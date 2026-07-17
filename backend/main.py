@@ -10,6 +10,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
+from utils.audit_log import register_audit_log
+
+# Importing the audit-log module registers its wildcard event-bus subscriber
+# (§3.3): from here on, every emitted event is persisted.
+register_audit_log()
 
 app = FastAPI(title="CTF Platform API", version="0.0.0")
 

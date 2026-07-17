@@ -39,3 +39,4 @@ Status is one of:
 | [0003](0003-jwt-access-refresh-auth.md) | JWT access + refresh tokens, shared across REST and WebSocket | Accepted |
 | [0004](0004-roles-permissions-as-data.md) | Roles and permissions as data, not a hardcoded enum | Accepted |
 | [0005](0005-async-event-bus.md) | Async pub/sub event bus as the core mutation-notification mechanism | Accepted |
+| [0006](0006-testing-stack.md) | Testing stack — pytest (backend) + Vitest (frontend) | Accepted |

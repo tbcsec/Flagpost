@@ -1,0 +1,7 @@
+# Development / test dependencies (see ADR-0006).
+-r requirements.txt
+
+pytest>=8.3,<9.0
+pytest-asyncio>=0.24,<0.25
+httpx>=0.28,<0.29          # ASGI transport for API tests
+aiosqlite>=0.20,<0.21      # in-memory async DB for tests

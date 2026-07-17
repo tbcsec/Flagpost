@@ -1,7 +1,14 @@
-# Tier 0 skeleton dependencies only. The rest of the stack fixed in
-# ARCHITECTURE.md §2 (SQLAlchemy 2.x async, Alembic, asyncpg, redis, the
-# S3/MinIO client) gets added by the Tier 0 features that actually use it —
-# adding them now, unused, would just be dead weight in the image.
+# Runtime dependencies. Stack fixed by ARCHITECTURE.md §2.
 fastapi>=0.115,<1.0
 uvicorn[standard]>=0.34,<1.0
 pydantic-settings>=2.6,<3.0
+pydantic[email]>=2.9,<3.0
+
+# Persistence — SQLAlchemy 2.x async + asyncpg + Alembic (§2)
+sqlalchemy[asyncio]>=2.0,<2.1
+asyncpg>=0.30,<0.31
+alembic>=1.14,<2.0
+
+# Auth — JWT access tokens + argon2 password hashing (§7.7, ADR-0003)
+pyjwt>=2.10,<3.0
+pwdlib[argon2]>=0.2.1,<0.3

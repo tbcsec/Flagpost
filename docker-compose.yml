@@ -57,16 +57,18 @@ services:
 
   backend:
     build: ./backend
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    # Apply migrations (creates tables + seeds the built-in roles) before
+    # serving, so a fresh `docker compose up` is immediately usable.
+    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
     environment:
-      # Infra is provisioned ahead of the code that uses it. The hello-world
-      # endpoints don't touch these yet; Tier 0 features will.
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-ctf}:${POSTGRES_PASSWORD:-ctf}@postgres:5432/${POSTGRES_DB:-ctf}
       REDIS_URL: redis://redis:6379/0
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       CORS_ORIGINS: http://localhost:3000
+      # Dev-only secret; override in any real deployment (ARCHITECTURE.md §7.7).
+      JWT_SECRET: ${JWT_SECRET:-dev-insecure-secret-change-me-0000000000}
     ports:
       - "8000:8000"
     volumes:

@@ -28,10 +28,18 @@ file, don't ignore it.
 ## Current build stage
 
 <!-- Update this line as tiers complete. -->
-**Tier 0 (Foundation)** See `docs/ROADMAP.md` for the
-full tier breakdown. Don't build Tier 2+ features before the current
-tier's items exist and work — a Tier 1 PR that also sneaks in Tier 3
-polish is scope creep, not helpfulness.
+**Tier 0 (Foundation) — built. Tier 1 (Minimum Viable Competition) is
+next.** See `docs/ROADMAP.md` for the full tier breakdown. Don't build
+Tier 2+ features before the current tier's items exist and work — a Tier
+1 PR that also sneaks in Tier 3 polish is scope creep, not helpfulness.
+
+What Tier 0 landed: the async event bus (§3) with an audit-log consumer,
+JWT auth + roles/permissions-as-data (§7), the Competition tenancy root
+(§6) with a create path, the Tailwind v4 `@theme` token layer + shadcn
+primitives (§9), and the TanStack Query hook layer + Zustand auth store
+(§8). Deferred within Tier 0 on purpose: the **module loader** (§11.1) —
+it's kernel per ADR-0002, but its first real consumer is Tier 1
+Challenges, so it's built then rather than speculatively now.
 
 ## Non-negotiable architectural rules
 
@@ -87,20 +95,26 @@ something already decided there (e.g. Zustand + TanStack Query, not
 Redux; SQLAlchemy 2.x async, not a different ORM).
 
 ```
-# Whole stack (Postgres/Redis/MinIO + backend + frontend), verified:
+# Whole stack (Postgres/Redis/MinIO + backend + frontend), verified.
+# The backend container runs `alembic upgrade head` before serving, so the
+# DB is migrated + system roles seeded automatically on first boot.
 docker compose up --build     # frontend :3000, backend :8000
 
-# Backend only
-cd backend && uvicorn main:app --reload
-docker compose run --rm backend alembic upgrade head   # once migrations exist
+# Backend only (needs a venv — this host's Python is externally-managed)
+cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+.venv/bin/alembic upgrade head          # against a reachable Postgres
+.venv/bin/uvicorn main:app --reload
 
-# Frontend only
-cd frontend && npm run dev
+# Frontend only — REQUIRES Node 20+ (Tailwind v4's engine, @tailwindcss/oxide).
+cd frontend && npm install && npm run dev
 ```
 
-<!-- The Tier 0 scaffold exists and `docker compose up` is verified working
-(hello-world both sides). `alembic upgrade head` is listed for when the
-first migration lands — there are no migrations yet. -->
+<!-- Verified end-to-end on 2026-07-18: docker compose up migrates + seeds,
+register->admin bootstrap, RBAC-gated competition create (participant 403),
+and competition.created/user.registered land in audit_log. Local Node here
+is 18, which can't run the frontend (Tailwind v4 needs Node 20); the Docker
+frontend image is node:20-alpine, so `docker compose up` is the reliable
+path on this machine. -->
 
 ## Code conventions
 
@@ -117,10 +131,17 @@ first migration lands — there are no migrations yet. -->
 
 ## Testing
 
-Not yet established — this is a Tier 0 task, not a settled fact. If
-you're the one setting it up, propose pytest (backend) and Vitest
-(frontend), and record the decision as an ADR rather than picking it
-silently mid-PR.
+Established in Tier 0 (see `docs/adr/0006-testing-stack.md`):
+
+- **Backend:** pytest + pytest-asyncio, httpx ASGI transport, SQLite
+  (aiosqlite) so no infra is needed. `cd backend && .venv/bin/pytest`.
+  The suite builds the schema from `Base.metadata` and seeds roles from
+  `auth/seed.py` (the same specs the migration uses).
+- **Frontend:** Vitest + Testing Library + jsdom.
+  `cd frontend && npm run test`.
+
+Keep SQLite/Postgres differences in mind (models stay portable, generic
+`JSON`, `render_as_batch` migrations) — the ADR spells out the tradeoff.
 
 ## Keeping this file honest
 

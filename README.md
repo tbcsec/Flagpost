@@ -8,11 +8,21 @@ A modern, open-source CTF competition management platform.
 
 ## Current state
 
-**Tier 0 skeleton.** This repo currently contains only the scaffold: the
-directory structure from ARCHITECTURE.md §14, a hello-world FastAPI backend,
-a hello-world Next.js (App Router) frontend that fetches from it, and a
-docker-compose stack wiring Postgres, Redis, and MinIO. No Tier 0 feature
-(auth, event bus, design tokens, …) is built yet — see `docs/ROADMAP.md`.
+**Tier 0 (Foundation) — built.** On top of the scaffold, the kernel and Tier
+0 foundations now exist (see `docs/ROADMAP.md`):
+
+- **Event bus** (async pub/sub) with an audit-log consumer persisting every
+  event.
+- **Auth & RBAC** — JWT access tokens + httpOnly refresh cookies, argon2
+  passwords, and roles/permissions as data with the three built-in roles.
+  The first account registered on a fresh install becomes the administrator.
+- **Competition entity** — the multi-tenant root every later entity scopes to.
+- **Design system** — a Tailwind v4 `@theme` token layer (dark + light
+  palettes) with shadcn-style primitives.
+- **Frontend data layer** — TanStack Query hooks per domain + a Zustand auth
+  store, with login/register and an authenticated competitions view.
+
+Tier 1 (a live, end-to-end competition) is next.
 
 ## Running locally
 
@@ -32,14 +42,16 @@ Then:
 | API docs      | http://localhost:8000/docs            |
 | MinIO console | http://localhost:9001 (minioadmin/minioadmin) |
 
-The frontend homepage fetches `/api/hello` from the backend and renders the
-message — if you see it, the two sides are talking.
+Open the frontend, **register an account** (the first one becomes the
+administrator), then create a competition — it appears in the list, and the
+`user.registered` / `competition.created` events land in the `audit_log`
+table.
 
 ## Layout
 
 ```
 backend/    FastAPI app + the §14 package tree (models, schemas, routers,
-            utils, plugins, alembic) — empty until features land
+            utils, plugins, alembic)
 frontend/   Next.js App Router app + the §14 src tree (app, components,
             lib/hooks, stores)
 docs/       Vision, architecture, roadmap, and ADRs
@@ -48,9 +60,20 @@ docs/       Vision, architecture, roadmap, and ADRs
 ## Running each side without Docker
 
 ```bash
-# Backend
-cd backend && pip install -r requirements.txt && uvicorn main:app --reload
+# Backend — the host Python is externally-managed, so use a venv
+cd backend
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/alembic upgrade head        # against a reachable Postgres
+.venv/bin/uvicorn main:app --reload
 
-# Frontend
+# Frontend — REQUIRES Node 20+ (Tailwind v4's @tailwindcss/oxide engine)
 cd frontend && npm install && npm run dev
+```
+
+## Tests
+
+```bash
+cd backend && .venv/bin/pytest        # pytest, SQLite-backed, no infra needed
+cd frontend && npm run test           # vitest
 ```

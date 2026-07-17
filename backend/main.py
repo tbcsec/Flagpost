@@ -1,15 +1,15 @@
 """FastAPI entrypoint.
 
-Tier 0 skeleton: a health check and a hello-world endpoint the frontend
-fetches to prove the two sides talk. No domain routers, models, event bus,
-or auth yet — those are Tier 0 features (see docs/ROADMAP.md), and each new
-domain gets its own router under `routers/` per ARCHITECTURE.md §14.
+Wires the audit-log event subscriber and mounts one router per domain
+(ARCHITECTURE.md §14). The hello/health endpoints from the Tier 0 skeleton
+remain as a liveness/connectivity check.
 """
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
+from routers import auth as auth_router
 from utils.audit_log import register_audit_log
 
 # Importing the audit-log module registers its wildcard event-bus subscriber
@@ -25,6 +25,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+app.include_router(auth_router.router)
 
 
 @app.get("/api/health")

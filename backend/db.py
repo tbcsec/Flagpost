@@ -44,6 +44,16 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def ensure_aware_utc(dt: datetime) -> datetime:
+    """Coerce a possibly-naive datetime to timezone-aware UTC.
+
+    Postgres round-trips ``DateTime(timezone=True)`` as aware, but SQLite (used
+    in tests, ADR-0006) drops tzinfo. Normalising on read keeps datetime
+    comparisons portable across both backends.
+    """
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
 class TimestampMixin:
     """Adds a ``created_at`` audit column."""
 

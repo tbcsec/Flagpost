@@ -1,0 +1,15 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install deps first so the layer caches across source changes. No lockfile
+# is committed for the skeleton, so use `install` rather than `ci`.
+COPY package.json ./
+RUN npm install
+
+COPY . .
+
+EXPOSE 3000
+
+# docker-compose runs `npm run dev`.
+CMD ["npm", "run", "dev"]

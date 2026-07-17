@@ -1,0 +1,7 @@
+# Tier 0 skeleton dependencies only. The rest of the stack fixed in
+# ARCHITECTURE.md §2 (SQLAlchemy 2.x async, Alembic, asyncpg, redis, the
+# S3/MinIO client) gets added by the Tier 0 features that actually use it —
+# adding them now, unused, would just be dead weight in the image.
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.34,<1.0
+pydantic-settings>=2.6,<3.0

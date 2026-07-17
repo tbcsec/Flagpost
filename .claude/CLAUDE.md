@@ -28,7 +28,7 @@ file, don't ignore it.
 ## Current build stage
 
 <!-- Update this line as tiers complete. -->
-**Tier 0 (Foundation) — not yet started.** See `docs/ROADMAP.md` for the
+**Tier 0 (Foundation)** See `docs/ROADMAP.md` for the
 full tier breakdown. Don't build Tier 2+ features before the current
 tier's items exist and work — a Tier 1 PR that also sneaks in Tier 3
 polish is scope creep, not helpfulness.
@@ -87,17 +87,20 @@ something already decided there (e.g. Zustand + TanStack Query, not
 Redux; SQLAlchemy 2.x async, not a different ORM).
 
 ```
-# Backend
-cd backend && uvicorn main:app --reload
-docker compose run --rm backend alembic upgrade head
+# Whole stack (Postgres/Redis/MinIO + backend + frontend), verified:
+docker compose up --build     # frontend :3000, backend :8000
 
-# Frontend
+# Backend only
+cd backend && uvicorn main:app --reload
+docker compose run --rm backend alembic upgrade head   # once migrations exist
+
+# Frontend only
 cd frontend && npm run dev
 ```
 
-<!-- These are the intended commands per ARCHITECTURE.md §2/§14, not yet
-verified against a working docker-compose.yml. Confirm and update once
-the Tier 0 scaffold exists. -->
+<!-- The Tier 0 scaffold exists and `docker compose up` is verified working
+(hello-world both sides). `alembic upgrade head` is listed for when the
+first migration lands — there are no migrations yet. -->
 
 ## Code conventions
 

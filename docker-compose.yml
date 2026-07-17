@@ -1,0 +1,99 @@
+# Local development stack for the CTF platform.
+#
+# This is the Tier 0 *skeleton* wiring only: it stands up the infrastructure
+# (Postgres / Redis / MinIO) and both application containers, and proves the
+# frontend and backend can talk to each other. It intentionally does NOT
+# build any Tier 0 feature — no schema, no migrations, no auth. See
+# docs/ROADMAP.md for what comes next.
+#
+#   docker compose up --build
+#     frontend  -> http://localhost:3000
+#     backend   -> http://localhost:8000/api/hello
+#     MinIO UI  -> http://localhost:9001
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ctf}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ctf}
+      POSTGRES_DB: ${POSTGRES_DB:-ctf}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ctf} -d ${POSTGRES_DB:-ctf}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # web console
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      # Infra is provisioned ahead of the code that uses it. The hello-world
+      # endpoints don't touch these yet; Tier 0 features will.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-ctf}:${POSTGRES_PASSWORD:-ctf}@postgres:5432/${POSTGRES_DB:-ctf}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app          # hot reload of source
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    command: npm run dev
+    environment:
+      # Consumed in the browser, so it must resolve from the host, not the
+      # compose network — hence localhost, not the `backend` service name.
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules       # keep the image's installed deps
+    depends_on:
+      - backend
+
+volumes:
+  postgres-data:
+  minio-data:

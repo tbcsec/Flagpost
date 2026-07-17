@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from routers import auth as auth_router
+from routers import competitions as competitions_router
 from utils.audit_log import register_audit_log
 
 # Importing the audit-log module registers its wildcard event-bus subscriber
@@ -28,6 +29,7 @@ app.add_middleware(
 
 
 app.include_router(auth_router.router)
+app.include_router(competitions_router.router)
 
 
 @app.get("/api/health")

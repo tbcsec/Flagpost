@@ -1,0 +1,37 @@
+# --- Secrets / environment ---
+.env
+.env.*
+!.env.example
+credentials_DO_NOT_SHARE.txt
+
+# --- Claude Code personal/local files (NOT the shared CLAUDE.md) ---
+CLAUDE.local.md
+
+# --- Node / Next.js (frontend) ---
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+npm-debug.log*
+
+# --- Python / FastAPI (backend) ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# --- Docker / local data volumes ---
+.docker-data/
+postgres-data/
+minio-data/
+
+# --- IDE (personal, not shared project config) ---
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+
+# --- OS cruft ---
+.DS_Store
+Thumbs.db

@@ -1,0 +1,10 @@
+id: competitions
+name: Competitions
+version: 1.0.0
+# Required-core (§11.3): registers through the module path like everything
+# else, but carries no admin enable/disable toggle.
+required_core: true
+provides:
+  routes: true
+  event_listeners: false
+dependencies: []

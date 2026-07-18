@@ -18,9 +18,10 @@ from auth.seed import (
 )
 from config import settings
 from db import SessionLocal
+from plugins.loader import load_modules
 from routers import auth as auth_router
-from routers import competitions as competitions_router
 from utils.audit_log import register_audit_log
+from utils.event_bus import event_bus
 
 logger = logging.getLogger("startup")
 
@@ -56,8 +57,10 @@ app.add_middleware(
 )
 
 
+# Auth is kernel — mounted directly. Every feature above the kernel registers
+# through the module loader (§11.1): required-core now, optional modules later.
 app.include_router(auth_router.router)
-app.include_router(competitions_router.router)
+load_modules(app, event_bus, SessionLocal)
 
 
 @app.get("/api/health")

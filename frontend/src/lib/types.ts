@@ -45,3 +45,28 @@ export interface CompetitionCreate {
 }
 
 export type CompetitionUpdate = Partial<CompetitionCreate>;
+
+export interface TeamMember {
+  user_id: string;
+  display_name: string;
+  is_captain: boolean;
+}
+
+/** Public listing shape — no invite code. */
+export interface Team {
+  id: string;
+  competition_id: string;
+  name: string;
+  member_count: number;
+  created_at: string;
+}
+
+/** A member's view of their own team. */
+export interface MyTeam {
+  id: string;
+  competition_id: string;
+  name: string;
+  invite_code: string;
+  members: TeamMember[];
+  created_at: string;
+}

@@ -1,0 +1,11 @@
+id: teams
+name: Teams
+version: 1.0.0
+# Required-core (§11.3): no admin toggle. Team-vs-individual is a
+# per-competition setting on the Competition entity, not a module switch.
+required_core: true
+provides:
+  routes: true
+  event_listeners: false
+dependencies:
+  - competitions

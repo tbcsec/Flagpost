@@ -12,6 +12,8 @@ import type {
   CompetitionCreate,
   CompetitionUpdate,
   HelloResponse,
+  MyTeam,
+  Team,
   TokenResponse,
   User,
 } from "@/lib/types";
@@ -137,6 +139,28 @@ export const competitionsApi = {
     apiFetch<Competition>(`/api/competitions/${id}`, {
       method: "PATCH",
       body: JSON.stringify(input),
+    }),
+};
+
+export const teamsApi = {
+  list: (competitionId: string) =>
+    apiFetch<Team[]>(`/api/competitions/${competitionId}/teams`),
+  // 404 means "not in a team" — callers treat that as null, not an error.
+  me: (competitionId: string) =>
+    apiFetch<MyTeam>(`/api/competitions/${competitionId}/teams/me`),
+  create: (competitionId: string, input: { name: string }) =>
+    apiFetch<MyTeam>(`/api/competitions/${competitionId}/teams`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  join: (competitionId: string, input: { invite_code: string }) =>
+    apiFetch<MyTeam>(`/api/competitions/${competitionId}/teams/join`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  leave: (competitionId: string) =>
+    apiFetch<void>(`/api/competitions/${competitionId}/teams/leave`, {
+      method: "POST",
     }),
 };
 

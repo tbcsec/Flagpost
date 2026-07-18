@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 
 import { CompetitionSettingsForm } from "@/components/competitions/competition-settings-form";
+import { TeamPanel } from "@/components/teams/team-panel";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -47,18 +48,26 @@ export default function CompetitionDetailPage() {
         <p className="text-sm text-destructive">{(error as Error).message}</p>
       )}
       {data && (
-        <Card>
-          <CardHeader>
-            <CardTitle>{data.name}</CardTitle>
-            <CardDescription>
-              Competition settings — {data.participation_mode} ·{" "}
-              {data.visibility}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <CompetitionSettingsForm competition={data} />
-          </CardContent>
-        </Card>
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>{data.name}</CardTitle>
+              <CardDescription>
+                Competition settings — {data.participation_mode} ·{" "}
+                {data.visibility}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <CompetitionSettingsForm competition={data} />
+            </CardContent>
+          </Card>
+
+          {/* Team-vs-individual is per-competition config (§11.3): the team
+              surface only exists in team mode. */}
+          {data.participation_mode === "team" && (
+            <TeamPanel competitionId={data.id} />
+          )}
+        </>
       )}
     </main>
   );

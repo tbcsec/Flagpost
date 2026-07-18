@@ -1,0 +1,208 @@
+"""Team endpoints: membership rules, mode gating, scoping, events (ROADMAP #7)."""
+
+from sqlalchemy import select
+
+from db import SessionLocal
+from models.audit_log import AuditLogEntry
+from tests.conftest import admin_token
+
+
+def _auth(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}"}
+
+
+async def _register(client, email, name=None) -> str:
+    resp = await client.post(
+        "/api/auth/register",
+        json={
+            "email": email,
+            "password": "password123",
+            "display_name": name or email.split("@")[0],
+        },
+    )
+    return resp.json()["access_token"]
+
+
+async def _make_competition(client, mode="team") -> str:
+    token = await admin_token(client)
+    resp = await client.post(
+        "/api/competitions",
+        json={"name": f"Comp-{mode}", "participation_mode": mode},
+        headers=_auth(token),
+    )
+    return resp.json()["id"]
+
+
+async def _events(name: str):
+    async with SessionLocal() as session:
+        return (
+            await session.execute(
+                select(AuditLogEntry).where(AuditLogEntry.event_name == name)
+            )
+        ).scalars().all()
+
+
+async def test_create_team_makes_creator_captain_and_emits_event(client):
+    comp = await _make_competition(client)
+    alice = await _register(client, "alice@example.com", "Alice")
+
+    resp = await client.post(
+        f"/api/competitions/{comp}/teams",
+        json={"name": "Red Team"},
+        headers=_auth(alice),
+    )
+    assert resp.status_code == 201
+    team = resp.json()
+    assert team["name"] == "Red Team"
+    assert team["invite_code"]
+    assert team["members"][0]["display_name"] == "Alice"
+    assert team["members"][0]["is_captain"] is True
+
+    events = await _events("team.created")
+    assert len(events) == 1
+    assert events[0].competition_id == comp
+
+
+async def test_individual_mode_competition_rejects_team_creation(client):
+    comp = await _make_competition(client, mode="individual")
+    user = await _register(client, "solo@example.com")
+
+    resp = await client.post(
+        f"/api/competitions/{comp}/teams",
+        json={"name": "Not Allowed"},
+        headers=_auth(user),
+    )
+    assert resp.status_code == 400
+
+
+async def test_join_via_invite_code_and_one_team_per_competition(client):
+    comp = await _make_competition(client)
+    alice = await _register(client, "alice@example.com", "Alice")
+    bob = await _register(client, "bob@example.com", "Bob")
+
+    created = (
+        await client.post(
+            f"/api/competitions/{comp}/teams",
+            json={"name": "Red Team"},
+            headers=_auth(alice),
+        )
+    ).json()
+
+    joined = await client.post(
+        f"/api/competitions/{comp}/teams/join",
+        json={"invite_code": created["invite_code"]},
+        headers=_auth(bob),
+    )
+    assert joined.status_code == 200
+    assert [m["display_name"] for m in joined.json()["members"]] == ["Alice", "Bob"]
+    assert len(await _events("team.member_joined")) == 1
+
+    # Bob can't create or join a second team in the same competition.
+    second = await client.post(
+        f"/api/competitions/{comp}/teams",
+        json={"name": "Blue Team"},
+        headers=_auth(bob),
+    )
+    assert second.status_code == 409
+
+    # A wrong code 404s.
+    bad = await client.post(
+        f"/api/competitions/{comp}/teams/join",
+        json={"invite_code": "not-a-code"},
+        headers=_auth(await _register(client, "carol@example.com")),
+    )
+    assert bad.status_code == 404
+
+
+async def test_invite_code_is_scoped_to_its_competition(client):
+    comp_a = await _make_competition(client)
+    admin = await admin_token(client)
+    comp_b = (
+        await client.post(
+            "/api/competitions",
+            json={"name": "Other Comp", "participation_mode": "team"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+
+    alice = await _register(client, "alice@example.com")
+    code = (
+        await client.post(
+            f"/api/competitions/{comp_a}/teams",
+            json={"name": "Red Team"},
+            headers=_auth(alice),
+        )
+    ).json()["invite_code"]
+
+    # The code belongs to comp_a; using it in comp_b must not match (§6.2).
+    bob = await _register(client, "bob@example.com")
+    resp = await client.post(
+        f"/api/competitions/{comp_b}/teams/join",
+        json={"invite_code": code},
+        headers=_auth(bob),
+    )
+    assert resp.status_code == 404
+
+
+async def test_listing_shows_counts_but_never_invite_codes(client):
+    comp = await _make_competition(client)
+    alice = await _register(client, "alice@example.com")
+    await client.post(
+        f"/api/competitions/{comp}/teams",
+        json={"name": "Red Team"},
+        headers=_auth(alice),
+    )
+
+    listed = await client.get(
+        f"/api/competitions/{comp}/teams", headers=_auth(alice)
+    )
+    assert listed.status_code == 200
+    [team] = listed.json()
+    assert team["member_count"] == 1
+    assert "invite_code" not in team
+
+
+async def test_leave_promotes_next_captain_then_deletes_empty_team(client):
+    comp = await _make_competition(client)
+    alice = await _register(client, "alice@example.com", "Alice")
+    bob = await _register(client, "bob@example.com", "Bob")
+
+    created = (
+        await client.post(
+            f"/api/competitions/{comp}/teams",
+            json={"name": "Red Team"},
+            headers=_auth(alice),
+        )
+    ).json()
+    await client.post(
+        f"/api/competitions/{comp}/teams/join",
+        json={"invite_code": created["invite_code"]},
+        headers=_auth(bob),
+    )
+
+    # Captain (Alice) leaves -> Bob is promoted.
+    left = await client.post(
+        f"/api/competitions/{comp}/teams/leave", headers=_auth(alice)
+    )
+    assert left.status_code == 204
+    mine = (
+        await client.get(f"/api/competitions/{comp}/teams/me", headers=_auth(bob))
+    ).json()
+    assert mine["members"] == [
+        {"user_id": mine["members"][0]["user_id"], "display_name": "Bob", "is_captain": True}
+    ]
+
+    # Last member leaves -> team is deleted and both events fire.
+    await client.post(f"/api/competitions/{comp}/teams/leave", headers=_auth(bob))
+    listed = await client.get(
+        f"/api/competitions/{comp}/teams", headers=_auth(bob)
+    )
+    assert listed.json() == []
+    assert len(await _events("team.member_left")) == 2
+    assert len(await _events("team.deleted")) == 1
+
+    # Alice, now teamless, gets a 404 from /me.
+    resp = await client.get(
+        f"/api/competitions/{comp}/teams/me", headers=_auth(alice)
+    )
+    assert resp.status_code == 404

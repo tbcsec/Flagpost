@@ -975,3 +975,21 @@ Keep this section honest — update as decisions are made:
   by earliest time reaching that score (standard CTF convention), or some
   other rule? Affects whether the scoreboard needs a secondary sort key
   captured at submission time, not just the point total.
+- Administrator bootstrap hardening (surfaced in Tier 0, see ADR-0007):
+  the first registered account becomes the Administrator on an empty
+  users table. That's fine for an operator standing up their own
+  instance, but on an internet-reachable fresh install it's a land-grab
+  race. Before any public/self-serve deployment, decide the hardening:
+  env-var-seeded admin, a one-time setup token, or locking registration
+  until an admin exists. Not urgent for the local/self-hosted model, but
+  a hard blocker for public launch.
+- Event-dispatch model & delivery durability (surfaced in Tier 0, see
+  ADR-0009): `emit()` currently awaits all handlers, so §3.1's
+  "non-blocking emit" is not yet real. When the first slow/external
+  handler arrives (the automation `webhook` action, §5.3), does emit go
+  fire-and-forget with an **outbox** for durable async delivery, or split
+  into sync-critical handlers (audit) vs async-background handlers
+  (webhooks/notifications)? This also decides whether the audit log is
+  allowed to be lossy on a crash — today it isn't, precisely because
+  dispatch is synchronous. Tie this to ADR-0005's flagged
+  single-process/durability limits rather than deciding it piecemeal.

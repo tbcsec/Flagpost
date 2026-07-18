@@ -28,18 +28,25 @@ file, don't ignore it.
 ## Current build stage
 
 <!-- Update this line as tiers complete. -->
-**Tier 0 (Foundation) — built. Tier 1 (Minimum Viable Competition) is
-next.** See `docs/ROADMAP.md` for the full tier breakdown. Don't build
-Tier 2+ features before the current tier's items exist and work — a Tier
-1 PR that also sneaks in Tier 3 polish is scope creep, not helpfulness.
+**Tier 0 (Foundation) — complete (tagged `tier-0`). Tier 1 (Minimum
+Viable Competition) is the active tier.** See `docs/ROADMAP.md` for the
+full tier breakdown. Don't build Tier 2+ features before the current
+tier's items exist and work — a Tier 1 PR that also sneaks in Tier 3
+polish is scope creep, not helpfulness.
 
 What Tier 0 landed: the async event bus (§3) with an audit-log consumer,
 JWT auth + roles/permissions-as-data (§7), the Competition tenancy root
 (§6) with a create path, the Tailwind v4 `@theme` token layer + shadcn
 primitives (§9), and the TanStack Query hook layer + Zustand auth store
-(§8). Deferred within Tier 0 on purpose: the **module loader** (§11.1) —
-it's kernel per ADR-0002, but its first real consumer is Tier 1
-Challenges, so it's built then rather than speculatively now.
+(§8). Decisions made while building it are recorded in ADR-0007
+(first-user admin bootstrap), ADR-0008 (stateful refresh sessions), and
+ADR-0009 (synchronous event dispatch for now) — read those before
+changing auth or the event bus.
+
+First up in Tier 1: the **module loader** (§11.1). It's kernel per
+ADR-0002 but was deferred out of Tier 0 on purpose — its first real
+consumer is Challenges, so it's built now, alongside them, rather than
+speculatively.
 
 ## Non-negotiable architectural rules
 

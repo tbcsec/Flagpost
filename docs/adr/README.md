@@ -40,3 +40,6 @@ Status is one of:
 | [0004](0004-roles-permissions-as-data.md) | Roles and permissions as data, not a hardcoded enum | Accepted |
 | [0005](0005-async-event-bus.md) | Async pub/sub event bus as the core mutation-notification mechanism | Accepted |
 | [0006](0006-testing-stack.md) | Testing stack — pytest (backend) + Vitest (frontend) | Accepted |
+| [0007](0007-first-user-admin-bootstrap.md) | First registered user becomes the Administrator | Accepted |
+| [0008](0008-stateful-refresh-sessions.md) | Refresh tokens are stateful, hashed, rotating DB sessions | Accepted |
+| [0009](0009-synchronous-event-dispatch-tier0.md) | Event dispatch is synchronous (awaited) in Tier 0 | Accepted |

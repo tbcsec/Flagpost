@@ -38,10 +38,13 @@ What Tier 0 landed: the async event bus (§3) with an audit-log consumer,
 JWT auth + roles/permissions-as-data (§7), the Competition tenancy root
 (§6) with a create path, the Tailwind v4 `@theme` token layer + shadcn
 primitives (§9), and the TanStack Query hook layer + Zustand auth store
-(§8). Decisions made while building it are recorded in ADR-0007
-(first-user admin bootstrap), ADR-0008 (stateful refresh sessions), and
-ADR-0009 (synchronous event dispatch for now) — read those before
-changing auth or the event bus.
+(§8). Decisions made while building it are recorded in ADR-0008 (stateful
+refresh sessions) and ADR-0009 (synchronous event dispatch for now) —
+read those before changing auth or the event bus. The admin is a **seeded
+default account** (`admin@example.com` / `changeme`, ADR-0010, which
+superseded the first-user bootstrap of ADR-0007); public registration
+never grants above Participant, and a loud startup warning fires while the
+default password is unchanged.
 
 First up in Tier 1: the **module loader** (§11.1). It's kernel per
 ADR-0002 but was deferred out of Tier 0 on purpose — its first real

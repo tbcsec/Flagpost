@@ -16,26 +16,42 @@ os.environ.setdefault("JWT_SECRET", "test-secret-at-least-32-bytes-long-000000")
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 
-from auth.seed import seed_system_roles  # noqa: E402
+from auth.seed import (  # noqa: E402
+    DEFAULT_ADMIN_EMAIL,
+    DEFAULT_ADMIN_PASSWORD,
+    seed_admin_user,
+    seed_system_roles,
+)
 from db import Base, SessionLocal, engine  # noqa: E402
 import models  # noqa: E402,F401  (populates Base.metadata)
 
 
 @pytest_asyncio.fixture(autouse=True)
 async def _create_schema():
-    """Fresh schema per test — create all tables (+ seed system roles), drop after.
+    """Fresh schema per test — create all tables, seed roles + admin, drop after.
 
     Tests build the schema from metadata rather than running migrations, so the
-    role seed the migration performs is reproduced here from the same specs
-    (auth/seed.py) — see ADR-0006 on why the suite is SQLite/metadata-based.
+    role + admin seed the migration/startup perform is reproduced here from the
+    same specs (auth/seed.py) — see ADR-0006 on why the suite is SQLite-based.
     """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     async with SessionLocal() as session:
         await seed_system_roles(session)
+        await seed_admin_user(session)
     yield
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+
+
+async def admin_token(client) -> str:
+    """Log in as the seeded default administrator and return an access token."""
+    resp = await client.post(
+        "/api/auth/login",
+        json={"email": DEFAULT_ADMIN_EMAIL, "password": DEFAULT_ADMIN_PASSWORD},
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()["access_token"]
 
 
 @pytest_asyncio.fixture

@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import get_current_user
@@ -24,9 +24,14 @@ from auth.security import (
 )
 from config import settings
 from db import ensure_aware_utc, get_db, utcnow
-from models.role import Role, RoleAssignment
 from models.user import RefreshSession, User
-from schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserOut
+from schemas.auth import (
+    ChangePasswordRequest,
+    LoginRequest,
+    RegisterRequest,
+    TokenResponse,
+    UserOut,
+)
 from utils.event_bus import event_bus
 
 logger = logging.getLogger("auth")
@@ -74,44 +79,18 @@ async def register(
             detail="Email already registered",
         )
 
-    # First-ever account bootstraps the platform administrator. This is the
-    # only path that grants above Participant; public registration otherwise
-    # never does. Guarded by the empty-users check, so it can't be re-triggered.
-    is_first_user = (
-        await db.scalar(select(func.count()).select_from(User))
-    ) == 0
-
+    # Public registration always creates a plain user with no role assignment.
+    # It never grants above Participant (ADR-0010, supersedes ADR-0007); the
+    # administrator is seeded at install time, and per-competition access comes
+    # from a RoleAssignment when a user joins a competition (§7.5).
     user = User(
         email=body.email,
         password_hash=hash_password(body.password),
         display_name=body.display_name,
     )
     db.add(user)
-    await db.flush()  # assign user.id before the role assignment / event
-
-    if is_first_user:
-        admin_role = await db.scalar(
-            select(Role).where(Role.name == "Administrator")
-        )
-        if admin_role is None:
-            # System roles are seeded by the migration; if they're missing the
-            # deployment is misconfigured — fail loudly rather than silently
-            # creating an admin-less instance.
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Administrator role not seeded; run migrations",
-            )
-        db.add(
-            RoleAssignment(
-                user_id=user.id, competition_id=None, role_id=admin_role.id
-            )
-        )
-        logger.warning(
-            "Bootstrapped first user %s as Administrator (empty users table)",
-            body.email,
-        )
-
     await db.commit()
+
     await event_bus.emit(
         "user.registered", {"user_id": user.id, "email": user.email}
     )
@@ -193,3 +172,37 @@ async def logout(
 @router.get("/me", response_model=UserOut)
 async def me(current_user: User = Depends(get_current_user)) -> UserOut:
     return UserOut.model_validate(current_user)
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(
+    body: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Change the current user's password.
+
+    This is what lets the seeded default admin rotate its well-known password
+    (ADR-0010). All of the user's refresh sessions are revoked, so a password
+    change logs them out everywhere and any leaked refresh token dies.
+    """
+    if not verify_password(body.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+    current_user.password_hash = hash_password(body.new_password)
+
+    sessions = (
+        await db.execute(
+            select(RefreshSession).where(
+                RefreshSession.user_id == current_user.id,
+                RefreshSession.revoked_at.is_(None),
+            )
+        )
+    ).scalars().all()
+    for session in sessions:
+        session.revoked_at = utcnow()
+
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

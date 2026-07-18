@@ -47,7 +47,8 @@ async def test_competition_scoped_role_is_isolated_to_its_competition():
 
 async def test_global_admin_satisfies_competition_scoped_checks_everywhere():
     async with SessionLocal() as session:
-        user_id = await _make_user(session, "admin@example.com")
+        # Distinct from the seeded admin@example.com (fixture) to avoid a clash.
+        user_id = await _make_user(session, "second-admin@example.com")
         admin_id = await _role_id(session, "Administrator")
         session.add(
             RoleAssignment(

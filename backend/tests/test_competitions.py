@@ -4,14 +4,16 @@ from sqlalchemy import select
 
 from db import SessionLocal
 from models.audit_log import AuditLogEntry
+from tests.conftest import admin_token
 
 
-async def _register(client, email, name="User"):
+async def _register(client, email, name="User") -> str:
+    """Register a plain user (Participant-level — no roles) and return a token."""
     resp = await client.post(
         "/api/auth/register",
         json={"email": email, "password": "password123", "display_name": name},
     )
-    return resp.json()["access_token"], resp.json()["user"]["id"]
+    return resp.json()["access_token"]
 
 
 def _auth(token: str) -> dict:
@@ -19,7 +21,7 @@ def _auth(token: str) -> dict:
 
 
 async def test_admin_can_create_competition_and_event_is_emitted(client):
-    token, user_id = await _register(client, "admin@example.com", "Admin")  # first == admin
+    token = await admin_token(client)
 
     resp = await client.post(
         "/api/competitions",
@@ -41,13 +43,12 @@ async def test_admin_can_create_competition_and_event_is_emitted(client):
             )
         ).scalar_one()
     assert entry.competition_id == created["id"]
-    assert entry.user_id == user_id
+    assert entry.user_id is not None  # the seeded admin
 
 
 async def test_participant_cannot_create_competition(client):
-    # First user is admin; the second is a plain Participant.
-    await _register(client, "admin@example.com", "Admin")
-    token, _ = await _register(client, "participant@example.com", "Player")
+    # A freshly registered user has no role assignment -> Participant-level.
+    token = await _register(client, "participant@example.com", "Player")
 
     resp = await client.post(
         "/api/competitions",
@@ -63,7 +64,7 @@ async def test_create_requires_authentication(client):
 
 
 async def test_list_and_get_competition(client):
-    token, _ = await _register(client, "admin@example.com", "Admin")
+    token = await admin_token(client)
     created = (
         await client.post(
             "/api/competitions", json={"name": "Autumn CTF"}, headers=_auth(token)

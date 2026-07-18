@@ -37,7 +37,7 @@ export default function RegisterPage() {
         <CardHeader>
           <CardTitle>Create account</CardTitle>
           <CardDescription>
-            The first account on a fresh install becomes the administrator.
+            Register to take part in competitions.
           </CardDescription>
         </CardHeader>
         <CardContent>

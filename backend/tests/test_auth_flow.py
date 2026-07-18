@@ -1,8 +1,9 @@
-"""End-to-end auth flow + first-user bootstrap (§7.7, ADR-0003)."""
+"""End-to-end auth flow, seeded admin, and password change (§7.7, ADR-0003/0010)."""
 
 from sqlalchemy import select
 
 from auth.deps import user_has_permission
+from auth.seed import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD
 from db import SessionLocal
 from models.audit_log import AuditLogEntry
 
@@ -15,12 +16,12 @@ async def _register(client, email, password="password123", name="Test User"):
 
 
 async def test_register_login_me_refresh_logout(client):
-    # Register (first user) -> 201 with an access token + user body.
-    resp = await _register(client, "admin@example.com", name="Admin")
+    # Register -> 201 with an access token + user body.
+    resp = await _register(client, "user@example.com", name="User")
     assert resp.status_code == 201
     body = resp.json()
     assert body["token_type"] == "bearer"
-    assert body["user"]["email"] == "admin@example.com"
+    assert body["user"]["email"] == "user@example.com"
     token = body["access_token"]
 
     # The refresh token is an httpOnly cookie, never in the body.
@@ -32,7 +33,7 @@ async def test_register_login_me_refresh_logout(client):
     # /me with the bearer token returns the current user.
     me = await client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert me.status_code == 200
-    assert me.json()["email"] == "admin@example.com"
+    assert me.json()["email"] == "user@example.com"
 
     # Refresh rotates and returns a new access token (cookie auto-sent by client).
     refreshed = await client.post("/api/auth/refresh")
@@ -66,21 +67,74 @@ async def test_login_wrong_password_rejected(client):
     assert resp.status_code == 401
 
 
-async def test_first_user_is_admin_second_is_participant(client):
-    first = await _register(client, "first@example.com")
-    second = await _register(client, "second@example.com")
-    first_id = first.json()["user"]["id"]
-    second_id = second.json()["user"]["id"]
-
+async def test_registered_user_has_no_elevated_permission(client):
+    # Public registration never grants above Participant (ADR-0010) — a fresh
+    # user holds no role assignment and so no global permission.
+    resp = await _register(client, "plain@example.com")
+    user_id = resp.json()["user"]["id"]
     async with SessionLocal() as session:
-        # The first user holds a global Administrator assignment -> can create
-        # competitions anywhere; the second holds nothing above Participant.
-        assert await user_has_permission(
-            session, first_id, "create_competition", None
-        )
         assert not await user_has_permission(
-            session, second_id, "create_competition", None
+            session, user_id, "create_competition", None
         )
+
+
+async def test_seeded_admin_can_log_in_and_is_administrator(client):
+    # The seeded default admin (fixture) logs in with the default credentials
+    # and holds the global create_competition permission.
+    resp = await client.post(
+        "/api/auth/login",
+        json={"email": DEFAULT_ADMIN_EMAIL, "password": DEFAULT_ADMIN_PASSWORD},
+    )
+    assert resp.status_code == 200
+    admin_id = resp.json()["user"]["id"]
+    async with SessionLocal() as session:
+        assert await user_has_permission(
+            session, admin_id, "create_competition", None
+        )
+
+
+async def test_change_password_updates_credential_and_revokes_sessions(client):
+    login = await client.post(
+        "/api/auth/login",
+        json={"email": DEFAULT_ADMIN_EMAIL, "password": DEFAULT_ADMIN_PASSWORD},
+    )
+    token = login.json()["access_token"]
+    auth = {"Authorization": f"Bearer {token}"}
+
+    # Wrong current password is rejected.
+    bad = await client.post(
+        "/api/auth/change-password",
+        json={"current_password": "nope", "new_password": "brand-new-pass"},
+        headers=auth,
+    )
+    assert bad.status_code == 400
+
+    ok = await client.post(
+        "/api/auth/change-password",
+        json={
+            "current_password": DEFAULT_ADMIN_PASSWORD,
+            "new_password": "brand-new-pass",
+        },
+        headers=auth,
+    )
+    assert ok.status_code == 204
+
+    # The refresh session issued at login was revoked by the change — check this
+    # before re-logging in, which would set a fresh (valid) cookie.
+    refreshed = await client.post("/api/auth/refresh")
+    assert refreshed.status_code == 401
+
+    # Old password no longer works; new one does.
+    old = await client.post(
+        "/api/auth/login",
+        json={"email": DEFAULT_ADMIN_EMAIL, "password": DEFAULT_ADMIN_PASSWORD},
+    )
+    assert old.status_code == 401
+    new = await client.post(
+        "/api/auth/login",
+        json={"email": DEFAULT_ADMIN_EMAIL, "password": "brand-new-pass"},
+    )
+    assert new.status_code == 200
 
 
 async def test_registration_emits_user_registered_event(client):

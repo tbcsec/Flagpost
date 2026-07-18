@@ -975,14 +975,16 @@ Keep this section honest — update as decisions are made:
   by earliest time reaching that score (standard CTF convention), or some
   other rule? Affects whether the scoreboard needs a secondary sort key
   captured at submission time, not just the point total.
-- Administrator bootstrap hardening (surfaced in Tier 0, see ADR-0007):
-  the first registered account becomes the Administrator on an empty
-  users table. That's fine for an operator standing up their own
-  instance, but on an internet-reachable fresh install it's a land-grab
-  race. Before any public/self-serve deployment, decide the hardening:
-  env-var-seeded admin, a one-time setup token, or locking registration
-  until an admin exists. Not urgent for the local/self-hosted model, but
-  a hard blocker for public launch.
+- Administrator bootstrap hardening (see ADR-0010, which superseded
+  ADR-0007): a default Administrator is now seeded at install with
+  **hardcoded default credentials** (`admin@example.com` / `changeme`),
+  guarded only by a loud startup warning while the password is unchanged.
+  That's fine for an operator who rotates it immediately, but an install
+  left on defaults is trivially compromised. Before any public/self-serve
+  deployment, decide the hardening: force a password change on first
+  login, and/or make the seed a no-op unless credentials are explicitly
+  provided (so no instance ships with a known-default admin). Not urgent
+  for the local/self-hosted model, but a hard blocker for public launch.
 - Event-dispatch model & delivery durability (surfaced in Tier 0, see
   ADR-0009): `emit()` currently awaits all handlers, so §3.1's
   "non-blocking emit" is not yet real. When the first slow/external

@@ -1,8 +1,13 @@
 # ADR-0007: First registered user becomes the Administrator
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-0010](0010-seeded-admin-default-credentials.md)
 **Date:** 2026-07-18
 **Architecture reference:** `ARCHITECTURE.md` §7.3, §7.5
+
+> **Superseded (2026-07-18):** the first-user bootstrap was replaced by a
+> seeded default administrator before it ever shipped in a release — see
+> ADR-0010 for why (the land-grab race and empty-admin window this ADR
+> flagged as costs turned out not to be worth carrying). Kept for history.
 
 ## Context
 

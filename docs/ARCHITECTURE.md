@@ -119,7 +119,8 @@ Key properties:
 Event names are `<entity>.<verb>`, past tense, e.g.:
 
 ```
-competition.created         competition.started        competition.ended
+competition.created         competition.updated        competition.started
+competition.ended
 team.created                team.member_joined
 challenge.created           challenge.published        challenge.solved
 challenge.hint_requested

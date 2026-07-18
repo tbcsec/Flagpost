@@ -10,6 +10,7 @@ import { useAuthStore } from "@/stores/auth";
 import type {
   Competition,
   CompetitionCreate,
+  CompetitionUpdate,
   HelloResponse,
   TokenResponse,
   User,
@@ -130,6 +131,11 @@ export const competitionsApi = {
   create: (input: CompetitionCreate) =>
     apiFetch<Competition>("/api/competitions", {
       method: "POST",
+      body: JSON.stringify(input),
+    }),
+  update: (id: string, input: CompetitionUpdate) =>
+    apiFetch<Competition>(`/api/competitions/${id}`, {
+      method: "PATCH",
       body: JSON.stringify(input),
     }),
 };

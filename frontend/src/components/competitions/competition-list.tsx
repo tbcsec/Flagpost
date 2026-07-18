@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import {
   Table,
   TableBody,
@@ -35,15 +37,26 @@ export function CompetitionList() {
         <TableRow>
           <TableHead>Name</TableHead>
           <TableHead>Mode</TableHead>
+          <TableHead>Visibility</TableHead>
           <TableHead>Created</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {data.map((competition) => (
           <TableRow key={competition.id}>
-            <TableCell className="font-medium">{competition.name}</TableCell>
+            <TableCell className="font-medium">
+              <Link
+                href={`/competitions/${competition.id}`}
+                className="text-primary hover:underline"
+              >
+                {competition.name}
+              </Link>
+            </TableCell>
             <TableCell className="capitalize">
               {competition.participation_mode}
+            </TableCell>
+            <TableCell className="capitalize text-muted-foreground">
+              {competition.visibility}
             </TableCell>
             <TableCell className="text-muted-foreground">
               {new Date(competition.created_at).toLocaleDateString()}

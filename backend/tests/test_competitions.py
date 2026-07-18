@@ -58,6 +58,83 @@ async def test_participant_cannot_create_competition(client):
     assert resp.status_code == 403
 
 
+async def test_create_defaults_and_roundtrips_management_fields(client):
+    token = await admin_token(client)
+    resp = await client.post(
+        "/api/competitions",
+        json={
+            "name": "Winter CTF",
+            "visibility": "public",
+            "registration_opens_at": "2026-01-01T00:00:00Z",
+        },
+        headers=_auth(token),
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["visibility"] == "public"
+    assert body["registration_opens_at"] is not None
+    # Unspecified management fields fall back to their defaults.
+    assert body["participation_mode"] == "team"
+
+
+async def test_admin_can_update_competition_and_event_is_emitted(client):
+    token = await admin_token(client)
+    created = (
+        await client.post(
+            "/api/competitions", json={"name": "Draft"}, headers=_auth(token)
+        )
+    ).json()
+    assert created["visibility"] == "private"  # default
+
+    patched = await client.patch(
+        f"/api/competitions/{created['id']}",
+        json={"name": "Published", "visibility": "public"},
+        headers=_auth(token),
+    )
+    assert patched.status_code == 200
+    body = patched.json()
+    assert body["name"] == "Published"
+    assert body["visibility"] == "public"
+
+    async with SessionLocal() as session:
+        entry = (
+            await session.execute(
+                select(AuditLogEntry).where(
+                    AuditLogEntry.event_name == "competition.updated"
+                )
+            )
+        ).scalar_one()
+    assert entry.competition_id == created["id"]
+    assert entry.payload["changed_fields"] == ["name", "visibility"]
+
+
+async def test_participant_cannot_update_competition(client):
+    admin = await admin_token(client)
+    created = (
+        await client.post(
+            "/api/competitions", json={"name": "Locked"}, headers=_auth(admin)
+        )
+    ).json()
+
+    player = await _register(client, "editor-wannabe@example.com")
+    resp = await client.patch(
+        f"/api/competitions/{created['id']}",
+        json={"name": "Hijacked"},
+        headers=_auth(player),
+    )
+    assert resp.status_code == 403
+
+
+async def test_update_missing_competition_is_404(client):
+    token = await admin_token(client)
+    resp = await client.patch(
+        "/api/competitions/does-not-exist",
+        json={"name": "Ghost"},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 404
+
+
 async def test_create_requires_authentication(client):
     resp = await client.post("/api/competitions", json={"name": "Anon"})
     assert resp.status_code == 401

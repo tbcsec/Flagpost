@@ -22,7 +22,11 @@ from auth.deps import get_current_user, require_permission
 from db import get_db
 from models.competition import Competition
 from models.user import User
-from schemas.competition import CompetitionCreate, CompetitionOut
+from schemas.competition import (
+    CompetitionCreate,
+    CompetitionOut,
+    CompetitionUpdate,
+)
 from utils.event_bus import event_bus
 
 router = APIRouter(prefix="/api/competitions", tags=["competitions"])
@@ -64,7 +68,10 @@ async def create_competition(
         description=body.description,
         start_at=body.start_at,
         end_at=body.end_at,
+        registration_opens_at=body.registration_opens_at,
+        registration_closes_at=body.registration_closes_at,
         participation_mode=body.participation_mode,
+        visibility=body.visibility,
     )
     db.add(competition)
     await db.commit()
@@ -76,6 +83,40 @@ async def create_competition(
             "competition_id": competition.id,
             "user_id": current_user.id,
             "name": competition.name,
+        },
+    )
+    return competition
+
+
+@router.patch("/{competition_id}", response_model=CompetitionOut)
+async def update_competition(
+    competition_id: str,
+    body: CompetitionUpdate,
+    # edit_competition is competition-scoped (§7.1). require_permission resolves
+    # the competition from the {competition_id} path param; a global Administrator
+    # satisfies it for any competition, a Judge only for their own (§7.5).
+    current_user: User = Depends(require_permission("edit_competition")),
+    db: AsyncSession = Depends(get_db),
+) -> Competition:
+    competition = await db.get(Competition, competition_id)
+    if competition is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"
+        )
+
+    # PATCH semantics: apply only the fields the caller actually sent.
+    changes = body.model_dump(exclude_unset=True)
+    for field, value in changes.items():
+        setattr(competition, field, value)
+    await db.commit()
+    await db.refresh(competition)
+
+    await event_bus.emit(
+        "competition.updated",
+        {
+            "competition_id": competition.id,
+            "user_id": current_user.id,
+            "changed_fields": sorted(changes.keys()),
         },
     )
     return competition

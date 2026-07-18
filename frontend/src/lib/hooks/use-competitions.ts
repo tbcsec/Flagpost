@@ -5,7 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { competitionsApi } from "@/lib/api";
-import type { Competition } from "@/lib/types";
+import type { Competition, CompetitionUpdate } from "@/lib/types";
 import { useAuthStore } from "@/stores/auth";
 
 // Query keys are namespaced by domain so invalidation stays scoped (§8).
@@ -41,6 +41,17 @@ export function useCreateCompetition() {
     onSuccess: (created: Competition) => {
       queryClient.invalidateQueries({ queryKey: competitionKeys.all });
       queryClient.setQueryData(competitionKeys.detail(created.id), created);
+    },
+  });
+}
+
+export function useUpdateCompetition(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CompetitionUpdate) => competitionsApi.update(id, input),
+    onSuccess: (updated: Competition) => {
+      queryClient.setQueryData(competitionKeys.detail(id), updated);
+      queryClient.invalidateQueries({ queryKey: competitionKeys.all });
     },
   });
 }

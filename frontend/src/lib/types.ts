@@ -18,6 +18,7 @@ export interface TokenResponse {
 }
 
 export type ParticipationMode = "team" | "individual";
+export type Visibility = "public" | "private";
 
 export interface Competition {
   id: string;
@@ -25,7 +26,10 @@ export interface Competition {
   description: string;
   start_at: string | null;
   end_at: string | null;
+  registration_opens_at: string | null;
+  registration_closes_at: string | null;
   participation_mode: ParticipationMode;
+  visibility: Visibility;
   created_at: string;
 }
 
@@ -33,6 +37,11 @@ export interface CompetitionCreate {
   name: string;
   description?: string;
   participation_mode?: ParticipationMode;
+  visibility?: Visibility;
   start_at?: string | null;
   end_at?: string | null;
+  registration_opens_at?: string | null;
+  registration_closes_at?: string | null;
 }
+
+export type CompetitionUpdate = Partial<CompetitionCreate>;

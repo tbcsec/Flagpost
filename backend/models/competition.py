@@ -38,7 +38,18 @@ class Competition(Base, TimestampMixin):
     end_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    registration_opens_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    registration_closes_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # "team" | "individual" (§11.3).
     participation_mode: Mapped[str] = mapped_column(
         String, nullable=False, default="team"
+    )
+    # "public" | "private". Private by default — a competition isn't visible to
+    # competitors until an organiser opens it up.
+    visibility: Mapped[str] = mapped_column(
+        String, nullable=False, default="private"
     )

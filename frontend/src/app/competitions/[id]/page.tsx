@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
+import { ChallengeAdmin } from "@/components/challenges/challenge-admin";
 import { CompetitionSettingsForm } from "@/components/competitions/competition-settings-form";
 import { TeamPanel } from "@/components/teams/team-panel";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,10 @@ export default function CompetitionDetailPage() {
           {data.participation_mode === "team" && (
             <TeamPanel competitionId={data.id} />
           )}
+
+          {/* Admin challenge authoring. The list endpoint 403s for non-staff,
+              surfaced inline — RBAC stays server-enforced. */}
+          <ChallengeAdmin competitionId={data.id} />
         </>
       )}
     </main>

@@ -1,0 +1,67 @@
+"""Challenge domain models: ``Category`` and ``Challenge`` (§13.1, ROADMAP #8/#9).
+
+Both are tenant-scoped (§6.2). Flag material (``flag_hash``/``flag_salt`` for
+static, ``flag_regex`` for regex) is **never** exposed by any schema — admin
+responses carry only a ``has_flag`` boolean (§13.2). ``state`` is
+draft|published for Tier 1; Tier 2's lifecycle (ROADMAP #17) inserts "review"
+between them without a rename.
+
+``description`` is a TipTap/ProseMirror document stored as JSON (§2 rich-text
+choice) — the editor's native format, portable across SQLite/Postgres via the
+generic JSON type (ADR-0006).
+"""
+
+from uuid import uuid4
+
+from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
+
+from db import Base, CompetitionScopedMixin, TimestampMixin
+
+
+class Category(Base, CompetitionScopedMixin, TimestampMixin):
+    __tablename__ = "categories"
+    __table_args__ = (
+        UniqueConstraint(
+            "competition_id", "name", name="uq_category_name_per_competition"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid4())
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class Challenge(Base, CompetitionScopedMixin, TimestampMixin):
+    __tablename__ = "challenges"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid4())
+    )
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    # TipTap document (JSON). Empty dict = no description yet.
+    description: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    # SET NULL: deleting a category uncategorizes its challenges, never deletes them.
+    category_id: Mapped[str | None] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL"), index=True, nullable=True
+    )
+    points: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    # "draft" | "published" (Tier 2 adds "review").
+    state: Mapped[str] = mapped_column(String, nullable=False, default="draft")
+
+    # --- Flag config (§13.2) — none of this is ever serialized ---
+    # "static" | "regex"
+    flag_type: Mapped[str] = mapped_column(String, nullable=False, default="static")
+    case_insensitive: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    flag_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    flag_salt: Mapped[str | None] = mapped_column(String, nullable=True)
+    flag_regex: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    @property
+    def has_flag(self) -> bool:
+        if self.flag_type == "regex":
+            return self.flag_regex is not None
+        return self.flag_hash is not None

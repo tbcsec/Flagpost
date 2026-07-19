@@ -123,8 +123,9 @@ competition.created         competition.updated        competition.started
 competition.ended
 team.created                team.member_joined         team.member_left
 team.deleted
-challenge.created           challenge.published        challenge.solved
-challenge.hint_requested
+challenge.created           challenge.updated          challenge.published
+challenge.deleted           challenge.solved           challenge.hint_requested
+category.created            category.deleted
 user.registered
 ticket.created               ticket.assigned            ticket.resolved
 feedback.submitted

@@ -8,6 +8,10 @@
 
 import { useAuthStore } from "@/stores/auth";
 import type {
+  Category,
+  Challenge,
+  ChallengeCreate,
+  ChallengeUpdate,
   Competition,
   CompetitionCreate,
   CompetitionUpdate,
@@ -162,6 +166,55 @@ export const teamsApi = {
     apiFetch<void>(`/api/competitions/${competitionId}/teams/leave`, {
       method: "POST",
     }),
+};
+
+export const categoriesApi = {
+  list: (competitionId: string) =>
+    apiFetch<Category[]>(`/api/competitions/${competitionId}/categories`),
+  create: (competitionId: string, input: { name: string }) =>
+    apiFetch<Category>(`/api/competitions/${competitionId}/categories`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  remove: (competitionId: string, categoryId: string) =>
+    apiFetch<void>(
+      `/api/competitions/${competitionId}/categories/${categoryId}`,
+      { method: "DELETE" },
+    ),
+};
+
+export const challengesApi = {
+  list: (competitionId: string) =>
+    apiFetch<Challenge[]>(`/api/competitions/${competitionId}/challenges`),
+  get: (competitionId: string, challengeId: string) =>
+    apiFetch<Challenge>(
+      `/api/competitions/${competitionId}/challenges/${challengeId}`,
+    ),
+  create: (competitionId: string, input: ChallengeCreate) =>
+    apiFetch<Challenge>(`/api/competitions/${competitionId}/challenges`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  update: (competitionId: string, challengeId: string, input: ChallengeUpdate) =>
+    apiFetch<Challenge>(
+      `/api/competitions/${competitionId}/challenges/${challengeId}`,
+      { method: "PATCH", body: JSON.stringify(input) },
+    ),
+  publish: (competitionId: string, challengeId: string) =>
+    apiFetch<Challenge>(
+      `/api/competitions/${competitionId}/challenges/${challengeId}/publish`,
+      { method: "POST" },
+    ),
+  unpublish: (competitionId: string, challengeId: string) =>
+    apiFetch<Challenge>(
+      `/api/competitions/${competitionId}/challenges/${challengeId}/unpublish`,
+      { method: "POST" },
+    ),
+  remove: (competitionId: string, challengeId: string) =>
+    apiFetch<void>(
+      `/api/competitions/${competitionId}/challenges/${challengeId}`,
+      { method: "DELETE" },
+    ),
 };
 
 /** Unauthenticated connectivity check (skeleton hello endpoint). */

@@ -1,0 +1,11 @@
+id: challenges
+name: Challenges
+version: 1.0.0
+# Required-core (§11.3): the platform isn't a CTF tool without challenges.
+# Registered through the module path like everything else; no admin toggle.
+required_core: true
+provides:
+  routes: true
+  event_listeners: false
+dependencies:
+  - competitions

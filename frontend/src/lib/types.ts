@@ -70,3 +70,43 @@ export interface MyTeam {
   members: TeamMember[];
   created_at: string;
 }
+
+export interface Category {
+  id: string;
+  competition_id: string;
+  name: string;
+  created_at: string;
+}
+
+export type FlagType = "static" | "regex";
+export type ChallengeState = "draft" | "published";
+
+/** TipTap/ProseMirror document. */
+export type RichTextDoc = Record<string, unknown>;
+
+export interface Challenge {
+  id: string;
+  competition_id: string;
+  title: string;
+  description: RichTextDoc;
+  category_id: string | null;
+  points: number;
+  state: ChallengeState;
+  flag_type: FlagType;
+  case_insensitive: boolean;
+  /** The only flag-related fact the server ever returns (§13.2). */
+  has_flag: boolean;
+  created_at: string;
+}
+
+export interface ChallengeCreate {
+  title: string;
+  description?: RichTextDoc;
+  category_id?: string | null;
+  points?: number;
+  flag_type?: FlagType;
+  case_insensitive?: boolean;
+  flag?: string | null;
+}
+
+export type ChallengeUpdate = Partial<ChallengeCreate>;

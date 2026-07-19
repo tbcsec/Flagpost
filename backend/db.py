@@ -79,6 +79,17 @@ class CompetitionScopedMixin:
 engine = create_async_engine(settings.database_url, future=True)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
+if engine.dialect.name == "sqlite":
+    # SQLite ships with foreign keys OFF; enable them so the test suite
+    # (ADR-0006) enforces the same CASCADE / SET NULL semantics Postgres does.
+    from sqlalchemy import event as _sa_event
+
+    @_sa_event.listens_for(engine.sync_engine, "connect")
+    def _enable_sqlite_fks(dbapi_connection, _record) -> None:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
 
 async def get_db() -> AsyncIterator[AsyncSession]:
     """FastAPI dependency yielding a request-scoped async session."""

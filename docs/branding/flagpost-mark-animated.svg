@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Flagpost">
+  <style>
+    .fp-ground, .fp-post, .fp-flag { transform-box: fill-box; }
+    .fp-ground { transform-origin: center; opacity: .16;
+                 animation: fp-plant-ground 340ms ease-out 300ms both; }
+    .fp-post   { transform-origin: bottom center;
+                 animation: fp-plant-post 520ms cubic-bezier(.34,1.4,.5,1) both; }
+    .fp-flag   { transform-origin: left center;
+                 animation: fp-plant-flag 420ms cubic-bezier(.2,.9,.3,1.15) 420ms both; }
+
+    @keyframes fp-plant-post {
+      0%   { transform: translateY(-34px); opacity: 0; }
+      30%  { opacity: 1; }
+      100% { transform: translateY(0); opacity: 1; }
+    }
+    @keyframes fp-plant-ground {
+      0%   { opacity: 0; transform: scale(.2); }
+      60%  { opacity: .22; }
+      100% { opacity: .16; transform: scale(1); }
+    }
+    @keyframes fp-plant-flag {
+      0%   { transform: scaleX(0); }
+      100% { transform: scaleX(1); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .fp-ground, .fp-post, .fp-flag { animation: none !important; }
+    }
+  </style>
+
+  <ellipse class="fp-ground" cx="22" cy="55" rx="12" ry="3.2" fill="#101720"/>
+  <rect class="fp-post" x="19" y="6" width="6" height="49" rx="3" fill="#101720"/>
+  <path class="fp-flag" d="M25 9 H46 L40.5 16 L46 23 H25 Z" fill="#1F9E6B"/>
+</svg>

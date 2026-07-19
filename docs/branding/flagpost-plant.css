@@ -1,0 +1,89 @@
+/* ==========================================================================
+   Flagpost — "Plant" logo animation
+   Canonical source. See LOGO-SPEC.md §11.
+
+   Usage:
+     <svg class="fp-mark" data-animate="plant"> ... </svg>
+
+   The resting mark and the animated mark are the same artwork. Remove the
+   data-animate attribute and it simply renders in its final state.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Base — resting state. Applies whether or not the mark animates.
+   -------------------------------------------------------------------------- */
+
+.fp-mark {
+  display: block;
+}
+
+.fp-mark .fp-ground,
+.fp-mark .fp-post,
+.fp-mark .fp-flag {
+  transform-box: fill-box;
+}
+
+.fp-mark .fp-ground {
+  transform-origin: center;
+  opacity: 0.16;
+}
+
+.fp-mark .fp-post {
+  transform-origin: bottom center;
+}
+
+.fp-mark .fp-flag {
+  transform-origin: left center;
+}
+
+/* Below 32px the ground ellipse reads as a smear rather than a shadow.
+   See LOGO-SPEC.md §1.2 — this mirrors the primary/compact artwork split. */
+.fp-mark[data-size="sm"] .fp-ground {
+  display: none;
+}
+
+/* --------------------------------------------------------------------------
+   Plant — 840ms total
+   -------------------------------------------------------------------------- */
+
+.fp-mark[data-animate="plant"] .fp-post {
+  animation: fp-plant-post 520ms cubic-bezier(0.34, 1.4, 0.5, 1) both;
+}
+
+.fp-mark[data-animate="plant"] .fp-ground {
+  animation: fp-plant-ground 340ms ease-out 300ms both;
+}
+
+.fp-mark[data-animate="plant"] .fp-flag {
+  animation: fp-plant-flag 420ms cubic-bezier(0.2, 0.9, 0.3, 1.15) 420ms both;
+}
+
+@keyframes fp-plant-post {
+  0%   { transform: translateY(-34px); opacity: 0; }
+  30%  { opacity: 1; }
+  100% { transform: translateY(0);     opacity: 1; }
+}
+
+@keyframes fp-plant-ground {
+  0%   { opacity: 0;    transform: scale(0.2); }
+  60%  { opacity: 0.22; }
+  100% { opacity: 0.16; transform: scale(1); }
+}
+
+@keyframes fp-plant-flag {
+  0%   { transform: scaleX(0); }
+  100% { transform: scaleX(1); }
+}
+
+/* --------------------------------------------------------------------------
+   Reduced motion — final state, no movement.
+   Not a faster version of the same sequence. Must not be overridden.
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .fp-mark[data-animate] .fp-post,
+  .fp-mark[data-animate] .fp-ground,
+  .fp-mark[data-animate] .fp-flag {
+    animation: none !important;
+  }
+}

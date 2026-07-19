@@ -9,7 +9,7 @@ import os
 import tempfile
 
 # Must run before importing db/config so settings pick these up.
-_TMPDIR = tempfile.mkdtemp(prefix="ctf-test-")
+_TMPDIR = tempfile.mkdtemp(prefix="flagpost-test-")
 os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_TMPDIR}/test.db")
 os.environ.setdefault("JWT_SECRET", "test-secret-at-least-32-bytes-long-000000")
 

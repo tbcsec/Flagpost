@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     # Async SQLAlchemy URL. Overridden by docker-compose; this default targets
     # a Postgres reachable on localhost for native `uvicorn` runs.
-    database_url: str = "postgresql+asyncpg://ctf:ctf@localhost:5432/ctf"
+    database_url: str = "postgresql+asyncpg://flagpost:flagpost@localhost:5432/flagpost"
 
     redis_url: str | None = None
 

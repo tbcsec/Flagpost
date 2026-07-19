@@ -1,6 +1,6 @@
 # Project Vision Document
 
-# Modern Open Source CTF Competition Platform
+# Flagpost — Modern Open Source CTF Competition Platform
 
 ## Overview
 

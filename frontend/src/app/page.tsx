@@ -36,7 +36,7 @@ export default function Home() {
       <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center p-8">
         <Card>
           <CardHeader>
-            <CardTitle>CTF Platform</CardTitle>
+            <CardTitle>Flagpost</CardTitle>
             <CardDescription>
               Sign in or create an account to continue.
             </CardDescription>

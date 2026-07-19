@@ -2,8 +2,8 @@
 
 ## What this project is
 
-A modern, open-source CTF competition management platform. Product
-rationale lives in `docs/VISION.md`. Technical design lives in
+Flagpost — a modern, open-source CTF competition management platform.
+Product rationale lives in `docs/VISION.md`. Technical design lives in
 `docs/ARCHITECTURE.md` and is binding, not aspirational — if code and
 `ARCHITECTURE.md` disagree, that's a bug in one of them, not a judgment
 call to make silently.

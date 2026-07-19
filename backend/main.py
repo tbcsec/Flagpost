@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="CTF Platform API", version="0.0.0", lifespan=lifespan)
+app = FastAPI(title="Flagpost API", version="0.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -70,4 +70,4 @@ async def health() -> dict[str, str]:
 
 @app.get("/api/hello")
 async def hello() -> dict[str, str]:
-    return {"message": "Hello from the CTF Platform backend 👋"}
+    return {"message": "Hello from the Flagpost backend 👋"}

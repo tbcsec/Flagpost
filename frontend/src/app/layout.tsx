@@ -5,8 +5,8 @@ import { Providers } from "./providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "CTF Platform",
-  description: "Open-source CTF competition management platform",
+  title: "Flagpost",
+  description: "Flagpost — open-source CTF competition management platform",
 };
 
 // `data-palette` selects the design-system palette (§9); "dark" is the default.

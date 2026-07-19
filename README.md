@@ -1,6 +1,6 @@
-# CTF Platform
+# Flagpost
 
-A modern, open-source CTF competition management platform.
+Flagpost is a modern, open-source CTF competition management platform.
 
 - **What & why:** [`docs/VISION.md`](docs/VISION.md)
 - **How (binding technical design):** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)

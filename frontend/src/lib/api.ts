@@ -8,6 +8,7 @@
 
 import { useAuthStore } from "@/stores/auth";
 import type {
+  Attachment,
   Category,
   Challenge,
   ChallengeCreate,
@@ -17,6 +18,7 @@ import type {
   CompetitionUpdate,
   HelloResponse,
   MyTeam,
+  SignedUrl,
   Team,
   TokenResponse,
   User,
@@ -75,7 +77,13 @@ async function apiFetch<T>(
     const token = useAuthStore.getState().accessToken;
     if (token) headers.set("Authorization", `Bearer ${token}`);
   }
-  if (init.body && !headers.has("Content-Type")) {
+  // Let the browser set the multipart boundary for FormData; only default to
+  // JSON for other bodies.
+  if (
+    init.body &&
+    !(init.body instanceof FormData) &&
+    !headers.has("Content-Type")
+  ) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -213,6 +221,31 @@ export const challengesApi = {
   remove: (competitionId: string, challengeId: string) =>
     apiFetch<void>(
       `/api/competitions/${competitionId}/challenges/${challengeId}`,
+      { method: "DELETE" },
+    ),
+};
+
+export const attachmentsApi = {
+  list: (competitionId: string, challengeId: string) =>
+    apiFetch<Attachment[]>(
+      `/api/competitions/${competitionId}/challenges/${challengeId}/attachments`,
+    ),
+  upload: (competitionId: string, challengeId: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiFetch<Attachment>(
+      `/api/competitions/${competitionId}/challenges/${challengeId}/attachments`,
+      { method: "POST", body: form },
+    );
+  },
+  // Fetch a fresh short-lived signed URL at click time (§13.3) — never store it.
+  signedUrl: (competitionId: string, challengeId: string, attachmentId: string) =>
+    apiFetch<SignedUrl>(
+      `/api/competitions/${competitionId}/challenges/${challengeId}/attachments/${attachmentId}/url`,
+    ),
+  remove: (competitionId: string, challengeId: string, attachmentId: string) =>
+    apiFetch<void>(
+      `/api/competitions/${competitionId}/challenges/${challengeId}/attachments/${attachmentId}`,
       { method: "DELETE" },
     ),
 };

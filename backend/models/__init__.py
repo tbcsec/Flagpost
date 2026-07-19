@@ -5,6 +5,7 @@ fully populated — Alembic autogenerate and metadata-create both rely on that.
 Add new model modules to the imports below as domains are built.
 """
 
+from models.attachment import Attachment
 from models.audit_log import AuditLogEntry
 from models.challenge import Category, Challenge
 from models.competition import Competition
@@ -13,6 +14,7 @@ from models.team import Team, TeamMembership
 from models.user import RefreshSession, User
 
 __all__ = [
+    "Attachment",
     "AuditLogEntry",
     "Category",
     "Challenge",

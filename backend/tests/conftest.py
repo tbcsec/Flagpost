@@ -54,13 +54,27 @@ async def admin_token(client) -> str:
     return resp.json()["access_token"]
 
 
+import pytest  # noqa: E402
+
+from storage import get_storage  # noqa: E402
+from storage.memory import InMemoryStorage  # noqa: E402
+
+
+@pytest.fixture
+def object_storage() -> InMemoryStorage:
+    """In-memory object storage double so the suite needs no MinIO (ADR-0006)."""
+    return InMemoryStorage()
+
+
 @pytest_asyncio.fixture
-async def client():
+async def client(object_storage):
     """In-process HTTP client against the real ASGI app (no port bound)."""
     import main
 
+    main.app.dependency_overrides[get_storage] = lambda: object_storage
     transport = ASGITransport(app=main.app)
     async with AsyncClient(
         transport=transport, base_url="http://test"
     ) as http_client:
         yield http_client
+    main.app.dependency_overrides.clear()

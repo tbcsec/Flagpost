@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { AttachmentsSection } from "@/components/challenges/attachments-section";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -300,6 +301,15 @@ function ChallengeForm({
             />
             Case-insensitive flag
           </label>
+
+          {/* Attachments need a persisted challenge id, so they're only
+              available once the challenge exists (edit mode). */}
+          {isEdit && (
+            <AttachmentsSection
+              competitionId={competitionId}
+              challengeId={challenge.id}
+            />
+          )}
 
           {mutation.isError && (
             <p className="text-sm text-destructive">

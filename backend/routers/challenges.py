@@ -21,9 +21,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import require_permission, user_has_permission
 from db import get_db
+from models.attachment import Attachment
 from models.challenge import Category, Challenge
 from models.user import User
 from schemas.challenge import ChallengeCreate, ChallengeOut, ChallengeUpdate
+from storage import get_storage
+from storage.base import ObjectStorage
 from utils.event_bus import event_bus
 from utils.flags import hash_static_flag, make_salt
 
@@ -57,6 +60,21 @@ async def _get_scoped_challenge(
         )
     )
     if challenge is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Challenge not found"
+        )
+    return challenge
+
+
+async def load_visible_challenge(
+    db: AsyncSession, competition_id: str, challenge_id: str, user: User
+) -> Challenge:
+    """Return a scoped challenge, hiding drafts from non-editors (a draft 404s,
+    indistinguishable from missing). Shared by challenge and attachment reads."""
+    challenge = await _get_scoped_challenge(db, competition_id, challenge_id)
+    if challenge.state != "published" and not await user_has_permission(
+        db, user.id, "challenge_edit", competition_id
+    ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Challenge not found"
         )
@@ -104,15 +122,9 @@ async def get_challenge(
     current_user: User = Depends(require_permission("challenge_view")),
     db: AsyncSession = Depends(get_db),
 ) -> Challenge:
-    challenge = await _get_scoped_challenge(db, competition_id, challenge_id)
-    if challenge.state != "published" and not await user_has_permission(
-        db, current_user.id, "challenge_edit", competition_id
-    ):
-        # A draft is indistinguishable from a missing challenge to viewers.
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Challenge not found"
-        )
-    return challenge
+    return await load_visible_challenge(
+        db, competition_id, challenge_id, current_user
+    )
 
 
 @router.post("", response_model=ChallengeOut, status_code=status.HTTP_201_CREATED)
@@ -252,8 +264,21 @@ async def delete_challenge(
     challenge_id: str,
     current_user: User = Depends(require_permission("challenge_delete")),
     db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
 ) -> None:
     challenge = await _get_scoped_challenge(db, competition_id, challenge_id)
+    # Remove attachment objects first — the rows cascade, but the bucket
+    # objects would otherwise be orphaned (§13.3).
+    keys = (
+        await db.execute(
+            select(Attachment.object_key).where(
+                Attachment.challenge_id == challenge_id
+            )
+        )
+    ).scalars().all()
+    for key in keys:
+        storage.delete(key)
+
     await db.delete(challenge)
     await db.commit()
 

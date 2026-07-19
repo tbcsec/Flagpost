@@ -18,11 +18,22 @@ class Settings(BaseSettings):
     # a Postgres reachable on localhost for native `uvicorn` runs.
     database_url: str = "postgresql+asyncpg://ctf:ctf@localhost:5432/ctf"
 
-    # Provisioned by docker-compose ahead of the code that uses them (Tier 1+).
     redis_url: str | None = None
-    minio_endpoint: str | None = None
-    minio_access_key: str | None = None
-    minio_secret_key: str | None = None
+
+    # --- Object storage (MinIO / S3, §13.3) ---
+    # Endpoint the backend talks to. Defaults to the compose MinIO as exposed on
+    # the host, so a native `uvicorn` run works against `docker compose up minio`.
+    minio_endpoint: str = "localhost:9000"
+    # Endpoint used when *signing* download URLs, i.e. the host the browser can
+    # reach. Falls back to minio_endpoint. In full-docker the backend talks to
+    # `minio:9000` but must sign against `localhost:9000` — compose sets this.
+    minio_public_endpoint: str | None = None
+    minio_access_key: str = "minioadmin"
+    minio_secret_key: str = "minioadmin"
+    minio_bucket: str = "challenge-files"
+    minio_secure: bool = False  # http in dev; true behind TLS in prod
+    # Lifetime of a signed download URL, in seconds (§13.3 — short-lived).
+    signed_url_ttl_seconds: int = 300
 
     # --- Auth (ARCHITECTURE.md §7.7, ADR-0003) ---
     # Dev default only; MUST be overridden in any real deployment.

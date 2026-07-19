@@ -110,3 +110,17 @@ export interface ChallengeCreate {
 }
 
 export type ChallengeUpdate = Partial<ChallengeCreate>;
+
+export interface Attachment {
+  id: string;
+  challenge_id: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  created_at: string;
+}
+
+export interface SignedUrl {
+  url: string;
+  expires_in_seconds: number;
+}

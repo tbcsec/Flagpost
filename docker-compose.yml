@@ -64,6 +64,9 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-ctf}:${POSTGRES_PASSWORD:-ctf}@postgres:5432/${POSTGRES_DB:-ctf}
       REDIS_URL: redis://redis:6379/0
       MINIO_ENDPOINT: minio:9000
+      # The backend reaches MinIO at minio:9000 inside the network, but signed
+      # download URLs must point at a host the browser can reach (§13.3).
+      MINIO_PUBLIC_ENDPOINT: localhost:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       CORS_ORIGINS: http://localhost:3000

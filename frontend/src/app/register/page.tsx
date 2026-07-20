@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { Lockup } from "@/components/brand/flagpost-mark";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -32,7 +33,10 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center p-8">
+    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 p-8">
+      <div className="flex justify-center">
+        <Lockup size={40} theme="dark" />
+      </div>
       <Card>
         <CardHeader>
           <CardTitle>Create account</CardTitle>

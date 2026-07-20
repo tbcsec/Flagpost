@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Space Grotesk — the brand/display face (wordmark, live numerals). UI body and
+ * mono use system stacks. Loaded from Google Fonts at runtime (open-licence);
+ * see the design-system readme → "Font substitution" to embed locally. */
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
 /* Design system = tokens, not components (ARCHITECTURE.md §9, principle 5).
  *
  * Colours are HSL *channel* triplets in CSS custom properties, so a palette
@@ -12,13 +17,28 @@
  * `@theme inline` maps each Tailwind colour token onto `hsl(var(--channel))`
  * so the generated utilities resolve the variables *at runtime*, which is what
  * makes live palette switching work.
+ *
+ * The accent is Flagpost signal green (LOGO-SPEC §2.3, §10): the brand green and
+ * success green are the same hue by intention, dark-corrected on the dark
+ * palette. This replaces the placeholder blue the Tier 0 scaffold shipped.
  */
 
 /* Enable `dark:` utilities keyed off the active palette. */
 @custom-variant dark (&:where([data-palette="dark"], [data-palette="dark"] *));
 
+/* Brand source values (LOGO-SPEC §2 & §10). The semantic palette references
+ * these rather than redeclaring hex, so the tie between brand green and success
+ * green stays explicit in code. */
+:root {
+  --fp-ink: 214 33% 9%; /* #101720 */
+  --fp-green: 156 67% 37%; /* #1F9E6B — signal green, the brand accent */
+  --fp-green-dark: 155 61% 44%; /* #2CB57C — corrected for dark grounds */
+  --fp-green-text: 162 72% 28%; /* #14795A — small green text on light (AA) */
+  --fp-sheet: 96 9% 90%; /* #E4E7E2 */
+}
+
 /* Default palette (dark). Applied when no data-palette is set, and explicitly
- * for data-palette="dark". */
+ * for data-palette="dark". Brand green uses the dark-corrected value. */
 :root,
 [data-palette="dark"] {
   --background: 222 47% 11%;
@@ -30,7 +50,7 @@
   --popover: 222 47% 14%;
   --popover-foreground: 210 40% 96%;
 
-  --primary: 217 91% 60%;
+  --primary: 155 61% 44%;
   --primary-foreground: 222 47% 11%;
 
   --secondary: 217 33% 24%;
@@ -45,9 +65,17 @@
   --destructive: 0 72% 51%;
   --destructive-foreground: 210 40% 98%;
 
+  /* Success is the brand green by intention (LOGO-SPEC §2.3) — never a second,
+     unrelated green. */
+  --success: 155 61% 44%;
+  --success-foreground: 222 47% 11%;
+
+  --warning: 38 92% 55%;
+  --warning-foreground: 222 47% 11%;
+
   --border: 217 33% 24%;
   --input: 217 33% 24%;
-  --ring: 217 91% 60%;
+  --ring: 155 61% 44%;
 
   --radius: 0.5rem;
 }
@@ -62,7 +90,7 @@
   --popover: 0 0% 100%;
   --popover-foreground: 222 47% 11%;
 
-  --primary: 217 91% 52%;
+  --primary: 156 67% 37%;
   --primary-foreground: 0 0% 100%;
 
   --secondary: 210 40% 96%;
@@ -77,9 +105,15 @@
   --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 100%;
 
+  --success: 162 72% 28%;
+  --success-foreground: 0 0% 100%;
+
+  --warning: 32 95% 44%;
+  --warning-foreground: 0 0% 100%;
+
   --border: 214 32% 91%;
   --input: 214 32% 91%;
-  --ring: 217 91% 52%;
+  --ring: 156 67% 37%;
 }
 
 @theme inline {
@@ -107,9 +141,21 @@
   --color-destructive: hsl(var(--destructive));
   --color-destructive-foreground: hsl(var(--destructive-foreground));
 
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
+
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
+
+  /* Brand green, resolved — for brand contexts (the mark, wordmark). */
+  --color-fp-green: hsl(var(--fp-green));
+  --color-fp-green-dark: hsl(var(--fp-green-dark));
+
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
 
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);

@@ -13,14 +13,20 @@ import type { User } from "@/lib/types";
 
 type AuthStatus = "loading" | "authenticated" | "anonymous";
 
+// Palette is a UI preference (client state, §2). The app is dark-first; the
+// topbar toggle flips this and the shell mirrors it onto <html data-palette>.
+type Palette = "dark" | "light";
+
 interface AuthState {
   accessToken: string | null;
   user: User | null;
   status: AuthStatus;
   activeCompetitionId: string | null;
+  palette: Palette;
   setSession: (accessToken: string, user: User) => void;
   clearSession: () => void;
   setActiveCompetition: (competitionId: string | null) => void;
+  togglePalette: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -28,10 +34,13 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   status: "loading",
   activeCompetitionId: null,
+  palette: "dark",
   setSession: (accessToken, user) =>
     set({ accessToken, user, status: "authenticated" }),
   clearSession: () =>
     set({ accessToken: null, user: null, status: "anonymous" }),
   setActiveCompetition: (competitionId) =>
     set({ activeCompetitionId: competitionId }),
+  togglePalette: () =>
+    set((s) => ({ palette: s.palette === "dark" ? "light" : "dark" })),
 }));

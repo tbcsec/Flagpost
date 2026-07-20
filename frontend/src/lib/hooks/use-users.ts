@@ -24,6 +24,10 @@ export function useLogin() {
   });
 }
 
+export function useChangePassword() {
+  return useMutation({ mutationFn: authApi.changePassword });
+}
+
 export function useLogout() {
   const clearSession = useAuthStore((s) => s.clearSession);
   const queryClient = useQueryClient();

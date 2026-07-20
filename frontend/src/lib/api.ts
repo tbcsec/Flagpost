@@ -135,6 +135,11 @@ export const authApi = {
   logout: () =>
     apiFetch<void>("/api/auth/logout", { method: "POST" }, { retryOn401: false }),
   me: () => apiFetch<User>("/api/auth/me"),
+  changePassword: (input: { current_password: string; new_password: string }) =>
+    apiFetch<void>("/api/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   /** Restore a session from the refresh cookie on app load. */
   restore: () => refreshOnce(),
 };

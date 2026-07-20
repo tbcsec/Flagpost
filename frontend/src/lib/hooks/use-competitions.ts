@@ -32,6 +32,14 @@ export function useCompetition(id: string) {
   });
 }
 
+/** The competition selected in the topbar switcher (stored in the auth store),
+ *  resolved to its full record. The shell defaults it to the first available. */
+export function useActiveCompetition() {
+  const activeCompetitionId = useAuthStore((s) => s.activeCompetitionId);
+  const query = useCompetition(activeCompetitionId ?? "");
+  return { competitionId: activeCompetitionId, ...query };
+}
+
 export function useCreateCompetition() {
   const queryClient = useQueryClient();
   return useMutation({

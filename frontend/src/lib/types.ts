@@ -136,3 +136,20 @@ export interface SubmitResult {
   points_awarded: number;
   is_first_blood: boolean;
 }
+
+/** One ranked row on the scoreboard (Phase 7). The subject is the team in
+ *  team-mode, the user in individual-mode — same as scoring. */
+export interface ScoreboardEntry {
+  rank: number;
+  subject_id: string;
+  name: string;
+  points: number;
+  /** When the subject reached its current score — the ranking tie-break. */
+  last_solve_at: string | null;
+}
+
+export interface Scoreboard {
+  competition_id: string;
+  mode: ParticipationMode;
+  entries: ScoreboardEntry[];
+}

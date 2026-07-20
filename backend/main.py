@@ -19,6 +19,7 @@ from auth.seed import (
 from config import settings
 from db import SessionLocal
 from plugins.loader import load_modules
+from realtime import router as realtime_router
 from routers import auth as auth_router
 from utils.audit_log import register_audit_log
 from utils.event_bus import event_bus
@@ -57,9 +58,12 @@ app.add_middleware(
 )
 
 
-# Auth is kernel — mounted directly. Every feature above the kernel registers
-# through the module loader (§11.1): required-core now, optional modules later.
+# Auth and the real-time WebSocket endpoint are kernel — mounted directly
+# (modules register the room *types* they own, §4.1). Every feature above the
+# kernel registers through the module loader (§11.1): required-core now,
+# optional modules later.
 app.include_router(auth_router.router)
+app.include_router(realtime_router)
 load_modules(app, event_bus, SessionLocal)
 
 

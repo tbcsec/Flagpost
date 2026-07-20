@@ -1,0 +1,13 @@
+id: scoring
+name: Scoring & Scoreboard
+version: 1.0.0
+# Required-core (§11.3): scoring "and the live scoreboard it drives" — a
+# competition without a scoreboard isn't a competition. No admin toggle.
+required_core: true
+provides:
+  routes: true
+  event_listeners: true
+dependencies:
+  - competitions
+  # Submissions (the data this ranks) live in the challenges module.
+  - challenges

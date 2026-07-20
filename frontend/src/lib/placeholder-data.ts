@@ -11,27 +11,6 @@
 // which roadmap phase lights each of these up for real.
 // -----------------------------------------------------------------------------
 
-export interface ScoreRow {
-  id: string;
-  name: string;
-  points: number;
-  lastSolve: string;
-  mine?: boolean;
-}
-
-export const SCOREBOARD: ScoreRow[] = [
-  { id: "t1", name: "Segfault Society", points: 1850, lastSolve: "14:22" },
-  { id: "t2", name: "Null Terminators", points: 1600, lastSolve: "13:58", mine: true },
-  { id: "t3", name: "The Buffer Overflowers", points: 1450, lastSolve: "13:40" },
-  { id: "t4", name: "Rubber Duck Debuggers", points: 1200, lastSolve: "12:55" },
-  { id: "t5", name: "Kernel Panic", points: 1050, lastSolve: "12:10" },
-  { id: "t6", name: "0x1337", points: 900, lastSolve: "11:48" },
-  { id: "t7", name: "Cache Money", points: 800, lastSolve: "11:20" },
-  { id: "t8", name: "Byte Me", points: 650, lastSolve: "10:55" },
-  { id: "t9", name: "Ping Pong Panda", points: 500, lastSolve: "10:30" },
-  { id: "t10", name: "Root Access", points: 400, lastSolve: "09:58" },
-];
-
 export interface ActivityEvent {
   id: string;
   text: string;

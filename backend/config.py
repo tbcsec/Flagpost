@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     submission_rate_limit: int = 10
     submission_rate_window_seconds: int = 30
 
+    # --- Real-time layer (§4.1) ---
+    # How long a fresh WebSocket connection has to send its first-frame auth
+    # message before the server closes it (the token is never in the URL,
+    # ADR-0003).
+    ws_auth_timeout_seconds: float = 5.0
+
     # --- Object storage (MinIO / S3, §13.3) ---
     # Endpoint the backend talks to. Defaults to the compose MinIO as exposed on
     # the host, so a native `uvicorn` run works against `docker compose up minio`.

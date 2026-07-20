@@ -18,6 +18,7 @@ import type {
   CompetitionUpdate,
   HelloResponse,
   MyTeam,
+  Scoreboard,
   SignedUrl,
   SubmitResult,
   Team,
@@ -237,6 +238,12 @@ export const submissionsApi = {
       `/api/competitions/${competitionId}/challenges/${challengeId}/submit`,
       { method: "POST", body: JSON.stringify({ flag }) },
     ),
+};
+
+export const scoreboardApi = {
+  // Initial load only — live updates arrive over the scoreboard WS room (§4.1).
+  get: (competitionId: string) =>
+    apiFetch<Scoreboard>(`/api/competitions/${competitionId}/scoreboard`),
 };
 
 export const attachmentsApi = {

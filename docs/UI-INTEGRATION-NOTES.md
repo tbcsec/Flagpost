@@ -49,6 +49,7 @@ code.
 | Challenges — detail dialog (title/points/category/description) | **Wired** (description rendered read-only via `richTextToPlain`) |
 | Challenges — flag submission + solve state | **Wired** (Phase 6 — `useSubmitFlag`, solved/solve_count badges, first-blood) |
 | Challenges — "Manage challenges" authoring (CRUD, categories, publish, attachments) | **Wired** (reuses `ChallengeAdmin`) |
+| Scoreboard — live rankings | **Wired** (Phase 7 — `useScoreboard`: REST initial load + WebSocket room updates, first-frame auth, backoff reconnect) |
 | Participants — team mode (create/join/leave, browse teams) | **Wired** (reuses `TeamPanel`) |
 | Competition Settings | **Wired** (`CompetitionSettingsForm` on the active competition) |
 | Admin → Competitions (list + New competition) | **Wired** (`useCompetitions`, `CreateCompetitionDialog`) |
@@ -60,12 +61,10 @@ code.
 These need features that are still on the roadmap. UI is in place so they're not
 a retrofit later; **none of the data is real**.
 
-- **Dashboard widgets** (stats, activity, announcements) — needs scoring /
-  announcements / WebSocket endpoints. Ships as a **fixed layout**; the mock's
-  drag-and-drop customization is explicitly deferred (ROADMAP).
-- **Scoreboard** — Tier 1 Phase 7 (ranking computation + live WebSocket layer;
-  the submissions data it ranks from exists as of Phase 6). The name column
-  does reflect the real participation mode.
+- **Dashboard widgets** (stats, activity, announcements) — needs announcement
+  endpoints and aggregate stats (the WebSocket layer itself exists as of
+  Phase 7). Ships as a **fixed layout**; the mock's drag-and-drop
+  customization is explicitly deferred (ROADMAP).
 - **Support tickets** — Tier 2.
 - **Analytics** — Tier 3.
 - **Automations** (competition + admin) — deferred past MVP.

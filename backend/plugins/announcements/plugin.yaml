@@ -1,0 +1,11 @@
+id: announcements
+name: Announcements
+version: 1.0.0
+# Required-core (§11.3): a floor feature — organisers broadcast to competitors.
+# Registered through the module path; no admin enable/disable toggle.
+required_core: true
+provides:
+  routes: true
+  event_listeners: true
+dependencies:
+  - competitions

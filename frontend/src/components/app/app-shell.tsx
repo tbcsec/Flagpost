@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import * as React from "react";
 
+import { AnnouncementBanner } from "@/components/announcements/announcement-banner";
 import { Lockup } from "@/components/brand/flagpost-mark";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -42,6 +43,9 @@ const shieldIcon: Icon = (
 const lobbyIcon: Icon = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9.5 12 3l9 6.5" /><path d="M5 9v11h14V9" /><path d="M9 20v-6h6v6" /></svg>
 );
+const settingsIcon: Icon = (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg>
+);
 
 const COMP_NAV: { href: string; label: string; icon: Icon }[] = [
   { href: "/", label: "Dashboard", icon: dashIcon },
@@ -51,7 +55,7 @@ const COMP_NAV: { href: string; label: string; icon: Icon }[] = [
   { href: "/support", label: "Support", icon: supportIcon },
   { href: "/analytics", label: "Analytics", icon: analyticsIcon },
   { href: "/automations", label: "Automations", icon: boltIcon },
-  { href: "/settings", label: "Settings", icon: <span className="text-base leading-none">⚙</span> },
+  { href: "/settings", label: "Settings", icon: settingsIcon },
 ];
 
 const ADMIN_SUBNAV: { href: string; label: string }[] = [
@@ -191,6 +195,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar isAdminSection={isAdminSection} pathname={pathname} />
+        {/* Live announcement banner on competition-scoped pages (not Admin,
+            which is global, nor the lobby, which has no active competition). */}
+        {!isAdminSection && pathname !== "/lobby" && <AnnouncementBanner />}
         <main className="flex-1 overflow-y-auto p-8">
           <div className="mx-auto grid max-w-5xl gap-6">{children}</div>
         </main>

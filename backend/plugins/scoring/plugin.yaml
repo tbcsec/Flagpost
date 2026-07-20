@@ -11,3 +11,5 @@ dependencies:
   - competitions
   # Submissions (the data this ranks) live in the challenges module.
   - challenges
+  # Hint costs (subtracted from scores) live in the hints module.
+  - hints

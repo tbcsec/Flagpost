@@ -1,14 +1,17 @@
 "use client";
 
+import { NewAnnouncementDialog } from "@/components/announcements/new-announcement-dialog";
 import { NotWiredNote, SectionHeader } from "@/components/app/section-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { relativeTime } from "@/lib/datetime";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
-import { ACTIVITY, ANNOUNCEMENTS } from "@/lib/placeholder-data";
+import { useAnnouncements } from "@/lib/hooks/use-announcements";
+import { ACTIVITY } from "@/lib/placeholder-data";
 
 // Dashboard. Ships as a FIXED layout per ROADMAP (Tier 2, #16); the drag-and-
-// drop customization layer is explicitly deferred. The stat/activity/
-// announcement widgets need endpoints that don't exist yet, so the numbers here
-// are placeholder — see docs/UI-INTEGRATION-NOTES.md.
+// drop customization layer is explicitly deferred. Announcements are live as of
+// Phase 8; the stat tiles and activity feed still need aggregate endpoints, so
+// those stay placeholder — see docs/UI-INTEGRATION-NOTES.md.
 const STATS = [
   { label: "Active competitors now", value: "—" },
   { label: "Recent solves (1h)", value: "—" },
@@ -17,19 +20,25 @@ const STATS = [
 ];
 
 export default function DashboardPage() {
-  const { data: competition } = useActiveCompetition();
+  const { competitionId, data: competition } = useActiveCompetition();
+  const announcements = useAnnouncements(competitionId ?? "");
 
   return (
     <>
       <SectionHeader
         title="Dashboard"
         subtitle={`${competition?.name ?? "—"} · operational overview`}
+        actions={
+          competitionId ? (
+            <NewAnnouncementDialog competitionId={competitionId} />
+          ) : undefined
+        }
       />
 
       <NotWiredNote>
-        Live stats, activity feed and announcements need endpoints that arrive in
-        later phases (scoring, announcements, WebSocket layer). Values shown are
-        placeholder. Drag-and-drop customization is deferred (fixed layout for now).
+        Stat tiles and the activity feed still need aggregate endpoints — those
+        values are placeholder. Announcements are live. Drag-and-drop dashboard
+        customization is deferred (fixed layout for now).
       </NotWiredNote>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -69,17 +78,23 @@ export default function DashboardPage() {
             <CardDescription>Archive, newest first</CardDescription>
           </CardHeader>
           <CardContent>
-            <ul className="grid gap-3">
-              {ANNOUNCEMENTS.map((an) => (
-                <li key={an.id} className="grid gap-0.5">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="text-[13px] font-medium">{an.title}</span>
-                    <span className="whitespace-nowrap text-[11px] text-muted-foreground">{an.time}</span>
-                  </div>
-                  <span className="text-[13px] text-muted-foreground">{an.body}</span>
-                </li>
-              ))}
-            </ul>
+            {announcements.data && announcements.data.length > 0 ? (
+              <ul className="grid gap-3">
+                {announcements.data.map((an) => (
+                  <li key={an.id} className="grid gap-0.5">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-[13px] font-medium">{an.title}</span>
+                      <span className="whitespace-nowrap text-[11px] text-muted-foreground">
+                        {relativeTime(an.created_at)}
+                      </span>
+                    </div>
+                    <span className="text-[13px] text-muted-foreground">{an.body}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">No announcements yet.</p>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -153,3 +153,31 @@ export interface Scoreboard {
   mode: ParticipationMode;
   entries: ScoreboardEntry[];
 }
+
+/** A broadcast announcement (Phase 8). */
+export interface Announcement {
+  id: string;
+  competition_id: string;
+  title: string;
+  body: string;
+  created_at: string;
+}
+
+/** A hint as a competitor sees it (Phase 9): `body` is null until this subject
+ *  has revealed it. Editors receive every body with `revealed: true`. */
+export interface Hint {
+  id: string;
+  challenge_id: string;
+  cost: number;
+  revealed: boolean;
+  body: string | null;
+}
+
+/** The authoring view returned when creating a hint. */
+export interface HintAuthored {
+  id: string;
+  challenge_id: string;
+  body: string;
+  cost: number;
+  created_at: string;
+}

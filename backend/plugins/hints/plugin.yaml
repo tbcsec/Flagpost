@@ -1,0 +1,13 @@
+id: hints
+name: Hints
+version: 1.0.0
+# Required-core (§11.3). Hints attach to challenges, so the module depends on
+# the challenges module (its router reuses load_visible_challenge + scoring's
+# subject resolution).
+required_core: true
+provides:
+  routes: true
+  event_listeners: false
+dependencies:
+  - competitions
+  - challenges

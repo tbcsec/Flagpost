@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { parseServerDate } from "@/lib/datetime";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
 import { useMyTeam } from "@/lib/hooks/use-teams";
 import { useScoreboard } from "@/lib/hooks/use-scoreboard";
@@ -125,7 +126,7 @@ export default function ScoreboardPage() {
                     <TableCell className="font-mono">{e.points}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {e.last_solve_at
-                        ? new Date(e.last_solve_at).toLocaleTimeString([], {
+                        ? parseServerDate(e.last_solve_at).toLocaleTimeString([], {
                             hour: "2-digit",
                             minute: "2-digit",
                           })

@@ -25,19 +25,6 @@ export const ACTIVITY: ActivityEvent[] = [
   { id: "a5", text: 'The Buffer Overflowers solved "JWT None Algorithm" (+200)', time: "34 min ago" },
 ];
 
-export interface Announcement {
-  id: string;
-  title: string;
-  body: string;
-  time: string;
-}
-
-export const ANNOUNCEMENTS: Announcement[] = [
-  { id: "an1", title: "Scoring freeze at T-1h", body: "The scoreboard will freeze one hour before the end.", time: "1h ago" },
-  { id: "an2", title: "Forensics category live", body: "Two new forensics challenges are now published.", time: "3h ago" },
-  { id: "an3", title: "Welcome", body: "Good luck — read the rules before you start.", time: "1d ago" },
-];
-
 export interface Ticket {
   id: string;
   subject: string;

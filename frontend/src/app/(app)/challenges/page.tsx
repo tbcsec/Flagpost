@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { ChallengeAdmin } from "@/components/challenges/challenge-admin";
+import { ChallengeHints } from "@/components/challenges/challenge-hints";
 import { SectionHeader } from "@/components/app/section-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -210,6 +211,8 @@ function ChallengeDialogBody({
           </DialogFooter>
         </form>
       )}
+
+      <ChallengeHints competitionId={competitionId} challengeId={challenge.id} />
     </>
   );
 }

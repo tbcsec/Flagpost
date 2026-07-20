@@ -19,6 +19,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.competition import Competition
+from models.hint import HintReveal
 from models.submission import Submission
 from models.team import TeamMembership
 from models.user import User
@@ -112,3 +113,42 @@ async def solved_challenge_ids(
         )
     ).all()
     return {challenge_id for (challenge_id,) in rows}
+
+
+# --- Hint reveals (§13.2 subject semantics reused for Phase 9) ---------------
+
+
+def _subject_reveal_filter(subject: Subject):
+    """WHERE clause matching a subject's own hint reveals (mirrors solves)."""
+    if subject.kind == "team":
+        return HintReveal.team_id == subject.id
+    return (HintReveal.user_id == subject.id) & (HintReveal.team_id.is_(None))
+
+
+async def subject_has_revealed(
+    db: AsyncSession, hint_id: str, subject: Subject
+) -> bool:
+    existing = await db.scalar(
+        select(HintReveal.id).where(
+            HintReveal.hint_id == hint_id,
+            _subject_reveal_filter(subject),
+        )
+    )
+    return existing is not None
+
+
+async def revealed_hint_ids(
+    db: AsyncSession, challenge_id: str, subject: Subject
+) -> set[str]:
+    """The set of hint ids ``subject`` has revealed on a challenge."""
+    rows = (
+        await db.execute(
+            select(HintReveal.hint_id)
+            .where(
+                HintReveal.challenge_id == challenge_id,
+                _subject_reveal_filter(subject),
+            )
+            .distinct()
+        )
+    ).all()
+    return {hint_id for (hint_id,) in rows}

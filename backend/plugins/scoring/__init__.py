@@ -42,7 +42,6 @@ def setup(app, event_bus, db_factory) -> None:
 
     register_room_type("scoreboard", authorize=authorize, snapshot=snapshot)
 
-    @event_bus.on("challenge.solved", owner="scoring")
     async def broadcast_scoreboard(event_name: str, payload: dict) -> None:
         competition_id = payload.get("competition_id")
         if not competition_id:
@@ -58,3 +57,10 @@ def setup(app, event_bus, db_factory) -> None:
         await manager.broadcast(
             "scoreboard", competition_id, {"type": "scoreboard", **board}
         )
+
+    # A solve changes totals; a hint reveal deducts its cost — both move the
+    # board, so both trigger a recompute + live broadcast.
+    event_bus.subscribe("challenge.solved", broadcast_scoreboard, owner="scoring")
+    event_bus.subscribe(
+        "challenge.hint_requested", broadcast_scoreboard, owner="scoring"
+    )

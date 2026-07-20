@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { AttachmentsSection } from "@/components/challenges/attachments-section";
+import { HintsSection } from "@/components/challenges/hints-section";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -302,13 +303,19 @@ function ChallengeForm({
             Case-insensitive flag
           </label>
 
-          {/* Attachments need a persisted challenge id, so they're only
-              available once the challenge exists (edit mode). */}
+          {/* Attachments and hints need a persisted challenge id, so they're
+              only available once the challenge exists (edit mode). */}
           {isEdit && (
-            <AttachmentsSection
-              competitionId={competitionId}
-              challengeId={challenge.id}
-            />
+            <>
+              <AttachmentsSection
+                competitionId={competitionId}
+                challengeId={challenge.id}
+              />
+              <HintsSection
+                competitionId={competitionId}
+                challengeId={challenge.id}
+              />
+            </>
           )}
 
           {mutation.isError && (

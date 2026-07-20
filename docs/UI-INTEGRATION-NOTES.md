@@ -50,6 +50,8 @@ code.
 | Challenges — flag submission + solve state | **Wired** (Phase 6 — `useSubmitFlag`, solved/solve_count badges, first-blood) |
 | Challenges — "Manage challenges" authoring (CRUD, categories, publish, attachments) | **Wired** (reuses `ChallengeAdmin`) |
 | Scoreboard — live rankings | **Wired** (Phase 7 — `useScoreboard`: REST initial load + WebSocket room updates, first-frame auth, backoff reconnect) |
+| Announcements — post + live banner + dashboard widget | **Wired** (Phase 8 — `useAnnouncements`: REST + WS room, `NewAnnouncementDialog`) |
+| Hints — reveal (competitor) + authoring (editor) | **Wired** (Phase 9 — `useHints`: reveal-on-request with cost, hidden body until revealed; scoreboard deducts cost live) |
 | Participants — team mode (create/join/leave, browse teams) | **Wired** (reuses `TeamPanel`) |
 | Competition Settings | **Wired** (`CompetitionSettingsForm` on the active competition) |
 | Admin → Competitions (list + New competition) | **Wired** (`useCompetitions`, `CreateCompetitionDialog`) |
@@ -61,10 +63,10 @@ code.
 These need features that are still on the roadmap. UI is in place so they're not
 a retrofit later; **none of the data is real**.
 
-- **Dashboard widgets** (stats, activity, announcements) — needs announcement
-  endpoints and aggregate stats (the WebSocket layer itself exists as of
-  Phase 7). Ships as a **fixed layout**; the mock's drag-and-drop
-  customization is explicitly deferred (ROADMAP).
+- **Dashboard widgets** — the announcements widget is live (Phase 8); the stat
+  tiles and activity feed still need aggregate endpoints and stay placeholder.
+  Ships as a **fixed layout**; the mock's drag-and-drop customization is
+  explicitly deferred (ROADMAP).
 - **Support tickets** — Tier 2.
 - **Analytics** — Tier 3.
 - **Automations** (competition + admin) — deferred past MVP.

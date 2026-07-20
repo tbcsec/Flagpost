@@ -8,6 +8,7 @@
 
 import { useAuthStore } from "@/stores/auth";
 import type {
+  Announcement,
   Attachment,
   Category,
   Challenge,
@@ -17,6 +18,8 @@ import type {
   CompetitionCreate,
   CompetitionUpdate,
   HelloResponse,
+  Hint,
+  HintAuthored,
   MyTeam,
   Scoreboard,
   SignedUrl,
@@ -244,6 +247,43 @@ export const scoreboardApi = {
   // Initial load only — live updates arrive over the scoreboard WS room (§4.1).
   get: (competitionId: string) =>
     apiFetch<Scoreboard>(`/api/competitions/${competitionId}/scoreboard`),
+};
+
+export const announcementsApi = {
+  // Initial load only — new announcements arrive over the announcements WS room.
+  list: (competitionId: string) =>
+    apiFetch<Announcement[]>(`/api/competitions/${competitionId}/announcements`),
+  create: (competitionId: string, input: { title: string; body: string }) =>
+    apiFetch<Announcement>(`/api/competitions/${competitionId}/announcements`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+};
+
+export const hintsApi = {
+  list: (competitionId: string, challengeId: string) =>
+    apiFetch<Hint[]>(
+      `/api/competitions/${competitionId}/challenges/${challengeId}/hints`,
+    ),
+  create: (
+    competitionId: string,
+    challengeId: string,
+    input: { body: string; cost: number },
+  ) =>
+    apiFetch<HintAuthored>(
+      `/api/competitions/${competitionId}/challenges/${challengeId}/hints`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
+  remove: (competitionId: string, challengeId: string, hintId: string) =>
+    apiFetch<void>(
+      `/api/competitions/${competitionId}/challenges/${challengeId}/hints/${hintId}`,
+      { method: "DELETE" },
+    ),
+  reveal: (competitionId: string, challengeId: string, hintId: string) =>
+    apiFetch<Hint>(
+      `/api/competitions/${competitionId}/challenges/${challengeId}/hints/${hintId}/reveal`,
+      { method: "POST" },
+    ),
 };
 
 export const attachmentsApi = {

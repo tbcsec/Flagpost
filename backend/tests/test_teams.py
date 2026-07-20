@@ -206,3 +206,38 @@ async def test_leave_promotes_next_captain_then_deletes_empty_team(client):
         f"/api/competitions/{comp}/teams/me", headers=_auth(alice)
     )
     assert resp.status_code == 404
+
+
+async def test_joining_a_team_grants_participant_access(client):
+    """Team membership is how a competitor gains competition access (§7.5, Phase
+    6): creating or joining a team grants the viewer-level Participant role, so
+    challenge_view (and thus flag submission) works without a separate join step."""
+    from auth.deps import user_has_permission
+
+    comp = await _make_competition(client)
+    alice = await _register(client, "alice@example.com", "Alice")
+    created = await client.post(
+        f"/api/competitions/{comp}/teams",
+        json={"name": "Red Team"},
+        headers=_auth(alice),
+    )
+    creator_id = created.json()["members"][0]["user_id"]
+    code = created.json()["invite_code"]
+
+    bob = await _register(client, "bob@example.com", "Bob")
+    joined = await client.post(
+        f"/api/competitions/{comp}/teams/join",
+        json={"invite_code": code},
+        headers=_auth(bob),
+    )
+    joiner_id = next(
+        m["user_id"] for m in joined.json()["members"] if m["display_name"] == "Bob"
+    )
+
+    async with SessionLocal() as session:
+        assert await user_has_permission(session, creator_id, "challenge_view", comp)
+        assert await user_has_permission(session, joiner_id, "challenge_view", comp)
+        # ...but only for this competition, never site-wide (§7.5).
+        assert not await user_has_permission(
+            session, creator_id, "challenge_view", None
+        )

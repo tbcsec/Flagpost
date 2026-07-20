@@ -19,6 +19,7 @@ import type {
   HelloResponse,
   MyTeam,
   SignedUrl,
+  SubmitResult,
   Team,
   TokenResponse,
   User,
@@ -227,6 +228,14 @@ export const challengesApi = {
     apiFetch<void>(
       `/api/competitions/${competitionId}/challenges/${challengeId}`,
       { method: "DELETE" },
+    ),
+};
+
+export const submissionsApi = {
+  submit: (competitionId: string, challengeId: string, flag: string) =>
+    apiFetch<SubmitResult>(
+      `/api/competitions/${competitionId}/challenges/${challengeId}/submit`,
+      { method: "POST", body: JSON.stringify({ flag }) },
     ),
 };
 

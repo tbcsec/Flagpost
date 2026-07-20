@@ -10,6 +10,7 @@ from models.audit_log import AuditLogEntry
 from models.challenge import Category, Challenge
 from models.competition import Competition
 from models.role import Role, RoleAssignment
+from models.submission import Submission
 from models.team import Team, TeamMembership
 from models.user import RefreshSession, User
 
@@ -21,6 +22,7 @@ __all__ = [
     "Competition",
     "Role",
     "RoleAssignment",
+    "Submission",
     "RefreshSession",
     "Team",
     "TeamMembership",

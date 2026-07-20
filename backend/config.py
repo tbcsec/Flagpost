@@ -20,6 +20,13 @@ class Settings(BaseSettings):
 
     redis_url: str | None = None
 
+    # --- Flag submission rate limit (§13.2) ---
+    # Per-subject (user or team) sliding window on the submit endpoint — tight
+    # enough to blunt a guessing script, loose enough not to slow a human typing
+    # a real answer.
+    submission_rate_limit: int = 10
+    submission_rate_window_seconds: int = 30
+
     # --- Object storage (MinIO / S3, §13.3) ---
     # Endpoint the backend talks to. Defaults to the compose MinIO as exposed on
     # the host, so a native `uvicorn` run works against `docker compose up minio`.

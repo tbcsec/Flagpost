@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { ChallengeAdmin } from "@/components/challenges/challenge-admin";
-import { NotWiredNote, SectionHeader } from "@/components/app/section-header";
+import { SectionHeader } from "@/components/app/section-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
 import { useCategories } from "@/lib/hooks/use-categories";
 import { useChallenges } from "@/lib/hooks/use-challenges";
+import { useSubmitFlag } from "@/lib/hooks/use-submissions";
 import { richTextToPlain } from "@/lib/rich-text";
 import type { Challenge } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -42,6 +43,7 @@ export default function ChallengesPage() {
   const visible = (challenges.data ?? []).filter(
     (c) => filter === "all" || c.category_id === filter,
   );
+  const solvedCount = (challenges.data ?? []).filter((c) => c.solved).length;
 
   const chips = [
     { id: "all", label: "All" },
@@ -52,19 +54,13 @@ export default function ChallengesPage() {
     <>
       <SectionHeader
         title="Challenges"
-        subtitle={`${competition?.name ?? ""} · ${challenges.data?.length ?? 0} challenge(s)`}
+        subtitle={`${competition?.name ?? ""} · ${solvedCount} of ${challenges.data?.length ?? 0} solved`}
         actions={
           <Button variant={managing ? "secondary" : "default"} onClick={() => setManaging((m) => !m)}>
             {managing ? "Done managing" : "Manage challenges"}
           </Button>
         }
       />
-
-      <NotWiredNote>
-        Flag submission, scoring and solve state land in Tier&nbsp;1 Phase&nbsp;6
-        — the submit form below is inert until then. Browsing, categories and
-        authoring are live.
-      </NotWiredNote>
 
       <div className="flex flex-wrap gap-2">
         {chips.map((chip) => (
@@ -96,20 +92,26 @@ export default function ChallengesPage() {
             <button
               key={ch.id}
               onClick={() => setOpen(ch)}
-              className="grid gap-2.5 rounded-lg border border-border bg-card p-5 text-left shadow-sm transition-colors hover:border-primary/40"
+              className={cn(
+                "grid gap-2.5 rounded-lg border bg-card p-5 text-left shadow-sm transition-colors hover:border-primary/40",
+                ch.solved ? "border-success/45" : "border-border",
+              )}
             >
               <div className="flex items-start justify-between gap-2">
                 <span className="text-[11px] font-semibold capitalize tracking-wide text-muted-foreground">
                   {categoryName(ch.category_id)}
                 </span>
-                {ch.state === "draft" && <Badge variant="outline">Draft</Badge>}
+                <div className="flex gap-1.5">
+                  {ch.state === "draft" && <Badge variant="outline">Draft</Badge>}
+                  <Badge variant={ch.solved ? "success" : "muted"}>
+                    {ch.solved ? "Solved" : "Open"}
+                  </Badge>
+                </div>
               </div>
               <div className="text-base font-semibold">{ch.title}</div>
               <div className="flex items-baseline justify-between">
                 <span className="font-mono text-sm font-semibold text-primary">{ch.points} pts</span>
-                {!ch.has_flag && (
-                  <span className="text-xs text-warning">no flag set</span>
-                )}
+                <span className="text-xs text-muted-foreground">{ch.solve_count} solves</span>
               </div>
             </button>
           ))}
@@ -127,61 +129,87 @@ export default function ChallengesPage() {
         </div>
       )}
 
-      <ChallengeDialog
-        challenge={open}
-        categoryName={open ? categoryName(open.category_id) : ""}
-        onClose={() => setOpen(null)}
-      />
+      <Dialog open={!!open} onOpenChange={(o) => !o && setOpen(null)}>
+        <DialogContent>
+          {open && (
+            <ChallengeDialogBody
+              competitionId={competitionId}
+              challenge={open}
+              categoryName={categoryName(open.category_id)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
 
-function ChallengeDialog({
+function ChallengeDialogBody({
+  competitionId,
   challenge,
   categoryName,
-  onClose,
 }: {
-  challenge: Challenge | null;
+  competitionId: string;
+  challenge: Challenge;
   categoryName: string;
-  onClose: () => void;
 }) {
+  const [flag, setFlag] = useState("");
+  const submit = useSubmitFlag(competitionId, challenge.id);
+  const result = submit.data;
+  const alreadySolved = challenge.solved || result?.already_solved;
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    submit.mutate(flag, { onSuccess: () => setFlag("") });
+  }
+
   return (
-    <Dialog open={!!challenge} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
-        {challenge && (
-          <>
-            <DialogHeader>
-              <DialogTitle>{challenge.title}</DialogTitle>
-              <DialogDescription>
-                {categoryName} · {challenge.points} pts
-              </DialogDescription>
-            </DialogHeader>
-            <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">
-              {richTextToPlain(challenge.description) || "No description."}
-            </p>
-            {/* Flag submission + scoring is Phase 6 — the form is present per the
-                design but intentionally not wired to a submit endpoint yet. */}
-            <form
-              className="grid gap-3"
-              onSubmit={(e) => e.preventDefault()}
-              aria-disabled
-            >
-              <div className="grid gap-2">
-                <Label htmlFor="flag-submit">Flag</Label>
-                <Input id="flag-submit" placeholder="flag{...}" className="font-mono" disabled />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Submission is disabled until scoring ships (Phase 6).
-              </p>
-              <DialogFooter>
-                <Button type="submit" disabled>
-                  Submit flag
-                </Button>
-              </DialogFooter>
-            </form>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
+    <>
+      <DialogHeader>
+        <DialogTitle>{challenge.title}</DialogTitle>
+        <DialogDescription>
+          {categoryName} · {challenge.points} pts · {challenge.solve_count} solves
+        </DialogDescription>
+      </DialogHeader>
+      <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">
+        {richTextToPlain(challenge.description) || "No description."}
+      </p>
+
+      {alreadySolved ? (
+        <p className="text-sm text-success">You&apos;ve solved this challenge.</p>
+      ) : (
+        <form className="grid gap-3" onSubmit={onSubmit}>
+          <div className="grid gap-2">
+            <Label htmlFor="flag-submit">Flag</Label>
+            <Input
+              id="flag-submit"
+              value={flag}
+              onChange={(e) => setFlag(e.target.value)}
+              placeholder="flag{...}"
+              className="font-mono"
+              autoComplete="off"
+              required
+            />
+          </div>
+          {result && !result.correct && (
+            <span className="text-sm text-destructive">Incorrect flag.</span>
+          )}
+          {result?.correct && (
+            <span className="text-sm text-success">
+              Correct — +{result.points_awarded}
+              {result.is_first_blood ? " · first blood!" : ""}
+            </span>
+          )}
+          {submit.isError && (
+            <span className="text-sm text-destructive">{(submit.error as Error).message}</span>
+          )}
+          <DialogFooter>
+            <Button type="submit" disabled={submit.isPending}>
+              {submit.isPending ? "Submitting…" : "Submit flag"}
+            </Button>
+          </DialogFooter>
+        </form>
+      )}
+    </>
   );
 }

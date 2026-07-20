@@ -20,6 +20,8 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
+# Local SQLite DBs from the no-infra dev flow (DATABASE_URL=sqlite+aiosqlite:…)
+backend/*.db
 
 # --- Docker / local data volumes ---
 .docker-data/

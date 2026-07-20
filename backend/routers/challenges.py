@@ -16,19 +16,27 @@ an unsolvable published challenge is a configuration error, caught here.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import require_permission, user_has_permission
 from db import get_db
 from models.attachment import Attachment
 from models.challenge import Category, Challenge
+from models.competition import Competition
+from models.submission import Submission
 from models.user import User
 from schemas.challenge import ChallengeCreate, ChallengeOut, ChallengeUpdate
 from storage import get_storage
 from storage.base import ObjectStorage
 from utils.event_bus import event_bus
 from utils.flags import hash_static_flag, make_salt
+from utils.scoring import (
+    resolve_subject,
+    solve_counts,
+    solved_challenge_ids,
+    subject_has_solved,
+)
 
 router = APIRouter(
     prefix="/api/competitions/{competition_id}/challenges", tags=["challenges"]
@@ -112,7 +120,27 @@ async def list_challenges(
     if not can_edit:
         query = query.where(Challenge.state == "published")
     result = await db.execute(query.order_by(Challenge.created_at))
-    return list(result.scalars().all())
+    challenges = list(result.scalars().all())
+
+    # Annotate each with solve state (Phase 6): total solves, plus whether the
+    # requesting subject has solved it. A viewer with no subject (e.g. a manager
+    # not on a team) simply sees solved=False everywhere.
+    competition = await db.get(Competition, competition_id)
+    subject = (
+        await resolve_subject(db, competition, current_user)
+        if competition is not None
+        else None
+    )
+    counts = await solve_counts(db, competition_id)
+    solved = (
+        await solved_challenge_ids(db, competition_id, subject)
+        if subject is not None
+        else set()
+    )
+    for challenge in challenges:
+        challenge.solve_count = counts.get(challenge.id, 0)
+        challenge.solved = challenge.id in solved
+    return challenges
 
 
 @router.get("/{challenge_id}", response_model=ChallengeOut)
@@ -122,9 +150,30 @@ async def get_challenge(
     current_user: User = Depends(require_permission("challenge_view")),
     db: AsyncSession = Depends(get_db),
 ) -> Challenge:
-    return await load_visible_challenge(
+    challenge = await load_visible_challenge(
         db, competition_id, challenge_id, current_user
     )
+    challenge.solve_count = (
+        await db.scalar(
+            select(func.count(Submission.id)).where(
+                Submission.challenge_id == challenge_id,
+                Submission.is_correct.is_(True),
+                Submission.is_duplicate.is_(False),
+            )
+        )
+    ) or 0
+    competition = await db.get(Competition, competition_id)
+    subject = (
+        await resolve_subject(db, competition, current_user)
+        if competition is not None
+        else None
+    )
+    challenge.solved = (
+        await subject_has_solved(db, challenge_id, subject)
+        if subject is not None
+        else False
+    )
+    return challenge
 
 
 @router.post("", response_model=ChallengeOut, status_code=status.HTTP_201_CREATED)

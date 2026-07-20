@@ -12,7 +12,10 @@ def setup(app, event_bus, db_factory) -> None:
     from routers.attachments import router as attachments_router
     from routers.categories import router as categories_router
     from routers.challenges import router as challenges_router
+    from routers.submissions import router as submissions_router
 
     app.include_router(challenges_router)
     app.include_router(categories_router)
     app.include_router(attachments_router)
+    # Flag submission + scoring (Phase 6) — competitor-facing, same module.
+    app.include_router(submissions_router)

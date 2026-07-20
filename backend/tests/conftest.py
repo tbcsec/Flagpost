@@ -56,6 +56,8 @@ async def admin_token(client) -> str:
 
 import pytest  # noqa: E402
 
+from ratelimit import get_rate_limiter  # noqa: E402
+from ratelimit.memory import InMemoryRateLimiter  # noqa: E402
 from storage import get_storage  # noqa: E402
 from storage.memory import InMemoryStorage  # noqa: E402
 
@@ -66,12 +68,20 @@ def object_storage() -> InMemoryStorage:
     return InMemoryStorage()
 
 
+@pytest.fixture
+def rate_limiter() -> InMemoryRateLimiter:
+    """Fresh in-memory submission rate limiter per test — no Redis, no leaking
+    counts across cases (ADR-0006)."""
+    return InMemoryRateLimiter()
+
+
 @pytest_asyncio.fixture
-async def client(object_storage):
+async def client(object_storage, rate_limiter):
     """In-process HTTP client against the real ASGI app (no port bound)."""
     import main
 
     main.app.dependency_overrides[get_storage] = lambda: object_storage
+    main.app.dependency_overrides[get_rate_limiter] = lambda: rate_limiter
     transport = ASGITransport(app=main.app)
     async with AsyncClient(
         transport=transport, base_url="http://test"

@@ -1,0 +1,155 @@
+"""Flag submission + scoring (ROADMAP #11/#12, ARCHITECTURE.md §13.2).
+
+The one adversarial endpoint in the product. Hardening, in order (§13.2):
+
+1. **Gated by ``challenge_view``** and scoped by the path's ``competition_id``
+   (§6.2, §7.6) — you can only submit against a challenge you can see, and a
+   draft stays 404 to non-editors (via ``load_visible_challenge``).
+2. **Per-subject rate limit** (tighter than general API limits) *before* any
+   flag comparison, so a guessing script is throttled whether it's right or not.
+3. **Server-side comparison only** — the stored hash/pattern never leaves the
+   server; verification reuses ``utils/flags`` so authoring and grading can't
+   drift (§13.2).
+4. **Every attempt is logged** — a row per try, success or failure.
+5. **Idempotent on repeat-correct** — the first correct submission by a subject
+   is authoritative; later correct ones are logged as duplicates and award
+   nothing, and ``challenge.solved`` fires exactly once per subject.
+
+The scoring subject is the team (team-mode) or the user (individual-mode),
+resolved in ``utils/scoring`` so this route never re-derives it.
+"""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from auth.deps import require_permission
+from config import settings
+from db import get_db
+from models.challenge import Challenge
+from models.competition import Competition
+from models.submission import Submission
+from models.user import User
+from ratelimit import get_rate_limiter
+from ratelimit.base import RateLimiter
+from routers.challenges import load_visible_challenge
+from schemas.submission import SubmitFlagRequest, SubmitResult
+from utils.event_bus import event_bus
+from utils.flags import verify_regex_flag, verify_static_flag
+from utils.scoring import resolve_subject, subject_has_solved
+
+router = APIRouter(
+    prefix="/api/competitions/{competition_id}/challenges/{challenge_id}",
+    tags=["submissions"],
+)
+
+
+def _flag_matches(challenge: Challenge, submitted: str) -> bool:
+    """Grade ``submitted`` against the challenge's stored flag config (§13.2)."""
+    if challenge.flag_type == "regex":
+        if challenge.flag_regex is None:
+            return False
+        return verify_regex_flag(
+            submitted, challenge.flag_regex, challenge.case_insensitive
+        )
+    if challenge.flag_hash is None or challenge.flag_salt is None:
+        return False
+    return verify_static_flag(
+        submitted, challenge.flag_salt, challenge.case_insensitive, challenge.flag_hash
+    )
+
+
+@router.post("/submit", response_model=SubmitResult)
+async def submit_flag(
+    competition_id: str,
+    challenge_id: str,
+    body: SubmitFlagRequest,
+    current_user: User = Depends(require_permission("challenge_view")),
+    db: AsyncSession = Depends(get_db),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
+) -> SubmitResult:
+    challenge = await load_visible_challenge(
+        db, competition_id, challenge_id, current_user
+    )
+    if not challenge.has_flag:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This challenge has no flag to submit against",
+        )
+
+    competition = await db.get(Competition, competition_id)
+    subject = await resolve_subject(db, competition, current_user)
+    if subject is None:
+        # Team-mode competitor who hasn't joined a team — nothing to credit.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Join a team before submitting flags",
+        )
+
+    # Rate limit the *subject* across the competition, before grading, so
+    # rotating challenges doesn't sidestep the throttle (§13.2).
+    allowed = await rate_limiter.hit(
+        f"submit:{competition_id}:{subject.kind}:{subject.id}",
+        limit=settings.submission_rate_limit,
+        window_seconds=settings.submission_rate_window_seconds,
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many submissions — slow down and try again shortly",
+        )
+
+    correct = _flag_matches(challenge, body.flag)
+    already_solved = correct and await subject_has_solved(db, challenge_id, subject)
+    award = correct and not already_solved
+
+    is_first_blood = False
+    points_awarded = 0
+    if award:
+        # First blood = no subject has an awarded solve on this challenge yet.
+        prior_solves = await db.scalar(
+            select(func.count(Submission.id)).where(
+                Submission.challenge_id == challenge_id,
+                Submission.is_correct.is_(True),
+                Submission.is_duplicate.is_(False),
+            )
+        )
+        is_first_blood = prior_solves == 0
+        points_awarded = challenge.points
+
+    # Every attempt is logged — success, failure, or duplicate (§13.2).
+    db.add(
+        Submission(
+            competition_id=competition_id,
+            challenge_id=challenge_id,
+            user_id=current_user.id,
+            team_id=subject.team_id,
+            value=body.flag,
+            is_correct=correct,
+            is_duplicate=correct and already_solved,
+            points_awarded=points_awarded,
+        )
+    )
+    await db.commit()
+
+    if award:
+        await event_bus.emit(
+            "challenge.solved",
+            {
+                "competition_id": competition_id,
+                "challenge_id": challenge_id,
+                "user_id": current_user.id,
+                "team_id": subject.team_id,
+                "points": points_awarded,
+                "is_first_blood": is_first_blood,
+            },
+        )
+
+    return SubmitResult(
+        correct=correct,
+        already_solved=already_solved,
+        points_awarded=points_awarded,
+        is_first_blood=is_first_blood,
+    )

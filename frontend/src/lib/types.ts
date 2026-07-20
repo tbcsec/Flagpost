@@ -96,6 +96,10 @@ export interface Challenge {
   case_insensitive: boolean;
   /** The only flag-related fact the server ever returns (§13.2). */
   has_flag: boolean;
+  /** Whether the requesting subject (team or user) has solved this (§13.2). */
+  solved: boolean;
+  /** Number of distinct subjects that have solved this challenge. */
+  solve_count: number;
   created_at: string;
 }
 
@@ -123,4 +127,12 @@ export interface Attachment {
 export interface SignedUrl {
   url: string;
   expires_in_seconds: number;
+}
+
+/** Result of a flag submission (§13.2). */
+export interface SubmitResult {
+  correct: boolean;
+  already_solved: boolean;
+  points_awarded: number;
+  is_first_blood: boolean;
 }

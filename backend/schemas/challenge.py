@@ -53,4 +53,11 @@ class ChallengeOut(BaseModel):
     flag_type: FlagType
     case_insensitive: bool
     has_flag: bool  # the only flag-related fact that ever leaves the server
+    # Solve state (Phase 6). ``solved`` is relative to the requesting subject —
+    # the team (team-mode) or user (individual-mode); false for a viewer with no
+    # subject (e.g. a manager not on a team). ``solve_count`` is the number of
+    # distinct subjects that have solved it. Defaulted so the create/update/
+    # publish responses (which don't compute solve state) stay valid.
+    solved: bool = False
+    solve_count: int = 0
     created_at: datetime

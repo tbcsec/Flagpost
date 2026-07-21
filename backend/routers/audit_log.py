@@ -7,8 +7,10 @@ competition, actor, team (matched inside the event payload), a time window, and
 a free-text search across the event name and payload.
 
 Global admin surface: gated on ``view_audit_log`` (§7.1), which only the
-Administrator role holds. The audit log is a cross-competition kernel table, so
-this router is mounted directly (like auth), not through a competition scope.
+Administrator role holds. Mounted through the ``audit_log`` module (§11.1,
+required-core); the audit log is a cross-competition table, so the routes are
+not competition-scoped even though they register through the loader like every
+other feature.
 """
 
 from __future__ import annotations

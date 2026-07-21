@@ -20,7 +20,6 @@ from config import settings
 from db import SessionLocal
 from plugins.loader import load_modules
 from realtime import router as realtime_router
-from routers import audit_log as audit_log_router
 from routers import auth as auth_router
 from utils.audit_log import register_audit_log
 from utils.event_bus import event_bus
@@ -65,9 +64,9 @@ app.add_middleware(
 # optional modules later.
 app.include_router(auth_router.router)
 app.include_router(realtime_router)
-# The audit log is the kernel event-bus consumer (§3.3); its admin read surface
-# is mounted here alongside auth rather than through a competition-scoped module.
-app.include_router(audit_log_router.router)
+# Every feature above the kernel — including the audit-log admin surface — mounts
+# through the loader (§11.1). The audit-log event-bus *consumer* stays kernel
+# (register_audit_log above); the module only adds its query router.
 load_modules(app, event_bus, SessionLocal)
 
 

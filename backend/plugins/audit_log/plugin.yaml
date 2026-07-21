@@ -1,0 +1,12 @@
+id: audit_log
+name: Audit Log
+version: 1.0.0
+# Required-core (§11.3): the admin event log is always available and carries no
+# enable/disable toggle. The event-bus *consumer* that persists every event
+# (utils/audit_log.py) is kernel and wired in main; this module owns the admin
+# read/query surface over that log.
+required_core: true
+provides:
+  routes: true
+  event_listeners: false
+dependencies: []

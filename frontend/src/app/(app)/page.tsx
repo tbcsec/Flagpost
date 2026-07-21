@@ -1,106 +1,64 @@
 "use client";
 
 import { NewAnnouncementDialog } from "@/components/announcements/new-announcement-dialog";
-import { NotWiredNote, SectionHeader } from "@/components/app/section-header";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { relativeTime } from "@/lib/datetime";
+import { SectionHeader } from "@/components/app/section-header";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
-import { useAnnouncements } from "@/lib/hooks/use-announcements";
 import { useAccess } from "@/lib/hooks/use-permissions";
-import { ACTIVITY } from "@/lib/placeholder-data";
+import {
+  DEFAULT_LAYOUT_MANAGER,
+  DEFAULT_LAYOUT_PARTICIPANT,
+  WIDGETS,
+} from "@/lib/dashboard/registry";
 
-// Dashboard. Ships as a FIXED layout per ROADMAP (Tier 2, #16); the drag-and-
-// drop customization layer is explicitly deferred. Announcements are live as of
-// Phase 8; the stat tiles and activity feed still need aggregate endpoints, so
-// those stay placeholder — see docs/UI-INTEGRATION-NOTES.md.
-const STATS = [
-  { label: "Active competitors now", value: "—" },
-  { label: "Recent solves (1h)", value: "—" },
-  { label: "Active teams", value: "—" },
-  { label: "Open tickets", value: "—" },
-];
+// The operational dashboard (ROADMAP #16). Renders a fixed-column grid plus the
+// widgets in the current audience's layout (§10.1) — it never hardcodes which
+// widget sits where; it just places each layout entry's widget at its declared
+// column span. The manager and participant layouts come from the registry.
+//
+// Static so Tailwind keeps the classes; maps a widget's column span to its lg
+// grid class (mobile stacks to one column).
+const COL_SPAN: Record<number, string> = {
+  1: "lg:col-span-1",
+  2: "lg:col-span-2",
+  3: "lg:col-span-3",
+  4: "lg:col-span-4",
+};
 
 export default function DashboardPage() {
   const { competitionId, data: competition } = useActiveCompetition();
   const access = useAccess();
-  // The shell's banner already holds the announcements socket for this
-  // competition; read from the shared cache here rather than opening a second.
-  const announcements = useAnnouncements(competitionId ?? "", { subscribe: false });
+
+  if (!competitionId || !access.ready) {
+    return (
+      <div className="grid gap-4">
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
+  const isManager = access.canManageActiveCompetition;
+  const layout = isManager ? DEFAULT_LAYOUT_MANAGER : DEFAULT_LAYOUT_PARTICIPANT;
 
   return (
     <>
       <SectionHeader
         title="Dashboard"
-        subtitle={`${competition?.name ?? "—"} · operational overview`}
-        actions={
-          competitionId && access.canManageActiveCompetition ? (
-            <NewAnnouncementDialog competitionId={competitionId} />
-          ) : undefined
-        }
+        subtitle={`${competition?.name ?? ""} · ${isManager ? "operational overview" : "your dashboard"}`}
+        actions={isManager ? <NewAnnouncementDialog competitionId={competitionId} /> : undefined}
       />
 
-      <NotWiredNote>
-        Stat tiles and the activity feed still need aggregate endpoints — those
-        values are placeholder. Announcements are live. Drag-and-drop dashboard
-        customization is deferred (fixed layout for now).
-      </NotWiredNote>
-
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {STATS.map((s) => (
-          <Card key={s.label}>
-            <CardContent className="p-6 text-center">
-              <div className="pt-1 text-xs text-muted-foreground">{s.label}</div>
-              <div className="mt-1 font-display text-3xl font-semibold tracking-tight">
-                {s.value}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent activity</CardTitle>
-            <CardDescription>Live feed across the competition</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="grid gap-3.5">
-              {ACTIVITY.map((ev) => (
-                <li key={ev.id} className="flex justify-between gap-3 text-sm">
-                  <span>{ev.text}</span>
-                  <span className="whitespace-nowrap text-xs text-muted-foreground">{ev.time}</span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Announcements</CardTitle>
-            <CardDescription>Archive, newest first</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {announcements.data && announcements.data.length > 0 ? (
-              <ul className="grid gap-3">
-                {announcements.data.map((an) => (
-                  <li key={an.id} className="grid gap-0.5">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="text-[13px] font-medium">{an.title}</span>
-                      <span className="whitespace-nowrap text-[11px] text-muted-foreground">
-                        {relativeTime(an.created_at)}
-                      </span>
-                    </div>
-                    <span className="text-[13px] text-muted-foreground">{an.body}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted-foreground">No announcements yet.</p>
-            )}
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-4 lg:items-start">
+        {layout.map((entry) => {
+          const def = WIDGETS[entry.widgetId];
+          const Widget = def.Component;
+          return (
+            <div key={entry.widgetId} className={COL_SPAN[entry.size.cols] ?? "lg:col-span-4"}>
+              <Widget competitionId={competitionId} />
+            </div>
+          );
+        })}
       </div>
     </>
   );

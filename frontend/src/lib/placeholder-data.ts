@@ -11,20 +11,6 @@
 // which roadmap phase lights each of these up for real.
 // -----------------------------------------------------------------------------
 
-export interface ActivityEvent {
-  id: string;
-  text: string;
-  time: string;
-}
-
-export const ACTIVITY: ActivityEvent[] = [
-  { id: "a1", text: 'Segfault Society solved "ROP Chain Gang" (+500)', time: "2 min ago" },
-  { id: "a2", text: 'Null Terminators solved "Baby RSA" (+250)', time: "8 min ago" },
-  { id: "a3", text: 'Kernel Panic submitted an incorrect flag for "Stack Smash"', time: "11 min ago" },
-  { id: "a4", text: "New team registered: Cache Money", time: "26 min ago" },
-  { id: "a5", text: 'The Buffer Overflowers solved "JWT None Algorithm" (+200)', time: "34 min ago" },
-];
-
 export interface Ticket {
   id: string;
   subject: string;

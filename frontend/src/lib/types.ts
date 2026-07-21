@@ -42,6 +42,36 @@ export interface Permissions {
   by_competition: Record<string, string[]>;
 }
 
+/** Operational dashboard reads (§10). Each widget fetches its own slice. */
+export interface DashboardStats {
+  total_solves: number;
+  total_submissions: number;
+  active_participants: number;
+  published_challenges: number;
+  recent_solves_1h: number;
+}
+
+export interface RecentSolve {
+  subject_name: string;
+  challenge_title: string;
+  points: number;
+  at: string;
+}
+
+export interface ChallengeHealth {
+  challenge_id: string;
+  title: string;
+  points: number;
+  solves: number;
+  attempts: number;
+}
+
+export interface MyStanding {
+  rank: number | null;
+  points: number | null;
+  solved_count: number;
+}
+
 /** One persisted event from the audit log (§3.3). */
 export interface AuditLogEntry {
   id: string;

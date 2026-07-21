@@ -13,6 +13,10 @@ import type {
   AuditLogQuery,
   Attachment,
   Category,
+  ChallengeHealth,
+  DashboardStats,
+  MyStanding,
+  RecentSolve,
   Challenge,
   ChallengeCreate,
   ChallengeUpdate,
@@ -260,6 +264,18 @@ export const scoreboardApi = {
   // Initial load only — live updates arrive over the scoreboard WS room (§4.1).
   get: (competitionId: string) =>
     apiFetch<Scoreboard>(`/api/competitions/${competitionId}/scoreboard`),
+};
+
+export const dashboardApi = {
+  base: (competitionId: string) => `/api/competitions/${competitionId}/dashboard`,
+  stats: (competitionId: string) =>
+    apiFetch<DashboardStats>(`${dashboardApi.base(competitionId)}/stats`),
+  recentSolves: (competitionId: string) =>
+    apiFetch<RecentSolve[]>(`${dashboardApi.base(competitionId)}/recent-solves`),
+  challengeHealth: (competitionId: string) =>
+    apiFetch<ChallengeHealth[]>(`${dashboardApi.base(competitionId)}/challenge-health`),
+  me: (competitionId: string) =>
+    apiFetch<MyStanding>(`${dashboardApi.base(competitionId)}/me`),
 };
 
 export const auditLogApi = {

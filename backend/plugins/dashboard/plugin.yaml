@@ -1,0 +1,14 @@
+id: dashboard
+name: Dashboard
+version: 1.0.0
+# Required-core (§11.3): "Dashboard customization" is part of the floor. This
+# module provides the operational dashboard's read endpoints; the widget layout
+# lives on the frontend. No admin enable/disable toggle.
+required_core: true
+provides:
+  routes: true
+  event_listeners: false
+dependencies:
+  - competitions
+  # Reads the submissions data recorded by the challenges module.
+  - challenges

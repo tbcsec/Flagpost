@@ -44,3 +44,4 @@ Status is one of:
 | [0008](0008-stateful-refresh-sessions.md) | Refresh tokens are stateful, hashed, rotating DB sessions | Accepted |
 | [0009](0009-synchronous-event-dispatch-tier0.md) | Event dispatch is synchronous (awaited) in Tier 0 | Accepted |
 | [0010](0010-seeded-admin-default-credentials.md) | Seed a default administrator with default credentials | Accepted |
+| [0011](0011-site-wide-theming-only.md) | Site-wide theming only for now (per-competition deferred) | Accepted |

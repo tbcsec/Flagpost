@@ -6,12 +6,21 @@ Tier 1 (Minimum Viable Competition) is complete: a competition can be run end
 to end — teams, challenges, files, submission + scoring, a live WebSocket
 scoreboard, announcements, and hints. Tier 2 (`docs/ROADMAP.md` items 16–21)
 turns "we could technically use this" into "we'd rather use this than what we
-have": an operational dashboard, a lightweight challenge lifecycle, support
-tickets, presence, per-competition theming, and a custom-role editor.
+have": an operational dashboard, support tickets, presence, **site-wide
+theming**, and a custom-role editor.
+
+**Scope changes from the original ROADMAP framing (owner decisions):**
+- **Challenge lifecycle (#17) is deferred to a future tier** — it wants more
+  design first, and will be re-added and planned properly then. Not built in
+  this tier.
+- **Per-competition theming (#20) is dropped in favour of site-wide theming.**
+  Themes are globally scoped for now; the per-competition/white-label variant
+  may return later if demand warrants it. This tier delivers only the site-wide
+  version (Phase 4 below).
 
 Governing docs: `ARCHITECTURE.md` §10 (dashboard widget model), §4.1 (presence /
 real-time), §4.4 (in-app notifications + the ticket audio cue), §7.4 (custom
-roles), §9 (per-competition theming), §13 (domain model). ADR-0009 (synchronous
+roles), §9 (theming / token layer), §13 (domain model). ADR-0009 (synchronous
 event dispatch) is due for revisiting **only** if a genuinely slow handler
 appears — Tier 2 handlers stay in-process and fast, so it holds.
 
@@ -25,38 +34,20 @@ pytest + vitest run per phase; one commit per phase.
 
 ---
 
-## Phase 0 — Close Tier 1 gaps (recommended before Tier 2 proper)
+## Phase 0 — Close Tier 1 gaps — ✅ DONE (landed pre-Tier-2)
 
-Gap-remediation surfaced by the end-of-Tier-1 review. Not new Tier 2 features,
-but Tier 2 (tickets, dashboard, the role editor) assumes a working participant-
-access model and honest nav, so these come first. **Flag for review — decide
-which of these to take.**
+Gap-remediation from the end-of-Tier-1 review, delivered ahead of Tier 2 proper.
+All items shipped:
 
-- **Competition registration / join (the material gap).** Today the only path
-  to the competition-scoped Participant role (and therefore `challenge_view`)
-  is creating or joining a *team*. Individual-mode competitions have no teams,
-  so a solo competitor cannot gain access at all without an admin hand-inserting
-  a `RoleAssignment` — i.e. solo competitions aren't actually playable through
-  the UI. Add `POST /api/competitions/{id}/join` (self-serve for `public`;
-  invite-code/None for `private`) that grants the Participant role idempotently,
-  emitting **`competition.member_joined`** (new — add to §3.2 first). Wire the
-  Lobby's "Join" actions (currently inert) and keep team-join granting the role
-  too. Migration only if an invite-code column is added to `Competition`.
-- **Enforce competition visibility on reads.** `GET /api/competitions` and
-  `GET /{id}` currently return every competition (private included) to any
-  authenticated user, so `visibility=private` is cosmetic. Scope the list to
-  public competitions + those the caller is a member/organiser of; 404 a private
-  competition to a non-member. No migration.
-- **Role-aware navigation (frontend honesty).** `/me` doesn't surface the
-  caller's permissions, so the shell shows every nav item (Admin included) to
-  everyone — the backend 403s protect data, but the UI misleads. Add
-  `GET /api/auth/me/permissions` (effective permission keys, per active
-  competition + global) and gate the sidebar/sections on it, replacing the
-  "everyone sees everything" stopgap. This also unblocks the dashboard's role
-  split (Phase 1) and the ticket competitor-vs-staff views (Phase 3).
-- *(Optional cleanup)* Serialize timestamps as tz-aware UTC so clients don't
-  have to compensate (the frontend currently normalizes naive-UTC in
-  `lib/datetime.ts`).
+- **Competition registration / join** — `POST /api/competitions/{id}/join`
+  (public self-serve) and `POST /api/competitions/join` (by invite code) grant
+  the Participant role idempotently, emitting `competition.member_joined`; the
+  Lobby join actions are wired. This makes individual-mode competitions playable.
+- **Visibility enforced on reads** — private competitions are hidden from the
+  list and 404 to non-members; a global admin sees all.
+- **Role-aware navigation** — `GET /api/auth/me/permissions` + `useAccess` gate
+  the sidebar/sections; direct admin URLs are guarded.
+- **Timestamps** serialize as aware UTC via the `UtcDateTime` column type.
 
 ## Phase 1 — Judge/admin dashboard (#16, §10)
 
@@ -71,26 +62,12 @@ fixed layout — so drag-and-drop (§10.2, deferred) is additive, not a rewrite.
 - Backend: aggregate/read endpoints the widgets need — active competitors,
   recent solves, challenge health (solve counts / attempt volume off the
   submissions data), scoreboard summary. Read-only; gated on competition-scoped
-  view permissions. (The support-queue widget is registered later, in Phase 3.)
+  view permissions. (The support-queue widget is registered later, in Phase 2.)
 - Frontend: replace the placeholder dashboard (`(app)/page.tsx`) with the real
   widget grid; a `use-dashboard.ts` hook module. Fixed layout; no drag-drop UI.
 - Tests: widget registry (sizes/defaults), each stats endpoint's scoping + RBAC.
 
-## Phase 2 — Challenge lifecycle, lightweight (#17)
-
-Smallest domain change; sits entirely in the challenges module.
-
-- Extend `Challenge`: insert **`review`** between `draft` and `published`
-  (`draft → review → published`) and add an **`author_id`** (SET NULL). No
-  testing sign-off, no version history (that's the full §-VISION lifecycle,
-  deferred). Transition endpoints gated on `challenge_edit`/`challenge_publish`;
-  publishing still requires a flag. Reuse `challenge.updated`/`challenge.published`
-  (no new events). Migration adds the column + widens the state check.
-- Frontend: state badges (draft/review/published) and transition controls in the
-  challenge editor; the browse list already hides non-published from competitors.
-- Tests: legal/illegal transitions, author capture, publish-still-needs-a-flag.
-
-## Phase 3 — Support tickets (#18, §4.4)
+## Phase 2 — Support tickets (#18, §4.4)
 
 Required-core module (§11.3), first consumer of the WS layer beyond scoreboard/
 announcements.
@@ -112,7 +89,7 @@ announcements.
 - Tests: create/reply/resolve RBAC, internal-note visibility, scoping, the
   ticket events, and the WS thread broadcast.
 
-## Phase 4 — Presence indicators (#19, §4.1)
+## Phase 3 — Presence indicators (#19, §4.1)
 
 Cheap now that the WS infrastructure exists — it's the "feels alive" detail.
 
@@ -123,26 +100,36 @@ Cheap now that the WS infrastructure exists — it's the "feels alive" detail.
   "who's here" list. Presence is WS-level state, not an event-bus event.
 - Surfaces: "N people viewing this challenge" on the challenge detail; "a judge
   is looking at this ticket" / soft-lock banner on the ticket thread (reuses the
-  Phase 3 room).
+  Phase 2 room).
 - Frontend: a small presence hook + indicator components. No new REST/migration.
 - Tests: presence join/leave, debounced clear, payload shape.
 
-## Phase 5 — Per-competition theming (#20, §9)
+## Phase 4 — Site-wide theming (§9)
 
-White-labelling without a fork — the token layer already supports it (every
-colour is an HSL-channel variable).
+Themes are **global / site-wide only** (per-competition dropped, see Context).
+The token layer already supports it — every colour is an HSL-channel variable,
+so overriding a small set at the root recolours the whole surface.
 
-- Backend: a `theme` on `Competition` (accent + optional palette overrides,
-  stored as the small documented override set). `edit_competition`-gated;
-  emits `competition.updated`. Migration adds the column (JSON).
-- Frontend: apply the overrides on a competition-scoped scope element
-  (`data-competition-theme` with `--primary` etc.) so the whole surface
-  recolours; an accent picker in the competition settings / Admin → Appearance
-  (wire the placeholder). The **logo never takes the theme** (LOGO-SPEC §7 — use
-  the mono mark on a branded ground).
-- Tests: override round-trips; scoping (one competition's theme never leaks).
+- Backend: a **site-settings** singleton (single-row table, or a small
+  key/value) holding the site theme — default palette (dark/light) + accent
+  colour — plus the platform name already stubbed on Admin → Appearance. A
+  public read endpoint (branding is needed on the login/register screens before
+  auth) and an update endpoint gated on a new global **`manage_site_settings`**
+  permission (add to §7.1 first; Administrator-only). The update is a mutation,
+  so emit **`site.settings_updated`** (new — add to §3.2 first). Migration adds
+  the settings table.
+- Frontend: wire the placeholder **Admin → Appearance** page — platform name,
+  default palette, and an accent picker — to real persistence, and apply the
+  accent site-wide by overriding the `--primary` / `--ring` token channels at
+  the root from the stored setting. The stored default palette sets the initial
+  light/dark for a user with no saved personal preference (the per-user toggle
+  still wins). The **logo never takes the accent** (LOGO-SPEC §7 — the mono mark
+  on a branded ground). Login/register pick up the platform name + accent via
+  the public read.
+- Tests: settings round-trip, RBAC (only `manage_site_settings` can update), the
+  event, and that the applied accent resolves through the token layer.
 
-## Phase 6 — Custom role editor, admin (#21, §7.4)
+## Phase 5 — Custom role editor, admin (#21, §7.4)
 
 The three built-in roles already cover Tiers 0–1; this lets an organiser hand
 out narrower access (e.g. a challenge-author-only role).
@@ -165,35 +152,41 @@ out narrower access (e.g. a challenge-author-only role).
 
 ## Cross-cutting notes
 
-- **Events:** new to §3.2 this tier (add there first): `competition.member_joined`
-  (Phase 0), `role.created`/`role.updated`/`role.deleted` (Phase 6). Everything
-  else (ticket.*, challenge.*) already exists.
+- **Events:** new to §3.2 this tier (add there first): `site.settings_updated`
+  (Phase 4), `role.created`/`role.updated`/`role.deleted` (Phase 5). The
+  ticket.* events (Phase 2) already exist. (`competition.member_joined` from the
+  now-complete Phase 0 already landed.)
 - **Dashboard architecture is the load-bearing decision** (§10.1): build widgets
   as self-contained, registered, size-declaring units in Phase 1 even with a
   fixed layout, so the Tier-3+ drag-drop layer is additive.
-- **RBAC:** `ticket_*`, `manage_roles`, `customize_dashboard` etc. already exist
-  in §7.1 — no catalog additions expected except possibly a `theme`/appearance
-  permission (reuse `edit_competition` unless a narrower one is wanted).
-- **New infra first-use:** WS presence (Phase 4) and the ticket audio cue
-  (Phase 3) are the only genuinely new real-time mechanics; both extend the
-  Phase 7 layer rather than adding infrastructure.
+- **RBAC:** `ticket_*`, `manage_roles`, `customize_dashboard` already exist in
+  §7.1. One catalog addition expected: **`manage_site_settings`** (global,
+  Phase 4). No per-competition theming permission is needed (theming is global).
+- **New infra first-use:** WS presence (Phase 3) and the ticket audio cue
+  (Phase 2) are the only genuinely new real-time mechanics; both extend the
+  Tier 1 Phase 7 WebSocket layer rather than adding infrastructure.
 
 ## Verification (per phase + at the end)
 
 1. `cd backend && .venv/bin/pytest` and `cd frontend && npm run test` green.
 2. Migrations apply cleanly up **and** down; native dev servers still start.
 3. End-to-end smoke on the running stack: as staff, watch the dashboard update
-   as solves land; move a challenge draft → review → published; a competitor
-   opens a ticket tied to a challenge and staff resolves it (with the audio cue
-   and live thread); two clients see each other's presence on a challenge;
-   apply a competition accent and see it recolour; clone Judge into a custom
-   role, assign it, and confirm it gates access.
+   as solves land; a competitor opens a ticket tied to a challenge and staff
+   resolves it (with the audio cue and live thread); two clients see each
+   other's presence on a challenge; set a site-wide accent in Admin →
+   Appearance and see the whole app (and the login screen) recolour; clone Judge
+   into a custom role, assign it, and confirm it gates access.
 
-## Out of scope (Tier 3+ / deferred, per ROADMAP)
+## Out of scope (deferred / future tiers)
 
-Dashboard drag-and-drop customization (§10.2), full challenge lifecycle
-(testing sign-off, version history), ticket routing rules + response-time
-analytics, email/push notification delivery, CRDT co-editing (§4.2), the
-automation engine, AI assistants, and the plugin marketplace / extension-slot
-UI. Feedback/surveys, challenge analytics, onboarding/empty-state and the
-accessibility/responsive pass are Tier 3.
+- **Challenge lifecycle (#17)** — Draft → Review → Published + author field.
+  Deferred to a future tier for fuller design (owner decision).
+- **Per-competition / white-label theming** — dropped for now in favour of
+  site-wide theming (Phase 4); may return later if demand warrants (owner
+  decision).
+- Dashboard drag-and-drop customization (§10.2), the *full* challenge lifecycle
+  (testing sign-off, version history), ticket routing rules + response-time
+  analytics, email/push notification delivery, CRDT co-editing (§4.2), the
+  automation engine, AI assistants, and the plugin marketplace / extension-slot
+  UI. Feedback/surveys, challenge analytics, onboarding/empty-state and the
+  accessibility/responsive pass are Tier 3.

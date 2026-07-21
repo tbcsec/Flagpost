@@ -589,10 +589,14 @@ This makes a few features possible without touching component code:
 - **Multiple built-in palettes** (e.g. a default dark theme, a
   high-contrast/"operator" theme, a light theme), switched by a
   `data-palette` attribute on `<html>`.
-- **Per-organisation or per-competition accent color**, including a
-  custom-hex option converted to HSL at runtime and written as an inline
-  CSS variable override — useful for white-labelling a competition
-  instance without a rebuild or a forked stylesheet.
+- **Accent color override**: a custom-hex option converted to HSL at
+  runtime and written as a CSS variable override, recolouring the whole
+  surface without a rebuild or a forked stylesheet. The token layer
+  supports scoping this per-organisation/per-competition, but the
+  **current build scope is site-wide only** — one platform theme an
+  administrator sets for the whole install. The per-competition /
+  white-label variant is deferred and may return later if demand warrants
+  (ADR-0011).
 - **Dark mode** as a Tailwind custom variant (`@custom-variant dark`)
   rather than a class scattered through every component.
 

@@ -22,6 +22,8 @@ depend on earlier ones.
 
 ## Tier 0 — Foundation
 
+**Status: ✅ complete (tagged `tier-0`).**
+
 Nothing user-facing yet. Get this wrong and everything built on top of it
 gets expensive to fix later; get it right and every later tier is faster
 to build, not slower.
@@ -60,6 +62,12 @@ to build, not slower.
 ---
 
 ## Tier 1 — Minimum Viable Competition
+
+**Status: ✅ complete.** All of items 6–15 are built and wired end to end,
+plus a batch of pre-Tier-2 fixes/enhancements (competition join for
+individual-mode play, enforced visibility, role-aware navigation, an admin
+audit-log/event viewer, and UI polish). See `.claude/CLAUDE.md` → "Current
+build stage" for the full list.
 
 This is the actual MVP: enough to run one competition, live, end to end.
 
@@ -103,6 +111,13 @@ the MVP line.
 
 ## Tier 2 — Makes It Good, Not Just Functional
 
+**Status: next / in planning** — the phased build plan is
+`docs/claude_plans/phase_2.md`. Two owner scope changes from the list below:
+**#17 (challenge lifecycle) is deferred to a future tier** (needs more
+design), and **#20 is rescoped from per-competition to site-wide theming**
+(the per-competition/white-label variant may return later if demand
+warrants — see ADR-0011).
+
 What turns "we could technically use this" into "we'd rather use this than
 what we have."
 
@@ -116,6 +131,8 @@ what we have."
     the full lifecycle in `VISION.md` (no testing sign-off workflow, no
     version history yet) — enough that a team of organisers isn't
     stepping on each other publishing half-finished challenges.
+    **Deferred to a future tier** (owner decision) — wants more design
+    first; not built in Tier 2.
 18. **Basic support tickets** — a competitor can ask a question tied to a
     challenge; a judge can respond and mark it resolved. No routing rules,
     no analytics on response time yet — just replacing the "ask in
@@ -125,10 +142,12 @@ what we have."
     §4.1. Cheap to add once the WebSocket infrastructure exists for the
     scoreboard, and it's the detail that makes the platform feel alive
     rather than just functional.
-20. **Basic per-competition theming** — palette/accent selection from
-    Architecture §9, so an organisation running the platform can put a
-    little of their own identity on a competition without needing a
-    plugin or a fork.
+20. **Site-wide theming** — palette/accent selection from Architecture §9,
+    applied **globally / site-wide** (an administrator sets one platform
+    theme for the whole install), wiring the Admin → Appearance surface.
+    *(Rescoped from the original "per-competition theming" — themes are
+    site-wide only for now; the per-competition/white-label variant is
+    deferred and may return later if demand warrants. See ADR-0011.)*
 21. **Custom role editor (admin)** — the clone-and-edit UI for roles from
     Architecture §7.4: clone Judge/Participant (or start blank), toggle
     permissions from the categorized list. The three built-in roles from

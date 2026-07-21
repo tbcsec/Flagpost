@@ -28,28 +28,45 @@ file, don't ignore it.
 ## Current build stage
 
 <!-- Update this line as tiers complete. -->
-**Tier 0 (Foundation) — complete (tagged `tier-0`). Tier 1 (Minimum
-Viable Competition) is the active tier.** See `docs/ROADMAP.md` for the
-full tier breakdown. Don't build Tier 2+ features before the current
-tier's items exist and work — a Tier 1 PR that also sneaks in Tier 3
-polish is scope creep, not helpfulness.
+**Tier 0 (Foundation) and Tier 1 (Minimum Viable Competition) are
+complete; a batch of pre-Tier-2 fixes/enhancements has also landed. Tier 2
+(Makes It Good) is the next tier — planned in `docs/claude_plans/phase_2.md`,
+not yet started.** See `docs/ROADMAP.md` for the full tier breakdown. Don't
+sneak Tier 3 polish into Tier 2 work — that's scope creep, not helpfulness.
 
-What Tier 0 landed: the async event bus (§3) with an audit-log consumer,
-JWT auth + roles/permissions-as-data (§7), the Competition tenancy root
-(§6) with a create path, the Tailwind v4 `@theme` token layer + shadcn
-primitives (§9), and the TanStack Query hook layer + Zustand auth store
-(§8). Decisions made while building it are recorded in ADR-0008 (stateful
-refresh sessions) and ADR-0009 (synchronous event dispatch for now) —
-read those before changing auth or the event bus. The admin is a **seeded
-default account** (`admin@example.com` / `changeme`, ADR-0010, which
-superseded the first-user bootstrap of ADR-0007); public registration
-never grants above Participant, and a loud startup warning fires while the
-default password is unchanged.
+What's built:
 
-First up in Tier 1: the **module loader** (§11.1). It's kernel per
-ADR-0002 but was deferred out of Tier 0 on purpose — its first real
-consumer is Challenges, so it's built now, alongside them, rather than
-speculatively.
+- **Tier 0** — the async event bus (§3) with an audit-log consumer, JWT
+  auth + roles/permissions-as-data (§7), the Competition tenancy root (§6),
+  the Tailwind v4 `@theme` token layer + shadcn primitives (§9), and the
+  TanStack Query hook + Zustand store layer (§8).
+- **Tier 1** — the manifest-driven module loader (§11.1); competition
+  admin (edit/schedule/visibility); teams; challenges + categories; MinIO
+  file attachments; flag submission + static-points scoring; the WebSocket
+  layer (§4.1) with a live scoreboard; announcements; and hints. The full
+  authenticated app shell (sidebar + topbar) from the design handoff is
+  wired — see `docs/UI-INTEGRATION-NOTES.md` for what's real vs. still
+  placeholder.
+- **Pre-Tier-2** — competition join (public self-serve + invite code; the
+  only way into an individual-mode competition), enforced competition
+  visibility, role-aware navigation via `GET /api/auth/me/permissions`,
+  tz-aware timestamps, an admin **audit-log / event viewer** (its own
+  required-core module) with GitLab-style filtering, and UI polish (toasts,
+  skeletons, scoreboard medals, solve celebration, persisted theme,
+  responsive drawer). `change-password` now emits `user.password_changed`.
+
+Read before touching the relevant area: ADR-0008 (stateful refresh
+sessions), ADR-0009 (synchronous event dispatch), ADR-0010 (seeded default
+admin creds), ADR-0011 (site-wide theming only — per-competition deferred).
+The admin is a **seeded default account** (`admin@example.com` / `changeme`,
+ADR-0010, superseding the first-user bootstrap of ADR-0007); public
+registration never grants above Participant, and a loud startup warning
+fires while the default password is unchanged.
+
+**Tier 2 scope notes** (owner decisions, reflected in the plan): the
+challenge lifecycle (ROADMAP #17) is **deferred to a future tier**, and
+theming is **site-wide only** for now (ROADMAP #20 rescoped from
+per-competition; ADR-0011).
 
 ## Non-negotiable architectural rules
 

@@ -126,7 +126,7 @@ team.deleted
 challenge.created           challenge.updated          challenge.published
 challenge.deleted           challenge.solved           challenge.hint_requested
 category.created            category.deleted
-user.registered
+user.registered              user.password_changed
 ticket.created               ticket.assigned            ticket.resolved
 feedback.submitted
 announcement.published
@@ -406,6 +406,7 @@ Dashboard                 customize_dashboard, manage_dashboard_widgets
 Automations               automation_view, automation_create,
                           automation_edit  (reserved — see ROADMAP.md;
                           not enforced until the automation engine ships)
+Audit                     view_audit_log
 ```
 
 Each permission also carries a **scope**: `global` (site-wide — creating a

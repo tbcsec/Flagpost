@@ -90,6 +90,9 @@ PERMISSIONS: tuple[Permission, ...] = (
     Permission(
         "automation_edit", "Automations", Scope.COMPETITION, reserved=True
     ),
+    # Audit — reading the cross-competition event log (§3.3). Site oversight, so
+    # global-scoped and Administrator-only among the built-in roles.
+    Permission("view_audit_log", "Audit", Scope.GLOBAL),
 )
 
 PERMISSIONS_BY_KEY: dict[str, Permission] = {p.key: p for p in PERMISSIONS}

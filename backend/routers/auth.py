@@ -218,4 +218,7 @@ async def change_password(
         session.revoked_at = utcnow()
 
     await db.commit()
+    await event_bus.emit(
+        "user.password_changed", {"user_id": current_user.id}
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

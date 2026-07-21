@@ -42,6 +42,35 @@ export interface Permissions {
   by_competition: Record<string, string[]>;
 }
 
+/** One persisted event from the audit log (§3.3). */
+export interface AuditLogEntry {
+  id: string;
+  event_name: string;
+  payload: Record<string, unknown>;
+  competition_id: string | null;
+  user_id: string | null;
+  created_at: string;
+}
+
+export interface AuditLogPage {
+  items: AuditLogEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AuditLogQuery {
+  event?: string;
+  competition_id?: string;
+  user_id?: string;
+  team_id?: string;
+  q?: string;
+  since?: string;
+  until?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export interface CompetitionCreate {
   name: string;
   description?: string;

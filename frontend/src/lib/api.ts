@@ -9,6 +9,8 @@
 import { useAuthStore } from "@/stores/auth";
 import type {
   Announcement,
+  AuditLogPage,
+  AuditLogQuery,
   Attachment,
   Category,
   Challenge,
@@ -258,6 +260,22 @@ export const scoreboardApi = {
   // Initial load only — live updates arrive over the scoreboard WS room (§4.1).
   get: (competitionId: string) =>
     apiFetch<Scoreboard>(`/api/competitions/${competitionId}/scoreboard`),
+};
+
+export const auditLogApi = {
+  list: (query: AuditLogQuery) => {
+    const qs = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined && value !== null && value !== "") {
+        qs.set(key, String(value));
+      }
+    }
+    const suffix = qs.toString();
+    return apiFetch<AuditLogPage>(
+      `/api/admin/audit-log${suffix ? `?${suffix}` : ""}`,
+    );
+  },
+  eventNames: () => apiFetch<string[]>("/api/admin/audit-log/event-names"),
 };
 
 export const announcementsApi = {

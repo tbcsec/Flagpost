@@ -66,6 +66,7 @@ const ADMIN_SUBNAV: { href: string; label: string }[] = [
   { href: "/admin/competitions", label: "Competitions" },
   { href: "/admin/users", label: "Users" },
   { href: "/admin/roles", label: "Roles" },
+  { href: "/admin/events", label: "Event log" },
   { href: "/admin/automations", label: "Automations" },
   { href: "/admin/appearance", label: "Appearance" },
   { href: "/admin/settings", label: "Site settings" },

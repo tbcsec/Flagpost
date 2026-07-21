@@ -1,0 +1,12 @@
+id: tickets
+name: Support Tickets
+version: 1.0.0
+# Required-core (§11.3). First WS-room consumer beyond scoreboard/announcements:
+# a per-ticket live thread room and a per-competition staff-queue room.
+required_core: true
+provides:
+  routes: true
+  event_listeners: true
+dependencies:
+  - competitions
+  - challenges

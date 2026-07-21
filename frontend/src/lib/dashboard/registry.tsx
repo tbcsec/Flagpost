@@ -14,6 +14,7 @@ import {
   MySolvesWidget,
   StandingWidget,
   StatsWidget,
+  SupportQueueWidget,
 } from "@/components/dashboard/widgets";
 
 /** A size in grid units. `cols` drives width now; `rows` is declared for the
@@ -61,6 +62,12 @@ export const WIDGETS: Record<string, WidgetDef> = {
     defaultSize: { cols: 2, rows: 2 },
     Component: ChallengeHealthWidget,
   },
+  "support-queue": {
+    id: "support-queue",
+    sizes: [{ cols: 2, rows: 2 }, { cols: 4, rows: 2 }],
+    defaultSize: { cols: 2, rows: 2 },
+    Component: SupportQueueWidget,
+  },
   "my-solves": {
     id: "my-solves",
     sizes: [{ cols: 2, rows: 2 }, { cols: 4, rows: 2 }],
@@ -83,6 +90,7 @@ export const DEFAULT_LAYOUT_MANAGER: LayoutEntry[] = [
   at("activity"),
   at("announcements"),
   at("challenge-health"),
+  at("support-queue"),
 ];
 
 export const DEFAULT_LAYOUT_PARTICIPANT: LayoutEntry[] = [

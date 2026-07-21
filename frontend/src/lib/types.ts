@@ -72,6 +72,35 @@ export interface MyStanding {
   solved_count: number;
 }
 
+/** Support tickets (§4.4, ROADMAP #18). */
+export type TicketStatus = "open" | "resolved";
+
+export interface TicketMessage {
+  id: string;
+  author_user_id: string;
+  author_name: string;
+  body: string;
+  is_internal: boolean;
+  created_at: string;
+}
+
+export interface Ticket {
+  id: string;
+  subject: string;
+  status: TicketStatus;
+  challenge_id: string | null;
+  challenge_title: string | null;
+  opener_name: string;
+  team_name: string | null;
+  assignee_name: string | null;
+  message_count: number;
+  created_at: string;
+}
+
+export interface TicketDetail extends Ticket {
+  messages: TicketMessage[];
+}
+
 /** One persisted event from the audit log (§3.3). */
 export interface AuditLogEntry {
   id: string;

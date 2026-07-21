@@ -4,6 +4,9 @@
 // via domain hooks and renders inside whatever grid cell the layout gives it —
 // it never assumes a position or an adjacent widget.
 
+import Link from "next/link";
+
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { relativeTime } from "@/lib/datetime";
@@ -16,6 +19,7 @@ import {
   useMyStanding,
   useRecentSolves,
 } from "@/lib/hooks/use-dashboard";
+import { useSupportQueueLive, useTickets } from "@/lib/hooks/use-tickets";
 
 type WidgetProps = { competitionId: string };
 
@@ -160,6 +164,36 @@ export function ChallengeHealthWidget({ competitionId }: WidgetProps) {
         </ul>
       ) : (
         <p className="text-sm text-muted-foreground">No challenges yet.</p>
+      )}
+    </ListCard>
+  );
+}
+
+export function SupportQueueWidget({ competitionId }: WidgetProps) {
+  // Staff widget: the live open-ticket queue. Subscribing here keeps the count
+  // fresh and plays the §4.4 cue when a new ticket arrives while on the dashboard.
+  useSupportQueueLive(competitionId, true);
+  const tickets = useTickets(competitionId, "open");
+  const open = tickets.data ?? [];
+  return (
+    <ListCard title="Support queue" description={`${open.length} open`}>
+      {tickets.isLoading ? (
+        <Skeleton className="h-16 w-full" />
+      ) : open.length > 0 ? (
+        <ul className="grid gap-2">
+          {open.map((t) => (
+            <li key={t.id} className="flex items-center justify-between gap-3 text-sm">
+              <span className="min-w-0 truncate">{t.subject}</span>
+              <span className="whitespace-nowrap text-xs text-muted-foreground">
+                {t.team_name ?? t.opener_name}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          No open tickets. <Link href="/support" className="text-primary hover:underline">Support</Link>
+        </p>
       )}
     </ListCard>
   );

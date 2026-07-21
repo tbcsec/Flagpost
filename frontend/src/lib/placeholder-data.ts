@@ -11,21 +11,6 @@
 // which roadmap phase lights each of these up for real.
 // -----------------------------------------------------------------------------
 
-export interface Ticket {
-  id: string;
-  subject: string;
-  team: string;
-  challenge: string;
-  status: "Open" | "Closed";
-}
-
-export const TICKETS: Ticket[] = [
-  { id: "tk1", subject: "Instance not spawning for Stack Smash", team: "Kernel Panic", challenge: "Stack Smash", status: "Open" },
-  { id: "tk2", subject: "Invite code not working", team: "Cache Money", challenge: "", status: "Open" },
-  { id: "tk3", subject: "Scoreboard shows wrong rank", team: "Byte Me", challenge: "", status: "Closed" },
-  { id: "tk4", subject: "Flag format question", team: "0x1337", challenge: "Baby RSA", status: "Closed" },
-];
-
 export interface DirectoryUser {
   id: string;
   name: string;

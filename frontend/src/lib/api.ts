@@ -32,6 +32,8 @@ import type {
   SignedUrl,
   SubmitResult,
   Team,
+  Ticket,
+  TicketDetail,
   TokenResponse,
   User,
 } from "@/lib/types";
@@ -51,10 +53,19 @@ export class ApiError extends Error {
 let refreshPromise: Promise<boolean> | null = null;
 
 async function runRefresh(): Promise<boolean> {
-  const res = await fetch(`${API_URL}/api/auth/refresh`, {
-    method: "POST",
-    credentials: "include",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/api/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+    });
+  } catch {
+    // Network error — the backend is unreachable (not running, CORS, offline).
+    // Treat it as "not authenticated" rather than letting the rejection surface
+    // as an unhandled error on app load; the app falls back to the login screen.
+    useAuthStore.getState().clearSession();
+    return false;
+  }
   if (!res.ok) {
     useAuthStore.getState().clearSession();
     return false;
@@ -99,11 +110,18 @@ async function apiFetch<T>(
     headers.set("Content-Type", "application/json");
   }
 
-  const res = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers,
-    credentials: "include",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers,
+      credentials: "include",
+    });
+  } catch {
+    // Network error (backend unreachable) — surface a clean ApiError so callers
+    // show a message instead of a raw "Failed to fetch" TypeError.
+    throw new ApiError(0, "Cannot reach the server. Is the backend running?");
+  }
 
   if (res.status === 401 && retryOn401 && auth) {
     const refreshed = await refreshOnce();
@@ -264,6 +282,42 @@ export const scoreboardApi = {
   // Initial load only — live updates arrive over the scoreboard WS room (§4.1).
   get: (competitionId: string) =>
     apiFetch<Scoreboard>(`/api/competitions/${competitionId}/scoreboard`),
+};
+
+export const ticketsApi = {
+  base: (competitionId: string) => `/api/competitions/${competitionId}/tickets`,
+  list: (competitionId: string, status?: "open" | "resolved") => {
+    const suffix = status ? `?status_filter=${status}` : "";
+    return apiFetch<Ticket[]>(`${ticketsApi.base(competitionId)}${suffix}`);
+  },
+  get: (competitionId: string, ticketId: string) =>
+    apiFetch<TicketDetail>(`${ticketsApi.base(competitionId)}/${ticketId}`),
+  create: (
+    competitionId: string,
+    input: { subject: string; body: string; challenge_id?: string | null },
+  ) =>
+    apiFetch<TicketDetail>(ticketsApi.base(competitionId), {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  reply: (
+    competitionId: string,
+    ticketId: string,
+    input: { body: string; is_internal?: boolean },
+  ) =>
+    apiFetch<TicketDetail>(`${ticketsApi.base(competitionId)}/${ticketId}/messages`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  assign: (competitionId: string, ticketId: string, assignee_user_id?: string) =>
+    apiFetch<TicketDetail>(`${ticketsApi.base(competitionId)}/${ticketId}/assign`, {
+      method: "POST",
+      body: JSON.stringify({ assignee_user_id: assignee_user_id ?? null }),
+    }),
+  resolve: (competitionId: string, ticketId: string) =>
+    apiFetch<TicketDetail>(`${ticketsApi.base(competitionId)}/${ticketId}/resolve`, {
+      method: "POST",
+    }),
 };
 
 export const dashboardApi = {

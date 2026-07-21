@@ -2,54 +2,75 @@
 
 import { useState } from "react";
 
-import { NotWiredNote, SectionHeader } from "@/components/app/section-header";
+import { SectionHeader } from "@/components/app/section-header";
+import { NewTicketDialog } from "@/components/support/new-ticket-dialog";
+import { TicketThread } from "@/components/support/ticket-thread";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
-import { TICKETS } from "@/lib/placeholder-data";
+import { useAccess } from "@/lib/hooks/use-permissions";
+import { useSupportQueueLive, useTickets } from "@/lib/hooks/use-tickets";
+import type { TicketStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-// Support tickets — Tier 2 (#18). No backend yet; placeholder tickets so the
-// design is in place for when the module lands.
-const FILTERS = ["all", "open", "closed"] as const;
+// Support tickets (ROADMAP #18). Staff see the whole queue with stats + filter
+// tabs; a competitor sees only their own tickets and can open new ones. Both
+// open the live thread. New tickets and replies cue staff / the other side
+// over the WS rooms.
+type Filter = "all" | TicketStatus;
 
 export default function SupportPage() {
-  const { data: competition } = useActiveCompetition();
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
+  const { competitionId, data: competition } = useActiveCompetition();
+  const access = useAccess();
+  const isStaff = access.has("ticket_assign");
 
-  const stats = [
-    { label: "All tickets", value: TICKETS.length },
-    { label: "Open tickets", value: TICKETS.filter((t) => t.status === "Open").length },
-    { label: "Closed tickets", value: TICKETS.filter((t) => t.status === "Closed").length },
-    { label: "Avg. time to respond", value: "—" },
-  ];
+  // Staff subscribe to the competition support room (live queue + new-ticket cue).
+  useSupportQueueLive(competitionId ?? "", isStaff);
 
-  const visible = TICKETS.filter(
-    (t) => filter === "all" || t.status.toLowerCase() === filter,
-  );
+  const tickets = useTickets(competitionId ?? "");
+  const [filter, setFilter] = useState<Filter>("all");
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  if (!competitionId) {
+    return <p className="text-sm text-muted-foreground">No competition selected.</p>;
+  }
+
+  const all = tickets.data ?? [];
+  const openCount = all.filter((t) => t.status === "open").length;
+  const resolvedCount = all.filter((t) => t.status === "resolved").length;
+  const visible = all.filter((t) => filter === "all" || t.status === filter);
+
+  const filters: Filter[] = ["all", "open", "resolved"];
 
   return (
     <>
       <SectionHeader
         title="Support"
-        subtitle={`${competition?.name ?? ""} · ${TICKETS.filter((t) => t.status === "Open").length} open`}
+        subtitle={`${competition?.name ?? ""} · ${isStaff ? `${openCount} open` : "your tickets"}`}
+        actions={!isStaff ? <NewTicketDialog competitionId={competitionId} /> : undefined}
       />
 
-      <NotWiredNote>Support tickets are a Tier&nbsp;2 feature — data shown is placeholder.</NotWiredNote>
-
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {stats.map((s) => (
-          <Card key={s.label}>
-            <CardContent className="p-6 text-center">
-              <div className="text-xs text-muted-foreground">{s.label}</div>
-              <div className="mt-1 font-display text-2xl font-semibold tracking-tight">{s.value}</div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {isStaff && (
+        <div className="grid grid-cols-3 gap-4">
+          {[
+            { label: "All tickets", value: all.length },
+            { label: "Open", value: openCount },
+            { label: "Resolved", value: resolvedCount },
+          ].map((s) => (
+            <Card key={s.label}>
+              <CardContent className="p-6 text-center">
+                <div className="text-xs text-muted-foreground">{s.label}</div>
+                <div className="mt-1 font-display text-2xl font-semibold tracking-tight">{s.value}</div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <div className="flex gap-2 border-b border-border">
-        {FILTERS.map((f) => (
+        {filters.map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -65,27 +86,45 @@ export default function SupportPage() {
         ))}
       </div>
 
+      {tickets.isLoading && <Skeleton className="h-40 w-full" />}
+
       <Card>
         <CardContent className="pt-5">
           <ul className="grid">
-            {visible.map((tk) => (
-              <li
-                key={tk.id}
-                className="flex items-center justify-between gap-3 border-b border-border py-3 last:border-0"
-              >
-                <div>
-                  <div className="text-sm font-medium">{tk.subject}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {tk.team}
-                    {tk.challenge && ` · ${tk.challenge}`}
+            {visible.map((t) => (
+              <li key={t.id}>
+                <button
+                  onClick={() => setOpenId(t.id)}
+                  className="flex w-full items-center justify-between gap-3 border-b border-border py-3 text-left last:border-0 hover:bg-accent/40"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">{t.subject}</div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {isStaff ? (t.team_name ?? t.opener_name) : "You"}
+                      {t.challenge_title && ` · ${t.challenge_title}`}
+                      {` · ${t.message_count} message${t.message_count === 1 ? "" : "s"}`}
+                    </div>
                   </div>
-                </div>
-                <Badge variant={tk.status === "Open" ? "destructive" : "muted"}>{tk.status}</Badge>
+                  <Badge variant={t.status === "open" ? "destructive" : "muted"}>{t.status}</Badge>
+                </button>
               </li>
             ))}
+            {!tickets.isLoading && visible.length === 0 && (
+              <li className="py-8 text-center text-sm text-muted-foreground">
+                {isStaff ? "No tickets match this filter." : "No tickets yet — open one if you're stuck."}
+              </li>
+            )}
           </ul>
         </CardContent>
       </Card>
+
+      <Dialog open={!!openId} onOpenChange={(o) => !o && setOpenId(null)}>
+        <DialogContent>
+          {openId && (
+            <TicketThread competitionId={competitionId} ticketId={openId} isStaff={isStaff} />
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

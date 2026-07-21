@@ -14,6 +14,7 @@ from models.hint import Hint, HintReveal
 from models.role import Role, RoleAssignment
 from models.submission import Submission
 from models.team import Team, TeamMembership
+from models.ticket import Ticket, TicketMessage
 from models.user import RefreshSession, User
 
 __all__ = [
@@ -31,5 +32,7 @@ __all__ = [
     "RefreshSession",
     "Team",
     "TeamMembership",
+    "Ticket",
+    "TicketMessage",
     "User",
 ]

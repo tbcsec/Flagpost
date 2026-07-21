@@ -128,6 +128,7 @@ challenge.deleted           challenge.solved           challenge.hint_requested
 category.created            category.deleted
 user.registered              user.password_changed
 ticket.created               ticket.assigned            ticket.resolved
+ticket.message_posted
 feedback.submitted
 announcement.published
 automation.rule_triggered

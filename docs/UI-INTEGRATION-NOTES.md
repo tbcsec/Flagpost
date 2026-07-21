@@ -59,7 +59,8 @@ code.
 | Lobby — join public / join by code | **Wired** (pre-Tier-2 — `useJoinCompetition` / `useJoinByCode`; refetches permissions so the nav leaves the lobby) |
 | Role-aware navigation | **Wired** (pre-Tier-2 — `useAccess` off `/me/permissions` gates manager-only nav + the Admin section; direct admin URLs are guarded) |
 | Admin → Event log | **Wired** — audit-log viewer over every emitted event (§3.3), gated on `view_audit_log`; GitLab-style filtering by event/competition/team/actor/time/free-text, pagination, expandable payloads (`use-audit-log`) |
-| Dashboard | **Wired** (Tier 2 Phase 1) — widget-registration architecture (§10.1) with fixed per-audience layouts off `dashboard` module endpoints: manager stats/recent-solves/challenge-health, participant standing/solves, announcements (`use-dashboard`) |
+| Dashboard | **Wired** (Tier 2 Phase 1) — widget-registration architecture (§10.1) with fixed per-audience layouts off `dashboard` module endpoints: manager stats/recent-solves/challenge-health/support-queue, participant standing/solves, announcements (`use-dashboard`) |
+| Support tickets | **Wired** (Tier 2 Phase 2) — `tickets` module: competitor create/reply, staff assign/resolve/internal-notes, ownership scoping; live thread + staff-queue WS rooms with the §4.4 audio cue (`use-tickets`) |
 
 ## Built as UI, NOT wired (placeholder data + in-app "Preview" banner)
 
@@ -69,7 +70,6 @@ a retrofit later; **none of the data is real**.
 - **Dashboard** — now fully wired (Tier 2 Phase 1, see the wired table above).
   Ships as a **fixed layout** built on the widget-registration architecture so
   the drag-and-drop customization layer is additive later (§10.2, deferred).
-- **Support tickets** — Tier 2.
 - **Analytics** — Tier 3.
 - **Automations** (competition + admin) — deferred past MVP.
 - **Admin → Dashboard** (global stats / module health) — no aggregate endpoint.

@@ -17,6 +17,8 @@ type AuthStatus = "loading" | "authenticated" | "anonymous";
 // topbar toggle flips this and the shell mirrors it onto <html data-palette>.
 type Palette = "dark" | "light";
 
+const PALETTE_KEY = "fp:palette";
+
 interface AuthState {
   accessToken: string | null;
   user: User | null;
@@ -27,6 +29,15 @@ interface AuthState {
   clearSession: () => void;
   setActiveCompetition: (competitionId: string | null) => void;
   togglePalette: () => void;
+  hydratePalette: () => void;
+}
+
+function persistPalette(palette: Palette) {
+  try {
+    window.localStorage.setItem(PALETTE_KEY, palette);
+  } catch {
+    /* private mode / SSR — non-fatal, the choice just won't persist */
+  }
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -34,6 +45,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   status: "loading",
   activeCompetitionId: null,
+  // SSR-safe default; the real saved choice is applied by hydratePalette on mount.
   palette: "dark",
   setSession: (accessToken, user) =>
     set({ accessToken, user, status: "authenticated" }),
@@ -42,5 +54,17 @@ export const useAuthStore = create<AuthState>((set) => ({
   setActiveCompetition: (competitionId) =>
     set({ activeCompetitionId: competitionId }),
   togglePalette: () =>
-    set((s) => ({ palette: s.palette === "dark" ? "light" : "dark" })),
+    set((s) => {
+      const palette: Palette = s.palette === "dark" ? "light" : "dark";
+      persistPalette(palette);
+      return { palette };
+    }),
+  hydratePalette: () => {
+    try {
+      const saved = window.localStorage.getItem(PALETTE_KEY);
+      if (saved === "light" || saved === "dark") set({ palette: saved });
+    } catch {
+      /* no-op */
+    }
+  },
 }));

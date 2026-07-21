@@ -5,8 +5,10 @@ import { useState } from "react";
 import { ChallengeAdmin } from "@/components/challenges/challenge-admin";
 import { ChallengeHints } from "@/components/challenges/challenge-hints";
 import { SectionHeader } from "@/components/app/section-header";
+import { FlagpostMark } from "@/components/brand/flagpost-mark";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SkeletonCards } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -18,15 +20,18 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
+import { useAccess } from "@/lib/hooks/use-permissions";
 import { useCategories } from "@/lib/hooks/use-categories";
 import { useChallenges } from "@/lib/hooks/use-challenges";
 import { useSubmitFlag } from "@/lib/hooks/use-submissions";
 import { richTextToPlain } from "@/lib/rich-text";
 import type { Challenge } from "@/lib/types";
+import { toast } from "@/stores/toast";
 import { cn } from "@/lib/utils";
 
 export default function ChallengesPage() {
   const { competitionId, data: competition } = useActiveCompetition();
+  const access = useAccess();
   const challenges = useChallenges(competitionId ?? "");
   const categories = useCategories(competitionId ?? "");
 
@@ -41,14 +46,25 @@ export default function ChallengesPage() {
   const categoryName = (id: string | null) =>
     categories.data?.find((c) => c.id === id)?.name ?? "uncategorized";
 
-  const visible = (challenges.data ?? []).filter(
+  const allData = challenges.data ?? [];
+  const visible = allData.filter(
     (c) => filter === "all" || c.category_id === filter,
   );
-  const solvedCount = (challenges.data ?? []).filter((c) => c.solved).length;
+  const solvedCount = allData.filter((c) => c.solved).length;
 
+  // Each chip carries its solved/total progress so competitors can see at a
+  // glance where they stand per category.
   const chips = [
-    { id: "all", label: "All" },
-    ...(categories.data ?? []).map((c) => ({ id: c.id, label: c.name })),
+    { id: "all", label: "All", solved: solvedCount, total: allData.length },
+    ...(categories.data ?? []).map((c) => {
+      const inCat = allData.filter((x) => x.category_id === c.id);
+      return {
+        id: c.id,
+        label: c.name,
+        solved: inCat.filter((x) => x.solved).length,
+        total: inCat.length,
+      };
+    }),
   ];
 
   return (
@@ -57,9 +73,11 @@ export default function ChallengesPage() {
         title="Challenges"
         subtitle={`${competition?.name ?? ""} · ${solvedCount} of ${challenges.data?.length ?? 0} solved`}
         actions={
-          <Button variant={managing ? "secondary" : "default"} onClick={() => setManaging((m) => !m)}>
-            {managing ? "Done managing" : "Manage challenges"}
-          </Button>
+          access.canManageActiveCompetition ? (
+            <Button variant={managing ? "secondary" : "default"} onClick={() => setManaging((m) => !m)}>
+              {managing ? "Done managing" : "Manage challenges"}
+            </Button>
+          ) : undefined
         }
       />
 
@@ -76,13 +94,14 @@ export default function ChallengesPage() {
             )}
           >
             {chip.label}
+            <span className="ml-1.5 font-mono text-xs opacity-70">
+              {chip.solved}/{chip.total}
+            </span>
           </button>
         ))}
       </div>
 
-      {challenges.isLoading && (
-        <p className="text-sm text-muted-foreground">Loading challenges…</p>
-      )}
+      {challenges.isLoading && <SkeletonCards count={6} />}
       {challenges.isError && (
         <p className="text-sm text-destructive">{(challenges.error as Error).message}</p>
       )}
@@ -157,11 +176,22 @@ function ChallengeDialogBody({
   const [flag, setFlag] = useState("");
   const submit = useSubmitFlag(competitionId, challenge.id);
   const result = submit.data;
+  const justSolved = result?.correct === true;
   const alreadySolved = challenge.solved || result?.already_solved;
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    submit.mutate(flag, { onSuccess: () => setFlag("") });
+    submit.mutate(flag, {
+      onSuccess: (r) => {
+        setFlag("");
+        if (r.correct) {
+          toast(
+            r.is_first_blood ? "First blood!" : "Solved!",
+            { description: `${challenge.title} · +${r.points_awarded} pts`, variant: "success" },
+          );
+        }
+      },
+    });
   }
 
   return (
@@ -176,7 +206,17 @@ function ChallengeDialogBody({
         {richTextToPlain(challenge.description) || "No description."}
       </p>
 
-      {alreadySolved ? (
+      {justSolved ? (
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-success/40 bg-success/10 p-6 text-center">
+          <FlagpostMark size={40} theme="dark" />
+          <div className="text-base font-semibold text-success">
+            {result.is_first_blood ? "First blood!" : "Solved!"}
+          </div>
+          <div className="font-mono text-sm text-muted-foreground">
+            +{result.points_awarded} pts
+          </div>
+        </div>
+      ) : alreadySolved ? (
         <p className="text-sm text-success">You&apos;ve solved this challenge.</p>
       ) : (
         <form className="grid gap-3" onSubmit={onSubmit}>
@@ -194,12 +234,6 @@ function ChallengeDialogBody({
           </div>
           {result && !result.correct && (
             <span className="text-sm text-destructive">Incorrect flag.</span>
-          )}
-          {result?.correct && (
-            <span className="text-sm text-success">
-              Correct — +{result.points_awarded}
-              {result.is_first_blood ? " · first blood!" : ""}
-            </span>
           )}
           {submit.isError && (
             <span className="text-sm text-destructive">{(submit.error as Error).message}</span>

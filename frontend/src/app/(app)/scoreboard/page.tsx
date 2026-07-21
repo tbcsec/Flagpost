@@ -1,7 +1,10 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+
 import { SectionHeader } from "@/components/app/section-header";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -18,8 +21,27 @@ import { useAuthStore } from "@/stores/auth";
 import { cn } from "@/lib/utils";
 
 // Live scoreboard (Phase 7): REST initial load + WebSocket room updates. "You"
-// highlighting follows the scoring subject — your team in team-mode, your own
-// account in individual-mode.
+// highlighting follows the scoring subject; the top three get a medal rank and
+// rows flash briefly when their points change on a live update.
+function RankBadge({ rank }: { rank: number }) {
+  if (rank > 3) return <span className="font-mono text-muted-foreground">{rank}</span>;
+  const style = {
+    1: "bg-warning text-warning-foreground",
+    2: "bg-secondary text-secondary-foreground",
+    3: "bg-muted text-muted-foreground",
+  }[rank as 1 | 2 | 3];
+  return (
+    <span
+      className={cn(
+        "inline-flex h-6 w-6 items-center justify-center rounded-full font-mono text-xs font-semibold",
+        style,
+      )}
+    >
+      {rank}
+    </span>
+  );
+}
+
 export default function ScoreboardPage() {
   const { competitionId, data: competition } = useActiveCompetition();
   const board = useScoreboard(competitionId ?? "");
@@ -27,12 +49,30 @@ export default function ScoreboardPage() {
   const myTeam = useMyTeam(isTeam ? (competitionId ?? "") : "");
   const userId = useAuthStore((s) => s.user?.id);
 
+  const entries = board.data?.entries ?? [];
+
+  // Flash a row whose points changed since the last live update. A colour
+  // transition (not a looping pulse) fades the highlight out on its own.
+  const prevPoints = useRef<Record<string, number>>({});
+  const [flashing, setFlashing] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const changed: string[] = [];
+    for (const e of entries) {
+      const prev = prevPoints.current[e.subject_id];
+      if (prev !== undefined && prev !== e.points) changed.push(e.subject_id);
+      prevPoints.current[e.subject_id] = e.points;
+    }
+    if (changed.length === 0) return;
+    setFlashing(new Set(changed));
+    const t = setTimeout(() => setFlashing(new Set()), 1200);
+    return () => clearTimeout(t);
+  }, [entries]);
+
   if (!competitionId) {
     return <p className="text-sm text-muted-foreground">No competition selected.</p>;
   }
 
   const mySubjectId = isTeam ? myTeam.data?.id : userId;
-  const entries = board.data?.entries ?? [];
   const top = entries.slice(0, 10);
   const maxPoints = Math.max(1, ...top.map((e) => e.points));
   const live = board.socketStatus === "open";
@@ -55,7 +95,10 @@ export default function ScoreboardPage() {
       />
 
       {board.isLoading && (
-        <p className="text-sm text-muted-foreground">Loading scoreboard…</p>
+        <div className="grid gap-4">
+          <Skeleton className="h-44 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
       )}
       {board.isError && (
         <p className="text-sm text-destructive">{(board.error as Error).message}</p>
@@ -83,7 +126,7 @@ export default function ScoreboardPage() {
                 >
                   <div
                     className={cn(
-                      "w-full rounded-t",
+                      "w-full rounded-t transition-[height] duration-500",
                       e.subject_id === mySubjectId ? "bg-primary" : "bg-secondary",
                     )}
                     style={{ height: `${Math.round((e.points / maxPoints) * 100)}%` }}
@@ -114,9 +157,15 @@ export default function ScoreboardPage() {
                 {entries.map((e) => (
                   <TableRow
                     key={e.subject_id}
-                    className={cn(e.subject_id === mySubjectId && "bg-primary/10")}
+                    className={cn(
+                      "transition-colors duration-700",
+                      flashing.has(e.subject_id) && "bg-success/15",
+                      e.subject_id === mySubjectId && "bg-primary/10",
+                    )}
                   >
-                    <TableCell className="font-mono text-muted-foreground">{e.rank}</TableCell>
+                    <TableCell>
+                      <RankBadge rank={e.rank} />
+                    </TableCell>
                     <TableCell className="font-medium">
                       {e.name}
                       {e.subject_id === mySubjectId && (

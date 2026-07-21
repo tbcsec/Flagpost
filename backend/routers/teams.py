@@ -23,9 +23,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import get_current_user
+from auth.membership import ensure_participant_role
 from db import get_db
 from models.competition import Competition
-from models.role import Role, RoleAssignment
 from models.team import Team, TeamMembership
 from models.user import User
 from schemas.team import (
@@ -56,37 +56,6 @@ async def _get_team_competition(
             detail="This competition is individual-mode; teams are disabled",
         )
     return competition
-
-
-async def _ensure_participant_role(
-    db: AsyncSession, competition_id: str, user_id: str
-) -> None:
-    """Grant the viewer-level Participant role for this competition (§7.5).
-
-    Joining or creating a team is how a competitor gains competition access —
-    ``challenge_view`` (and therefore flag submission). Idempotent: a user who
-    already holds it (e.g. re-joining after leaving) isn't assigned twice.
-
-    Individual-mode competitions have no team to join, so a self-serve
-    join-competition path is still a gap there (flagged in the Phase 6 notes);
-    this covers the team-mode flow end to end.
-    """
-    role = await db.scalar(select(Role).where(Role.name == "Participant"))
-    if role is None:  # roles unseeded — nothing to grant (shouldn't happen)
-        return
-    existing = await db.scalar(
-        select(RoleAssignment).where(
-            RoleAssignment.user_id == user_id,
-            RoleAssignment.competition_id == competition_id,
-            RoleAssignment.role_id == role.id,
-        )
-    )
-    if existing is None:
-        db.add(
-            RoleAssignment(
-                user_id=user_id, competition_id=competition_id, role_id=role.id
-            )
-        )
 
 
 async def _membership_of(
@@ -205,7 +174,7 @@ async def create_team(
             is_captain=True,
         )
     )
-    await _ensure_participant_role(db, competition_id, current_user.id)
+    await ensure_participant_role(db, competition_id, current_user.id)
     await db.commit()
 
     await event_bus.emit(
@@ -253,7 +222,7 @@ async def join_team(
             user_id=current_user.id,
         )
     )
-    await _ensure_participant_role(db, competition_id, current_user.id)
+    await ensure_participant_role(db, competition_id, current_user.id)
     await db.commit()
 
     await event_bus.emit(

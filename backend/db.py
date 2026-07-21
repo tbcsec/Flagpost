@@ -14,7 +14,7 @@ answerable structurally rather than per-table guesswork.
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, MetaData
+from sqlalchemy import DateTime, ForeignKey, MetaData, TypeDecorator
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -54,11 +54,28 @@ def ensure_aware_utc(dt: datetime) -> datetime:
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
+class UtcDateTime(TypeDecorator):
+    """A ``DateTime(timezone=True)`` that always returns **aware** UTC values.
+
+    SQLite (tests/dev, ADR-0006) stores datetimes as text and drops tzinfo, so a
+    naive value round-trips and then serializes to an offset-less ISO string
+    that a browser misreads as local time. Coercing on load fixes it in one
+    place — every timestamp leaves the API as aware UTC regardless of backend,
+    so clients never have to compensate.
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_result_value(self, value, dialect):
+        return None if value is None else ensure_aware_utc(value)
+
+
 class TimestampMixin:
     """Adds a ``created_at`` audit column."""
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False
+        UtcDateTime, default=utcnow, nullable=False
     )
 
 

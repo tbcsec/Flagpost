@@ -23,11 +23,13 @@ from auth.security import (
     verify_password,
 )
 from config import settings
+from auth.membership import effective_permissions
 from db import ensure_aware_utc, get_db, utcnow
 from models.user import RefreshSession, User
 from schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
+    PermissionsOut,
     RegisterRequest,
     TokenResponse,
     UserOut,
@@ -172,6 +174,17 @@ async def logout(
 @router.get("/me", response_model=UserOut)
 async def me(current_user: User = Depends(get_current_user)) -> UserOut:
     return UserOut.model_validate(current_user)
+
+
+@router.get("/me/permissions", response_model=PermissionsOut)
+async def my_permissions(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PermissionsOut:
+    """Effective permissions for the caller, so the frontend can gate nav and
+    sections rather than showing everything and relying on backend 403s."""
+    perms = await effective_permissions(db, current_user.id)
+    return PermissionsOut(global_perms=perms["global"], by_competition=perms["by_competition"])
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)

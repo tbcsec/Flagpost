@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { useHints, useRevealHint } from "@/lib/hooks/use-hints";
+import { toast } from "@/stores/toast";
 
 // Competitor-facing hint list on the challenge detail dialog (Phase 9). A hint's
 // body stays hidden until this subject reveals it; revealing charges the cost
@@ -38,7 +39,14 @@ export function ChallengeHints({
                   size="sm"
                   variant="outline"
                   disabled={reveal.isPending}
-                  onClick={() => reveal.mutate(hint.id)}
+                  onClick={() =>
+                    reveal.mutate(hint.id, {
+                      onSuccess: (h) =>
+                        toast("Hint revealed", {
+                          description: h.cost > 0 ? `−${h.cost} pts` : undefined,
+                        }),
+                    })
+                  }
                 >
                   {reveal.isPending ? "Revealing…" : "Reveal"}
                 </Button>

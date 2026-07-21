@@ -21,6 +21,7 @@ import type {
   Hint,
   HintAuthored,
   MyTeam,
+  Permissions,
   Scoreboard,
   SignedUrl,
   SubmitResult,
@@ -140,6 +141,7 @@ export const authApi = {
   logout: () =>
     apiFetch<void>("/api/auth/logout", { method: "POST" }, { retryOn401: false }),
   me: () => apiFetch<User>("/api/auth/me"),
+  permissions: () => apiFetch<Permissions>("/api/auth/me/permissions"),
   changePassword: (input: { current_password: string; new_password: string }) =>
     apiFetch<void>("/api/auth/change-password", {
       method: "POST",
@@ -161,6 +163,15 @@ export const competitionsApi = {
     apiFetch<Competition>(`/api/competitions/${id}`, {
       method: "PATCH",
       body: JSON.stringify(input),
+    }),
+  // Self-serve join for a public competition (from the lobby list).
+  join: (id: string) =>
+    apiFetch<Competition>(`/api/competitions/${id}/join`, { method: "POST" }),
+  // Join any competition by invite code — the only way into a private one.
+  joinByCode: (invite_code: string) =>
+    apiFetch<Competition>("/api/competitions/join", {
+      method: "POST",
+      body: JSON.stringify({ invite_code }),
     }),
 };
 

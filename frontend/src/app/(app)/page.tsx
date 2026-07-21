@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { relativeTime } from "@/lib/datetime";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
 import { useAnnouncements } from "@/lib/hooks/use-announcements";
+import { useAccess } from "@/lib/hooks/use-permissions";
 import { ACTIVITY } from "@/lib/placeholder-data";
 
 // Dashboard. Ships as a FIXED layout per ROADMAP (Tier 2, #16); the drag-and-
@@ -21,7 +22,10 @@ const STATS = [
 
 export default function DashboardPage() {
   const { competitionId, data: competition } = useActiveCompetition();
-  const announcements = useAnnouncements(competitionId ?? "");
+  const access = useAccess();
+  // The shell's banner already holds the announcements socket for this
+  // competition; read from the shared cache here rather than opening a second.
+  const announcements = useAnnouncements(competitionId ?? "", { subscribe: false });
 
   return (
     <>
@@ -29,7 +33,7 @@ export default function DashboardPage() {
         title="Dashboard"
         subtitle={`${competition?.name ?? "—"} · operational overview`}
         actions={
-          competitionId ? (
+          competitionId && access.canManageActiveCompetition ? (
             <NewAnnouncementDialog competitionId={competitionId} />
           ) : undefined
         }

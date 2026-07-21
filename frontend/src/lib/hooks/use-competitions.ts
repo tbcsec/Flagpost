@@ -40,6 +40,35 @@ export function useActiveCompetition() {
   return { competitionId: activeCompetitionId, ...query };
 }
 
+/** Joining grants the competition-scoped Participant role, so we refresh both
+ *  the competition list (visibility) and permissions (nav gating), and switch
+ *  the active competition to the one just joined. */
+function useOnJoined() {
+  const queryClient = useQueryClient();
+  const setActiveCompetition = useAuthStore((s) => s.setActiveCompetition);
+  return (joined: Competition) => {
+    queryClient.invalidateQueries({ queryKey: competitionKeys.all });
+    queryClient.invalidateQueries({ queryKey: ["permissions"] });
+    setActiveCompetition(joined.id);
+  };
+}
+
+export function useJoinCompetition() {
+  const onJoined = useOnJoined();
+  return useMutation({
+    mutationFn: (id: string) => competitionsApi.join(id),
+    onSuccess: onJoined,
+  });
+}
+
+export function useJoinByCode() {
+  const onJoined = useOnJoined();
+  return useMutation({
+    mutationFn: (inviteCode: string) => competitionsApi.joinByCode(inviteCode),
+    onSuccess: onJoined,
+  });
+}
+
 export function useCreateCompetition() {
   const queryClient = useQueryClient();
   return useMutation({

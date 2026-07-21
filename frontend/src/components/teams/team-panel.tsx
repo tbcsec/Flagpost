@@ -27,6 +27,7 @@ import {
   useMyTeam,
   useTeams,
 } from "@/lib/hooks/use-teams";
+import { toast } from "@/stores/toast";
 
 // Feature component (§14 components/<domain>). All server state via the
 // use-teams hooks; membership rules (one team per competition, invite-code
@@ -119,7 +120,11 @@ function MyTeamCard({
         <div className="flex items-center gap-3">
           <Button
             variant="destructive"
-            onClick={() => leave.mutate()}
+            onClick={() =>
+              leave.mutate(undefined, {
+                onSuccess: () => toast("Left team", { variant: "success" }),
+              })
+            }
             disabled={leave.isPending}
           >
             {leave.isPending ? "Leaving…" : "Leave team"}
@@ -153,7 +158,10 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
             className="space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
-              create.mutate({ name });
+              create.mutate(
+                { name },
+                { onSuccess: () => toast(`Created ${name}`, { variant: "success" }) },
+              );
             }}
           >
             <div className="space-y-2">
@@ -187,7 +195,10 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
             className="space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
-              join.mutate({ invite_code: inviteCode });
+              join.mutate(
+                { invite_code: inviteCode },
+                { onSuccess: () => toast("Joined team", { variant: "success" }) },
+              );
             }}
           >
             <div className="space-y-2">

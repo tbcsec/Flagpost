@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 
 import { AnnouncementBanner } from "@/components/announcements/announcement-banner";
@@ -9,6 +9,7 @@ import { Lockup } from "@/components/brand/flagpost-mark";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { useCompetitions } from "@/lib/hooks/use-competitions";
+import { useAccess } from "@/lib/hooks/use-permissions";
 import { useLogout } from "@/lib/hooks/use-users";
 import { cn } from "@/lib/utils";
 import { NOTIFICATIONS } from "@/lib/placeholder-data";
@@ -47,15 +48,17 @@ const settingsIcon: Icon = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg>
 );
 
-const COMP_NAV: { href: string; label: string; icon: Icon }[] = [
+// `manage: true` items are shown only to a Judge/organiser of the active
+// competition (gated by useAccess); the rest are competitor-facing.
+const COMP_NAV: { href: string; label: string; icon: Icon; manage?: boolean }[] = [
   { href: "/", label: "Dashboard", icon: dashIcon },
   { href: "/challenges", label: "Challenges", icon: <span className="text-base leading-none">⚑</span> },
   { href: "/scoreboard", label: "Scoreboard", icon: scoreboardIcon },
   { href: "/participants", label: "Participants", icon: peopleIcon },
   { href: "/support", label: "Support", icon: supportIcon },
-  { href: "/analytics", label: "Analytics", icon: analyticsIcon },
-  { href: "/automations", label: "Automations", icon: boltIcon },
-  { href: "/settings", label: "Settings", icon: settingsIcon },
+  { href: "/analytics", label: "Analytics", icon: analyticsIcon, manage: true },
+  { href: "/automations", label: "Automations", icon: boltIcon, manage: true },
+  { href: "/settings", label: "Settings", icon: settingsIcon, manage: true },
 ];
 
 const ADMIN_SUBNAV: { href: string; label: string }[] = [
@@ -77,11 +80,25 @@ function useActivePath() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const isActive = useActivePath();
   const [collapsed, setCollapsed] = React.useState(false);
+  const [mobileOpen, setMobileOpen] = React.useState(false);
   const [adminOpen, setAdminOpen] = React.useState(pathname.startsWith("/admin"));
   const logout = useLogout();
   const user = useAuthStore((s) => s.user);
+  const hydratePalette = useAuthStore((s) => s.hydratePalette);
+  const access = useAccess();
+
+  // Apply the saved light/dark choice once on mount.
+  React.useEffect(() => {
+    hydratePalette();
+  }, [hydratePalette]);
+
+  // Close the mobile drawer whenever the route changes.
+  React.useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
   const initials = React.useMemo(() => {
     const n = user?.display_name?.trim() ?? "";
@@ -91,7 +108,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const isAdminSection = pathname.startsWith("/admin");
-  const navExpanded = !collapsed;
+  // Labels show on the desktop drawer unless collapsed, and always in the open
+  // mobile drawer (which never collapses to an icon rail).
+  const navExpanded = mobileOpen || !collapsed;
+
+  // Role-aware nav: hide manager-only items from competitors, the Admin section
+  // from non-admins, and swap the whole competition nav for a Lobby link when a
+  // signed-in user has no competition access yet.
+  const showLobby = access.ready && access.inLobby;
+  const compNav = COMP_NAV.filter(
+    (item) => !item.manage || access.canManageActiveCompetition,
+  );
+  const adminDenied = isAdminSection && access.ready && !access.isAdmin;
+
+  // A lobby user (no competition access) has no competition-scoped pages to be
+  // on — send them to the lobby (they can still reach their profile).
+  React.useEffect(() => {
+    if (showLobby && pathname !== "/lobby" && pathname !== "/profile") {
+      router.replace("/lobby");
+    }
+  }, [showLobby, pathname, router]);
 
   const navItem = (active: boolean) =>
     cn(
@@ -112,20 +148,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen overflow-hidden">
+      {/* Mobile drawer backdrop. */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 md:hidden"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden
+        />
+      )}
       <aside
         className={cn(
-          "flex flex-shrink-0 flex-col overflow-y-auto border-r border-border bg-card p-3 transition-[width]",
-          collapsed ? "w-[56px]" : "w-[248px]",
+          "flex flex-col overflow-y-auto border-r border-border bg-card p-3",
+          // Off-canvas drawer on mobile, static rail on md+.
+          "fixed inset-y-0 left-0 z-40 w-[248px] transition-transform md:static md:z-auto md:flex-shrink-0 md:translate-x-0 md:transition-[width]",
+          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+          collapsed ? "md:w-[56px]" : "md:w-[248px]",
         )}
       >
-        <div className={cn("flex items-center gap-2 px-1 pb-5", collapsed ? "justify-center" : "justify-start")}>
+        <div className={cn("flex items-center gap-2 px-1 pb-5", collapsed && !mobileOpen ? "md:justify-center" : "justify-start")}>
           {navExpanded && <Lockup size={26} theme="dark" />}
           <button
             onClick={() => setCollapsed((c) => !c)}
             title="Toggle sidebar"
             className={cn(
-              "rounded-md px-2.5 py-1 text-xl leading-none text-muted-foreground hover:bg-accent/60",
-              collapsed ? "" : "ml-auto",
+              "ml-auto hidden rounded-md px-2.5 py-1 text-xl leading-none text-muted-foreground hover:bg-accent/60 md:block",
+              collapsed && "md:ml-0",
             )}
           >
             {collapsed ? "»" : "«"}
@@ -133,38 +180,48 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="flex flex-1 flex-col gap-1">
-          {COMP_NAV.map((item) => (
-            <Link key={item.href} href={item.href} title={item.label} className={navItem(isActive(item.href))}>
-              <span className="flex h-4 w-4 items-center justify-center">{item.icon}</span>
-              {navExpanded && <span>{item.label}</span>}
+          {showLobby ? (
+            <Link href="/lobby" title="Lobby" className={navItem(isActive("/lobby"))}>
+              <span className="flex h-4 w-4 items-center justify-center">{lobbyIcon}</span>
+              {navExpanded && <span>Lobby</span>}
             </Link>
-          ))}
-
-          <div className="my-2 border-t border-border" />
-
-          <button
-            onClick={() => {
-              if (collapsed) setCollapsed(false);
-              setAdminOpen((o) => !o);
-            }}
-            title="Admin"
-            className={navItem(isAdminSection)}
-          >
-            <span className="flex h-4 w-4 items-center justify-center">{shieldIcon}</span>
-            {navExpanded && (
-              <>
-                <span className="flex-1 text-left">Admin</span>
-                <span className="text-[11px] text-muted-foreground">{adminOpen ? "▾" : "▸"}</span>
-              </>
-            )}
-          </button>
-          {navExpanded &&
-            adminOpen &&
-            ADMIN_SUBNAV.map((item) => (
-              <Link key={item.href} href={item.href} className={subNavItem(isActive(item.href))}>
-                {item.label}
+          ) : (
+            compNav.map((item) => (
+              <Link key={item.href} href={item.href} title={item.label} className={navItem(isActive(item.href))}>
+                <span className="flex h-4 w-4 items-center justify-center">{item.icon}</span>
+                {navExpanded && <span>{item.label}</span>}
               </Link>
-            ))}
+            ))
+          )}
+
+          {access.isAdmin && (
+            <>
+              <div className="my-2 border-t border-border" />
+              <button
+                onClick={() => {
+                  if (collapsed) setCollapsed(false);
+                  setAdminOpen((o) => !o);
+                }}
+                title="Admin"
+                className={navItem(isAdminSection)}
+              >
+                <span className="flex h-4 w-4 items-center justify-center">{shieldIcon}</span>
+                {navExpanded && (
+                  <>
+                    <span className="flex-1 text-left">Admin</span>
+                    <span className="text-[11px] text-muted-foreground">{adminOpen ? "▾" : "▸"}</span>
+                  </>
+                )}
+              </button>
+              {navExpanded &&
+                adminOpen &&
+                ADMIN_SUBNAV.map((item) => (
+                  <Link key={item.href} href={item.href} className={subNavItem(isActive(item.href))}>
+                    {item.label}
+                  </Link>
+                ))}
+            </>
+          )}
         </nav>
 
         <div className="grid gap-3 border-t border-border pt-3.5">
@@ -194,19 +251,41 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar isAdminSection={isAdminSection} pathname={pathname} />
+        <Topbar
+          isAdminSection={isAdminSection}
+          pathname={pathname}
+          onOpenMenu={() => setMobileOpen(true)}
+        />
         {/* Live announcement banner on competition-scoped pages (not Admin,
             which is global, nor the lobby, which has no active competition). */}
         {!isAdminSection && pathname !== "/lobby" && <AnnouncementBanner />}
-        <main className="flex-1 overflow-y-auto p-8">
-          <div className="mx-auto grid max-w-5xl gap-6">{children}</div>
+        <main className="flex-1 overflow-y-auto p-4 md:p-8">
+          <div className="mx-auto grid max-w-5xl gap-6">
+            {adminDenied ? (
+              <div className="rounded-lg border border-border bg-card p-10 text-center">
+                <p className="text-sm text-muted-foreground">
+                  You don&apos;t have access to the admin area.
+                </p>
+              </div>
+            ) : (
+              children
+            )}
+          </div>
         </main>
       </div>
     </div>
   );
 }
 
-function Topbar({ isAdminSection, pathname }: { isAdminSection: boolean; pathname: string }) {
+function Topbar({
+  isAdminSection,
+  pathname,
+  onOpenMenu,
+}: {
+  isAdminSection: boolean;
+  pathname: string;
+  onOpenMenu: () => void;
+}) {
   const palette = useAuthStore((s) => s.palette);
   const togglePalette = useAuthStore((s) => s.togglePalette);
   const activeCompetitionId = useAuthStore((s) => s.activeCompetitionId);
@@ -243,12 +322,20 @@ function Topbar({ isAdminSection, pathname }: { isAdminSection: boolean; pathnam
   const showSwitcher = !isAdminSection && pathname !== "/profile" && pathname !== "/lobby";
 
   return (
-    <div className="flex flex-shrink-0 items-center gap-4 border-b border-border bg-background px-8 py-3.5">
+    <div className="flex flex-shrink-0 items-center gap-3 border-b border-border bg-background px-4 py-3.5 md:gap-4 md:px-8">
+      <button
+        onClick={onOpenMenu}
+        title="Open menu"
+        aria-label="Open menu"
+        className="text-muted-foreground hover:text-foreground md:hidden"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
+      </button>
       {showSwitcher && competitions && competitions.length > 0 && (
         <Select
           value={activeCompetitionId ?? ""}
           onChange={(e) => setActiveCompetition(e.target.value)}
-          className="h-9 w-60"
+          className="h-9 w-44 md:w-60"
         >
           {competitions.map((c) => (
             <option key={c.id} value={c.id}>

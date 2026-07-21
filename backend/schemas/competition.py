@@ -45,4 +45,14 @@ class CompetitionOut(BaseModel):
     registration_closes_at: datetime | None
     participation_mode: ParticipationMode
     visibility: Visibility
+    # Only members/organisers ever receive a CompetitionOut (visibility is
+    # enforced on read), and it mirrors the team invite-code exposure, so the
+    # code travels with the record for organisers to share.
+    invite_code: str
     created_at: datetime
+
+
+class CompetitionJoinRequest(BaseModel):
+    """Join a competition by its invite code (any visibility)."""
+
+    invite_code: str = Field(min_length=1, max_length=100)

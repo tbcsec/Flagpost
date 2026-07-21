@@ -19,9 +19,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, func, select, type_coerce
+from sqlalchemy import func, select, type_coerce
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from db import UtcDateTime
 from models.competition import Competition
 from models.hint import HintReveal
 from models.role import Role, RoleAssignment
@@ -41,7 +42,7 @@ def _awarded_totals(competition_id: str, group_col):
         select(
             group_col.label("subject_id"),
             func.sum(Submission.points_awarded).label("points"),
-            type_coerce(func.max(Submission.created_at), DateTime(timezone=True)).label(
+            type_coerce(func.max(Submission.created_at), UtcDateTime()).label(
                 "last_solve_at"
             ),
         )

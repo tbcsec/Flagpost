@@ -30,7 +30,16 @@ export interface Competition {
   registration_closes_at: string | null;
   participation_mode: ParticipationMode;
   visibility: Visibility;
+  /** Organiser-shareable code for joining a private competition. */
+  invite_code: string;
   created_at: string;
+}
+
+/** Effective permissions for the current user (auth/me/permissions). The set
+ *  for a competition is `global ∪ by_competition[id]`. */
+export interface Permissions {
+  global: string[];
+  by_competition: Record<string, string[]>;
 }
 
 export interface CompetitionCreate {

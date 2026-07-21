@@ -15,8 +15,15 @@ const announcementKeys = {
 };
 
 /** The competition's announcements: REST for the initial load, then the
- *  announcements WebSocket room prepends new ones live into the cache (§8). */
-export function useAnnouncements(competitionId: string) {
+ *  announcements WebSocket room prepends new ones live into the cache (§8).
+ *
+ *  `subscribe` gates the socket so the same room isn't opened twice on one page:
+ *  the shell's banner subscribes; other readers (e.g. the dashboard widget) pass
+ *  `subscribe: false` and get live updates via the shared query cache. */
+export function useAnnouncements(
+  competitionId: string,
+  { subscribe = true }: { subscribe?: boolean } = {},
+) {
   const isAuthenticated = useAuthStore((s) => s.status === "authenticated");
   const queryClient = useQueryClient();
 
@@ -27,7 +34,7 @@ export function useAnnouncements(competitionId: string) {
   });
 
   useEffect(() => {
-    if (!isAuthenticated || !competitionId) return;
+    if (!subscribe || !isAuthenticated || !competitionId) return;
     const socket = openRoomSocket("announcements", competitionId, {
       onMessage: (data) => {
         const frame = data as {
@@ -53,7 +60,7 @@ export function useAnnouncements(competitionId: string) {
       },
     });
     return () => socket.close();
-  }, [isAuthenticated, competitionId, queryClient]);
+  }, [subscribe, isAuthenticated, competitionId, queryClient]);
 
   return query;
 }

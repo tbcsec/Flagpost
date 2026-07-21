@@ -56,7 +56,8 @@ code.
 | Competition Settings | **Wired** (`CompetitionSettingsForm` on the active competition) |
 | Admin → Competitions (list + New competition) | **Wired** (`useCompetitions`, `CreateCompetitionDialog`) |
 | Profile — change password | **Wired** (new `authApi.changePassword` + `useChangePassword`) |
-| Lobby — public competitions list | **Wired** (filtered from `useCompetitions`) |
+| Lobby — join public / join by code | **Wired** (pre-Tier-2 — `useJoinCompetition` / `useJoinByCode`; refetches permissions so the nav leaves the lobby) |
+| Role-aware navigation | **Wired** (pre-Tier-2 — `useAccess` off `/me/permissions` gates manager-only nav + the Admin section; direct admin URLs are guarded) |
 
 ## Built as UI, NOT wired (placeholder data + in-app "Preview" banner)
 
@@ -85,13 +86,28 @@ a retrofit later; **none of the data is real**.
 
 ## Deliberately not carried over from the mock
 
-- The mock's **"Preview as (demo)" role switcher** and role-based nav gating.
-  The backend doesn't surface the current user's role/permissions on `/me` yet,
-  so — per the agreed approach — every signed-in user currently sees all nav.
-  Real RBAC gating is a follow-up once `/me` (or a `/me/permissions` endpoint)
-  returns the caller's effective permissions.
+- The mock's **"Preview as (demo)" role switcher** — real RBAC now drives the
+  nav instead. `GET /api/auth/me/permissions` surfaces the caller's effective
+  permissions and `useAccess` gates the sidebar (manager-only items, the Admin
+  section) and the lobby state; the demo switcher isn't needed.
 - **Per-competition theming** override examples (Tier 2) — the token layer
   supports it, but no competition-scoped theming UI was built.
+
+## Pre-Tier-2 enhancements (in addition to the wired features above)
+
+- **Toasts** (`stores/toast` + `Toaster`) on team join/leave, announcement post,
+  hint reveal, settings save, password change, competition join, and solves.
+- **Loading skeletons** (`ui/skeleton`) and empty states on the challenge and
+  scoreboard screens.
+- **Scoreboard polish** — medal ranks for the top three and a colour flash on a
+  row whose points change from a live update.
+- **Solve celebration** — the brand mark + points on a correct flag, plus a
+  first-blood toast.
+- **Persisted theme** — the light/dark choice is saved to `localStorage`.
+- **Responsive shell** — the sidebar becomes an off-canvas drawer under `md`
+  (hamburger in the topbar).
+- **Timestamps** read as UTC via `lib/datetime` (the backend also now serializes
+  aware UTC through the `UtcDateTime` column type).
 
 ## Placeholder data
 

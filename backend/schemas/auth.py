@@ -30,6 +30,19 @@ class UserOut(BaseModel):
     created_at: datetime
 
 
+class PermissionsOut(BaseModel):
+    """The caller's effective permissions, split global vs per-competition.
+
+    The client's effective set for a competition is ``global ∪
+    by_competition[id]``. The field is emitted as ``global`` (a Python keyword,
+    hence the alias)."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    global_perms: list[str] = Field(serialization_alias="global")
+    by_competition: dict[str, list[str]]
+
+
 class TokenResponse(BaseModel):
     """The access token plus the authenticated user.
 

@@ -12,6 +12,7 @@ import type {
   ParticipationMode,
   Visibility,
 } from "@/lib/types";
+import { toast } from "@/stores/toast";
 
 // datetime-local <-> stored ISO. The input value is treated as UTC so it
 // round-trips without a timezone shift (timezone polish is a later tier).
@@ -43,16 +44,19 @@ export function CompetitionSettingsForm({
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    update.mutate({
-      name: form.name,
-      description: form.description,
-      participation_mode: form.participation_mode,
-      visibility: form.visibility,
-      start_at: fromInput(form.start_at),
-      end_at: fromInput(form.end_at),
-      registration_opens_at: fromInput(form.registration_opens_at),
-      registration_closes_at: fromInput(form.registration_closes_at),
-    });
+    update.mutate(
+      {
+        name: form.name,
+        description: form.description,
+        participation_mode: form.participation_mode,
+        visibility: form.visibility,
+        start_at: fromInput(form.start_at),
+        end_at: fromInput(form.end_at),
+        registration_opens_at: fromInput(form.registration_opens_at),
+        registration_closes_at: fromInput(form.registration_closes_at),
+      },
+      { onSuccess: () => toast("Changes saved", { variant: "success" }) },
+    );
   }
 
   return (

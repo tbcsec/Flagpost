@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useChangePassword } from "@/lib/hooks/use-users";
 import { useAuthStore } from "@/stores/auth";
+import { toast } from "@/stores/toast";
 
 // Profile. Changing your password IS wired (POST /api/auth/change-password).
 // Editing display name / email needs a user-update endpoint that doesn't exist
@@ -27,6 +28,7 @@ export default function ProfilePage() {
         onSuccess: () => {
           setCurrent("");
           setNext("");
+          toast("Password changed", { variant: "success" });
         },
       },
     );

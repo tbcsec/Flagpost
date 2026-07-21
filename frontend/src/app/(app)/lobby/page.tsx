@@ -1,28 +1,52 @@
 "use client";
 
-import { NotWiredNote, SectionHeader } from "@/components/app/section-header";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+
+import { SectionHeader } from "@/components/app/section-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { useCompetitions } from "@/lib/hooks/use-competitions";
+import {
+  useCompetitions,
+  useJoinByCode,
+  useJoinCompetition,
+} from "@/lib/hooks/use-competitions";
+import { toast } from "@/stores/toast";
 
-// Lobby — where a participant who isn't in any competition lands. The public
-// competitions list is real (filtered from the competitions endpoint). There's
-// no "join a competition" endpoint yet (joining currently happens per-team via
-// an invite code inside a competition), so the join actions are flagged.
+// Lobby — where a competitor who isn't in any competition lands. Joining is now
+// fully wired: self-serve for public competitions (the list below) and by
+// invite code for private ones. On success the shell's nav switches out of the
+// lobby (permissions are refetched) and the joined competition becomes active.
 export default function LobbyPage() {
+  const router = useRouter();
   const { data: competitions } = useCompetitions();
+  const join = useJoinCompetition();
+  const joinByCode = useJoinByCode();
+  const [code, setCode] = useState("");
+
   const publicComps = (competitions ?? []).filter((c) => c.visibility === "public");
+
+  function onJoined(name: string) {
+    toast(`Joined ${name}`, { variant: "success" });
+    router.push("/");
+  }
+
+  function onJoinByCode(e: React.FormEvent) {
+    e.preventDefault();
+    joinByCode.mutate(code, {
+      onSuccess: (comp) => {
+        setCode("");
+        onJoined(comp.name);
+      },
+      onError: (err) =>
+        toast("Couldn't join", { description: (err as Error).message, variant: "destructive" }),
+    });
+  }
 
   return (
     <>
       <SectionHeader title="Lobby" subtitle="You're not currently part of any competition." />
-
-      <NotWiredNote>
-        A dedicated join-a-competition flow (invite codes at the competition level,
-        self-serve public join) isn&apos;t built — joining currently happens
-        per-team from inside a competition.
-      </NotWiredNote>
 
       <Card>
         <CardHeader>
@@ -30,9 +54,17 @@ export default function LobbyPage() {
           <CardDescription>For invite-only competitions</CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="flex max-w-md gap-3" onSubmit={(e) => e.preventDefault()}>
-            <Input placeholder="Invite code" className="font-mono" disabled />
-            <Button type="submit" disabled>Join</Button>
+          <form className="flex max-w-md gap-3" onSubmit={onJoinByCode}>
+            <Input
+              placeholder="Invite code"
+              className="font-mono"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              required
+            />
+            <Button type="submit" disabled={joinByCode.isPending}>
+              {joinByCode.isPending ? "Joining…" : "Join"}
+            </Button>
           </form>
         </CardContent>
       </Card>
@@ -55,7 +87,22 @@ export default function LobbyPage() {
                     {c.participation_mode} · {c.visibility}
                   </div>
                 </div>
-                <Button size="sm" disabled>Join</Button>
+                <Button
+                  size="sm"
+                  disabled={join.isPending}
+                  onClick={() =>
+                    join.mutate(c.id, {
+                      onSuccess: () => onJoined(c.name),
+                      onError: (err) =>
+                        toast("Couldn't join", {
+                          description: (err as Error).message,
+                          variant: "destructive",
+                        }),
+                    })
+                  }
+                >
+                  Join
+                </Button>
               </div>
             ))}
             {publicComps.length === 0 && (

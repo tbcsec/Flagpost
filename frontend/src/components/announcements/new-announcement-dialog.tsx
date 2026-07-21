@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCreateAnnouncement } from "@/lib/hooks/use-announcements";
+import { toast } from "@/stores/toast";
 
 // Feature component (§14). Posts through the domain hook; RBAC
 // (announcement_create) is server-enforced — a non-organiser's POST 403s,
@@ -35,6 +36,7 @@ export function NewAnnouncementDialog({ competitionId }: { competitionId: string
           setTitle("");
           setBody("");
           setOpen(false);
+          toast("Announcement posted", { variant: "success" });
         },
       },
     );

@@ -19,11 +19,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import get_current_user, require_permission
+from auth.membership import (
+    ensure_participant_role,
+    has_global_role,
+    member_competition_ids,
+)
 from db import get_db
 from models.competition import Competition
 from models.user import User
 from schemas.competition import (
     CompetitionCreate,
+    CompetitionJoinRequest,
     CompetitionOut,
     CompetitionUpdate,
 )
@@ -32,27 +38,102 @@ from utils.event_bus import event_bus
 router = APIRouter(prefix="/api/competitions", tags=["competitions"])
 
 
+async def _can_see(db: AsyncSession, competition: Competition, user: User) -> bool:
+    """Visibility (§6): a competition is visible if it's public, the caller holds
+    a role in it (member/organiser), or the caller is a global Administrator."""
+    if competition.visibility == "public":
+        return True
+    if await has_global_role(db, user.id):
+        return True
+    return competition.id in await member_competition_ids(db, user.id)
+
+
 @router.get("", response_model=list[CompetitionOut])
 async def list_competitions(
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[Competition]:
     result = await db.execute(select(Competition).order_by(Competition.created_at))
-    return list(result.scalars().all())
+    competitions = list(result.scalars().all())
+    # Enforce visibility on the listing: private competitions are hidden from
+    # anyone who isn't a member/organiser (a global admin sees all).
+    if await has_global_role(db, current_user.id):
+        return competitions
+    member_ids = await member_competition_ids(db, current_user.id)
+    return [
+        c
+        for c in competitions
+        if c.visibility == "public" or c.id in member_ids
+    ]
 
 
 @router.get("/{competition_id}", response_model=CompetitionOut)
 async def get_competition(
     competition_id: str,
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Competition:
+    competition = await db.get(Competition, competition_id)
+    # A private competition the caller can't see 404s (indistinguishable from
+    # missing), never 403 — its existence isn't disclosed.
+    if competition is None or not await _can_see(db, competition, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"
+        )
+    return competition
+
+
+async def _join(
+    db: AsyncSession, competition: Competition, user: User
+) -> Competition:
+    """Grant the Participant role (idempotently) and emit the join event once."""
+    newly_joined = await ensure_participant_role(db, competition.id, user.id)
+    await db.commit()
+    if newly_joined:
+        await event_bus.emit(
+            "competition.member_joined",
+            {"competition_id": competition.id, "user_id": user.id},
+        )
+    return competition
+
+
+@router.post("/join", response_model=CompetitionOut)
+async def join_by_code(
+    body: CompetitionJoinRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Competition:
+    """Join any competition by its invite code — the only self-serve path into a
+    private competition, and the individual-mode entry point (no team to join)."""
+    competition = await db.scalar(
+        select(Competition).where(Competition.invite_code == body.invite_code)
+    )
+    if competition is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Invalid invite code"
+        )
+    return await _join(db, competition, current_user)
+
+
+@router.post("/{competition_id}/join", response_model=CompetitionOut)
+async def join_competition(
+    competition_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Competition:
+    """Self-serve join for a **public** competition (from the lobby list).
+    Private competitions require the invite-code route above."""
     competition = await db.get(Competition, competition_id)
     if competition is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"
         )
-    return competition
+    if competition.visibility != "public":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This competition is invite-only — join with an invite code",
+        )
+    return await _join(db, competition, current_user)
 
 
 @router.post("", response_model=CompetitionOut, status_code=status.HTTP_201_CREATED)

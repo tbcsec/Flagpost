@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
+import { Toaster } from "@/components/ui/toaster";
 import { authApi } from "@/lib/api";
 
 // Defaults per §8: short-but-non-zero staleTime (real-time updates arrive over
@@ -36,6 +37,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <SessionRestorer />
       {children}
+      <Toaster />
     </QueryClientProvider>
   );
 }

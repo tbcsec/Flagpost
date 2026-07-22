@@ -1,0 +1,16 @@
+id: analytics
+name: Analytics
+version: 1.0.0
+# Optional module (§11.3) — the third one, per-competition toggleable (default
+# on); its endpoints 404 when disabled. Pure read-only reporting off the
+# submissions/hints/tickets data the required-core modules already record, so it
+# depends on them.
+required_core: false
+provides:
+  routes: true
+  event_listeners: false
+dependencies:
+  - competitions
+  - challenges
+  - hints
+  - tickets

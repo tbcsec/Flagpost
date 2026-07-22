@@ -27,23 +27,6 @@ export const DIRECTORY_USERS: DirectoryUser[] = [
   { id: "u5", name: "Margaret Hamilton", email: "margaret@university.edu", role: "participant", status: "Banned" },
 ];
 
-export interface AnalyticsRow {
-  title: string;
-  solves: number;
-  completion: string;
-  avgTime: string;
-  hints: number;
-  tickets: number;
-}
-
-export const ANALYTICS: AnalyticsRow[] = [
-  { title: "SQL Injection 101", solves: 42, completion: "33%", avgTime: "12m", hints: 6, tickets: 0 },
-  { title: "Baby RSA", solves: 18, completion: "14%", avgTime: "16m", hints: 7, tickets: 1 },
-  { title: "Stack Smash", solves: 6, completion: "5%", avgTime: "20m", hints: 8, tickets: 2 },
-  { title: "Hidden in Plain Sight", solves: 31, completion: "24%", avgTime: "24m", hints: 9, tickets: 0 },
-  { title: "ROP Chain Gang", solves: 2, completion: "2%", avgTime: "28m", hints: 10, tickets: 1 },
-];
-
 export interface PluginRow {
   id: string;
   name: string;

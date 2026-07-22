@@ -16,7 +16,7 @@ original handoff the backend has caught up through all of Tier 1 and Tier 2 and
 into Tier 3 (per `claude_plans/phase_3.md`): the notification bell (Phase 0) and
 the whole automation surface — rules + the visual builder (Phases 1–3) — are now
 real too. The tables below are kept current; the remaining placeholder surfaces
-are Analytics, the Admin → Users directory, the Admin → Plugins toggle UI (its
+are the Admin → Users directory, the Admin → Plugins toggle UI (its
 per-competition module-toggle *backend* now exists), Admin → Dashboard global
 stats, and per-user notification *preferences* (the inbox itself is wired).
 
@@ -78,6 +78,7 @@ code.
 | Notifications (topbar bell) | **Wired** (Tier 3 Phase 0, §4.4) — real per-user inbox: `notifications` required-core module, `/ws/user/<id>` live push, list/mark-read/read-all; ticket events routed like the audio cue (`use-notifications`). Per-user *preferences*/mute still unbuilt |
 | Automations (competition + admin) | **Wired** (Tier 3 Phases 1–3, §5) — the `automations` optional module + engine (nine §5.3 actions incl. `open_survey`, per-competition toggle, plus the time-based `competition.time_remaining` trigger via a scheduler) and the §5.5 **visual rule builder**: catalog-driven When→If→Then editor for competition + global rules, plus a personal notify-self section (`use-automations`, `rule-builder`) |
 | Feedback / surveys | **Wired** (Tier 3 Phase 4, #22) — the `feedback` optional module: staff survey builder (5 question types, reorder, open/close), competitor response form, results dialog (histograms/tallies/text) + CSV export; a submission emits `feedback.submitted`, a live automation trigger (`use-feedback`) |
+| Analytics | **Wired** (Tier 3 Phase 5, #23) — the `analytics` optional module (staff, `view_competition_analytics`): overview + per-challenge table (solves / attempts+fails / completion rate / avg solve time / hints / linked tickets) and a competitors/teams ranking (rank / points / solves / last solve), read off existing submission data (`use-analytics`) |
 
 ## Built as UI, NOT wired (placeholder data + in-app "Preview" banner)
 
@@ -87,7 +88,6 @@ a retrofit later; **none of the data is real**.
 - **Dashboard** — now fully wired (Tier 2 Phase 1, see the wired table above).
   Ships as a **fixed layout** built on the widget-registration architecture so
   the drag-and-drop customization layer is additive later (§10.2, deferred).
-- **Analytics** — Tier 3 (`phase_3.md` Phase 5, not yet built).
 - **Admin → Dashboard** (global stats / module health) — no aggregate endpoint.
 - **Admin → Users** — no user-directory / create / ban API. (Note: role
   *assignment* is handled on Admin → Roles by email, so no directory is needed

@@ -249,7 +249,7 @@ before the competition ends, open the post-event survey, which notifies
 participants" — verified end to end in tests. All catalog-driven, so the builder
 shows the new trigger/action with no frontend change; no migration.
 
-## Phase 5 — Challenge & Team analytics (#23)
+## Phase 5 — Challenge & Team analytics (#23) — ✅ DONE
 
 Read-only reporting off data Tier 1 already captures (§13.2 logs *every* attempt,
 success or fail) — no new instrumentation, just surfacing it.
@@ -264,6 +264,23 @@ success or fail) — no new instrumentation, just surfacing it.
   (they slot into the Tier-2 widget registry). `use-analytics.ts` hook.
 - Tests: aggregate correctness off a seeded submission set, scoping (a
   competition analytic never leaks another competition's data), RBAC.
+
+**As built:** the `analytics` **optional module** (the third, after automations
+and feedback — per-competition toggleable, 404 when disabled), `utils/analytics.py`
++ `routers/analytics.py` gated on `view_competition_analytics` (staff). Two
+endpoints: `/analytics/challenges` (per-challenge solves, attempts/fails,
+completion rate, average solve time — from `competition.start_at` — plus hints
+used and linked ticket count) and `/analytics/teams` (per-subject rank / net
+points / distinct-solve count / last solve, reusing `compute_scoreboard`).
+Timestamp math is done in Python for SQLite/Postgres portability. No migration
+(pure read model). Frontend: the wired `/analytics` page (overview strip +
+per-challenge and competitors/teams tables), `use-analytics.ts`; the placeholder
+`ANALYTICS` data is gone. **Deviations:** `view_global_analytics` (cross-site
+rollup) stays unbuilt — cross-competition consolidation is deferred (§6.3); a
+global Administrator already reads any single competition's analytics via
+`view_competition_analytics`. Skipped adding *new* dashboard widgets — the Tier-2
+`challenge-health` widget already covers the at-a-glance case, so this is a
+dedicated page rather than duplicating it.
 
 ## Phase 6 — Dashboard drag-and-drop (#26, §10.2–10.5)
 

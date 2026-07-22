@@ -31,8 +31,8 @@ file, don't ignore it.
 **Tier 0, Tier 1, and Tier 2 ("Makes It Good") are all complete — Tier 2 was
 built phase-by-phase per `docs/claude_plans/phase_2.md` (Phases 0–5 all
 shipped). Tier 3 is the current tier and is now scoped/planned in
-`docs/claude_plans/phase_3.md` (Phases 0–9; **Phases 0–4 shipped**, Phase 5 —
-challenge & team analytics — next).
+`docs/claude_plans/phase_3.md` (Phases 0–9; **Phases 0–5 shipped**, Phase 6 —
+dashboard drag-and-drop — next).
 An owner revision pulled three previously-deferred subsystems up into Tier 3 —
 the **full automation engine** (§5), **dashboard drag-and-drop** (§10), and
 **collaborative rich-text/CRDT editing** (§4.2) — alongside the polish items
@@ -176,6 +176,17 @@ What's built:
   the scheduler reuses it). Enables "an hour before the end → open the survey →
   notify participants". No new migration; all catalog-driven (the builder shows
   the new trigger/action automatically).
+- **Tier 3 Phase 5** — **challenge & team analytics** (ROADMAP #23): the
+  `analytics` **optional module** (third one, per-competition toggleable),
+  `utils/analytics.py` + `routers/analytics.py` gated on
+  `view_competition_analytics` (staff). `/analytics/challenges` (per-challenge
+  solves / attempts+fails / completion rate / avg solve time / hints / linked
+  tickets) and `/analytics/teams` (per-subject rank/points/solves/last-solve,
+  reusing `compute_scoreboard`). Pure read model off existing submission/hint/
+  ticket data — **no migration**; timestamp math in Python for SQLite/Postgres
+  parity. Frontend: wired `/analytics` page (overview + two tables),
+  `use-analytics.ts`. `view_global_analytics` (cross-site rollup) stays unbuilt
+  (§6.3 consolidation deferred).
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0012 (event-dispatch sync-critical vs background, supersedes

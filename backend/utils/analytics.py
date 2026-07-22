@@ -1,0 +1,195 @@
+"""Challenge & team analytics aggregation (ROADMAP #23, §13.2).
+
+Read-only reporting derived entirely from data Tier 1 already records — every
+submission (success *and* failure, §13.2), hint reveals, and challenge-linked
+tickets — so there's no new instrumentation, just aggregation. Everything is
+competition-scoped (§6.2); the caller (routers/analytics.py) gates on
+``view_competition_analytics``.
+
+Timestamp math (average solve time) is done in Python, not SQL, so it stays
+portable across SQLite/Postgres (ADR-0006) — the DB only counts and groups.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+
+from sqlalchemy import case, distinct, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from db import ensure_aware_utc
+from models.challenge import Category, Challenge
+from models.competition import Competition
+from models.hint import HintReveal
+from models.role import Role, RoleAssignment
+from models.submission import Submission
+from models.team import Team
+from utils.scoreboard import compute_scoreboard
+
+_AWARDED = (Submission.is_correct.is_(True), Submission.is_duplicate.is_(False))
+
+
+async def subject_count(db: AsyncSession, competition: Competition) -> int:
+    """The number of scoring subjects — teams in team mode, Participant-role
+    holders in individual mode (the denominator for completion rate)."""
+    if competition.participation_mode == "team":
+        return (
+            await db.scalar(
+                select(func.count(Team.id)).where(
+                    Team.competition_id == competition.id
+                )
+            )
+        ) or 0
+    return (
+        await db.scalar(
+            select(func.count(distinct(RoleAssignment.user_id)))
+            .join(Role, Role.id == RoleAssignment.role_id)
+            .where(
+                RoleAssignment.competition_id == competition.id,
+                Role.name == "Participant",
+            )
+        )
+    ) or 0
+
+
+def _solve_time_reference(competition: Competition) -> datetime:
+    """When the clock starts for "solve time": the competition's start, or its
+    creation if it was never scheduled."""
+    start = competition.start_at or competition.created_at
+    return ensure_aware_utc(start)
+
+
+async def challenge_analytics(
+    db: AsyncSession, competition: Competition
+) -> list[dict[str, Any]]:
+    """Per-challenge: solves, attempts/fails, completion rate, average solve
+    time, hints used, and linked ticket count."""
+    competition_id = competition.id
+    reference = _solve_time_reference(competition)
+    subjects = await subject_count(db, competition)
+
+    # Attempts + fails per challenge (one grouped count query).
+    attempt_rows = (
+        await db.execute(
+            select(
+                Submission.challenge_id,
+                func.count(Submission.id),
+                func.sum(case((Submission.is_correct.is_(False), 1), else_=0)),
+            )
+            .where(Submission.competition_id == competition_id)
+            .group_by(Submission.challenge_id)
+        )
+    ).all()
+    attempts = {cid: (total, int(fails or 0)) for cid, total, fails in attempt_rows}
+
+    # Awarded (first-correct) submissions carry solve_count + solve timestamps.
+    solve_rows = (
+        await db.execute(
+            select(Submission.challenge_id, Submission.created_at).where(
+                Submission.competition_id == competition_id, *_AWARDED
+            )
+        )
+    ).all()
+    solve_times: dict[str, list[float]] = {}
+    for cid, created_at in solve_rows:
+        seconds = (ensure_aware_utc(created_at) - reference).total_seconds()
+        solve_times.setdefault(cid, []).append(max(0.0, seconds))
+
+    hint_rows = (
+        await db.execute(
+            select(HintReveal.challenge_id, func.count(HintReveal.id))
+            .where(HintReveal.competition_id == competition_id)
+            .group_by(HintReveal.challenge_id)
+        )
+    ).all()
+    hints_used = {cid: count for cid, count in hint_rows}
+
+    # Tickets linked to a challenge (models.ticket.Ticket.challenge_id).
+    from models.ticket import Ticket
+
+    ticket_rows = (
+        await db.execute(
+            select(Ticket.challenge_id, func.count(Ticket.id))
+            .where(
+                Ticket.competition_id == competition_id,
+                Ticket.challenge_id.is_not(None),
+            )
+            .group_by(Ticket.challenge_id)
+        )
+    ).all()
+    tickets = {cid: count for cid, count in ticket_rows}
+
+    challenges = (
+        await db.execute(
+            select(
+                Challenge.id,
+                Challenge.title,
+                Challenge.points,
+                Challenge.state,
+                Category.name,
+            )
+            .outerjoin(Category, Category.id == Challenge.category_id)
+            .where(Challenge.competition_id == competition_id)
+            .order_by(Challenge.created_at)
+        )
+    ).all()
+
+    result: list[dict[str, Any]] = []
+    for cid, title, points, state, category in challenges:
+        times = solve_times.get(cid, [])
+        solves = len(times)
+        total_attempts, fails = attempts.get(cid, (0, 0))
+        result.append(
+            {
+                "challenge_id": cid,
+                "title": title,
+                "category": category,
+                "points": points,
+                "state": state,
+                "solve_count": solves,
+                "attempt_count": total_attempts,
+                "fail_count": fails,
+                "completion_rate": (solves / subjects) if subjects else 0.0,
+                "avg_solve_time_seconds": (
+                    sum(times) / solves if solves else None
+                ),
+                "hints_used": hints_used.get(cid, 0),
+                "ticket_count": tickets.get(cid, 0),
+            }
+        )
+    return result
+
+
+async def team_analytics(
+    db: AsyncSession, competition: Competition
+) -> list[dict[str, Any]]:
+    """Per-subject standing (rank/points/last solve from the scoreboard) plus a
+    distinct-challenge solve count — the "team progress" view."""
+    board = await compute_scoreboard(db, competition)
+
+    subject_col = (
+        Submission.team_id
+        if competition.participation_mode == "team"
+        else Submission.user_id
+    )
+    solve_rows = (
+        await db.execute(
+            select(subject_col, func.count(distinct(Submission.challenge_id)))
+            .where(Submission.competition_id == competition.id, *_AWARDED)
+            .group_by(subject_col)
+        )
+    ).all()
+    solves_by_subject = {sid: count for sid, count in solve_rows}
+
+    return [
+        {
+            "subject_id": entry["subject_id"],
+            "name": entry["name"],
+            "rank": entry["rank"],
+            "points": entry["points"],
+            "solve_count": solves_by_subject.get(entry["subject_id"], 0),
+            "last_solve_at": entry["last_solve_at"],
+        }
+        for entry in board["entries"]
+    ]

@@ -16,6 +16,8 @@ import type {
   AutomationCatalog,
   AutomationRule,
   AutomationRuleInput,
+  ChallengeAnalyticsReport,
+  TeamAnalyticsReport,
   QuestionInput,
   SurveyDetail,
   SurveyQuestion,
@@ -535,6 +537,17 @@ export const automationsApi = {
     remove: (ruleId: string) =>
       apiFetch<void>(`/api/automations/personal/${ruleId}`, { method: "DELETE" }),
   },
+};
+
+export const analyticsApi = {
+  challenges: (competitionId: string) =>
+    apiFetch<ChallengeAnalyticsReport>(
+      `/api/competitions/${competitionId}/analytics/challenges`,
+    ),
+  teams: (competitionId: string) =>
+    apiFetch<TeamAnalyticsReport>(
+      `/api/competitions/${competitionId}/analytics/teams`,
+    ),
 };
 
 export const notificationsApi = {

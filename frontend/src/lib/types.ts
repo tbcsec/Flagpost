@@ -229,6 +229,42 @@ export interface AutomationCatalog {
   actions: ActionCatalogEntry[];
 }
 
+/** Per-challenge analytics (ROADMAP #23). */
+export interface ChallengeAnalytics {
+  challenge_id: string;
+  title: string;
+  category: string | null;
+  points: number;
+  state: string;
+  solve_count: number;
+  attempt_count: number;
+  fail_count: number;
+  completion_rate: number; // 0..1
+  avg_solve_time_seconds: number | null;
+  hints_used: number;
+  ticket_count: number;
+}
+
+export interface ChallengeAnalyticsReport {
+  mode: string;
+  subject_count: number;
+  challenges: ChallengeAnalytics[];
+}
+
+export interface TeamAnalytics {
+  subject_id: string;
+  name: string;
+  rank: number;
+  points: number;
+  solve_count: number;
+  last_solve_at: string | null;
+}
+
+export interface TeamAnalyticsReport {
+  mode: string;
+  teams: TeamAnalytics[];
+}
+
 /** One in-app notification for the bell (§4.4). `read` is derived server-side
  *  from the row's nullable `read_at`. */
 export interface AppNotification {

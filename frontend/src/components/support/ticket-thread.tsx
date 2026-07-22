@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { PresenceIndicator } from "@/components/presence/presence-indicator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { relativeTime } from "@/lib/datetime";
+import { usePresence } from "@/lib/hooks/use-presence";
 import {
   useAssignTicket,
   useReplyTicket,
@@ -35,6 +37,9 @@ export function TicketThread({
   const reply = useReplyTicket(competitionId, ticketId);
   const assign = useAssignTicket(competitionId, ticketId);
   const resolve = useResolveTicket(competitionId, ticketId);
+  // Who else is on this thread live (§4.1). A competitor sees "a judge is
+  // looking"; staff see the other people currently on the ticket.
+  const presence = usePresence("ticket", ticketId);
 
   const [body, setBody] = useState("");
   const [internal, setInternal] = useState(false);
@@ -66,6 +71,17 @@ export function TicketThread({
           )}
         </DialogDescription>
       </DialogHeader>
+
+      {(presence.others.length > 0 || (!isStaff && presence.staffPresent)) && (
+        <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-muted/40 px-3 py-2">
+          <span className="text-xs text-muted-foreground">
+            {!isStaff && presence.staffPresent
+              ? "A judge is looking at this ticket"
+              : `${presence.others.length} other${presence.others.length === 1 ? "" : "s"} here`}
+          </span>
+          <PresenceIndicator members={presence.others} max={5} />
+        </div>
+      )}
 
       <ul className="grid max-h-72 gap-3 overflow-y-auto pr-1">
         {t?.messages.map((m) => (

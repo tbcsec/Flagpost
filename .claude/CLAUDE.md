@@ -27,12 +27,12 @@ file, don't ignore it.
 
 ## Current build stage
 
-<!-- Update this line as tiers complete. -->
-**Tier 0 (Foundation) and Tier 1 (Minimum Viable Competition) are
-complete; a batch of pre-Tier-2 fixes/enhancements has also landed. Tier 2
-(Makes It Good) is the next tier — planned in `docs/claude_plans/phase_2.md`,
-not yet started.** See `docs/ROADMAP.md` for the full tier breakdown. Don't
-sneak Tier 3 polish into Tier 2 work — that's scope creep, not helpfulness.
+<!-- Update this line as tiers/phases complete. -->
+**Tier 0 and Tier 1 are complete. Tier 2 ("Makes It Good") is underway,
+planned phase-by-phase in `docs/claude_plans/phase_2.md`. Phases 0–3 are
+done; Phase 4 (site-wide theming) is next.** See `docs/ROADMAP.md` for
+the full tier breakdown. Don't sneak Tier 3 polish into Tier 2 work —
+that's scope creep, not helpfulness.
 
 What's built:
 
@@ -47,13 +47,33 @@ What's built:
   authenticated app shell (sidebar + topbar) from the design handoff is
   wired — see `docs/UI-INTEGRATION-NOTES.md` for what's real vs. still
   placeholder.
-- **Pre-Tier-2** — competition join (public self-serve + invite code; the
-  only way into an individual-mode competition), enforced competition
-  visibility, role-aware navigation via `GET /api/auth/me/permissions`,
-  tz-aware timestamps, an admin **audit-log / event viewer** (its own
-  required-core module) with GitLab-style filtering, and UI polish (toasts,
-  skeletons, scoreboard medals, solve celebration, persisted theme,
-  responsive drawer). `change-password` now emits `user.password_changed`.
+- **Tier 2 Phase 0** (pre-Tier-2 gap fixes) — competition join (public
+  self-serve + invite code; the only way into an individual-mode
+  competition), enforced competition visibility, role-aware navigation via
+  `GET /api/auth/me/permissions`, tz-aware timestamps, an admin
+  **audit-log / event viewer** (its own required-core module) with
+  GitLab-style filtering, and UI polish (toasts, skeletons, scoreboard
+  medals, solve celebration, persisted theme, responsive drawer).
+  `change-password` now emits `user.password_changed`.
+- **Tier 2 Phase 1** — the judge/admin **operational dashboard** (§10) on a
+  widget-registration architecture: a registry of self-contained,
+  size-declaring widgets (`lib/dashboard/registry.tsx`) rendered in a fixed
+  per-role layout, so the (deferred) drag-and-drop layer is additive later,
+  not a rewrite. Backend stats/recent-solves/challenge-health/me endpoints
+  in a required-core `dashboard` module.
+- **Tier 2 Phase 2** — **support tickets** (§4.4), a required-core `tickets`
+  module: competitor create/reply, staff assign/resolve/internal notes,
+  ownership-scoped reads, a live per-ticket WS thread + a staff support
+  queue room, and the one sanctioned **audio cue** for new tickets/replies.
+  Registers a support-queue dashboard widget into Phase 1's registry.
+- **Tier 2 Phase 3** — **presence** (§4.1) on the WS layer: a room type opts
+  in with a `presence_member` builder and the connection manager tracks a
+  per-user, tab-deduped "who's here" set, broadcasting it on change with a
+  debounced clear (`ws_presence_grace_seconds`) so brief reconnects don't
+  flicker. WS-level state only — no event, REST, or migration. Drives "N
+  others viewing" on the challenge dialog (a new presence-only `challenge`
+  room) and "a judge is looking at this ticket" on the Phase 2 ticket room.
+  Frontend: `usePresence` + `PresenceIndicator`.
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0009 (synchronous event dispatch), ADR-0010 (seeded default
@@ -67,6 +87,12 @@ fires while the default password is unchanged.
 challenge lifecycle (ROADMAP #17) is **deferred to a future tier**, and
 theming is **site-wide only** for now (ROADMAP #20 rescoped from
 per-competition; ADR-0011).
+
+**Local dev note:** `.claude/launch.json`'s backend config runs against
+SQLite by default (`DATABASE_URL` env var overrides it) so `preview` needs
+no infra, matching the test stack (ADR-0006). Migrations run automatically
+on every start. Use `docker compose up` for the full Postgres/Redis/MinIO
+stack.
 
 ## Non-negotiable architectural rules
 

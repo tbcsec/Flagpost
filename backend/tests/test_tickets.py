@@ -209,6 +209,9 @@ async def test_live_thread_broadcast(client):
     async with WsTestClient(main.app, f"/ws/ticket/{tk}") as ws:
         await ws.send_json({"token": ada})
         assert (await ws.receive_json())["type"] == "auth_ok"
+        # The ticket room now carries presence (§4.1): the opener's own join
+        # frame arrives before any thread activity.
+        assert (await ws.receive_json())["type"] == "presence"
 
         # Staff replies → the opener's socket gets a ticket_message ping.
         await client.post(

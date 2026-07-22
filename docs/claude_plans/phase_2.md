@@ -49,7 +49,7 @@ All items shipped:
   the sidebar/sections; direct admin URLs are guarded.
 - **Timestamps** serialize as aware UTC via the `UtcDateTime` column type.
 
-## Phase 1 — Judge/admin dashboard (#16, §10)
+## Phase 1 — Judge/admin dashboard (#16, §10) — ✅ DONE
 
 Build the **widget-registration architecture** now (§10.1) — even shipping a
 fixed layout — so drag-and-drop (§10.2, deferred) is additive, not a rewrite.
@@ -67,7 +67,7 @@ fixed layout — so drag-and-drop (§10.2, deferred) is additive, not a rewrite.
   widget grid; a `use-dashboard.ts` hook module. Fixed layout; no drag-drop UI.
 - Tests: widget registry (sizes/defaults), each stats endpoint's scoping + RBAC.
 
-## Phase 2 — Support tickets (#18, §4.4)
+## Phase 2 — Support tickets (#18, §4.4) — ✅ DONE
 
 Required-core module (§11.3), first consumer of the WS layer beyond scoreboard/
 announcements.
@@ -89,22 +89,29 @@ announcements.
 - Tests: create/reply/resolve RBAC, internal-note visibility, scoping, the
   ticket events, and the WS thread broadcast.
 
-## Phase 3 — Presence indicators (#19, §4.1)
+## Phase 3 — Presence indicators (#19, §4.1) — ✅ DONE
 
 Cheap now that the WS infrastructure exists — it's the "feels alive" detail.
 
-- Extend the real-time layer with **presence**: on joining a resource room a
-  client is tracked with the minimal §4.1 payload (id, display name, role,
-  optional `view`/`edit` mode); the room broadcasts the presence set. **Debounced
-  clearing** (a short grace period) so a brief reconnect doesn't flicker the
-  "who's here" list. Presence is WS-level state, not an event-bus event.
-- Surfaces: "N people viewing this challenge" on the challenge detail; "a judge
-  is looking at this ticket" / soft-lock banner on the ticket thread (reuses the
-  Phase 2 room).
-- Frontend: a small presence hook + indicator components. No new REST/migration.
-- Tests: presence join/leave, debounced clear, payload shape.
+- The real-time layer gained **presence**: a room type opts in by registering a
+  `presence_member` builder (`(db, user, room_id, mode) → {id, name, role, mode}`),
+  and the connection manager tracks the per-user set (deduped across tabs) and
+  broadcasts a `{"type": "presence", "members": [...]}` frame on every change.
+  **Debounced clearing** (`ws_presence_grace_seconds`, default 5s) absorbs brief
+  reconnects so the "who's here" list doesn't flicker. Presence stays WS-level
+  state — no event-bus event, no REST, no migration. The optional `view`/`edit`
+  `mode` rides the same first frame as the auth token.
+- Surfaces: a `challenge/<id>` presence-only room drives "N others viewing" on the
+  challenge detail dialog; the Phase 2 `ticket/<id>` room now also carries
+  presence, so a competitor sees "a judge is looking at this ticket" and staff
+  see who else is on the thread.
+- Frontend: `usePresence` hook (+ pure `summarizePresence`) and a reusable
+  `PresenceIndicator` (stacked avatar chips).
+- Tests: manager-level join/leave, dedup, debounced clear, reconnect-cancels
+  (`tests/test_presence.py`); end-to-end join/broadcast/clear + payload shape +
+  staff-role + RBAC (`tests/test_realtime.py`); `summarizePresence` (vitest).
 
-## Phase 4 — Site-wide theming (§9)
+## Phase 4 — Site-wide theming (§9) — 🔜 NEXT
 
 Themes are **global / site-wide only** (per-competition dropped, see Context).
 The token layer already supports it — every colour is an HSL-channel variable,

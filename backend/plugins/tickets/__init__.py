@@ -43,7 +43,23 @@ def setup(app, event_bus, db_factory) -> None:
             db, user.id, "ticket_assign", competition_id
         )
 
-    register_room_type("ticket", authorize=authorize_ticket)
+    async def ticket_presence_member(db, user, ticket_id: str, mode: str) -> dict:
+        # Role drives the "a judge is looking at this ticket" hint on the thread:
+        # staff (ticket_assign) vs the participant who opened it.
+        ticket = await db.get(Ticket, ticket_id)
+        is_staff = ticket is not None and await user_has_permission(
+            db, user.id, "ticket_assign", ticket.competition_id
+        )
+        return {
+            "id": user.id,
+            "name": user.display_name,
+            "role": "staff" if is_staff else "participant",
+            "mode": mode,
+        }
+
+    register_room_type(
+        "ticket", authorize=authorize_ticket, presence_member=ticket_presence_member
+    )
     register_room_type("support", authorize=authorize_support)
 
     @event_bus.on("ticket.created", owner="tickets")

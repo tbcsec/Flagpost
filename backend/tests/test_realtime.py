@@ -127,3 +127,67 @@ async def test_room_requires_competition_access(client):
 async def test_unknown_room_type_is_rejected(client):
     async with WsTestClient(main.app, "/ws/nonsense/whatever") as ws:
         assert await ws.expect_close() == 4404
+
+
+async def test_challenge_presence_join_and_debounced_clear(client, monkeypatch):
+    # Short grace so the end-to-end debounced clear resolves inside the test
+    # rather than the 5s default (§4.1); the timing itself is unit-tested.
+    monkeypatch.setattr(settings, "ws_presence_grace_seconds", 0.05)
+    comp, chal = await _competition_with_challenge(client)
+    p1 = await _joined_participant(client, comp, "viewer1@example.com", "One")
+    p2 = await _joined_participant(client, comp, "viewer2@example.com", "Two")
+
+    async with WsTestClient(main.app, f"/ws/challenge/{chal}") as ws1:
+        await ws1.send_json({"token": p1, "mode": "view"})
+        assert (await ws1.receive_json())["type"] == "auth_ok"
+
+        # First presence frame: just this viewer, minimal §4.1 payload shape.
+        first = await ws1.receive_json()
+        assert first["type"] == "presence"
+        assert len(first["members"]) == 1
+        assert set(first["members"][0]) == {"id", "name", "role", "mode"}
+        assert first["members"][0]["role"] == "participant"
+        assert first["members"][0]["mode"] == "view"
+        p1_id = first["members"][0]["id"]
+
+        async with WsTestClient(main.app, f"/ws/challenge/{chal}") as ws2:
+            await ws2.send_json({"token": p2})
+            assert (await ws2.receive_json())["type"] == "auth_ok"
+            # Second viewer sees both; the first viewer's set grows to two live.
+            assert len((await ws2.receive_json())["members"]) == 2
+            grown = await ws1.receive_json()
+            assert grown["type"] == "presence"
+            assert len(grown["members"]) == 2
+
+        # Second viewer gone → after the grace window the room clears back to one.
+        cleared = await ws1.receive_json()
+        assert cleared["type"] == "presence"
+        assert [m["id"] for m in cleared["members"]] == [p1_id]
+
+
+async def test_challenge_presence_requires_competition_access(client):
+    comp, chal = await _competition_with_challenge(client)
+    outsider = await _register(client, "nosy@example.com")  # no role in comp
+    async with WsTestClient(main.app, f"/ws/challenge/{chal}") as ws:
+        await ws.send_json({"token": outsider})
+        assert await ws.expect_close() == 4403
+
+
+async def test_ticket_presence_reports_staff_role(client):
+    comp, chal = await _competition_with_challenge(client)
+    admin = await admin_token(client)
+    opener = await _joined_participant(client, comp, "stuck@example.com", "Stuck")
+    ticket = (
+        await client.post(
+            f"/api/competitions/{comp}/tickets",
+            json={"subject": "Help", "body": "I'm stuck", "challenge_id": chal},
+            headers=_auth(opener),
+        )
+    ).json()["id"]
+
+    async with WsTestClient(main.app, f"/ws/ticket/{ticket}") as ws:
+        await ws.send_json({"token": admin})  # staff joins the thread
+        assert (await ws.receive_json())["type"] == "auth_ok"
+        presence = await ws.receive_json()
+        assert presence["type"] == "presence"
+        assert presence["members"][0]["role"] == "staff"

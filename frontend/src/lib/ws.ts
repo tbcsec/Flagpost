@@ -19,6 +19,8 @@ export interface RoomSocketHandle {
 interface RoomSocketOptions {
   onMessage: (data: unknown) => void;
   onStatus?: (status: RoomSocketStatus) => void;
+  // Presence rooms (§4.1) read an optional view/edit mode off the auth frame.
+  mode?: "view" | "edit";
 }
 
 const BASE_DELAY_MS = 1_000;
@@ -33,7 +35,7 @@ export function backoffDelayMs(attempt: number, random: () => number = Math.rand
 export function openRoomSocket(
   roomType: string,
   roomId: string,
-  { onMessage, onStatus }: RoomSocketOptions,
+  { onMessage, onStatus, mode }: RoomSocketOptions,
 ): RoomSocketHandle {
   const url = `${API_URL.replace(/^http/, "ws")}/ws/${roomType}/${roomId}`;
   let ws: WebSocket | null = null;
@@ -47,9 +49,10 @@ export function openRoomSocket(
     ws = new WebSocket(url);
 
     ws.onopen = () => {
-      // First-frame auth: same access token as REST, never in the URL.
+      // First-frame auth: same access token as REST, never in the URL. Presence
+      // rooms also carry the optional view/edit mode on this same frame (§4.1).
       const token = useAuthStore.getState().accessToken;
-      ws?.send(JSON.stringify({ token }));
+      ws?.send(JSON.stringify(mode ? { token, mode } : { token }));
     };
 
     ws.onmessage = (event) => {

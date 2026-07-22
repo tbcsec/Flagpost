@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     # message before the server closes it (the token is never in the URL,
     # ADR-0003).
     ws_auth_timeout_seconds: float = 5.0
+    # Grace period before a departed presence member is cleared from a room's
+    # "who's here" set (§4.1 "debounced presence clearing"): a brief reconnect
+    # inside this window doesn't flicker the presence list.
+    ws_presence_grace_seconds: float = 5.0
 
     # --- Object storage (MinIO / S3, §13.3) ---
     # Endpoint the backend talks to. Defaults to the compose MinIO as exposed on
@@ -49,8 +53,9 @@ class Settings(BaseSettings):
     signed_url_ttl_seconds: int = 300
 
     # --- Auth (ARCHITECTURE.md §7.7, ADR-0003) ---
-    # Dev default only; MUST be overridden in any real deployment.
-    jwt_secret: str = "dev-insecure-change-me"
+    # Dev default only; MUST be overridden in any real deployment. Kept ≥32
+    # bytes so HS256 doesn't emit an insecure-key-length warning in local runs.
+    jwt_secret: str = "dev-insecure-secret-change-me-in-production"
     jwt_algorithm: str = "HS256"
     access_token_ttl_minutes: int = 15
     refresh_token_ttl_days: int = 14

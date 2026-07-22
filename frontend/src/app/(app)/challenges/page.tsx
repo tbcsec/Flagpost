@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { ChallengeAdmin } from "@/components/challenges/challenge-admin";
 import { ChallengeHints } from "@/components/challenges/challenge-hints";
+import { PresenceIndicator } from "@/components/presence/presence-indicator";
 import { SectionHeader } from "@/components/app/section-header";
 import { FlagpostMark } from "@/components/brand/flagpost-mark";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +21,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
+import { usePresence } from "@/lib/hooks/use-presence";
 import { useAccess } from "@/lib/hooks/use-permissions";
 import { useCategories } from "@/lib/hooks/use-categories";
 import { useChallenges } from "@/lib/hooks/use-challenges";
@@ -175,6 +177,8 @@ function ChallengeDialogBody({
 }) {
   const [flag, setFlag] = useState("");
   const submit = useSubmitFlag(competitionId, challenge.id);
+  // Live "who else is on this challenge" while the detail dialog is open (§4.1).
+  const presence = usePresence("challenge", challenge.id);
   const result = submit.data;
   const justSolved = result?.correct === true;
   const alreadySolved = challenge.solved || result?.already_solved;
@@ -202,6 +206,12 @@ function ChallengeDialogBody({
           {categoryName} · {challenge.points} pts · {challenge.solve_count} solves
         </DialogDescription>
       </DialogHeader>
+      {presence.others.length > 0 && (
+        <PresenceIndicator
+          members={presence.others}
+          label={`${presence.others.length} other${presence.others.length === 1 ? "" : "s"} viewing`}
+        />
+      )}
       <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">
         {richTextToPlain(challenge.description) || "No description."}
       </p>

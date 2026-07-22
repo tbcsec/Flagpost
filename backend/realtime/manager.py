@@ -13,8 +13,10 @@ interface.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections import defaultdict
+from dataclasses import dataclass, field
 from typing import Any
 
 from fastapi import WebSocket
@@ -22,9 +24,30 @@ from fastapi import WebSocket
 logger = logging.getLogger("realtime")
 
 
+@dataclass
+class _PresenceMember:
+    """A single user present in a room (§4.1 payload: id, name, role, mode).
+
+    Deduped per user id — a user with several tabs open counts once, and only
+    drops from the room when their *last* socket goes (``sockets`` empty).
+    """
+
+    payload: dict[str, Any]
+    sockets: set[WebSocket] = field(default_factory=set)
+
+
 class ConnectionManager:
     def __init__(self) -> None:
         self._rooms: dict[tuple[str, str], set[WebSocket]] = defaultdict(set)
+        # Presence set per room: room key → {user_id → member}. Distinct from
+        # ``_rooms`` (socket membership) because presence is deduped per user
+        # and cleared on a debounce, not the instant a socket drops.
+        self._presence: dict[tuple[str, str], dict[str, _PresenceMember]] = (
+            defaultdict(dict)
+        )
+        # Pending debounced-clear tasks, keyed (room_type, room_id, user_id), so
+        # a reconnect inside the grace window can cancel the impending removal.
+        self._expiries: dict[tuple[str, str, str], asyncio.Task] = {}
 
     def join(self, room_type: str, room_id: str, websocket: WebSocket) -> None:
         self._rooms[(room_type, room_id)].add(websocket)
@@ -57,6 +80,106 @@ class ConnectionManager:
         for websocket in dead:
             self.leave(room_type, room_id, websocket)
             logger.debug("dropped dead socket from %s/%s", room_type, room_id)
+
+    # --- Presence (§4.1) --------------------------------------------------
+    #
+    # Presence is WS-level state, not an event-bus event: a room type opts in
+    # by registering a presence-member builder (see ``realtime.router``), and
+    # the manager tracks who's in the room and fans out the full set on change.
+
+    def presence_members(self, room_type: str, room_id: str) -> list[dict[str, Any]]:
+        """The current presence set for a room, ordered by display name."""
+        members = self._presence.get((room_type, room_id))
+        if not members:
+            return []
+        return [
+            m.payload
+            for m in sorted(
+                members.values(), key=lambda m: m.payload.get("name", "")
+            )
+        ]
+
+    def _presence_frame(self, room_type: str, room_id: str) -> dict[str, Any]:
+        return {
+            "type": "presence",
+            "members": self.presence_members(room_type, room_id),
+        }
+
+    async def presence_join(
+        self, room_type: str, room_id: str, websocket: WebSocket, member: dict[str, Any]
+    ) -> None:
+        """Add ``websocket`` to the room's presence set under ``member['id']``.
+
+        Cancels any pending debounced removal for that user (a reconnect inside
+        the grace window), then broadcasts the refreshed set to the room.
+        """
+        user_id = member["id"]
+        pending = self._expiries.pop((room_type, room_id, user_id), None)
+        if pending is not None:
+            pending.cancel()
+
+        members = self._presence[(room_type, room_id)]
+        existing = members.get(user_id)
+        if existing is None:
+            members[user_id] = _PresenceMember(payload=member, sockets={websocket})
+        else:
+            existing.sockets.add(websocket)
+        await self.broadcast(
+            room_type, room_id, self._presence_frame(room_type, room_id)
+        )
+
+    async def presence_leave(
+        self,
+        room_type: str,
+        room_id: str,
+        websocket: WebSocket,
+        user_id: str,
+        grace_seconds: float,
+    ) -> None:
+        """Drop ``websocket`` from the user's presence entry.
+
+        If it was the user's last socket, schedule a debounced removal after
+        ``grace_seconds`` rather than clearing instantly, so a brief reconnect
+        doesn't flicker the "who's here" list (§4.1).
+        """
+        members = self._presence.get((room_type, room_id))
+        if not members:
+            return
+        member = members.get(user_id)
+        if member is None:
+            return
+        member.sockets.discard(websocket)
+        if member.sockets:
+            return  # another tab keeps the user present
+
+        ekey = (room_type, room_id, user_id)
+        pending = self._expiries.pop(ekey, None)
+        if pending is not None:
+            pending.cancel()
+        self._expiries[ekey] = asyncio.ensure_future(
+            self._expire_member(room_type, room_id, user_id, grace_seconds)
+        )
+
+    async def _expire_member(
+        self, room_type: str, room_id: str, user_id: str, grace_seconds: float
+    ) -> None:
+        try:
+            await asyncio.sleep(grace_seconds)
+        except asyncio.CancelledError:
+            return
+        self._expiries.pop((room_type, room_id, user_id), None)
+        members = self._presence.get((room_type, room_id))
+        if not members:
+            return
+        member = members.get(user_id)
+        if member is None or member.sockets:
+            return  # rejoined during the grace window
+        del members[user_id]
+        if not members:
+            del self._presence[(room_type, room_id)]
+        await self.broadcast(
+            room_type, room_id, self._presence_frame(room_type, room_id)
+        )
 
 
 # Module-level singleton, like the event bus (§3.1).

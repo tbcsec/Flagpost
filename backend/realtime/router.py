@@ -48,12 +48,20 @@ router = APIRouter()
 Authorizer = Callable[[AsyncSession, User, str], Awaitable[bool]]
 # Optional initial frame sent right after auth_ok (e.g. the current scoreboard).
 SnapshotProvider = Callable[[AsyncSession, User, str], Awaitable[dict[str, Any] | None]]
+# Builds a room's minimal §4.1 presence payload for a joining user. A room type
+# opts into presence purely by providing one; the (db, user, room_id, mode) →
+# payload signature lets each room resolve its own role/context. The result must
+# carry a stable per-user ``id`` (presence is deduped by it across tabs).
+PresenceMemberBuilder = Callable[
+    [AsyncSession, User, str, str], Awaitable[dict[str, Any]]
+]
 
 
 @dataclass(frozen=True)
 class RoomType:
     authorize: Authorizer
     snapshot: SnapshotProvider | None = None
+    presence_member: PresenceMemberBuilder | None = None
 
 
 _room_types: dict[str, RoomType] = {}
@@ -64,9 +72,12 @@ def register_room_type(
     *,
     authorize: Authorizer,
     snapshot: SnapshotProvider | None = None,
+    presence_member: PresenceMemberBuilder | None = None,
 ) -> None:
     """Register a room type. Called by the module that owns the resource."""
-    _room_types[room_type] = RoomType(authorize=authorize, snapshot=snapshot)
+    _room_types[room_type] = RoomType(
+        authorize=authorize, snapshot=snapshot, presence_member=presence_member
+    )
 
 
 @router.websocket("/ws/{room_type}/{room_id}")
@@ -100,6 +111,7 @@ async def room_socket(websocket: WebSocket, room_type: str, room_id: str) -> Non
         await websocket.close(code=4401, reason="Invalid or expired token")
         return
 
+    member: dict[str, Any] | None = None
     async with SessionLocal() as db:
         user = await db.get(User, payload.get("sub"))
         if user is None:
@@ -115,8 +127,17 @@ async def room_socket(websocket: WebSocket, room_type: str, room_id: str) -> Non
             snapshot = await room.snapshot(db, user, room_id)
             if snapshot is not None:
                 await websocket.send_json(snapshot)
+        if room.presence_member is not None:
+            # Optional `mode` (view/edit, §4.1) rides the same first frame as
+            # the auth token; anything unrecognized falls back to "view".
+            mode = first.get("mode") if isinstance(first, dict) else None
+            if mode not in ("view", "edit"):
+                mode = "view"
+            member = await room.presence_member(db, user, room_id, mode)
 
     manager.join(room_type, room_id, websocket)
+    if member is not None:
+        await manager.presence_join(room_type, room_id, websocket, member)
     try:
         # Broadcast-only rooms: drain (and ignore) client frames until it hangs
         # up, so the socket stays responsive to pings/closes.
@@ -125,4 +146,12 @@ async def room_socket(websocket: WebSocket, room_type: str, room_id: str) -> Non
     except WebSocketDisconnect:
         pass
     finally:
+        if member is not None:
+            await manager.presence_leave(
+                room_type,
+                room_id,
+                websocket,
+                member["id"],
+                settings.ws_presence_grace_seconds,
+            )
         manager.leave(room_type, room_id, websocket)

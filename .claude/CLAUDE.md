@@ -109,9 +109,9 @@ stack.
 
 ## Non-negotiable architectural rules
 
-From `docs/ARCHITECTURE.md` §1, enforced by convention and code review,
-not the compiler — treat these as hard rules, not defaults to reconsider
-per-feature:
+From `docs/ARCHITECTURE.md` §1, enforced by convention and code review
+(and, where marked below, by ESLint — `frontend/eslint.config.mjs`) — treat
+these as hard rules, not defaults to reconsider per-feature:
 
 - **Every mutation emits an event** through the event bus (§3), using the
   `<entity>.<verb>` past-tense vocabulary already defined in §3.2. Don't
@@ -124,10 +124,12 @@ per-feature:
   role check (§7.6). If the permission you need doesn't exist yet, add it
   to the categorized list in §7.1 first.
 - **One hook module per frontend domain** under `frontend/src/lib/hooks/`
-  (§8). Components never call the API client directly.
+  (§8). Components never call the API client directly. *(ESLint: no
+  `@/lib/api` import outside `lib/hooks/`.)*
 - **Colors and spacing come from design tokens**, never a raw hex value
   or magic number in a component (§9). Missing a token is a reason to add
-  the token, not to inline the hex.
+  the token, not to inline the hex. *(ESLint: no raw hex literals in
+  `app/`/`components/`, brand mark excepted.)*
 - **New backend features register through the module loader** (§11.1),
   including required-core ones — check §11.3 for which tier a feature
   belongs to before deciding whether it needs an admin-facing toggle.

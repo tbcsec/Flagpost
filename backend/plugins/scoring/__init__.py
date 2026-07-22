@@ -7,10 +7,10 @@ challenges module records:
 - the "scoreboard" WebSocket room type (authorized exactly like the REST
   route — ``challenge_view`` on the competition — with the current board as
   the join snapshot), and
-- the ``challenge.solved`` listener that recomputes and broadcasts the board
-  to the competition's room. Handlers stay fast (one aggregate query +
-  in-process fan-out) per ADR-0009's sync-dispatch constraint, and skip the
-  recompute entirely when nobody is watching.
+- the listeners that recompute and broadcast the board to the competition's
+  room whenever totals move. Handlers stay fast (one aggregate query +
+  in-process fan-out), run on the foreground lane (ADR-0012 default), and
+  skip the recompute entirely when nobody is watching.
 """
 
 from __future__ import annotations
@@ -58,9 +58,11 @@ def setup(app, event_bus, db_factory) -> None:
             "scoreboard", competition_id, {"type": "scoreboard", **board}
         )
 
-    # A solve changes totals; a hint reveal deducts its cost — both move the
-    # board, so both trigger a recompute + live broadcast.
+    # A solve changes totals; a hint reveal deducts its cost; an automation
+    # score adjustment (§5.3 update_score) adds/removes points — all three move
+    # the board, so all three trigger a recompute + live broadcast.
     event_bus.subscribe("challenge.solved", broadcast_scoreboard, owner="scoring")
     event_bus.subscribe(
         "challenge.hint_requested", broadcast_scoreboard, owner="scoring"
     )
+    event_bus.subscribe("score.adjusted", broadcast_scoreboard, owner="scoring")

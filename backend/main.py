@@ -22,6 +22,7 @@ from db import SessionLocal
 from plugins.loader import load_modules
 from realtime import router as realtime_router
 from routers import auth as auth_router
+from routers import modules as modules_router
 from utils.audit_log import register_audit_log
 from utils.event_bus import event_bus
 
@@ -63,12 +64,14 @@ app.add_middleware(
 )
 
 
-# Auth and the real-time WebSocket endpoint are kernel — mounted directly
-# (modules register the room *types* they own, §4.1). Every feature above the
-# kernel registers through the module loader (§11.1): required-core now,
-# optional modules later.
+# Auth, the real-time WebSocket endpoint, and the per-competition module
+# toggle are kernel — mounted directly (modules register the room *types* they
+# own, §4.1; the loader whose state the toggle manages is itself kernel,
+# §11.3). Every feature above the kernel registers through the module loader
+# (§11.1): required-core and, since Tier 3, optional modules alike.
 app.include_router(auth_router.router)
 app.include_router(realtime_router)
+app.include_router(modules_router.router)
 # Every feature above the kernel — including the audit-log admin surface — mounts
 # through the loader (§11.1). The audit-log event-bus *consumer* stays kernel
 # (register_audit_log above); the module only adds its query router.

@@ -48,9 +48,10 @@ class ModuleManifest:
 
     @property
     def enabled(self) -> bool:
-        # Required-core modules are never disableable (§11.3). Optional modules
-        # will read persisted admin state here once disabling exists; until then
-        # everything in the box is on.
+        # Whether the module is loaded/mounted at all (site level). Required-core
+        # modules are never disableable (§11.3); optional in-box modules always
+        # *load* too — their per-competition disable (§11.3) is runtime state
+        # checked by ``is_module_enabled``, not a reason to skip mounting.
         return True
 
 
@@ -127,6 +128,12 @@ def discover_manifests(plugins_dir: Path = PLUGINS_DIR) -> list[ModuleManifest]:
     return manifests
 
 
+# Manifests of the modules actually loaded this process, by id — populated by
+# load_modules so runtime checks (is_module_enabled, the module-state admin
+# surface) can reason about what exists without re-scanning the directory.
+_loaded_manifests: dict[str, ModuleManifest] = {}
+
+
 def load_modules(app, event_bus, db_factory, plugins_dir: Path = PLUGINS_DIR) -> list[ModuleManifest]:
     """Discover, order, and wire every enabled module. Returns the load order."""
     manifests = [m for m in discover_manifests(plugins_dir) if m.enabled]
@@ -137,6 +144,7 @@ def load_modules(app, event_bus, db_factory, plugins_dir: Path = PLUGINS_DIR) ->
         if not callable(setup):
             raise ModuleError(f"module {manifest.id!r} has no setup() entry point")
         setup(app, event_bus, db_factory)
+        _loaded_manifests[manifest.id] = manifest
         logger.info(
             "loaded module %s v%s%s",
             manifest.id,
@@ -144,3 +152,40 @@ def load_modules(app, event_bus, db_factory, plugins_dir: Path = PLUGINS_DIR) ->
             " (required-core)" if manifest.required_core else "",
         )
     return order
+
+
+def loaded_manifest(module_id: str) -> ModuleManifest | None:
+    return _loaded_manifests.get(module_id)
+
+
+def optional_modules() -> list[ModuleManifest]:
+    """The loaded modules that carry a per-competition toggle (§11.3)."""
+    return [m for m in _loaded_manifests.values() if not m.required_core]
+
+
+async def is_module_enabled(db, module_id: str, competition_id: str | None) -> bool:
+    """Is ``module_id`` active in ``competition_id``'s context? (§11.3, §11.1.3)
+
+    Required-core modules are always on. An optional module defaults to
+    **enabled** — a ``competition_modules`` row exists only to override that.
+    ``competition_id=None`` (a global/site-wide context) has no per-competition
+    toggle to consult, so a loaded module counts as enabled there. An id that
+    isn't a loaded module at all is never "enabled".
+    """
+    manifest = _loaded_manifests.get(module_id)
+    if manifest is None:
+        return False
+    if manifest.required_core or competition_id is None:
+        return True
+
+    from sqlalchemy import select
+
+    from models.competition_module import CompetitionModule
+
+    state = await db.scalar(
+        select(CompetitionModule.enabled).where(
+            CompetitionModule.competition_id == competition_id,
+            CompetitionModule.module_id == module_id,
+        )
+    )
+    return True if state is None else bool(state)

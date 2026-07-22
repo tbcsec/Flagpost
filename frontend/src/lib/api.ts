@@ -13,6 +13,9 @@ import type {
   AuditLogPage,
   AuditLogQuery,
   Attachment,
+  AutomationCatalog,
+  AutomationRule,
+  AutomationRuleInput,
   Category,
   ChallengeHealth,
   DashboardStats,
@@ -481,6 +484,49 @@ export const attachmentsApi = {
       `/api/competitions/${competitionId}/challenges/${challengeId}/attachments/${attachmentId}`,
       { method: "DELETE" },
     ),
+};
+
+export const automationsApi = {
+  // Org rules (§5.1). The competition context rides ?competition_id= — the
+  // same place the backend permission check reads it; omitting it means the
+  // global-rules surface (Administrator only).
+  list: (competitionId?: string) =>
+    apiFetch<AutomationRule[]>(
+      `/api/automations${competitionId ? `?competition_id=${competitionId}` : ""}`,
+    ),
+  get: (ruleId: string) => apiFetch<AutomationRule>(`/api/automations/${ruleId}`),
+  create: (input: AutomationRuleInput, competitionId?: string) =>
+    apiFetch<AutomationRule>(
+      `/api/automations${competitionId ? `?competition_id=${competitionId}` : ""}`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
+  update: (ruleId: string, input: AutomationRuleInput) =>
+    apiFetch<AutomationRule>(`/api/automations/${ruleId}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  remove: (ruleId: string) =>
+    apiFetch<void>(`/api/automations/${ruleId}`, { method: "DELETE" }),
+  catalog: () => apiFetch<AutomationCatalog>("/api/automations/catalog"),
+  // Personal rules (§5.1): notify-self only, no automation permission needed.
+  personal: {
+    list: () => apiFetch<AutomationRule[]>("/api/automations/personal"),
+    create: (input: AutomationRuleInput & { competition_id?: string | null }) =>
+      apiFetch<AutomationRule>("/api/automations/personal", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    update: (
+      ruleId: string,
+      input: AutomationRuleInput & { competition_id?: string | null },
+    ) =>
+      apiFetch<AutomationRule>(`/api/automations/personal/${ruleId}`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+      }),
+    remove: (ruleId: string) =>
+      apiFetch<void>(`/api/automations/personal/${ruleId}`, { method: "DELETE" }),
+  },
 };
 
 export const notificationsApi = {

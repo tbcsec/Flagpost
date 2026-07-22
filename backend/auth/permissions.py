@@ -16,8 +16,9 @@ Adding a permission here is the *only* place a new capability is introduced —
 `require_permission("x")` referencing a key absent from this catalog is a bug,
 guarded by a test (see tests/test_permissions.py, per ADR-0004).
 
-Automations permissions are listed but marked reserved: the automation engine
-is deferred (ROADMAP "Explicitly Deferred"), so nothing enforces them yet.
+``reserved`` marks a permission that is defined ahead of the feature enforcing
+it (so role editors can see it coming); nothing carries it today — the
+automations keys shed it when the engine shipped (Tier 3 Phase 1).
 """
 
 from __future__ import annotations
@@ -36,7 +37,7 @@ class Permission:
     key: str
     category: str
     scope: Scope
-    reserved: bool = False  # defined but not yet enforced (automation engine)
+    reserved: bool = False  # defined ahead of the feature that enforces it
 
 
 # Ordered by the §7.1 categories. Keys are the source of truth referenced by
@@ -85,14 +86,12 @@ PERMISSIONS: tuple[Permission, ...] = (
     # Dashboard
     Permission("customize_dashboard", "Dashboard", Scope.COMPETITION),
     Permission("manage_dashboard_widgets", "Dashboard", Scope.COMPETITION),
-    # Automations (reserved — not enforced until the engine ships, §7.1)
-    Permission("automation_view", "Automations", Scope.COMPETITION, reserved=True),
-    Permission(
-        "automation_create", "Automations", Scope.COMPETITION, reserved=True
-    ),
-    Permission(
-        "automation_edit", "Automations", Scope.COMPETITION, reserved=True
-    ),
+    # Automations — enforced since the engine shipped (Tier 3 Phase 1, §5).
+    # Personal rules (§5.1) deliberately need none of these; a global rule
+    # requires holding create/edit via a *global* assignment (§5.1).
+    Permission("automation_view", "Automations", Scope.COMPETITION),
+    Permission("automation_create", "Automations", Scope.COMPETITION),
+    Permission("automation_edit", "Automations", Scope.COMPETITION),
     # Audit — reading the cross-competition event log (§3.3). Site oversight, so
     # global-scoped and Administrator-only among the built-in roles.
     Permission("view_audit_log", "Audit", Scope.GLOBAL),
@@ -139,6 +138,12 @@ JUDGE_PERMISSIONS: list[str] = [
     "announcement_delete",
     "view_competition_analytics",
     "customize_dashboard",
+    # Automations (§5): a Judge runs their competition's rules — "full
+    # operational control" (§7.3). Reaches existing installs via the startup
+    # role re-sync (seed_system_roles).
+    "automation_view",
+    "automation_create",
+    "automation_edit",
 ]
 
 # Participant: competitor-facing only — view challenges, view the scoreboard,

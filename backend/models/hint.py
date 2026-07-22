@@ -8,8 +8,9 @@ charged once per subject, never per click.
 
 ``HintReveal`` is that record: it makes reveals idempotent (a subject that has
 revealed a hint isn't charged again) and gives the scoreboard the per-subject
-hint-cost total to subtract from points. No automation-driven release yet —
-that's a deferred automation action (§5.3); reveal here is always explicit.
+hint-cost total to subtract from points. Reveals come from an explicit request
+(charged the hint's cost) or from the automation ``release_hint`` action (§5.3,
+``cost_charged=0`` — a granted hint costs nothing).
 """
 
 from uuid import uuid4

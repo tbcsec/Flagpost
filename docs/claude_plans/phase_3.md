@@ -54,7 +54,7 @@ green pytest + vitest + tsc + eslint run per phase; one commit per phase.
 
 ---
 
-## Phase 0 — Notification center + event-dispatch groundwork (§4.4, §3.1, ADR-0009)
+## Phase 0 — Notification center + event-dispatch groundwork (§4.4, §3.1, ADR-0009) — ✅ DONE
 
 The foundation the automation engine stands on. Nothing user-visible from
 automations yet — this closes the two gaps above so Phases 1–3 have a real
@@ -84,7 +84,7 @@ automations yet — this closes the two gaps above so Phases 1–3 have a real
   scheduled, one handler's failure doesn't block others), notification
   create/read/scoping RBAC, the per-user WS push.
 
-## Phase 1 — Automation engine: model, evaluation, action executors (§5.1–5.3)
+## Phase 1 — Automation engine: model, evaluation, action executors (§5.1–5.3) — ✅ DONE
 
 The engine core, as an **optional system module** (§11.3) — the *first* module
 that carries a real enable/disable toggle and declares a manifest **dependency**
@@ -121,6 +121,19 @@ time.
 - Tests: trigger→condition→action matching, scoping (global vs competition vs
   personal), each executor, the reserved-perm flip, the new events, module
   enable/disable gating a rule from firing.
+
+**As built (deviations worth knowing):** `trigger_type` is the verbatim §3.2
+event name (no parallel enum; `utils/event_catalog.py` mirrors the vocabulary
+in code, `automation.*` excluded as triggers). Personal rules are restricted to
+**notify-self** (§5.1 note added — they're creatable without automation perms,
+so they must not run privileged actions). The new events grew to include
+`hint.released` (the `release_hint` action's mutation — a granted reveal at
+`cost_charged=0`) and `module.enabled`/`module.disabled` (the per-competition
+toggle, `competition_modules` table, kernel-mounted router since the loader is
+kernel). A global rule requires the automation perms via a *global* assignment.
+Basic loop guards landed here (automation.* never triggers; cascade-depth cap
+`automation_max_depth=3`) — Phase 2 still owns the fuller §15 story. Judge
+gained the three automation perms (startup role re-sync propagates them).
 
 ## Phase 2 — Webhook action hardening (§5.4)
 

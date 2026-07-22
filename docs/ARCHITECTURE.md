@@ -125,6 +125,7 @@ team.created                team.member_joined         team.member_left
 team.deleted
 challenge.created           challenge.updated          challenge.published
 challenge.deleted           challenge.solved           challenge.hint_requested
+hint.released
 category.created            category.deleted
 user.registered              user.password_changed
 role.created                 role.updated               role.deleted
@@ -134,12 +135,25 @@ ticket.message_posted
 feedback.submitted
 announcement.published
 site.settings_updated
-automation.rule_triggered
+score.adjusted               achievement.awarded
+module.enabled               module.disabled
+automation.rule_triggered    automation.rule_created
+automation.rule_updated      automation.rule_deleted
 ```
 
 `site.settings_updated` is site-wide (not competition-scoped), so its payload
 carries no `competition_id` — the audit log records it with a null tenant,
-which is correct for a global setting change.
+which is correct for a global setting change. The same is true of an
+`automation.rule_*` event for a **global** rule (`competition_id = None`,
+§5.1).
+
+`score.adjusted` and `achievement.awarded` are the automation engine's
+mutating-action events (§5.3 `update_score` / `award_achievement`) — an
+automation's side effects are events like any other mutation's.
+`module.enabled` / `module.disabled` record the per-competition optional-module
+toggle (§11.3); the canonical vocabulary above is mirrored in code by
+`backend/utils/event_catalog.py`, which is also what validates an automation
+rule's `trigger_type` (§5.1).
 
 This vocabulary is the single source of truth for what "things happen" in
 the system — it should be documented and versioned alongside the schema, not
@@ -254,7 +268,7 @@ A rule is a flat `Trigger → Conditions → Actions` record:
 class AutomationRule:
     id: str
     name: str
-    trigger_type: str            # e.g. "challenge_solved"
+    trigger_type: str            # a §3.2 event name, e.g. "challenge.solved"
     conditions: list[Condition]  # [{field, operator, value}, ...]
     actions: list[Action]        # [{type, ...config}, ...]
     is_enabled: bool
@@ -264,14 +278,28 @@ class AutomationRule:
     last_triggered_at: datetime | None
 ```
 
+- **Triggers are the §3.2 vocabulary, verbatim.** `trigger_type` is a
+  canonical event name (`challenge.solved`), not a parallel enum — validated
+  against `utils/event_catalog.py`, so anything that emits an event is
+  automatable with zero per-feature wiring, and a new event type is a new
+  trigger for free. The `automation.*` events themselves are **not**
+  triggerable (the trivial self-loop).
 - **Scoping**: a rule with `competition_id = None` fires across every
   competition; scoping to one competition is the common case for
-  organiser-authored rules.
+  organiser-authored rules. Creating/editing a competition's rules takes
+  `automation_create`/`automation_edit` on that competition; a **global**
+  rule requires holding those permissions via a global assignment
+  (Administrator), since it fires everywhere.
 - **Ownership**: `owner_user_id = None` means an org-wide rule; a non-null
   value scopes the rule to fire only for events caused by that user, and
   lets that user manage the rule without needing elevated automation
   permissions. This is what lets individual judges or team captains set up
-  personal notification rules without an admin doing it for them.
+  personal notification rules without an admin doing it for them. Because
+  they're creatable without automation permissions, **personal rules are
+  restricted to the `notify` action targeting the owner** — a personal rule
+  is a saved search that pings you, never a way to run privileged actions
+  (`update_score`, `webhook`, …) without holding the permissions an org rule
+  requires.
 
 ### 5.2 Evaluation
 
@@ -281,6 +309,17 @@ The engine is invoked from the same place events are emitted: on every
 that matches. This keeps the automation engine a *consumer* of the event
 bus rather than a parallel system — anything that emits an event is
 automatically automatable, with no extra wiring per feature.
+
+As built (Tier 3 Phase 1): the engine subscribes on the **background lane**
+(ADR-0012), so evaluation and actions never hold up the request that emitted
+the event; conditions are AND-ed (`equals`, `not_equals`, `contains`,
+`gt`/`gte`/`lt`/`lte`, `exists`/`not_exists`); every fire updates
+`trigger_count`/`last_triggered_at` and emits `automation.rule_triggered`.
+Two loop guards: `automation.*` events are never evaluated as triggers, and a
+**cascade-depth cap** stops a chain of rules whose actions' events trigger
+further rules (the fuller runaway detection stays open in §15). If the
+automations module is disabled for the event's competition (§11.3), nothing
+fires for that event — global rules included.
 
 ### 5.3 Action Types (initial set)
 
@@ -414,8 +453,9 @@ Site Settings             manage_site_settings  (global — the site-wide
 Analytics                 view_competition_analytics, view_global_analytics
 Dashboard                 customize_dashboard, manage_dashboard_widgets
 Automations               automation_view, automation_create,
-                          automation_edit  (reserved — see ROADMAP.md;
-                          not enforced until the automation engine ships)
+                          automation_edit  (enforced since the automation
+                          engine shipped, Tier 3 — personal rules need none
+                          of these, §5.1)
 Audit                     view_audit_log
 ```
 

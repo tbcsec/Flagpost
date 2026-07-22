@@ -31,7 +31,8 @@ file, don't ignore it.
 **Tier 0, Tier 1, and Tier 2 ("Makes It Good") are all complete — Tier 2 was
 built phase-by-phase per `docs/claude_plans/phase_2.md` (Phases 0–5 all
 shipped). Tier 3 is the current tier and is now scoped/planned in
-`docs/claude_plans/phase_3.md` (Phases 0–9; **Phase 0 shipped**, Phase 1 next).
+`docs/claude_plans/phase_3.md` (Phases 0–9; **Phases 0–1 shipped**, Phase 2 —
+webhook hardening — next).
 An owner revision pulled three previously-deferred subsystems up into Tier 3 —
 the **full automation engine** (§5), **dashboard drag-and-drop** (§10), and
 **collaborative rich-text/CRDT editing** (§4.2) — alongside the polish items
@@ -113,6 +114,23 @@ What's built:
   `/ws/user/<id>` room, and ticket-event listeners that notify staff/opener the
   same way the audio cue routes; `use-notifications.ts` + the wired topbar bell.
   `auth.deps.users_with_permission` (the "who can do X here" audience query).
+- **Tier 3 Phase 1** — the **automation engine** (§5), the first genuinely
+  **optional** module (`automations` — per-competition toggle via
+  `competition_modules` + `PUT /api/competitions/{id}/modules/{module_id}`,
+  kernel-mounted; disabled = nothing fires for that competition's events and
+  the org-rules API 404s). `AutomationRule` per §5.1 (`trigger_type` = verbatim
+  §3.2 event name, validated against `utils/event_catalog.py`; conditions
+  AND-ed; global rule = null competition, needs a *global* automation grant;
+  personal rules = **notify-self only**, no perms needed). Engine
+  (`utils/automation_engine.py`) runs on the ADR-0012 background lane with two
+  loop guards (automation.* never triggers; cascade-depth cap). **All eight
+  §5.3 executors** (`utils/automation_actions.py`): notify / send_email
+  (aiosmtplib, no-op unconfigured) / webhook (basic — §5.4 hardening is
+  Phase 2) / release_hint (free, emits `hint.released`) / unlock_challenge /
+  create_ticket / update_score (`ScoreAdjustment` folded into the scoreboard)
+  / award_achievement (`Achievement`). Reserved `automation_*` perms flipped
+  live; Judge gained them. Frontend: `use-automations.ts` + minimal rules list
+  on `/automations` (toggle/delete; builder is Phase 3).
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0012 (event-dispatch sync-critical vs background, supersedes

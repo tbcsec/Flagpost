@@ -37,6 +37,23 @@ class Settings(BaseSettings):
     # inside this window doesn't flicker the presence list.
     ws_presence_grace_seconds: float = 5.0
 
+    # --- Outbound email (§5.3 send_email action) ---
+    # Unset host = email delivery disabled (the action logs and no-ops). Email
+    # is only an automation action target for now, not a notification channel
+    # of its own (§4.4).
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str = "flagpost@localhost"
+    smtp_starttls: bool = True
+
+    # --- Automation engine (§5.2) ---
+    # Cascade-depth cap: a rule's actions emit events that may trigger further
+    # rules; evaluation stops past this depth (basic runaway-loop guard — the
+    # fuller detection scheme stays open in §15).
+    automation_max_depth: int = 3
+
     # --- Object storage (MinIO / S3, §13.3) ---
     # Endpoint the backend talks to. Defaults to the compose MinIO as exposed on
     # the host, so a native `uvicorn` run works against `docker compose up minio`.

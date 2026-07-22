@@ -1,0 +1,23 @@
+id: automations
+name: Automations
+version: 1.0.0
+# The FIRST optional module (§11.3): not required-core, so it carries the
+# per-competition enable/disable toggle (competition_modules — default ON).
+# Disabling it for a competition stops every rule firing for that
+# competition's events; the loader still mounts it site-wide (§11.1).
+required_core: false
+provides:
+  routes: true
+  event_listeners: true
+# Real wiring, not decoration: the notify action writes through the
+# notifications module's service; release_hint/unlock_challenge/create_ticket/
+# update_score mutate the hints/challenges/tickets/scoring domains; rules
+# scope to competitions. The loader orders these first and would refuse to
+# load automations if one were missing (§11.3 dependency contract).
+dependencies:
+  - competitions
+  - challenges
+  - hints
+  - tickets
+  - scoring
+  - notifications

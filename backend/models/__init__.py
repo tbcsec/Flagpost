@@ -8,11 +8,14 @@ Add new model modules to the imports below as domains are built.
 from models.announcement import Announcement
 from models.attachment import Attachment
 from models.audit_log import AuditLogEntry
+from models.automation import Achievement, AutomationRule
 from models.challenge import Category, Challenge
 from models.competition import Competition
+from models.competition_module import CompetitionModule
 from models.hint import Hint, HintReveal
 from models.notification import Notification
 from models.role import Role, RoleAssignment
+from models.score_adjustment import ScoreAdjustment
 from models.site_settings import SiteSettings
 from models.submission import Submission
 from models.team import Team, TeamMembership
@@ -20,17 +23,21 @@ from models.ticket import Ticket, TicketMessage
 from models.user import RefreshSession, User
 
 __all__ = [
+    "Achievement",
     "Announcement",
     "Attachment",
     "AuditLogEntry",
+    "AutomationRule",
     "Category",
     "Challenge",
     "Competition",
+    "CompetitionModule",
     "Hint",
     "HintReveal",
     "Notification",
     "Role",
     "RoleAssignment",
+    "ScoreAdjustment",
     "SiteSettings",
     "Submission",
     "RefreshSession",

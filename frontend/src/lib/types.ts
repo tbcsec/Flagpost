@@ -101,6 +101,47 @@ export interface TicketDetail extends Ticket {
   messages: TicketMessage[];
 }
 
+/** An automation rule (§5.1): Trigger → Conditions → Actions. */
+export interface AutomationCondition {
+  field: string;
+  operator: string;
+  value?: string | number | boolean | null;
+}
+
+/** Action config is per-type (§5.3); the list page only needs `type`. */
+export interface AutomationAction {
+  type: string;
+  [key: string]: unknown;
+}
+
+export interface AutomationRule {
+  id: string;
+  name: string;
+  trigger_type: string;
+  conditions: AutomationCondition[];
+  actions: AutomationAction[];
+  is_enabled: boolean;
+  competition_id: string | null;
+  owner_user_id: string | null;
+  trigger_count: number;
+  last_triggered_at: string | null;
+  created_at: string;
+}
+
+export interface AutomationRuleInput {
+  name: string;
+  trigger_type: string;
+  conditions: AutomationCondition[];
+  actions: AutomationAction[];
+  is_enabled: boolean;
+}
+
+export interface AutomationCatalog {
+  triggers: string[];
+  operators: string[];
+  actions: { type: string; personal_allowed: boolean }[];
+}
+
 /** One in-app notification for the bell (§4.4). `read` is derived server-side
  *  from the row's nullable `read_at`. */
 export interface AppNotification {

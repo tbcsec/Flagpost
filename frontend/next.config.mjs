@@ -1,6 +1,20 @@
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  webpack: (config) => {
+    // Force every `yjs` import/require to resolve to one module instance. Y.js
+    // must be a singleton — a second copy (our ESM import vs a transitive CJS
+    // require in y-prosemirror) breaks its internal `instanceof` checks (§4.2).
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      yjs: require.resolve("yjs"),
+    };
+    return config;
+  },
 };
 
 export default nextConfig;

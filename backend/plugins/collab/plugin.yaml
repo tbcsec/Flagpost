@@ -1,0 +1,17 @@
+id: collab
+name: Collaborative Notes
+version: 1.0.0
+# Required-core (§11.3, §4.2): the CRDT collaboration layer — a team's private
+# per-challenge scratchpad and staff internal-note editing on tickets. Owns the
+# `note/<doc_key>` WebSocket room (relay + snapshot persistence, ADR-0014) and
+# the `collab_documents` store. Registers a room type only (no HTTP routes);
+# depends on the resources a note can be scoped to so their models are loaded.
+required_core: true
+provides:
+  routes: false
+  event_listeners: false
+dependencies:
+  - competitions
+  - challenges
+  - teams
+  - tickets

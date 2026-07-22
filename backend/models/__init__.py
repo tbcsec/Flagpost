@@ -10,6 +10,7 @@ from models.attachment import Attachment
 from models.audit_log import AuditLogEntry
 from models.automation import Achievement, AutomationRule
 from models.challenge import Category, Challenge
+from models.collab import CollabDocument
 from models.competition import Competition
 from models.competition_module import CompetitionModule
 from models.dashboard_layout import DashboardLayout
@@ -37,6 +38,7 @@ __all__ = [
     "AutomationRule",
     "Category",
     "Challenge",
+    "CollabDocument",
     "Competition",
     "CompetitionModule",
     "DashboardLayout",

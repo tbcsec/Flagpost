@@ -31,8 +31,8 @@ file, don't ignore it.
 **Tier 0, Tier 1, and Tier 2 ("Makes It Good") are all complete — Tier 2 was
 built phase-by-phase per `docs/claude_plans/phase_2.md` (Phases 0–5 all
 shipped). Tier 3 is the current tier and is now scoped/planned in
-`docs/claude_plans/phase_3.md` (Phases 0–9; **Phases 0–6 shipped**, Phase 7 —
-collaborative rich-text / CRDT editing — next).
+`docs/claude_plans/phase_3.md` (Phases 0–9; **Phases 0–7 shipped**, Phase 8 —
+onboarding / empty states — next).
 An owner revision pulled three previously-deferred subsystems up into Tier 3 —
 the **full automation engine** (§5), **dashboard drag-and-drop** (§10), and
 **collaborative rich-text/CRDT editing** (§4.2) — alongside the polish items
@@ -207,10 +207,30 @@ What's built:
   keep the fixed default. The grid is an **ordered column-span flow** (CSS reflow),
   not a 2D `{row,col}` engine; `manage_dashboard_widgets` stays Admin-only + unused
   (widget-catalog governance, deferred).
+- **Tier 3 Phase 7** — **collaborative rich-text / CRDT editing** (§4.2, ROADMAP
+  #27, ADR-0014): the required-core **`collab` module**. Two owner-chosen
+  surfaces: a **team per-challenge scratchpad** (challenge dialog, team-facing)
+  and **staff notes on a ticket** (ticket thread, staff-facing). One
+  `note/<doc_key>` WS room serves both; `doc_key` =
+  `team_challenge:<team_id>:<challenge_id>` or `ticket:<ticket_id>`, authorized
+  per request by `utils/collab.resolve_note` (team membership; or
+  `ticket_view_internal_notes` staff — **not** the ticket opener). **Transport =
+  dumb relay + client-snapshot persistence (ADR-0014):** the server relays opaque
+  Y.js update frames (`manager.broadcast(exclude=sender)`) and stores one
+  full-state blob per doc (`collab_documents`, `LargeBinary` + migration), never
+  decoding the CRDT; base64 over the JSON socket. The §4.1 WS router gained an
+  `on_message` hook (broadcast-only rooms unchanged; `on_message` opens its own
+  DB session only on the debounced persist, keeping the relay hot path DB-free).
+  Frontend: `yjs` + `@tiptap/extension-collaboration`, `lib/collab.ts` (Y.Doc ↔
+  socket), `lib/ws.ts` `send()` buffering, `<CollabNote>`. A **webpack alias pins
+  Y.js to a single instance** (`next.config.mjs`) — its hard singleton
+  requirement. No per-cursor awareness; the soft-lock cue reuses the existing
+  challenge/ticket presence indicators.
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0012 (event-dispatch sync-critical vs background, supersedes
-ADR-0009), ADR-0013 (webhook egress hardening), ADR-0010 (seeded default admin
+ADR-0009), ADR-0013 (webhook egress hardening), ADR-0014 (CRDT transport —
+dumb relay + client snapshot), ADR-0010 (seeded default admin
 creds), ADR-0011 (site-wide theming only — per-competition deferred).
 The admin is a **seeded default account** (`admin@example.com` / `changeme`,
 ADR-0010, superseding the first-user bootstrap of ADR-0007); public

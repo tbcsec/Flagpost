@@ -64,15 +64,24 @@ class ConnectionManager:
         return len(self._rooms.get((room_type, room_id), ()))
 
     async def broadcast(
-        self, room_type: str, room_id: str, message: dict[str, Any]
+        self,
+        room_type: str,
+        room_id: str,
+        message: dict[str, Any],
+        *,
+        exclude: WebSocket | None = None,
     ) -> None:
         """Send ``message`` as JSON to every socket in the room.
 
-        A socket that fails to send (client vanished mid-broadcast) is dropped
-        from the room rather than failing the broadcast for its neighbours.
+        ``exclude`` skips one socket — used by the CRDT relay (§4.2) so a client
+        doesn't receive an echo of the update it just sent. A socket that fails
+        to send (client vanished mid-broadcast) is dropped from the room rather
+        than failing the broadcast for its neighbours.
         """
         dead: list[WebSocket] = []
         for websocket in list(self._rooms.get((room_type, room_id), ())):
+            if websocket is exclude:
+                continue
             try:
                 await websocket.send_json(message)
             except Exception:  # noqa: BLE001 — any send failure means "gone"

@@ -14,6 +14,9 @@ export type RoomSocketStatus = "connecting" | "open" | "closed";
 
 export interface RoomSocketHandle {
   close: () => void;
+  /** Send a JSON frame once the socket is authed; buffered until then, and
+   *  after a reconnect re-auths. Used by the CRDT relay (§4.2). */
+  send: (data: unknown) => void;
 }
 
 interface RoomSocketOptions {
@@ -41,7 +44,16 @@ export function openRoomSocket(
   let ws: WebSocket | null = null;
   let attempt = 0;
   let closed = false;
+  let authed = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  // Frames requested before auth completes (or during a reconnect) wait here and
+  // flush on auth_ok, so a caller never has to track connection state itself.
+  const outbox: unknown[] = [];
+
+  function flush() {
+    if (!authed || ws?.readyState !== WebSocket.OPEN) return;
+    while (outbox.length) ws.send(JSON.stringify(outbox.shift()));
+  }
 
   function connect() {
     if (closed) return;
@@ -65,13 +77,16 @@ export function openRoomSocket(
       const frame = data as { type?: string };
       if (frame.type === "auth_ok") {
         attempt = 0; // healthy connection: reset the backoff
+        authed = true;
         onStatus?.("open");
+        flush();
         return;
       }
       onMessage(data);
     };
 
     ws.onclose = () => {
+      authed = false;
       onStatus?.("closed");
       if (closed) return;
       timer = setTimeout(() => {
@@ -91,6 +106,10 @@ export function openRoomSocket(
       closed = true;
       if (timer) clearTimeout(timer);
       ws?.close();
+    },
+    send(data: unknown) {
+      outbox.push(data);
+      flush();
     },
   };
 }

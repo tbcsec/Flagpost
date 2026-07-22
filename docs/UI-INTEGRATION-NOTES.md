@@ -11,13 +11,14 @@ widgets. The shell and every section were built, but only the sections with a
 real backend are wired; the rest render as faithful UI seeded with placeholder
 data and flagged in-app with a **"Preview — …"** banner (`NotWiredNote`).
 
-**Status: Tier 2 complete; Tier 3 in progress (Phases 0–6 shipped).** Since the
+**Status: Tier 2 complete; Tier 3 in progress (Phases 0–7 shipped).** Since the
 original handoff the backend has caught up through all of Tier 1 and Tier 2 and
 into Tier 3 (per `claude_plans/phase_3.md`): the notification bell (Phase 0), the
 whole automation surface — rules + the visual builder (Phases 1–3), feedback /
-surveys (Phase 4), challenge & team analytics (Phase 5), and **dashboard
-customization** — drag-reorder / resize / show-hide edit mode (Phase 6) — are all
-real too. The tables below are kept current; the remaining placeholder surfaces
+surveys (Phase 4), challenge & team analytics (Phase 5), **dashboard
+customization** — drag-reorder / resize / show-hide edit mode (Phase 6), and
+**collaborative CRDT notes** — a team challenge scratchpad + staff ticket notes
+(Phase 7) — are all real too. The tables below are kept current; the remaining placeholder surfaces
 are the Admin → Users directory, the Admin → Plugins toggle UI (its
 per-competition module-toggle *backend* now exists), Admin → Dashboard global
 stats, and per-user notification *preferences* (the inbox itself is wired).
@@ -81,6 +82,7 @@ code.
 | Automations (competition + admin) | **Wired** (Tier 3 Phases 1–3, §5) — the `automations` optional module + engine (nine §5.3 actions incl. `open_survey`, per-competition toggle, plus the time-based `competition.time_remaining` trigger via a scheduler) and the §5.5 **visual rule builder**: catalog-driven When→If→Then editor for competition + global rules, plus a personal notify-self section (`use-automations`, `rule-builder`) |
 | Feedback / surveys | **Wired** (Tier 3 Phase 4, #22) — the `feedback` optional module: staff survey builder (5 question types, reorder, open/close), competitor response form, results dialog (histograms/tallies/text) + CSV export; a submission emits `feedback.submitted`, a live automation trigger (`use-feedback`) |
 | Analytics | **Wired** (Tier 3 Phase 5, #23) — the `analytics` optional module (staff, `view_competition_analytics`): overview + per-challenge table (solves / attempts+fails / completion rate / avg solve time / hints / linked tickets) and a competitors/teams ranking (rank / points / solves / first bloods / tickets / last solve), read off existing submission data (`use-analytics`) |
+| Collaborative notes | **Wired** (Tier 3 Phase 7, §4.2, ADR-0014) — the required-core `collab` module: a **team per-challenge scratchpad** in the challenge dialog and **staff notes** on a ticket thread, both live-collaborative rich text (Y.js under TipTap over a `note/<doc_key>` WS room, dumb-relay transport + blob persistence). Scoped per-request — team membership / `ticket_view_internal_notes` (`CollabNote`, `lib/collab`) |
 
 ## Built as UI, NOT wired (placeholder data + in-app "Preview" banner)
 

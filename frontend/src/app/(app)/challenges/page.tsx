@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { ChallengeAdmin } from "@/components/challenges/challenge-admin";
 import { ChallengeHints } from "@/components/challenges/challenge-hints";
+import { CollabNote } from "@/components/collab/collab-note";
 import { PresenceIndicator } from "@/components/presence/presence-indicator";
 import { SectionHeader } from "@/components/app/section-header";
 import { FlagpostMark } from "@/components/brand/flagpost-mark";
@@ -21,6 +22,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
+import { useMyTeam } from "@/lib/hooks/use-teams";
 import { usePresence } from "@/lib/hooks/use-presence";
 import { useAccess } from "@/lib/hooks/use-permissions";
 import { useCategories } from "@/lib/hooks/use-categories";
@@ -179,6 +181,9 @@ function ChallengeDialogBody({
   const submit = useSubmitFlag(competitionId, challenge.id);
   // Live "who else is on this challenge" while the detail dialog is open (§4.1).
   const presence = usePresence("challenge", challenge.id);
+  // The team's private scratchpad for this challenge (§4.2) — only when the
+  // viewer is actually on a team (team-mode competitions); scoped to that team.
+  const myTeam = useMyTeam(competitionId);
   const result = submit.data;
   const justSolved = result?.correct === true;
   const alreadySolved = challenge.solved || result?.already_solved;
@@ -257,6 +262,18 @@ function ChallengeDialogBody({
       )}
 
       <ChallengeHints competitionId={competitionId} challengeId={challenge.id} />
+
+      {myTeam.data && (
+        <section className="grid gap-2">
+          <div>
+            <h3 className="text-sm font-medium">Team notes</h3>
+            <p className="text-xs text-muted-foreground">
+              A shared scratchpad for {myTeam.data.name} — visible only to your team, live as you type.
+            </p>
+          </div>
+          <CollabNote docKey={`team_challenge:${myTeam.data.id}:${challenge.id}`} />
+        </section>
+      )}
     </>
   );
 }

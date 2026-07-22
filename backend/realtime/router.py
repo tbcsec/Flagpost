@@ -13,8 +13,10 @@ One endpoint serves every room type. The lifecycle, per §4.1 / ADR-0003:
 4. On success the server confirms with ``{"type": "auth_ok"}``, sends the
    room's snapshot frame if the room type provides one (so a client that
    reconnects after missing broadcasts is immediately current), and joins the
-   socket to the room. Inbound frames after auth are ignored — Tier 1 rooms are
-   broadcast-only; presence (§4.1) is Tier 2.
+   socket to the room. Inbound frames after auth are ignored for broadcast-only
+   rooms; a room type that opts into ``on_message`` (the CRDT collab rooms, §4.2)
+   has each inbound JSON frame handed to its handler instead — that's the relay +
+   persist lane.
 
 Close codes mirror HTTP: 4401 auth failed/timeout, 4403 not allowed, 4404
 unknown room type. Room types are registered by the modules that own them
@@ -25,6 +27,7 @@ of feature knowledge.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -55,6 +58,11 @@ SnapshotProvider = Callable[[AsyncSession, User, str], Awaitable[dict[str, Any] 
 PresenceMemberBuilder = Callable[
     [AsyncSession, User, str, str], Awaitable[dict[str, Any]]
 ]
+# Handles an inbound JSON frame after auth (CRDT relay + persist, §4.2). Given
+# the authed user, the room key, the sending socket (so the handler can relay to
+# *other* members without echoing), and the parsed frame. Opens its own DB
+# session only when it needs one — the hot relay path stays DB-free.
+OnMessage = Callable[[User, str, str, WebSocket, dict[str, Any]], Awaitable[None]]
 
 
 @dataclass(frozen=True)
@@ -62,6 +70,7 @@ class RoomType:
     authorize: Authorizer
     snapshot: SnapshotProvider | None = None
     presence_member: PresenceMemberBuilder | None = None
+    on_message: OnMessage | None = None
 
 
 _room_types: dict[str, RoomType] = {}
@@ -73,10 +82,14 @@ def register_room_type(
     authorize: Authorizer,
     snapshot: SnapshotProvider | None = None,
     presence_member: PresenceMemberBuilder | None = None,
+    on_message: OnMessage | None = None,
 ) -> None:
     """Register a room type. Called by the module that owns the resource."""
     _room_types[room_type] = RoomType(
-        authorize=authorize, snapshot=snapshot, presence_member=presence_member
+        authorize=authorize,
+        snapshot=snapshot,
+        presence_member=presence_member,
+        on_message=on_message,
     )
 
 
@@ -139,10 +152,18 @@ async def room_socket(websocket: WebSocket, room_type: str, room_id: str) -> Non
     if member is not None:
         await manager.presence_join(room_type, room_id, websocket, member)
     try:
-        # Broadcast-only rooms: drain (and ignore) client frames until it hangs
-        # up, so the socket stays responsive to pings/closes.
         while True:
-            await websocket.receive_text()
+            raw = await websocket.receive_text()
+            # Broadcast-only rooms drain (and ignore) client frames; rooms with a
+            # handler (CRDT collab, §4.2) get each parsed JSON frame dispatched.
+            if room.on_message is None:
+                continue
+            try:
+                frame = json.loads(raw)
+            except ValueError:
+                continue
+            if isinstance(frame, dict):
+                await room.on_message(user, room_type, room_id, websocket, frame)
     except WebSocketDisconnect:
         pass
     finally:

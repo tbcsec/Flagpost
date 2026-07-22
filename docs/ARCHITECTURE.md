@@ -226,6 +226,19 @@ solve-path hint channel: they're storage for the team's own thinking, not a
 platform-provided collaboration feature that leaks structure the team hasn't
 already worked out itself.
 
+> **Status (Tier 3 Phase 7):** shipped as the required-core `collab` module. A
+> single `note/<doc_key>` WS room carries both sides; `doc_key` encodes the
+> resource (`team_challenge:<team_id>:<challenge_id>` or `ticket:<ticket_id>`)
+> and `utils/collab.resolve_note` decides read/write per request — team
+> membership for a scratchpad, `ticket_view_internal_notes` (staff, **not** the
+> opener) for a ticket note. The transport is a **dumb relay** with client-side
+> snapshot persistence (**ADR-0014**): the server relays opaque Y.js update
+> frames and stores one full-state blob per doc (`collab_documents`), never
+> decoding the CRDT. Frontend: `<CollabNote>` (TipTap + `@tiptap/extension-collaboration`
+> over a Y.Doc) wired into the challenge dialog (team scratchpad) and the ticket
+> thread (staff notes). The soft-lock/"who's here" cue rides the existing
+> challenge/ticket presence indicators (§4.1); per-cursor awareness is not built.
+
 ### 4.3 What Should Be Real-Time on This Platform
 
 - Live scoreboard during a running competition

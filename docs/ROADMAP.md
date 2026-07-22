@@ -171,10 +171,11 @@ across Phases 1–3 — the engine + all eight §5.3 actions + the first optiona
 per-competition-toggleable module (Phase 1), webhook hardening (Phase 2,
 ADR-0013), and the §5.5 visual rule builder (Phase 3); **feedback/survey (#22)**
 (Phase 4, the second optional module + automation glue); **challenge & team
-analytics (#23)** (Phase 5, the third optional module); and **dashboard
+analytics (#23)** (Phase 5, the third optional module); **dashboard
 drag-and-drop (#26)** (Phase 6, per-user layout customization on the Tier-2
-widget registry). Remaining: CRDT co-editing (#27), onboarding (#24), and the
-a11y/optimization pass (#28).
+widget registry); and **collaborative rich-text / CRDT editing (#27)** (Phase 7,
+Y.js team scratchpad + staff ticket notes, ADR-0014). Remaining: onboarding
+(#24) and the a11y/optimization pass (#28).
 
 Worth doing before a public/1.0 release, not worth doing before Tiers 1–2
 are solid.
@@ -203,7 +204,10 @@ are solid.
 27. **Collaborative rich-text editing** (Architecture §4.2) — both the
     staff and team-facing cases. Real-time *presence* (Tier 2, #19) ships
     first; true CRDT co-editing is a bigger lift, pulled into Tier 3 from
-    the previously-deferred list.
+    the previously-deferred list. *(Shipped — Tier 3 Phase 7: Y.js under
+    TipTap over the WS layer; team per-challenge scratchpad + staff ticket
+    notes via the required-core `collab` module; dumb-relay transport +
+    blob persistence, ADR-0014.)*
 28. **Accessibility, Responsiveness, and Optimization pass** — keyboard navigation, contrast,
     mobile layout for the competitor-facing screens in particular (people
     check scoreboards from their phones), a full optimization pass.

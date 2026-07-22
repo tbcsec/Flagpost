@@ -330,7 +330,7 @@ Administrator-only and unused (it governs the widget *catalog* — marketplace
 territory, deferred). No event emitted (personal preference, like the theme
 palette override).
 
-## Phase 7 — Collaborative rich-text / CRDT editing (#27, §4.2) — full spec
+## Phase 7 — Collaborative rich-text / CRDT editing (#27, §4.2) — ✅ DONE
 
 The biggest infra lift: Y.js as the CRDT layer under the existing TipTap editor,
 replacing last-write-wins on **prose** fields only (titles/flags/points stay
@@ -353,6 +353,35 @@ plain form submits, §4.2). Both sides in this tier.
 - Tests: two-client convergence (concurrent edits merge, no lost writes), team
   isolation (a team can't read another's scratchpad), permission gating, presence
   soft-lock. Note SQLite/Postgres blob-storage parity (ADR-0006).
+
+**As built:** the required-core **`collab` module**. Owner placement (this
+tier's ask): **team scratchpad** in the challenge dialog, **staff notes** in the
+ticket thread — those two of the §4.2 surfaces (challenge writeups / review notes
+are additive later, same machinery). One `note/<doc_key>` WS room carries both;
+`doc_key` = `team_challenge:<team_id>:<challenge_id>` or `ticket:<ticket_id>`,
+and `utils/collab.resolve_note` authorizes per request (team membership; or
+`ticket_view_internal_notes` staff — **not** the opener, so the staff channel
+stays invisible to competitors). **Transport = dumb relay + client-snapshot
+persistence (ADR-0014)** — the server relays opaque Y.js update frames
+(`broadcast(exclude=sender)`) and stores one full-state blob per doc
+(`collab_documents` + migration), never decoding the CRDT; base64 over the JSON
+socket. The §4.1 router gained an `on_message` hook (broadcast-only rooms
+unchanged). Frontend: `yjs` + `@tiptap/extension-collaboration`, `lib/collab.ts`
+(Y.Doc ↔ socket binding), `lib/ws.ts` `send()` buffering, and a `<CollabNote>`
+component. **Deviations from the sketch:** the room path is `note/<doc_key>`
+(single path segment — the §4.1 router is `/<type>/<id>`) rather than
+`notes/<resource_type>/<id>`; persistence is a **Postgres/SQLite `LargeBinary`
+blob** in `collab_documents`, not MinIO (one small row per note, cascades with
+the competition — §6.2); the ADR is **0014** (0013 was already webhook
+hardening). The **soft-lock/"who's here" cue reuses the existing challenge/ticket
+presence indicators** (which already carry `mode`, Tier-2 Phase 3) instead of a
+new per-note presence set + banner; **per-cursor awareness is not built** (out of
+scope for two prose fields). Two-client convergence is proven by a Y.js
+round-trip unit test (frontend) + a server relay/isolation test (backend); a
+webpack alias pins Y.js to one instance (its singleton requirement). Tests:
+backend +7 (`test_collab.py`: team isolation, ticket staff-only/opener-rejected,
+null→persisted snapshot, live relay w/o self-echo, per-doc isolation, unknown
+scope), frontend +4 (base64 round-trip, two-doc convergence, snapshot rebuild).
 
 ## Phase 8 — Onboarding / empty states (#24)
 
@@ -383,9 +412,11 @@ Last, over finished surfaces — a polish pass, not a feature.
 ## Cross-cutting notes
 
 - **New ADRs expected:** ADR-0012 (event-dispatch async/outbox — resolves the
-  ADR-0009 open question), ADR-0013 (CRDT transport + persistence), and possibly
+  ADR-0009 open question), a CRDT transport + persistence ADR, and possibly
   a short one for the webhook egress/SSRF policy. Write the ADR in the same phase
-  as the decision, don't backfill.
+  as the decision, don't backfill. *(As shipped: ADR-0012 event-dispatch,
+  ADR-0013 webhook egress hardening, ADR-0014 CRDT transport — the webhook one
+  took 0013, so CRDT landed at 0014.)*
 - **New events (add to §3.2 first):** `automation.rule_triggered` already
   exists; `feedback.submitted` already exists. The automation *actions* likely
   introduce **`score.adjusted`** (`update_score`) and **`achievement.awarded`**

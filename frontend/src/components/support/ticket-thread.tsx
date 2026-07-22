@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { CollabNote } from "@/components/collab/collab-note";
 import { PresenceIndicator } from "@/components/presence/presence-indicator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -158,6 +159,18 @@ export function TicketThread({
           <p className="text-sm text-destructive">{(reply.error as Error).message}</p>
         )}
       </form>
+
+      {isStaff && (
+        <section className="grid gap-2 border-t border-border pt-3">
+          <div>
+            <h3 className="text-sm font-medium">Staff notes</h3>
+            <p className="text-xs text-muted-foreground">
+              A shared working pad for staff on this ticket — never shown to the competitor, live as you type.
+            </p>
+          </div>
+          <CollabNote docKey={`ticket:${ticketId}`} />
+        </section>
+      )}
     </>
   );
 }

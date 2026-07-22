@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -49,7 +49,10 @@ export default function ScoreboardPage() {
   const myTeam = useMyTeam(isTeam ? (competitionId ?? "") : "");
   const userId = useAuthStore((s) => s.user?.id);
 
-  const entries = board.data?.entries ?? [];
+  // Memoised so the flash-detection effect below only re-runs when the board
+  // data actually changes, not on every render (the `?? []` would otherwise be
+  // a fresh array reference each time).
+  const entries = useMemo(() => board.data?.entries ?? [], [board.data?.entries]);
 
   // Flash a row whose points changed since the last live update. A colour
   // transition (not a looping pulse) fades the highlight out on its own.

@@ -32,6 +32,8 @@ class TeamAnalytics(BaseModel):
     rank: int
     points: int
     solve_count: int
+    first_bloods: int
+    ticket_count: int
     last_solve_at: datetime | None
 
 

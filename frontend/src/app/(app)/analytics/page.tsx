@@ -129,6 +129,8 @@ export default function AnalyticsPage() {
                     <TableHead>{challenges.data.mode === "team" ? "Team" : "Competitor"}</TableHead>
                     <TableHead className="text-right">Points</TableHead>
                     <TableHead className="text-right">Solves</TableHead>
+                    <TableHead className="text-right">First bloods</TableHead>
+                    <TableHead className="text-right">Tickets</TableHead>
                     <TableHead className="text-right">Last solve</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -141,6 +143,14 @@ export default function AnalyticsPage() {
                       <TableCell className="font-medium">{t.name}</TableCell>
                       <TableCell className="text-right font-mono">{t.points}</TableCell>
                       <TableCell className="text-right font-mono">{t.solve_count}</TableCell>
+                      <TableCell className="text-right font-mono">
+                        {t.first_bloods > 0 ? (
+                          <span className="text-success">{t.first_bloods}</span>
+                        ) : (
+                          t.first_bloods
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">{t.ticket_count}</TableCell>
                       <TableCell className="text-right text-muted-foreground">
                         {t.last_solve_at ? relativeTime(t.last_solve_at) : "—"}
                       </TableCell>
@@ -148,7 +158,7 @@ export default function AnalyticsPage() {
                   ))}
                   {teams.data && teams.data.teams.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center text-muted-foreground">
                         No participants yet.
                       </TableCell>
                     </TableRow>

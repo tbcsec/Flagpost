@@ -168,9 +168,15 @@ async def test_team_analytics_ranks_and_counts(client):
     bob = await _participant(client, comp, "bob@example.com")
     await _participant(client, comp, "cara@example.com")  # no solves
 
-    await _submit(client, comp, chal_a, ada, "flag{a}")
-    await _submit(client, comp, chal_b, ada, "flag{b}")  # ada: 300, 2 solves
-    await _submit(client, comp, chal_a, bob, "flag{a}")  # bob: 100, 1 solve
+    await _submit(client, comp, chal_a, ada, "flag{a}")  # ada first-bloods A
+    await _submit(client, comp, chal_b, ada, "flag{b}")  # ada first-bloods B → 300, 2 solves
+    await _submit(client, comp, chal_a, bob, "flag{a}")  # bob solves A after ada → no first blood
+    # bob opens a ticket → bob ticket_count 1.
+    await client.post(
+        f"/api/competitions/{comp}/tickets",
+        json={"subject": "help", "body": "?", "challenge_id": chal_a},
+        headers=_auth(bob),
+    )
 
     resp = await client.get(
         f"/api/competitions/{comp}/analytics/teams", headers=_auth(admin)
@@ -184,6 +190,13 @@ async def test_team_analytics_ranks_and_counts(client):
     assert by_name["cara"]["points"] == 0 and by_name["cara"]["solve_count"] == 0
     assert by_name["ada"]["last_solve_at"] is not None
     assert by_name["cara"]["last_solve_at"] is None
+    # First bloods: ada took both challenges first; bob none.
+    assert by_name["ada"]["first_bloods"] == 2
+    assert by_name["bob"]["first_bloods"] == 0
+    assert by_name["cara"]["first_bloods"] == 0
+    # Tickets: only bob opened one.
+    assert by_name["bob"]["ticket_count"] == 1
+    assert by_name["ada"]["ticket_count"] == 0
 
 
 async def test_analytics_is_staff_only(client):

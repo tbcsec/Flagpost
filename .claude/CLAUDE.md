@@ -181,8 +181,8 @@ What's built:
   `utils/analytics.py` + `routers/analytics.py` gated on
   `view_competition_analytics` (staff). `/analytics/challenges` (per-challenge
   solves / attempts+fails / completion rate / avg solve time / hints / linked
-  tickets) and `/analytics/teams` (per-subject rank/points/solves/last-solve,
-  reusing `compute_scoreboard`). Pure read model off existing submission/hint/
+  tickets) and `/analytics/teams` (per-subject rank/points/solves/first-bloods/
+  tickets-opened/last-solve, reusing `compute_scoreboard`). Pure read model off existing submission/hint/
   ticket data — **no migration**; timestamp math in Python for SQLite/Postgres
   parity. Frontend: wired `/analytics` page (overview + two tables),
   `use-analytics.ts`. `view_global_analytics` (cross-site rollup) stays unbuilt

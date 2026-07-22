@@ -257,6 +257,8 @@ export interface TeamAnalytics {
   rank: number;
   points: number;
   solve_count: number;
+  first_bloods: number;
+  ticket_count: number;
   last_solve_at: string | null;
 }
 

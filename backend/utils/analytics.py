@@ -165,14 +165,14 @@ async def team_analytics(
     db: AsyncSession, competition: Competition
 ) -> list[dict[str, Any]]:
     """Per-subject standing (rank/points/last solve from the scoreboard) plus a
-    distinct-challenge solve count — the "team progress" view."""
+    distinct-challenge solve count, first-blood count, and tickets opened — the
+    "team progress" view."""
+    from models.ticket import Ticket
+
+    team_mode = competition.participation_mode == "team"
+    subject_col = Submission.team_id if team_mode else Submission.user_id
     board = await compute_scoreboard(db, competition)
 
-    subject_col = (
-        Submission.team_id
-        if competition.participation_mode == "team"
-        else Submission.user_id
-    )
     solve_rows = (
         await db.execute(
             select(subject_col, func.count(distinct(Submission.challenge_id)))
@@ -182,6 +182,38 @@ async def team_analytics(
     ).all()
     solves_by_subject = {sid: count for sid, count in solve_rows}
 
+    # First blood = the earliest awarded submission per challenge. Fetch awarded
+    # solves oldest-first and take the first subject seen for each challenge.
+    firstblood_rows = (
+        await db.execute(
+            select(subject_col, Submission.challenge_id, Submission.created_at)
+            .where(Submission.competition_id == competition.id, *_AWARDED)
+            .order_by(Submission.created_at, Submission.id)
+        )
+    ).all()
+    first_solver: dict[str, str] = {}
+    for subject_id, challenge_id, _created in firstblood_rows:
+        first_solver.setdefault(challenge_id, subject_id)
+    first_bloods: dict[str, int] = {}
+    for subject_id in first_solver.values():
+        first_bloods[subject_id] = first_bloods.get(subject_id, 0) + 1
+
+    # Tickets opened, credited to the subject: the opener's team (team mode) or
+    # the opener (individual mode). A team-mode ticket from a teamless opener has
+    # a null team_id and simply isn't counted against any team.
+    ticket_subject_col = Ticket.team_id if team_mode else Ticket.opener_user_id
+    ticket_rows = (
+        await db.execute(
+            select(ticket_subject_col, func.count(Ticket.id))
+            .where(
+                Ticket.competition_id == competition.id,
+                ticket_subject_col.is_not(None),
+            )
+            .group_by(ticket_subject_col)
+        )
+    ).all()
+    tickets_by_subject = {sid: count for sid, count in ticket_rows}
+
     return [
         {
             "subject_id": entry["subject_id"],
@@ -189,6 +221,8 @@ async def team_analytics(
             "rank": entry["rank"],
             "points": entry["points"],
             "solve_count": solves_by_subject.get(entry["subject_id"], 0),
+            "first_bloods": first_bloods.get(entry["subject_id"], 0),
+            "ticket_count": tickets_by_subject.get(entry["subject_id"], 0),
             "last_solve_at": entry["last_solve_at"],
         }
         for entry in board["entries"]

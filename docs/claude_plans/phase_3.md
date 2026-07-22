@@ -271,7 +271,9 @@ and feedback — per-competition toggleable, 404 when disabled), `utils/analytic
 endpoints: `/analytics/challenges` (per-challenge solves, attempts/fails,
 completion rate, average solve time — from `competition.start_at` — plus hints
 used and linked ticket count) and `/analytics/teams` (per-subject rank / net
-points / distinct-solve count / last solve, reusing `compute_scoreboard`).
+points / distinct-solve count / **first-blood count** / **tickets opened** /
+last solve, reusing `compute_scoreboard`; first blood = earliest awarded
+submission per challenge).
 Timestamp math is done in Python for SQLite/Postgres portability. No migration
 (pure read model). Frontend: the wired `/analytics` page (overview strip +
 per-challenge and competitors/teams tables), `use-analytics.ts`; the placeholder

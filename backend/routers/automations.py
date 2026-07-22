@@ -26,6 +26,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import get_current_user, require_permission, user_has_permission
+from auth.membership import effective_permissions
+from auth.permissions import Scope, scope_of
 from db import get_db
 from models.automation import AutomationRule
 from models.competition import Competition
@@ -38,7 +40,7 @@ from schemas.automation import (
     RuleOut,
     RuleUpdate,
 )
-from utils.automation_catalog import build_catalog
+from utils.automation_catalog import build_catalog, required_permission
 from utils.event_bus import event_bus
 
 router = APIRouter(prefix="/api/automations", tags=["automations"])
@@ -72,6 +74,28 @@ async def _require_module_enabled(db: AsyncSession, competition_id: str) -> None
         )
 
 
+async def _authorize_trigger(
+    db: AsyncSession, user: User, trigger_type: str, competition_id: str | None
+) -> None:
+    """403 unless ``user`` may observe ``trigger_type`` in the rule's scope
+    (§5.1 trigger authorization) — so an org rule can't automate on an event its
+    creator isn't allowed to see (e.g. a Judge on ``role.assigned``). A
+    global-scoped governing permission is checked site-wide; a competition one
+    against the rule's competition."""
+    permission = required_permission(trigger_type)
+    scope_competition = (
+        None if scope_of(permission) is Scope.GLOBAL else competition_id
+    )
+    if not await user_has_permission(db, user.id, permission, scope_competition):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Your role can't automate on '{trigger_type}' "
+                f"(requires '{permission}')"
+            ),
+        )
+
+
 def _dump_rule_fields(body: RuleCreate | RuleUpdate | PersonalRuleCreate) -> dict:
     return {
         "name": body.name,
@@ -100,12 +124,31 @@ async def _emit_rule_event(verb: str, rule: AutomationRule, actor: User) -> None
 
 @router.get("/catalog", response_model=AutomationCatalog)
 async def automation_catalog(
+    competition_id: str | None = None,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> AutomationCatalog:
     """Everything the visual builder is generated from — triggers + their
     payload fields, operators, and action config fields (§5.5). Authenticated-
-    only (personal-rule authors need it too, §5.1)."""
-    return AutomationCatalog(**build_catalog())
+    only (personal-rule authors need it too, §5.1).
+
+    The **trigger** list is filtered to events the caller may observe (§5.1
+    trigger authorization): with ``competition_id`` set, staff/member triggers
+    they hold there are included; global-admin triggers only if held site-wide.
+    This mirrors the create-time enforcement so the builder never offers a
+    trigger the API would then reject."""
+    catalog = build_catalog()
+    perms = await effective_permissions(db, current_user.id)
+    global_perms = set(perms["global"])
+    here = global_perms | set(perms["by_competition"].get(competition_id, []))
+
+    def observable(event: str) -> bool:
+        permission = required_permission(event)
+        pool = global_perms if scope_of(permission) is Scope.GLOBAL else here
+        return permission in pool
+
+    catalog["triggers"] = [t for t in catalog["triggers"] if observable(t["event"])]
+    return AutomationCatalog(**catalog)
 
 
 # --- personal rules (§5.1) ---------------------------------------------------
@@ -232,6 +275,7 @@ async def create_rule(
 ) -> RuleOut:
     if competition_id is not None:
         await _require_module_enabled(db, competition_id)
+    await _authorize_trigger(db, current_user, body.trigger_type, competition_id)
     rule = AutomationRule(
         competition_id=competition_id,
         owner_user_id=None,
@@ -292,6 +336,9 @@ async def update_rule(
     db: AsyncSession = Depends(get_db),
 ) -> RuleOut:
     rule = await _editable_org_rule(db, rule_id, current_user)
+    # Re-check against the (possibly changed) trigger, scoped to the rule's own
+    # competition — you can't switch a rule onto an event you can't observe.
+    await _authorize_trigger(db, current_user, body.trigger_type, rule.competition_id)
     for key, value in _dump_rule_fields(body).items():
         setattr(rule, key, value)
     await db.commit()

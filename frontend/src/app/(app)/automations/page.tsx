@@ -36,7 +36,7 @@ export default function AutomationsPage() {
   const canCreate = access.has("automation_create");
   const canEdit = access.has("automation_edit");
 
-  const { data: catalog } = useAutomationCatalog();
+  const { data: catalog } = useAutomationCatalog(competition?.id);
   const { data: rules, isLoading, isError } = useAutomations(
     competition?.id,
     Boolean(competition) && canView,

@@ -512,7 +512,10 @@ export const automationsApi = {
     }),
   remove: (ruleId: string) =>
     apiFetch<void>(`/api/automations/${ruleId}`, { method: "DELETE" }),
-  catalog: () => apiFetch<AutomationCatalog>("/api/automations/catalog"),
+  catalog: (competitionId?: string) =>
+    apiFetch<AutomationCatalog>(
+      `/api/automations/catalog${competitionId ? `?competition_id=${competitionId}` : ""}`,
+    ),
   // Personal rules (§5.1): notify-self only, no automation permission needed.
   personal: {
     list: () => apiFetch<AutomationRule[]>("/api/automations/personal"),

@@ -30,13 +30,16 @@ export function useAutomations(competitionId?: string, enabled = true) {
   });
 }
 
-export function useAutomationCatalog() {
+/** The builder catalog. The **trigger** list is permission-filtered per
+ *  competition context (§5.1), so pass the competition whose rules are being
+ *  edited; omit it for the global (admin) surface. */
+export function useAutomationCatalog(competitionId?: string) {
   const isAuthenticated = useAuthStore((s) => s.status === "authenticated");
   return useQuery({
-    queryKey: automationKeys.catalog,
-    queryFn: () => automationsApi.catalog(),
+    queryKey: [...automationKeys.catalog, competitionId ?? "global"],
+    queryFn: () => automationsApi.catalog(competitionId),
     enabled: isAuthenticated,
-    staleTime: 5 * 60_000, // the catalog only changes with a deploy
+    staleTime: 5 * 60_000, // only changes with a deploy or a role change
   });
 }
 

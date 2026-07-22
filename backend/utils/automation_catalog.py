@@ -61,6 +61,66 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "user.registered": ["user_id"],
 }
 
+# The permission that governs *observing* each trigger event (§5.1 trigger
+# authorization). An org rule's creator must hold this in the rule's scope, so a
+# Judge can't automate on — and thereby exfiltrate — an admin-only event like a
+# role assignment. Tiers: global-admin domains (roles/users/site) need their
+# global permission; staff events need a staff competition permission; events
+# every competition member can already see map to `challenge_view` (the baseline
+# a Participant holds). A drift test asserts every triggerable event is mapped.
+TRIGGER_PERMISSIONS: dict[str, str] = {
+    # Global admin domains — a competition role never grants these.
+    "role.created": "manage_roles",
+    "role.updated": "manage_roles",
+    "role.deleted": "manage_roles",
+    "role.assigned": "manage_roles",
+    "role.unassigned": "manage_roles",
+    "user.registered": "manage_users",
+    "user.password_changed": "manage_users",
+    "site.settings_updated": "manage_site_settings",
+    # Competition-lifecycle / staff events.
+    "competition.created": "edit_competition",
+    "competition.updated": "edit_competition",
+    "competition.started": "edit_competition",
+    "competition.ended": "edit_competition",
+    "competition.time_remaining": "edit_competition",
+    "module.enabled": "edit_competition",
+    "module.disabled": "edit_competition",
+    "ticket.created": "ticket_view",
+    "ticket.assigned": "ticket_view",
+    "ticket.resolved": "ticket_view",
+    "ticket.message_posted": "ticket_view",
+    "feedback.submitted": "feedback_view_responses",
+    # Challenge authoring (draft/edit) is staff; play events are member-visible.
+    "challenge.created": "challenge_edit",
+    "challenge.updated": "challenge_edit",
+    "challenge.deleted": "challenge_edit",
+    "category.created": "challenge_edit",
+    "category.deleted": "challenge_edit",
+    # Member-visible events (published challenges, solves, scoreboard-facing).
+    "challenge.published": "challenge_view",
+    "challenge.solved": "challenge_view",
+    "challenge.hint_requested": "challenge_view",
+    "hint.released": "challenge_view",
+    "score.adjusted": "challenge_view",
+    "achievement.awarded": "challenge_view",
+    "announcement.published": "challenge_view",
+    "survey.opened": "challenge_view",
+    "competition.member_joined": "challenge_view",
+    "team.created": "challenge_view",
+    "team.member_joined": "challenge_view",
+    "team.member_left": "challenge_view",
+    "team.deleted": "challenge_view",
+}
+
+
+def required_permission(event: str) -> str:
+    """The permission gating a rule's use of ``event`` as a trigger (§5.1).
+    Falls back to the strictest global admin permission for any unmapped event
+    (fail-closed) — but the drift test keeps the map complete."""
+    return TRIGGER_PERMISSIONS.get(event, "manage_roles")
+
+
 _OPERATOR_LABELS = {
     "equals": "equals",
     "not_equals": "does not equal",

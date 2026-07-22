@@ -288,6 +288,16 @@ class AutomationRule:
   automatable with zero per-feature wiring, and a new event type is a new
   trigger for free. The `automation.*` events themselves are **not**
   triggerable (the trivial self-loop).
+- **Trigger authorization.** A trigger is *not* a free choice: each event maps
+  to the permission that governs observing it (`utils/automation_catalog.py`
+  `TRIGGER_PERMISSIONS` — role/user/site events need the global admin
+  permission, staff events a staff competition permission, member-visible
+  events `challenge_view`). Creating or editing an **org** rule checks the
+  creator holds that permission in the rule's scope, and the `/catalog` trigger
+  list is filtered the same way — so a Judge can't automate on (and exfiltrate)
+  `role.assigned` in their competition. **Personal** rules need no such check:
+  they only ever fire for events the owner *caused*, so they can't surface data
+  the owner didn't already act on.
 - **Scoping**: a rule with `competition_id = None` fires across every
   competition; scoping to one competition is the common case for
   organiser-authored rules. Creating/editing a competition's rules takes

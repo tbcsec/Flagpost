@@ -247,7 +247,7 @@ async def test_rule_crud_emits_events(client):
 
 
 async def test_catalog_generates_the_builder(client):
-    token = await _register(client, "anyone@example.com")
+    token = await admin_token(client)  # an admin sees every trigger
     catalog = (await client.get("/api/automations/catalog", headers=_auth(token))).json()
 
     triggers = {t["event"] for t in catalog["triggers"]}
@@ -281,6 +281,92 @@ def test_catalog_covers_every_action_without_drift():
     from utils.automation_catalog import ACTION_FIELDS
 
     assert set(ACTION_FIELDS) == set(ACTIONS)
+
+
+def test_every_trigger_has_a_governing_permission():
+    from auth.permissions import is_known
+    from utils.automation_catalog import TRIGGER_PERMISSIONS
+    from utils.event_catalog import TRIGGERABLE_EVENTS
+
+    assert set(TRIGGER_PERMISSIONS) == set(TRIGGERABLE_EVENTS)
+    assert all(is_known(p) for p in TRIGGER_PERMISSIONS.values())
+
+
+# --- trigger authorization (§5.1) --------------------------------------------
+
+
+async def test_judge_cannot_automate_on_admin_only_events(client):
+    comp = await _competition(client)
+    judge = await _judge(client, comp, "judge@example.com")
+
+    # A Judge holds no `manage_roles` / `manage_users` / `manage_site_settings`,
+    # so an org rule triggering on those events is refused (403) — closing the
+    # role.assigned observation leak.
+    for trigger in ("role.assigned", "role.created", "user.registered", "site.settings_updated"):
+        resp = await client.post(
+            f"/api/automations?competition_id={comp}",
+            json=_notify_rule(trigger=trigger),
+            headers=_auth(judge),
+        )
+        assert resp.status_code == 403, f"{trigger} should be forbidden for a judge"
+
+    # …but a Judge can automate on events they operate (challenge_view).
+    resp = await client.post(
+        f"/api/automations?competition_id={comp}",
+        json=_notify_rule(trigger="challenge.solved"),
+        headers=_auth(judge),
+    )
+    assert resp.status_code == 201
+
+
+async def test_admin_can_automate_on_role_events(client):
+    comp = await _competition(client)
+    admin = await admin_token(client)
+    resp = await client.post(
+        f"/api/automations?competition_id={comp}",
+        json=_notify_rule(trigger="role.assigned"),
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 201
+
+
+async def test_judge_cannot_switch_a_rule_onto_a_forbidden_trigger(client):
+    comp = await _competition(client)
+    judge = await _judge(client, comp, "judge@example.com")
+    rule = await _create_rule(client, judge, comp)  # challenge.solved — allowed
+
+    resp = await client.put(
+        f"/api/automations/{rule['id']}",
+        json=_notify_rule(trigger="role.assigned"),
+        headers=_auth(judge),
+    )
+    assert resp.status_code == 403
+
+
+async def test_catalog_trigger_list_is_permission_scoped(client):
+    comp = await _competition(client)
+    judge = await _judge(client, comp, "judge@example.com")
+    admin = await admin_token(client)
+
+    judge_cat = (
+        await client.get(
+            f"/api/automations/catalog?competition_id={comp}", headers=_auth(judge)
+        )
+    ).json()
+    judge_triggers = {t["event"] for t in judge_cat["triggers"]}
+    # A judge is offered their competition's events, never the admin-only ones.
+    assert "challenge.solved" in judge_triggers
+    assert "ticket.created" in judge_triggers
+    assert "role.assigned" not in judge_triggers
+    assert "user.registered" not in judge_triggers
+    assert "site.settings_updated" not in judge_triggers
+
+    admin_cat = (
+        await client.get(
+            f"/api/automations/catalog?competition_id={comp}", headers=_auth(admin)
+        )
+    ).json()
+    assert "role.assigned" in {t["event"] for t in admin_cat["triggers"]}
 
 
 # --- personal rules (§5.1) ----------------------------------------------------

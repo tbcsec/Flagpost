@@ -55,10 +55,16 @@ async def test_ssrf_rejects_bad_schemes_and_hosts(url):
         await validate_webhook_url(url)
 
 
-@pytest.mark.parametrize("url", ["http://1.1.1.1/x", "https://8.8.8.8/hook"])
-async def test_ssrf_allows_public_literal_ips(url):
-    # A public literal IP passes the resolved-IP check with no DNS.
-    await validate_webhook_url(url)
+@pytest.mark.parametrize("ip", ["1.1.1.1", "8.8.8.8"])
+async def test_ssrf_allows_public_addresses(ip, monkeypatch):
+    # A public address passes the resolved-IP check. Resolution is stubbed so
+    # the suite makes no real getaddrinfo call (which runs in a worker thread
+    # and can leak a socket warning) — the block logic itself is what's tested.
+    async def _resolves_to(host, port):
+        return [ip]
+
+    monkeypatch.setattr(webhook_security, "_resolve_host", _resolves_to)
+    await validate_webhook_url(f"https://webhook.example/{ip}")
 
 
 async def test_ssrf_refuses_unresolvable_host(monkeypatch):

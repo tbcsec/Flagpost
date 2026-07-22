@@ -149,6 +149,11 @@ What's built:
   `lib/automation-builder.ts` (unit-tested). Lives on `/automations` (competition
   rules + a personal notify-self section); Admin → Automations hosts global
   rules. No migration; the builder is additive over the Phase-1 engine/schema.
+  **Trigger authorization** (§5.1): `TRIGGER_PERMISSIONS` maps each event to the
+  permission that governs observing it; org-rule create/update enforce it and the
+  `/catalog?competition_id=` trigger list is filtered to match — so a Judge
+  can't automate on `role.assigned` etc. (personal rules are safe by the
+  owner-caused invariant, so they skip the check).
 - **Tier 3 Phase 4** — **feedback / surveys** (ROADMAP #22): the `feedback`
   optional module (the **second** one — shares the per-competition toggle with
   `automations`; routes 404 when disabled). `Survey` + `SurveyQuestion`

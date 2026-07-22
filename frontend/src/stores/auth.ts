@@ -13,31 +13,23 @@ import type { User } from "@/lib/types";
 
 type AuthStatus = "loading" | "authenticated" | "anonymous";
 
-// Palette is a UI preference (client state, §2). The app is dark-first; the
-// topbar toggle flips this and the shell mirrors it onto <html data-palette>.
-type Palette = "dark" | "light";
-
-const PALETTE_KEY = "fp:palette";
+// The palette is a per-user UI preference (client state, §2) that overrides the
+// site-wide default palette an administrator sets (§9). `null` = follow the site
+// default. The topbar palette menu writes this; the ThemeApplier resolves
+// override ?? site-default and mirrors it onto <html data-palette>.
+const PALETTE_OVERRIDE_KEY = "fp:palette-override";
 
 interface AuthState {
   accessToken: string | null;
   user: User | null;
   status: AuthStatus;
   activeCompetitionId: string | null;
-  palette: Palette;
+  paletteOverride: string | null;
   setSession: (accessToken: string, user: User) => void;
   clearSession: () => void;
   setActiveCompetition: (competitionId: string | null) => void;
-  togglePalette: () => void;
-  hydratePalette: () => void;
-}
-
-function persistPalette(palette: Palette) {
-  try {
-    window.localStorage.setItem(PALETTE_KEY, palette);
-  } catch {
-    /* private mode / SSR — non-fatal, the choice just won't persist */
-  }
+  setPaletteOverride: (palette: string | null) => void;
+  hydratePaletteOverride: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -45,24 +37,27 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   status: "loading",
   activeCompetitionId: null,
-  // SSR-safe default; the real saved choice is applied by hydratePalette on mount.
-  palette: "dark",
+  // SSR-safe default; the saved override is applied by hydratePaletteOverride.
+  paletteOverride: null,
   setSession: (accessToken, user) =>
     set({ accessToken, user, status: "authenticated" }),
   clearSession: () =>
     set({ accessToken: null, user: null, status: "anonymous" }),
   setActiveCompetition: (competitionId) =>
     set({ activeCompetitionId: competitionId }),
-  togglePalette: () =>
-    set((s) => {
-      const palette: Palette = s.palette === "dark" ? "light" : "dark";
-      persistPalette(palette);
-      return { palette };
-    }),
-  hydratePalette: () => {
+  setPaletteOverride: (palette) => {
     try {
-      const saved = window.localStorage.getItem(PALETTE_KEY);
-      if (saved === "light" || saved === "dark") set({ palette: saved });
+      if (palette) window.localStorage.setItem(PALETTE_OVERRIDE_KEY, palette);
+      else window.localStorage.removeItem(PALETTE_OVERRIDE_KEY);
+    } catch {
+      /* private mode / SSR — non-fatal, the choice just won't persist */
+    }
+    set({ paletteOverride: palette });
+  },
+  hydratePaletteOverride: () => {
+    try {
+      const saved = window.localStorage.getItem(PALETTE_OVERRIDE_KEY);
+      if (saved) set({ paletteOverride: saved });
     } catch {
       /* no-op */
     }

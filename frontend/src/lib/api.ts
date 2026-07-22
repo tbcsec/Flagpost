@@ -30,6 +30,8 @@ import type {
   Permissions,
   Scoreboard,
   SignedUrl,
+  SiteSettings,
+  SiteSettingsAdmin,
   SubmitResult,
   Team,
   Ticket,
@@ -362,6 +364,16 @@ export const dashboardApi = {
     apiFetch<ChallengeHealth[]>(`${dashboardApi.base(competitionId)}/challenge-health`),
   me: (competitionId: string) =>
     apiFetch<MyStanding>(`${dashboardApi.base(competitionId)}/me`),
+};
+
+export const siteSettingsApi = {
+  // Public read — served unauthenticated so login/register can brand themselves.
+  get: () => apiFetch<SiteSettings>("/api/site-settings", {}, { auth: false }),
+  update: (input: { platform_name: string; default_palette: string; accent: string }) =>
+    apiFetch<SiteSettingsAdmin>("/api/site-settings", {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
 };
 
 export const auditLogApi = {

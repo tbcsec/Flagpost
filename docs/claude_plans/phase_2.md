@@ -111,32 +111,40 @@ Cheap now that the WS infrastructure exists — it's the "feels alive" detail.
   (`tests/test_presence.py`); end-to-end join/broadcast/clear + payload shape +
   staff-role + RBAC (`tests/test_realtime.py`); `summarizePresence` (vitest).
 
-## Phase 4 — Site-wide theming (§9) — 🔜 NEXT
+## Phase 4 — Site-wide theming (§9) — ✅ DONE
 
 Themes are **global / site-wide only** (per-competition dropped, see Context).
-The token layer already supports it — every colour is an HSL-channel variable,
-so overriding a small set at the root recolours the whole surface.
+Owner decision during the phase: palette/background stays a **curated-preset**
+choice (not a free-form background picker) — a palette is ~15 interdependent
+channels that must hold contrast + elevation + hue together, so presets are the
+only way to guarantee legibility; the accent gets the full custom-hex treatment
+because it's one colour into a swap-designed slot. The shipped presets are
+bespoke (not the reference mockup's): **Harbor/Eclipse/Umbra** (dark),
+**Daybreak/Sandstone** (light).
 
-- Backend: a **site-settings** singleton (single-row table, or a small
-  key/value) holding the site theme — default palette (dark/light) + accent
-  colour — plus the platform name already stubbed on Admin → Appearance. A
-  public read endpoint (branding is needed on the login/register screens before
-  auth) and an update endpoint gated on a new global **`manage_site_settings`**
-  permission (add to §7.1 first; Administrator-only). The update is a mutation,
-  so emit **`site.settings_updated`** (new — add to §3.2 first). Migration adds
-  the settings table.
-- Frontend: wire the placeholder **Admin → Appearance** page — platform name,
-  default palette, and an accent picker — to real persistence, and apply the
-  accent site-wide by overriding the `--primary` / `--ring` token channels at
-  the root from the stored setting. The stored default palette sets the initial
-  light/dark for a user with no saved personal preference (the per-user toggle
-  still wins). The **logo never takes the accent** (LOGO-SPEC §7 — the mono mark
-  on a branded ground). Login/register pick up the platform name + accent via
-  the public read.
-- Tests: settings round-trip, RBAC (only `manage_site_settings` can update), the
-  event, and that the applied accent resolves through the token layer.
+- Backend (`site_settings` required-core module): a **SiteSettings singleton**
+  (lazy `get_or_create`, no data migration needed) holding platform name +
+  default palette + accent. Public `GET /api/site-settings` (login/register
+  brand before auth) and `PUT` gated on the new global **`manage_site_settings`**
+  (§7.1); the update emits **`site.settings_updated`** (§3.2). Palette/accent are
+  regex-validated (a slug, or `#RRGGBB`) so neither can inject CSS/attributes.
+  Migration adds the table. **System roles now re-sync from the catalog on every
+  startup** (`seed_system_roles`) so the new permission actually reaches an
+  already-migrated Administrator — the general fix for "a permission added after
+  install".
+- Frontend: unique palettes in `globals.css`; a `lib/theme.ts` registry + colour
+  math (hex→HSL, YIQ-based on-accent foreground, `resolveTheme`/`applyTheme`); a
+  `ThemeApplier` mounted above every page that applies palette (per-user override
+  ?? site default) + accent, with a **no-flash inline script** priming from a
+  cached resolved theme. Admin → Appearance wired with live preview; a topbar
+  **palette menu** for the per-user override; the accent overrides only
+  `--primary`/`--ring` (+ foreground) — `--success` and the **logo never take the
+  accent** (LOGO-SPEC §7). Login/register/sidebar/tab-title pick up the platform
+  name via the public read.
+- Tests: settings round-trip, RBAC, validation, the event (backend); the colour
+  math + `applyTheme` (vitest).
 
-## Phase 5 — Custom role editor, admin (#21, §7.4)
+## Phase 5 — Custom role editor, admin (#21, §7.4) — 🔜 NEXT
 
 The three built-in roles already cover Tiers 0–1; this lets an organiser hand
 out narrower access (e.g. a challenge-author-only role).

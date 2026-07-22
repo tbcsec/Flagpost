@@ -12,6 +12,7 @@ from models.challenge import Category, Challenge
 from models.competition import Competition
 from models.hint import Hint, HintReveal
 from models.role import Role, RoleAssignment
+from models.site_settings import SiteSettings
 from models.submission import Submission
 from models.team import Team, TeamMembership
 from models.ticket import Ticket, TicketMessage
@@ -28,6 +29,7 @@ __all__ = [
     "HintReveal",
     "Role",
     "RoleAssignment",
+    "SiteSettings",
     "Submission",
     "RefreshSession",
     "Team",

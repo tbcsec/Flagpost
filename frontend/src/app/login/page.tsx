@@ -15,11 +15,14 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
 import { useLogin } from "@/lib/hooks/use-users";
 
 export default function LoginPage() {
   const router = useRouter();
   const login = useLogin();
+  const { data: settings } = useSiteSettings();
+  const platformName = (settings ?? FALLBACK_SETTINGS).platform_name;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -34,7 +37,7 @@ export default function LoginPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 p-8">
       <div className="flex justify-center">
-        <Lockup size={40} theme="dark" />
+        <Lockup size={40} theme="dark" label={platformName} />
       </div>
       <Card>
         <CardHeader>

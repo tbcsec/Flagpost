@@ -113,8 +113,8 @@ the MVP line.
 
 **Status: in progress** — phased build plan in `docs/claude_plans/phase_2.md`.
 Phase 0 (pre-Tier-2 gap fixes), Phase 1 (#16, judge/admin dashboard),
-Phase 2 (#18, support tickets) and Phase 3 (#19, presence) are done; Phase 4
-(site-wide theming) is next, followed by Phase 5 (#21, custom role editor).
+Phase 2 (#18, support tickets), Phase 3 (#19, presence) and Phase 4 (#20,
+site-wide theming) are done; Phase 5 (#21, custom role editor) is next.
 Two owner scope changes from the list below: **#17 (challenge
 lifecycle) is deferred to a future tier** (needs more design), and **#20 is
 rescoped from per-competition to site-wide theming** (the

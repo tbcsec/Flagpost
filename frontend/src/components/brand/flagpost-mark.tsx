@@ -53,10 +53,13 @@ export interface LockupProps {
   size?: number;
   theme?: "light" | "dark";
   className?: string;
+  /** The wordmark text — the site's platform name (§9). Defaults to "Flagpost".
+   *  The mark itself never changes; only the name is white-labelled. */
+  label?: string;
 }
 
-/** The mark + "Flagpost" wordmark, horizontally locked up (LOGO-SPEC §4). */
-export function Lockup({ size = 28, theme = "dark", className }: LockupProps) {
+/** The mark + wordmark, horizontally locked up (LOGO-SPEC §4). */
+export function Lockup({ size = 28, theme = "dark", className, label = "Flagpost" }: LockupProps) {
   return (
     <span
       className={className}
@@ -73,7 +76,7 @@ export function Lockup({ size = 28, theme = "dark", className }: LockupProps) {
           color: "hsl(var(--foreground))",
         }}
       >
-        Flagpost
+        {label}
       </span>
     </span>
   );

@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
+import { ThemeApplier } from "@/components/theme/theme-applier";
 import { Toaster } from "@/components/ui/toaster";
 import { authApi } from "@/lib/api";
 
@@ -36,6 +37,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <SessionRestorer />
+      <ThemeApplier />
       {children}
       <Toaster />
     </QueryClientProvider>

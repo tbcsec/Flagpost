@@ -65,14 +65,29 @@ SYSTEM_ROLE_SPECS: list[dict] = [
 
 
 async def seed_system_roles(session: AsyncSession) -> None:
-    """Insert any missing built-in roles. Idempotent — safe to call repeatedly."""
+    """Insert missing built-in roles and re-sync existing ones to the catalog.
+
+    Idempotent — safe to call repeatedly (and called on every startup). The
+    permission catalog (auth/permissions.py) is the source of truth for what a
+    system role can do (§7.3), so an existing system role's stored permission
+    set is brought back into line with its spec here. That's how a permission
+    *added to the catalog after* an install was first migrated (e.g. a new
+    module's keys) reaches that install's built-in roles without a hand-written
+    data migration — the migration only provisions a fresh DB. Custom roles and
+    any non-system role sharing a name are never touched.
+    """
     for spec in SYSTEM_ROLE_SPECS:
         existing = await session.scalar(
-            select(Role).where(Role.name == spec["name"])
+            select(Role).where(Role.name == spec["name"], Role.is_system.is_(True))
         )
-        if existing is not None:
+        if existing is None:
+            session.add(Role(is_system=True, **spec))
             continue
-        session.add(Role(is_system=True, **spec))
+        # Re-sync from the spec — an admin can't edit a system role directly
+        # (§7.3), so its stored set should always equal the catalog-derived spec.
+        existing.description = spec["description"]
+        existing.scope = spec["scope"]
+        existing.permissions = spec["permissions"]
     await session.commit()
 
 

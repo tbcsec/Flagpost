@@ -74,6 +74,9 @@ PERMISSIONS: tuple[Permission, ...] = (
     Permission("manage_users", "Users & Roles", Scope.GLOBAL),
     Permission("manage_roles", "Users & Roles", Scope.GLOBAL),
     Permission("view_all_users", "Users & Roles", Scope.GLOBAL),
+    # Site Settings — the site-wide theme/branding an administrator sets for the
+    # whole install (§9, site-wide theming). Global-scoped, Administrator-only.
+    Permission("manage_site_settings", "Site Settings", Scope.GLOBAL),
     # Analytics
     Permission(
         "view_competition_analytics", "Analytics", Scope.COMPETITION

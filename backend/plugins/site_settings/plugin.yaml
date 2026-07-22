@@ -1,0 +1,10 @@
+id: site_settings
+name: Site Settings
+version: 1.0.0
+# Required-core (§11.3): the site-wide theme/branding an administrator sets for
+# the whole install. Global (not competition-scoped) — no admin enable/disable
+# toggle, and no competition dependency.
+required_core: true
+provides:
+  routes: true
+  event_listeners: false

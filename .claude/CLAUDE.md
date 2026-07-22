@@ -29,8 +29,8 @@ file, don't ignore it.
 
 <!-- Update this line as tiers/phases complete. -->
 **Tier 0 and Tier 1 are complete. Tier 2 ("Makes It Good") is underway,
-planned phase-by-phase in `docs/claude_plans/phase_2.md`. Phases 0–3 are
-done; Phase 4 (site-wide theming) is next.** See `docs/ROADMAP.md` for
+planned phase-by-phase in `docs/claude_plans/phase_2.md`. Phases 0–4 are
+done; Phase 5 (custom role editor) is next.** See `docs/ROADMAP.md` for
 the full tier breakdown. Don't sneak Tier 3 polish into Tier 2 work —
 that's scope creep, not helpfulness.
 
@@ -74,6 +74,19 @@ What's built:
   others viewing" on the challenge dialog (a new presence-only `challenge`
   room) and "a judge is looking at this ticket" on the Phase 2 ticket room.
   Frontend: `usePresence` + `PresenceIndicator`.
+- **Tier 2 Phase 4** — **site-wide theming** (§9), a required-core
+  `site_settings` module: a **SiteSettings singleton** (platform name +
+  default palette + accent), public `GET` (login/register brand before auth) +
+  `manage_site_settings`-gated `PUT` emitting `site.settings_updated`.
+  Curated palette presets (**Harbor/Eclipse/Umbra** dark, **Daybreak/Sandstone**
+  light — a palette is a full token set, not a free-form background picker);
+  accent is one hue overriding only `--primary`/`--ring` (+ YIQ-chosen
+  foreground), preset or custom hex, never touching `--success`/the logo
+  (LOGO-SPEC §7). `lib/theme.ts` (registry + colour math) + a `ThemeApplier`
+  (palette = per-user override ?? site default; no-flash inline script) + the
+  topbar palette menu + the wired Admin → Appearance page. System roles now
+  **re-sync from the permission catalog on every startup** (`seed_system_roles`)
+  so a newly-added permission reaches an already-migrated Administrator.
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0009 (synchronous event dispatch), ADR-0010 (seeded default

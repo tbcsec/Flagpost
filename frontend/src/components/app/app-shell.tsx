@@ -6,10 +6,12 @@ import * as React from "react";
 
 import { AnnouncementBanner } from "@/components/announcements/announcement-banner";
 import { Lockup } from "@/components/brand/flagpost-mark";
+import { PaletteMenu } from "@/components/theme/palette-menu";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { useCompetitions } from "@/lib/hooks/use-competitions";
 import { useAccess } from "@/lib/hooks/use-permissions";
+import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
 import { useLogout } from "@/lib/hooks/use-users";
 import { cn } from "@/lib/utils";
 import { NOTIFICATIONS } from "@/lib/placeholder-data";
@@ -88,13 +90,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [adminOpen, setAdminOpen] = React.useState(pathname.startsWith("/admin"));
   const logout = useLogout();
   const user = useAuthStore((s) => s.user);
-  const hydratePalette = useAuthStore((s) => s.hydratePalette);
   const access = useAccess();
+  const { data: siteSettings } = useSiteSettings();
+  const platformName = (siteSettings ?? FALLBACK_SETTINGS).platform_name;
 
-  // Apply the saved light/dark choice once on mount.
-  React.useEffect(() => {
-    hydratePalette();
-  }, [hydratePalette]);
+  // The theme (palette + accent) is applied globally by <ThemeApplier>, which
+  // also restores the saved per-user palette override — the shell no longer
+  // touches <html data-palette> itself.
 
   // Close the mobile drawer whenever the route changes.
   React.useEffect(() => {
@@ -167,7 +169,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
       >
         <div className={cn("flex items-center gap-2 px-1 pb-5", collapsed && !mobileOpen ? "md:justify-center" : "justify-start")}>
-          {navExpanded && <Lockup size={26} theme="dark" />}
+          {navExpanded && <Lockup size={26} theme="dark" label={platformName} />}
           <button
             onClick={() => setCollapsed((c) => !c)}
             title="Toggle sidebar"
@@ -287,8 +289,6 @@ function Topbar({
   pathname: string;
   onOpenMenu: () => void;
 }) {
-  const palette = useAuthStore((s) => s.palette);
-  const togglePalette = useAuthStore((s) => s.togglePalette);
   const activeCompetitionId = useAuthStore((s) => s.activeCompetitionId);
   const setActiveCompetition = useAuthStore((s) => s.setActiveCompetition);
   const { data: competitions } = useCompetitions();
@@ -296,12 +296,6 @@ function Topbar({
   const [notifOpen, setNotifOpen] = React.useState(false);
   const notifRef = React.useRef<HTMLDivElement>(null);
   const hasUnread = NOTIFICATIONS.some((n) => n.unread);
-
-  // Keep <html data-palette> in sync with the store so the whole surface
-  // recolours when the toggle flips (§9 live palette switching).
-  React.useEffect(() => {
-    document.documentElement.dataset.palette = palette;
-  }, [palette]);
 
   // Default the active competition to the first one once the list loads.
   React.useEffect(() => {
@@ -387,17 +381,7 @@ function Topbar({
         )}
       </div>
 
-      <button
-        onClick={togglePalette}
-        title="Toggle light / dark"
-        className="flex items-center text-muted-foreground hover:text-foreground"
-      >
-        {palette === "dark" ? (
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M21.5 14.5A9 9 0 1 1 9.5 2.5a7 7 0 0 0 12 12Z" /></svg>
-        ) : (
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5" /><g stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="1" x2="12" y2="4" /><line x1="12" y1="20" x2="12" y2="23" /><line x1="1" y1="12" x2="4" y2="12" /><line x1="20" y1="12" x2="23" y2="12" /><line x1="4.2" y1="4.2" x2="6.3" y2="6.3" /><line x1="17.7" y1="17.7" x2="19.8" y2="19.8" /><line x1="4.2" y1="19.8" x2="6.3" y2="17.7" /><line x1="17.7" y1="6.3" x2="19.8" y2="4.2" /></g></svg>
-        )}
-      </button>
+      <PaletteMenu />
     </div>
   );
 }

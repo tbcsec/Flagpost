@@ -15,6 +15,7 @@ from auth.seed import (
     DEFAULT_ADMIN_EMAIL,
     admin_has_default_password,
     seed_admin_user,
+    seed_system_roles,
 )
 from config import settings
 from db import SessionLocal
@@ -37,6 +38,10 @@ async def lifespan(app: FastAPI):
     migration the container runs before this): seed the default administrator
     and warn loudly while it still has its default password (ADR-0010)."""
     async with SessionLocal() as session:
+        # Re-sync the built-in roles to the current permission catalog first, so
+        # an install migrated before a permission was added still grants it
+        # (§7.3). Then the admin user (its Administrator role now current).
+        await seed_system_roles(session)
         await seed_admin_user(session)
         if await admin_has_default_password(session):
             logger.warning(

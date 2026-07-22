@@ -13,18 +13,30 @@
  * `--color-*` tokens (via Tailwind's `bg-primary`, `text-muted-foreground`,
  * …), never a raw hex value.
  *
- * Palettes switch via a `data-palette` attribute on <html> (default = dark).
- * `@theme inline` maps each Tailwind colour token onto `hsl(var(--channel))`
- * so the generated utilities resolve the variables *at runtime*, which is what
+ * Palettes switch via a `data-palette` attribute on <html>. Each named palette
+ * is a full set of surface/text/border channels; the site-wide default is set
+ * by an administrator (Admin → Appearance, §9 site-wide theming) and a user can
+ * override it for themselves. Shipped presets:
+ *   dark  — harbor (default, blue-slate), eclipse (near-black violet-neutral),
+ *           umbra (warm graphite)
+ *   light — daybreak (cool white), sandstone (warm paper)
+ * `@theme inline` maps each Tailwind colour token onto `hsl(var(--channel))` so
+ * the generated utilities resolve the variables *at runtime*, which is what
  * makes live palette switching work.
  *
- * The accent is Flagpost signal green (LOGO-SPEC §2.3, §10): the brand green and
- * success green are the same hue by intention, dark-corrected on the dark
- * palette. This replaces the placeholder blue the Tier 0 scaffold shipped.
+ * ACCENT vs PALETTE (§9): a palette owns *surface* colours (background, card,
+ * text, border); the ACCENT owns *action* colours — it's a single hue written
+ * only into `--primary` / `--ring` (+ their foreground). Each palette ships a
+ * default accent of Flagpost signal green (LOGO-SPEC §2.3), dark-corrected on
+ * dark grounds; the admin's accent choice overrides just those channels at the
+ * root at runtime, leaving surfaces and the brand `--success` green untouched
+ * (the logo never takes the accent — LOGO-SPEC §7).
  */
 
-/* Enable `dark:` utilities keyed off the active palette. */
-@custom-variant dark (&:where([data-palette="dark"], [data-palette="dark"] *));
+/* `dark:` utilities key off the mode the active palette declares (the shell
+ * mirrors each palette's light/dark character onto <html data-mode>), not the
+ * palette name — so a new dark palette doesn't have to be enumerated here. */
+@custom-variant dark (&:where([data-mode="dark"], [data-mode="dark"] *));
 
 /* Brand source values (LOGO-SPEC §2 & §10). The semantic palette references
  * these rather than redeclaring hex, so the tie between brand green and success
@@ -37,82 +49,197 @@
   --fp-sheet: 96 9% 90%; /* #E4E7E2 */
 }
 
-/* Default palette (dark). Applied when no data-palette is set, and explicitly
- * for data-palette="dark". Brand green uses the dark-corrected value. */
+/* Shared across palettes — geometry, not colour, so it isn't repeated per block. */
+:root {
+  --radius: 0.5rem;
+}
+
+/* Harbor (dark, default) — deep blue-slate. Applied when no data-palette is set
+ * and for data-palette="harbor". The default accent is dark-corrected brand green. */
 :root,
-[data-palette="dark"] {
-  --background: 222 47% 11%;
-  --foreground: 210 40% 96%;
+[data-palette="harbor"] {
+  --background: 213 41% 11%;
+  --foreground: 210 34% 96%;
 
-  --card: 222 47% 14%;
-  --card-foreground: 210 40% 96%;
+  --card: 213 38% 14%;
+  --card-foreground: 210 34% 96%;
 
-  --popover: 222 47% 14%;
-  --popover-foreground: 210 40% 96%;
+  --popover: 213 38% 14%;
+  --popover-foreground: 210 34% 96%;
 
   --primary: 155 61% 44%;
-  --primary-foreground: 222 47% 11%;
+  --primary-foreground: 213 41% 11%;
 
-  --secondary: 217 33% 24%;
-  --secondary-foreground: 210 40% 96%;
+  --secondary: 213 30% 23%;
+  --secondary-foreground: 210 34% 96%;
 
-  --muted: 217 33% 20%;
-  --muted-foreground: 215 20% 65%;
+  --muted: 213 30% 18%;
+  --muted-foreground: 213 20% 66%;
 
-  --accent: 217 33% 24%;
-  --accent-foreground: 210 40% 96%;
+  --accent: 213 30% 23%;
+  --accent-foreground: 210 34% 96%;
 
   --destructive: 0 72% 51%;
   --destructive-foreground: 210 40% 98%;
 
   /* Success is the brand green by intention (LOGO-SPEC §2.3) — never a second,
-     unrelated green. */
+     unrelated green, and never recoloured by the accent. */
   --success: 155 61% 44%;
-  --success-foreground: 222 47% 11%;
+  --success-foreground: 213 41% 11%;
 
   --warning: 38 92% 55%;
-  --warning-foreground: 222 47% 11%;
+  --warning-foreground: 213 41% 11%;
 
-  --border: 217 33% 24%;
-  --input: 217 33% 24%;
+  --border: 213 30% 23%;
+  --input: 213 30% 23%;
   --ring: 155 61% 44%;
-
-  --radius: 0.5rem;
 }
 
-[data-palette="light"] {
-  --background: 0 0% 100%;
-  --foreground: 222 47% 11%;
+/* Eclipse (dark) — near-black with a faint violet-neutral cast. Elegant, minimal. */
+[data-palette="eclipse"] {
+  --background: 250 12% 8%;
+  --foreground: 250 14% 95%;
+
+  --card: 250 11% 11%;
+  --card-foreground: 250 14% 95%;
+
+  --popover: 250 11% 11%;
+  --popover-foreground: 250 14% 95%;
+
+  --primary: 155 61% 44%;
+  --primary-foreground: 250 15% 8%;
+
+  --secondary: 250 9% 19%;
+  --secondary-foreground: 250 14% 95%;
+
+  --muted: 250 9% 15%;
+  --muted-foreground: 250 8% 65%;
+
+  --accent: 250 9% 19%;
+  --accent-foreground: 250 14% 95%;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 98%;
+
+  --success: 155 61% 44%;
+  --success-foreground: 250 15% 8%;
+
+  --warning: 38 92% 55%;
+  --warning-foreground: 250 15% 8%;
+
+  --border: 250 9% 19%;
+  --input: 250 9% 19%;
+  --ring: 155 61% 44%;
+}
+
+/* Umbra (dark) — warm graphite, a low-saturation brown-grey. Softer than navy. */
+[data-palette="umbra"] {
+  --background: 28 9% 9%;
+  --foreground: 30 12% 94%;
+
+  --card: 28 8% 12%;
+  --card-foreground: 30 12% 94%;
+
+  --popover: 28 8% 12%;
+  --popover-foreground: 30 12% 94%;
+
+  --primary: 155 61% 44%;
+  --primary-foreground: 28 10% 9%;
+
+  --secondary: 28 8% 20%;
+  --secondary-foreground: 30 12% 94%;
+
+  --muted: 28 8% 16%;
+  --muted-foreground: 30 8% 64%;
+
+  --accent: 28 8% 20%;
+  --accent-foreground: 30 12% 94%;
+
+  --destructive: 0 70% 52%;
+  --destructive-foreground: 0 0% 98%;
+
+  --success: 155 61% 44%;
+  --success-foreground: 28 10% 9%;
+
+  --warning: 38 92% 55%;
+  --warning-foreground: 28 10% 9%;
+
+  --border: 28 8% 20%;
+  --input: 28 8% 20%;
+  --ring: 155 61% 44%;
+}
+
+/* Daybreak (light) — crisp cool white with slate text. */
+[data-palette="daybreak"] {
+  --background: 210 40% 99%;
+  --foreground: 213 40% 12%;
 
   --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
+  --card-foreground: 213 40% 12%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
+  --popover-foreground: 213 40% 12%;
 
   --primary: 156 67% 37%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 210 40% 96%;
-  --secondary-foreground: 222 47% 11%;
+  --secondary: 210 40% 94%;
+  --secondary-foreground: 213 40% 12%;
 
-  --muted: 210 40% 96%;
-  --muted-foreground: 215 16% 47%;
+  --muted: 210 40% 94%;
+  --muted-foreground: 215 16% 42%;
 
-  --accent: 210 40% 96%;
-  --accent-foreground: 222 47% 11%;
+  --accent: 210 40% 94%;
+  --accent-foreground: 213 40% 12%;
 
-  --destructive: 0 72% 51%;
+  --destructive: 0 72% 48%;
   --destructive-foreground: 0 0% 100%;
 
   --success: 162 72% 28%;
   --success-foreground: 0 0% 100%;
 
-  --warning: 32 95% 44%;
+  --warning: 32 95% 42%;
   --warning-foreground: 0 0% 100%;
 
-  --border: 214 32% 91%;
-  --input: 214 32% 91%;
+  --border: 214 32% 88%;
+  --input: 214 32% 88%;
+  --ring: 156 67% 37%;
+}
+
+/* Sandstone (light) — warm paper/cream, easy on the eyes. */
+[data-palette="sandstone"] {
+  --background: 40 36% 96%;
+  --foreground: 28 24% 15%;
+
+  --card: 42 44% 98%;
+  --card-foreground: 28 24% 15%;
+
+  --popover: 42 44% 98%;
+  --popover-foreground: 28 24% 15%;
+
+  --primary: 156 67% 37%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 40 28% 90%;
+  --secondary-foreground: 28 24% 15%;
+
+  --muted: 40 28% 90%;
+  --muted-foreground: 33 14% 40%;
+
+  --accent: 40 28% 90%;
+  --accent-foreground: 28 24% 15%;
+
+  --destructive: 0 68% 45%;
+  --destructive-foreground: 0 0% 100%;
+
+  --success: 162 72% 28%;
+  --success-foreground: 0 0% 100%;
+
+  --warning: 32 90% 38%;
+  --warning-foreground: 0 0% 100%;
+
+  --border: 40 24% 85%;
+  --input: 40 24% 85%;
   --ring: 156 67% 37%;
 }
 

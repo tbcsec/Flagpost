@@ -278,3 +278,15 @@ export interface HintAuthored {
   cost: number;
   created_at: string;
 }
+
+// Site-wide theme + branding (§9). Public shape (login/register read it).
+export interface SiteSettings {
+  platform_name: string;
+  default_palette: string;
+  accent: string;
+}
+
+// Admin shape adds the last-updated timestamp.
+export interface SiteSettingsAdmin extends SiteSettings {
+  updated_at: string | null;
+}

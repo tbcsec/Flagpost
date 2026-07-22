@@ -131,8 +131,13 @@ ticket.created               ticket.assigned            ticket.resolved
 ticket.message_posted
 feedback.submitted
 announcement.published
+site.settings_updated
 automation.rule_triggered
 ```
+
+`site.settings_updated` is site-wide (not competition-scoped), so its payload
+carries no `competition_id` — the audit log records it with a null tenant,
+which is correct for a global setting change.
 
 This vocabulary is the single source of truth for what "things happen" in
 the system — it should be documented and versioned alongside the schema, not
@@ -402,6 +407,8 @@ Support Tickets           ticket_view, ticket_respond, ticket_assign,
                           ticket_view_internal_notes
 Announcements             announcement_create, announcement_delete
 Users & Roles             manage_users, manage_roles, view_all_users
+Site Settings             manage_site_settings  (global — the site-wide
+                          theme/branding an administrator sets, §9)
 Analytics                 view_competition_analytics, view_global_analytics
 Dashboard                 customize_dashboard, manage_dashboard_widgets
 Automations               automation_view, automation_create,
@@ -453,6 +460,14 @@ own competition" stays a safe assumption to build other features on. An
 admin who wants a variant — e.g. a Judge who can't override scores — clones
 the built-in role into a new, fully editable custom role rather than
 mutating the original.
+
+Because the catalog (7.1) is the source of truth for what a system role can
+do, the three built-ins are **re-synced from their specs on every startup**
+(`seed_system_roles`), not just inserted once at migration time. That's what
+lets a permission *added to the catalog after* an install was first migrated —
+a new module's keys, say — reach that install's built-in roles without a
+hand-written data migration. Custom roles (and any non-system role) are never
+touched by the sync.
 
 ### 7.4 Custom Roles
 
@@ -587,19 +602,40 @@ v4's `@theme` directive:
 
 This makes a few features possible without touching component code:
 
-- **Multiple built-in palettes** (e.g. a default dark theme, a
-  high-contrast/"operator" theme, a light theme), switched by a
-  `data-palette` attribute on `<html>`.
-- **Accent color override**: a custom-hex option converted to HSL at
-  runtime and written as a CSS variable override, recolouring the whole
-  surface without a rebuild or a forked stylesheet. The token layer
-  supports scoping this per-organisation/per-competition, but the
-  **current build scope is site-wide only** — one platform theme an
-  administrator sets for the whole install. The per-competition /
-  white-label variant is deferred and may return later if demand warrants
-  (ADR-0011).
-- **Dark mode** as a Tailwind custom variant (`@custom-variant dark`)
-  rather than a class scattered through every component.
+- **Multiple built-in palettes**, switched by a `data-palette` attribute on
+  `<html>`. As built (Tier 2 Phase 4) the shipped set is **Harbor** (dark,
+  default), **Eclipse** (dark), **Umbra** (dark), **Daybreak** (light) and
+  **Sandstone** (light) — each a full token set. Palettes are **curated
+  presets, not a free-form background picker**: a palette is ~15 interdependent
+  channels that have to hold AA text contrast, an elevation order, and a hue
+  family at once, so hand-tuned presets are the only way to *guarantee*
+  legibility. (A single arbitrary background hex would need a whole derivation
+  engine + contrast clamp to be safe — deferred; presets are the deliberate
+  scope.)
+- **Accent color override**: one hue written **only** into `--primary` /
+  `--ring` (+ an on-accent foreground chosen by YIQ perceived brightness),
+  converted from a preset or a custom hex to HSL channels at runtime — the
+  whole surface recolours without a rebuild or a forked stylesheet, while
+  `--success` (brand green) and the logo are left untouched (LOGO-SPEC §7).
+  Because an accent is one colour into a slot designed to be swapped, a fully
+  custom hex is safe here in a way a custom background is not. The token layer
+  supports scoping this per-organisation/per-competition, but the **current
+  build scope is site-wide only** — one platform theme an administrator sets
+  for the whole install (Admin → Appearance), persisted in a **site-settings
+  singleton** and read publicly so login/register brand themselves before auth.
+  A user may override just the *palette* for themselves (topbar menu, stored in
+  `localStorage`); the accent and platform name stay site-wide. The
+  per-competition / white-label variant is deferred and may return later if
+  demand warrants (ADR-0011).
+- **Palette mode** drives the `dark:` Tailwind custom variant
+  (`@custom-variant dark`) via a `data-mode` attribute the shell mirrors from
+  the active palette, rather than a class scattered through every component —
+  so a new dark palette needn't be enumerated in the variant.
+
+No flash on load: the resolved theme (palette + mode + any accent channels) is
+cached in `localStorage`, and a tiny inline script in the document head applies
+it before first paint; a `ThemeApplier` mounted above every page (public
+included) then reconciles it with the live site-settings read.
 
 Component library (shadcn/ui-style primitives) sits on top of this token
 layer, not the other way around — components should reference

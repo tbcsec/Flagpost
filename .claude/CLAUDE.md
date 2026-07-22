@@ -31,8 +31,8 @@ file, don't ignore it.
 **Tier 0, Tier 1, and Tier 2 ("Makes It Good") are all complete — Tier 2 was
 built phase-by-phase per `docs/claude_plans/phase_2.md` (Phases 0–5 all
 shipped). Tier 3 is the current tier and is now scoped/planned in
-`docs/claude_plans/phase_3.md` (Phases 0–9; **Phases 0–1 shipped**, Phase 2 —
-webhook hardening — next).
+`docs/claude_plans/phase_3.md` (Phases 0–9; **Phases 0–2 shipped**, Phase 3 —
+the visual rule builder — next).
 An owner revision pulled three previously-deferred subsystems up into Tier 3 —
 the **full automation engine** (§5), **dashboard drag-and-drop** (§10), and
 **collaborative rich-text/CRDT editing** (§4.2) — alongside the polish items
@@ -131,11 +131,20 @@ What's built:
   / award_achievement (`Achievement`). Reserved `automation_*` perms flipped
   live; Judge gained them. Frontend: `use-automations.ts` + minimal rules list
   on `/automations` (toggle/delete; builder is Phase 3).
+- **Tier 3 Phase 2** — **webhook hardening** (§5.4, ADR-0013) in
+  `utils/webhook_security.py`, applied by the `webhook` executor: per-call
+  **SSRF blocklist** (resolve host, reject any non-routable IP incl. the
+  `169.254.169.254` metadata endpoint + IPv4-mapped IPv6; refuse unresolvable;
+  `follow_redirects=False`), **header stripping** (Authorization/Cookie/Host/
+  X-Forwarded-*/content-*), and **content-type escaping + chat-token defang**
+  (Discord `@everyone`, Slack `<!…>`/`<@…>`, markdown links) of the values
+  substituted into an optional `body_template`. Residual/open: resolve→connect
+  TOCTOU + destination rate-limiting (§15). No migration; backend-only.
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0012 (event-dispatch sync-critical vs background, supersedes
-ADR-0009), ADR-0010 (seeded default admin creds), ADR-0011 (site-wide theming
-only — per-competition deferred).
+ADR-0009), ADR-0013 (webhook egress hardening), ADR-0010 (seeded default admin
+creds), ADR-0011 (site-wide theming only — per-competition deferred).
 The admin is a **seeded default account** (`admin@example.com` / `changeme`,
 ADR-0010, superseding the first-user bootstrap of ADR-0007); public
 registration never grants above Participant, and a loud startup warning

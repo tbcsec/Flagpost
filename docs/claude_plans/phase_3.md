@@ -135,7 +135,7 @@ Basic loop guards landed here (automation.* never triggers; cascade-depth cap
 `automation_max_depth=3`) — Phase 2 still owns the fuller §15 story. Judge
 gained the three automation perms (startup role re-sync propagates them).
 
-## Phase 2 — Webhook action hardening (§5.4)
+## Phase 2 — Webhook action hardening (§5.4) — ✅ DONE
 
 Its own phase because the threat is specific and adversarial: webhook targets +
 templates are admin-authored, but the **values substituted in** (team names,
@@ -158,6 +158,19 @@ challenge names, ticket titles) are competitor-controlled by design.
   runaway-loop guard — note it, don't build the full scheme without real
   trigger-volume numbers; a basic runaway-loop guard is in scope, tuned
   thresholds are not.
+
+**As built (ADR-0013):** all four hardenings live in `utils/webhook_security.py`,
+applied by `_execute_webhook`. The SSRF guard resolves the host and rejects if
+**any** resolved IP is non-routable (blocklist, not allowlist — organisers point
+at arbitrary Slack/Discord/custom endpoints), unwraps IPv4-mapped IPv6, refuses
+an unresolvable host, and keeps `follow_redirects=False`. Escaping + defang
+apply to a new optional **`body_template`** (`{field}` placeholders; a
+templateless webhook keeps sending the structured event as `json=`, which is
+serialisation-safe). The cascade-depth guard from Phase 1 is the "basic
+runaway-loop guard"; destination rate-limiting and the resolve→connect TOCTOU
+(no connection pinning) are the two residual gaps, both recorded in ADR-0013 and
+§15. Backend-only, no migration, not browser-observable — covered by unit tests
+(`test_webhook_security.py` + template/header cases in `test_automations.py`).
 
 ## Phase 3 — Visual rule builder UI (§5.5)
 

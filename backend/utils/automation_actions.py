@@ -44,7 +44,7 @@ from models.role import Role, RoleAssignment
 from models.score_adjustment import ScoreAdjustment
 from models.team import TeamMembership
 from models.ticket import Ticket, TicketMessage
-from utils import mailer
+from utils import mailer, webhook_security
 from utils.event_bus import event_bus
 from utils.notifications import broadcast_notifications, create_notifications
 
@@ -143,25 +143,46 @@ async def _execute_send_email(db, rule, event_name, payload, config) -> None:
     )
 
 
-# --- webhook (§5.3): outbound HTTP call — §5.4 hardening is the next phase ---
+# --- webhook (§5.3): outbound HTTP call, hardened per §5.4 -------------------
 
 
 async def _execute_webhook(db, rule, event_name, payload, config) -> None:
     import httpx
 
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        response = await client.post(
-            config["url"],
-            json={
-                "event": event_name,
-                "payload": payload,
-                "rule": {"id": rule.id, "name": rule.name},
-            },
-            headers=dict(config.get("headers") or {}),
-        )
-    logger.info(
-        "webhook: rule %s POST %s -> %s", rule.id, config["url"], response.status_code
-    )
+    url = config["url"]
+    # §5.4: SSRF check on every call (DNS may have changed since rule save).
+    try:
+        await webhook_security.validate_webhook_url(url)
+    except webhook_security.WebhookSecurityError as exc:
+        logger.warning("webhook: rule %s refused unsafe target: %s", rule.id, exc)
+        return
+
+    # §5.4: strip caller-uncontrollable headers from the admin header set.
+    headers = webhook_security.sanitize_headers(config.get("headers"))
+
+    # A body_template (admin-authored) has its competitor-controlled values
+    # escaped + defanged for the declared content type (§5.4); without one we
+    # send the structured event as JSON to a generic endpoint (json.dumps
+    # serialisation is injection-safe on its own).
+    request_kwargs: dict = {"headers": headers}
+    template = config.get("body_template")
+    if template:
+        content_type = config.get("content_type", "application/json")
+        body = webhook_security.render_webhook_body(template, payload, content_type)
+        headers["Content-Type"] = content_type
+        request_kwargs["content"] = body.encode()
+    else:
+        request_kwargs["json"] = {
+            "event": event_name,
+            "payload": payload,
+            "rule": {"id": rule.id, "name": rule.name},
+        }
+
+    # follow_redirects stays off (httpx default) so a 302 can't bounce the
+    # request past the SSRF check to an internal target (§5.4).
+    async with httpx.AsyncClient(timeout=5.0, follow_redirects=False) as client:
+        response = await client.post(url, **request_kwargs)
+    logger.info("webhook: rule %s POST %s -> %s", rule.id, url, response.status_code)
 
 
 # --- release_hint (§5.3): unlock a hint for the event's subject, free --------

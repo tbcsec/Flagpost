@@ -65,9 +65,20 @@ class SendEmailAction(BaseModel):
 
 class WebhookAction(BaseModel):
     type: Literal["webhook"]
-    # http(s) only — the fuller §5.4 SSRF/header hardening is the next phase.
+    # http(s) only; the per-call SSRF check + header stripping happen at send
+    # time (utils/webhook_security.py, §5.4) — this is just the cheap up-front
+    # scheme guard so an obviously-bad URL is rejected at rule save too.
     url: str = Field(pattern=r"^https?://", max_length=2000)
     headers: dict[str, str] | None = None
+    # With a body_template, competitor-controlled {field} values are escaped +
+    # defanged for this content type (§5.4). Without one, the structured event
+    # is sent as JSON to a generic endpoint.
+    content_type: Literal[
+        "application/json",
+        "application/x-www-form-urlencoded",
+        "text/plain",
+    ] = "application/json"
+    body_template: str | None = Field(default=None, max_length=_TEMPLATE_MAX)
 
 
 class ReleaseHintAction(BaseModel):

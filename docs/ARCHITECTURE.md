@@ -358,6 +358,17 @@ public-facing template engine would:
 This matters more on a competition platform than most SaaS products: team
 and challenge names are adversarial input by design.
 
+**As built (Tier 3 Phase 2, ADR-0013):** all four land in
+`utils/webhook_security.py`. The SSRF guard resolves the host and rejects if
+**any** resolved IP is non-routable (loopback/private/link-local — incl. the
+`169.254.169.254` metadata endpoint — reserved/multicast/unspecified; IPv4-mapped
+IPv6 unwrapped), refuses an unresolvable host, and the caller keeps redirects
+off. Escaping + defang apply to a webhook's optional `body_template` (where an
+admin composes a message with `{field}` placeholders); a templateless webhook
+sends the structured event as `json=`, which needs no escaping. Two residual
+gaps are called out in ADR-0013 and §15: the resolve-then-connect TOCTOU (no
+connection pinning yet) and destination rate-limiting.
+
 ### 5.5 Suggested Frontend: Visual Rule Builder
 
 A node-based Trigger → Condition → Action builder (rather than a form) pays
@@ -1055,7 +1066,9 @@ Keep this section honest — update as decisions are made:
   `VISION.md`'s Plugin Marketplace) will need a stronger isolation story
   before that ships.
 - Rate limiting / abuse prevention on the automation engine's webhook
-  action, beyond the SSRF/header hardening in §5.4. Needs to be sensible
+  action, beyond the SSRF/header/value hardening in §5.4 (that part landed
+  in Tier 3 Phase 2, ADR-0013; also still open there: the resolve-then-connect
+  TOCTOU / connection pinning). Rate limiting needs to be sensible
   rather than a flat cap: a single rule can legitimately fire thousands of
   times in quick succession on a large event (e.g. a "challenge solved"
   notification rule during a 1,000+ competitor competition isn't abuse,

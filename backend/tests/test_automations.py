@@ -610,30 +610,50 @@ async def test_send_email_action_interpolates(client, monkeypatch):
     assert chal in sent[0]["body"]
 
 
-async def test_webhook_action_posts_event_payload(client, monkeypatch):
+class _FakeResponse:
+    status_code = 200
+
+
+class _FakeHttpxClient:
+    """Captures webhook POSTs so tests can assert without a real request.
+    Accepts whatever kwargs _execute_webhook passes (follow_redirects, json,
+    content, headers)."""
+
     calls: list[dict] = []
 
-    class FakeResponse:
-        status_code = 200
+    def __init__(self, *args, **kwargs):
+        pass
 
-    class FakeClient:
-        def __init__(self, timeout=None):
-            pass
+    async def __aenter__(self):
+        return self
 
-        async def __aenter__(self):
-            return self
+    async def __aexit__(self, *exc):
+        return False
 
-        async def __aexit__(self, *exc):
-            return False
+    async def post(self, url, **kwargs):
+        _FakeHttpxClient.calls.append({"url": url, **kwargs})
+        return _FakeResponse()
 
-        async def post(self, url, json=None, headers=None):
-            calls.append({"url": url, "json": json, "headers": headers})
-            return FakeResponse()
 
+def _fake_webhook(monkeypatch):
+    """Fake httpx + skip the SSRF resolver (its own tests cover that), so a
+    webhook test is hermetic and about payload/headers, not DNS."""
     import httpx
 
-    monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
+    from utils import webhook_security
 
+    _FakeHttpxClient.calls = []
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeHttpxClient)
+
+    async def _ok(url):
+        return None
+
+    monkeypatch.setattr(webhook_security, "validate_webhook_url", _ok)
+    return _FakeHttpxClient.calls
+
+
+async def test_webhook_action_posts_structured_event_and_strips_headers(client, monkeypatch):
+    calls = _fake_webhook(monkeypatch)
     comp = await _competition(client)
     chal = await _challenge(client, comp)
     admin = await admin_token(client)
@@ -646,7 +666,12 @@ async def test_webhook_action_posts_event_payload(client, monkeypatch):
         actions=[{
             "type": "webhook",
             "url": "https://hooks.example.com/x",
-            "headers": {"X-Token": "abc"},
+            # X-Token is kept; Authorization + X-Forwarded-For are stripped (§5.4).
+            "headers": {
+                "X-Token": "abc",
+                "Authorization": "Bearer secret",
+                "X-Forwarded-For": "10.0.0.1",
+            },
         }],
     )
     await _solve(client, comp, chal, ada)
@@ -656,6 +681,45 @@ async def test_webhook_action_posts_event_payload(client, monkeypatch):
     assert calls[0]["json"]["event"] == "challenge.solved"
     assert calls[0]["json"]["payload"]["challenge_id"] == chal
     assert calls[0]["headers"] == {"X-Token": "abc"}
+
+
+async def test_webhook_template_body_escapes_and_defangs_adversarial_values(client, monkeypatch):
+    import json as _json
+
+    calls = _fake_webhook(monkeypatch)
+    comp = await _competition(client)
+    admin = await admin_token(client)
+
+    # Rule first, then publish the hostile-titled challenge so the rule is live
+    # when challenge.published fires (its payload carries `title`).
+    await _create_rule(
+        client,
+        admin,
+        comp,
+        trigger="challenge.published",
+        actions=[{
+            "type": "webhook",
+            "url": "https://hooks.example.com/slack",
+            "content_type": "application/json",
+            "body_template": '{"text":"Solved: {title}"}',
+        }],
+    )
+    # A title that is both a JSON-injection and a mass-ping attempt (§5.4).
+    hostile = '@everyone","admin":true'
+    await _challenge(client, comp, title=hostile, flag="flag{x}")
+    await event_bus.wait_for_background()
+
+    assert len(calls) == 1
+    body = calls[0]["content"].decode()
+    parsed = _json.loads(body)  # still valid JSON — value didn't break out
+    # The injected key isn't a real sibling; it survives only as escaped text.
+    assert '\\"admin\\":true' in body
+    assert parsed.get("admin") is None
+    assert "admin" in parsed["text"]
+    # @everyone was defanged: the literal token no longer renders as a ping.
+    assert "@everyone" not in parsed["text"]
+    assert "everyone" in parsed["text"]
+    assert calls[0]["headers"]["Content-Type"] == "application/json"
 
 
 async def test_cascade_depth_guard_stops_rule_loops(client):

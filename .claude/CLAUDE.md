@@ -31,8 +31,8 @@ file, don't ignore it.
 **Tier 0, Tier 1, and Tier 2 ("Makes It Good") are all complete — Tier 2 was
 built phase-by-phase per `docs/claude_plans/phase_2.md` (Phases 0–5 all
 shipped). Tier 3 is the current tier and is now scoped/planned in
-`docs/claude_plans/phase_3.md` (Phases 0–9; **Phases 0–5 shipped**, Phase 6 —
-dashboard drag-and-drop — next).
+`docs/claude_plans/phase_3.md` (Phases 0–9; **Phases 0–6 shipped**, Phase 7 —
+collaborative rich-text / CRDT editing — next).
 An owner revision pulled three previously-deferred subsystems up into Tier 3 —
 the **full automation engine** (§5), **dashboard drag-and-drop** (§10), and
 **collaborative rich-text/CRDT editing** (§4.2) — alongside the polish items
@@ -187,6 +187,26 @@ What's built:
   parity. Frontend: wired `/analytics` page (overview + two tables),
   `use-analytics.ts`. `view_global_analytics` (cross-site rollup) stays unbuilt
   (§6.3 consolidation deferred).
+- **Tier 3 Phase 6** — **dashboard drag-and-drop** (§10.2–10.5, ROADMAP #26):
+  the per-user layer over Tier-2's fixed widget registry (built additive on
+  purpose, §10.1). `DashboardLayout` (`dashboard_layouts`, keyed
+  `(user_id, dashboard_key)`; **per-user, not competition-scoped** — a personal
+  preference, so the competition in the route only scopes the check) + a
+  migration. Three endpoints on the existing required-core `dashboard` module —
+  `GET/PUT/DELETE .../dashboard/layout?dashboard_key=` gated on
+  `customize_dashboard`: GET returns saved layout or **null** (→ code default),
+  PUT upserts on exit-edit, DELETE = reset-to-default. Layout JSON is **opaque
+  to the backend** (frontend registry owns the widget catalog + legitimate
+  sizes; backend does shape/bound validation only — key allowlist, positive
+  grid units, ≤50 entries), so a new widget stays a frontend-only change. No
+  event (personal pref, like the theme palette override). Frontend:
+  `lib/dashboard/layout.ts` (pure `mergeLayout`/`cycleSize`/`toSaved`/`moveEntry`,
+  unit-tested), `DashboardGrid` edit mode (**native HTML5 drag-and-drop — no DnD
+  library**; per-widget size-cycle + show/hide; Save/Cancel/Reset), layout hooks
+  in `use-dashboard.ts`. Managers customize the `manager` dashboard; participants
+  keep the fixed default. The grid is an **ordered column-span flow** (CSS reflow),
+  not a 2D `{row,col}` engine; `manage_dashboard_widgets` stays Admin-only + unused
+  (widget-catalog governance, deferred).
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0012 (event-dispatch sync-critical vs background, supersedes

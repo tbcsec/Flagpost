@@ -284,7 +284,7 @@ global Administrator already reads any single competition's analytics via
 `challenge-health` widget already covers the at-a-glance case, so this is a
 dedicated page rather than duplicating it.
 
-## Phase 6 — Dashboard drag-and-drop (#26, §10.2–10.5)
+## Phase 6 — Dashboard drag-and-drop (#26, §10.2–10.5) — ✅ DONE
 
 Additive to the Tier-2 Phase-1 widget registry — which was built size-declaring
 and self-contained *precisely* so this layer is additive, not a rewrite (§10.1).
@@ -300,6 +300,35 @@ and self-contained *precisely* so this layer is additive, not a rewrite (§10.1)
   (§7.1) — enforce them.
 - Tests: layout round-trip, collision reflow, size-cycle bounds, reset-to-default
   discards the saved layout, default fallback when none saved.
+
+**As built:** the `DashboardLayout` model (`dashboard_layouts`, per-user, keyed
+`(user_id, dashboard_key)`; *not* competition-scoped — a personal preference,
+same layout whichever competition it's viewed under, so the competition in the
+route only scopes the `customize_dashboard` check) + a migration. Three
+endpoints on the existing required-core `dashboard` module —
+`GET/PUT/DELETE .../dashboard/layout?dashboard_key=` gated on
+`customize_dashboard`: GET returns the saved layout or **null** (fall back to
+the code default), PUT upserts on exit-edit, DELETE is reset-to-default (drops
+the row). The layout JSON is **opaque to the backend** — the frontend registry
+owns the widget catalog and legitimate sizes, so a new widget stays a
+frontend-only change; the backend does light shape/bound validation only (known
+`dashboard_key` allowlist, positive grid units, ≤50 entries). Frontend:
+`lib/dashboard/layout.ts` (pure `mergeLayout`/`cycleSize`/`toSaved`/`moveEntry`,
+unit-tested — snaps stale sizes back into the legitimate set, drops uninstalled
+widgets, appends newly-registered ones), a `DashboardGrid` component with the
+edit mode (native HTML5 drag-and-drop — no DnD library; per-widget size-cycle +
+show/hide; Save/Cancel/Reset toolbar), and `use-dashboard.ts` layout hooks.
+Managers (who hold `customize_dashboard`) customize the `manager` dashboard;
+participants keep the fixed default (§10 scope). **Deviations:** the grid is an
+**ordered flow** of column-spanned widgets (CSS grid reflow) rather than a 2D
+`{row,col}` engine — reorder + size-cycle + show/hide over the 4-col grid, which
+covers §10.2–10.5's intent without a free-form positioning layer; row-spans stay
+declared metadata (widgets keep natural height, no content clipping). Only the
+`manager` dashboard is customizable this tier (participant/team/organiser keys
+are forward-compatible but unbuilt). `manage_dashboard_widgets` stays
+Administrator-only and unused (it governs the widget *catalog* — marketplace
+territory, deferred). No event emitted (personal preference, like the theme
+palette override).
 
 ## Phase 7 — Collaborative rich-text / CRDT editing (#27, §4.2) — full spec
 

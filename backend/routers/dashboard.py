@@ -24,12 +24,15 @@ from auth.deps import require_permission
 from db import get_db, utcnow
 from models.challenge import Challenge
 from models.competition import Competition
+from models.dashboard_layout import DashboardLayout
 from models.role import Role, RoleAssignment
 from models.submission import Submission
 from models.team import Team
 from models.user import User
 from schemas.dashboard import (
     ChallengeHealth,
+    DashboardLayoutOut,
+    DashboardLayoutUpdate,
     DashboardStats,
     MyStanding,
     RecentSolve,
@@ -211,6 +214,92 @@ async def challenge_health(
         )
         for cid, title, points, solves, attempts in rows
     ]
+
+
+# Dashboards a saved layout may target (§10.3). Only the manager dashboard is
+# customizable in this tier; the participant dashboard stays fixed. Kept as an
+# allowlist so a client can't spray junk keys into the table.
+_KNOWN_DASHBOARD_KEYS = frozenset({"manager"})
+
+
+def _validate_key(dashboard_key: str) -> str:
+    if dashboard_key not in _KNOWN_DASHBOARD_KEYS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown dashboard key: {dashboard_key}",
+        )
+    return dashboard_key
+
+
+async def _get_layout_row(
+    db: AsyncSession, user_id: str, dashboard_key: str
+) -> DashboardLayout | None:
+    return await db.scalar(
+        select(DashboardLayout).where(
+            DashboardLayout.user_id == user_id,
+            DashboardLayout.dashboard_key == dashboard_key,
+        )
+    )
+
+
+@router.get("/layout", response_model=DashboardLayoutOut | None)
+async def get_layout(
+    competition_id: str,
+    dashboard_key: str = "manager",
+    current_user: User = Depends(require_permission("customize_dashboard")),
+    db: AsyncSession = Depends(get_db),
+) -> DashboardLayoutOut | None:
+    """The caller's saved layout for this dashboard, or null to fall back to the
+    code-defined default (§10.5). Layout is per-user, not per-competition — the
+    competition in the path only scopes the ``customize_dashboard`` check."""
+    await _load_competition(db, competition_id)
+    _validate_key(dashboard_key)
+    row = await _get_layout_row(db, current_user.id, dashboard_key)
+    if row is None:
+        return None
+    return DashboardLayoutOut(dashboard_key=dashboard_key, entries=row.layout_json)
+
+
+@router.put("/layout", response_model=DashboardLayoutOut)
+async def put_layout(
+    competition_id: str,
+    payload: DashboardLayoutUpdate,
+    dashboard_key: str = "manager",
+    current_user: User = Depends(require_permission("customize_dashboard")),
+    db: AsyncSession = Depends(get_db),
+) -> DashboardLayoutOut:
+    """Save (upsert) the caller's layout for this dashboard. Called on exit-edit,
+    not per drag (§10.3). A personal preference, so no event is emitted."""
+    await _load_competition(db, competition_id)
+    _validate_key(dashboard_key)
+    entries = [e.model_dump() for e in payload.entries]
+    row = await _get_layout_row(db, current_user.id, dashboard_key)
+    if row is None:
+        row = DashboardLayout(
+            user_id=current_user.id, dashboard_key=dashboard_key, layout_json=entries
+        )
+        db.add(row)
+    else:
+        row.layout_json = entries
+    await db.commit()
+    return DashboardLayoutOut(dashboard_key=dashboard_key, entries=payload.entries)
+
+
+@router.delete("/layout", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_layout(
+    competition_id: str,
+    dashboard_key: str = "manager",
+    current_user: User = Depends(require_permission("customize_dashboard")),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Reset to default (§10.5): drop the saved layout so the code default
+    applies again. Idempotent — deleting a non-existent layout is a no-op."""
+    await _load_competition(db, competition_id)
+    _validate_key(dashboard_key)
+    row = await _get_layout_row(db, current_user.id, dashboard_key)
+    if row is not None:
+        await db.delete(row)
+        await db.commit()
 
 
 @router.get("/me", response_model=MyStanding)

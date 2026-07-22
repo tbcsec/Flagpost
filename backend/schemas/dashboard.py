@@ -6,7 +6,7 @@ small read shapes rather than one monolithic payload.
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class DashboardStats(BaseModel):
@@ -40,3 +40,29 @@ class MyStanding(BaseModel):
     rank: int | None
     points: int | None
     solved_count: int
+
+
+# --- Dashboard layout customization (§10.2–10.5) ---------------------------
+# The layout is opaque to the backend (§10.3): the frontend registry owns the
+# widget catalog and legitimate sizes, so we only validate shape and bounds.
+# `cols`/`rows` are grid units on the fixed-column dashboard grid (§10.2).
+
+_MAX_GRID = 12  # generous ceiling; the real grid is 4 columns
+
+
+class LayoutEntry(BaseModel):
+    widget_id: str = Field(min_length=1, max_length=64)
+    cols: int = Field(ge=1, le=_MAX_GRID)
+    rows: int = Field(ge=1, le=_MAX_GRID)
+    hidden: bool = False
+
+
+class DashboardLayoutOut(BaseModel):
+    dashboard_key: str
+    entries: list[LayoutEntry]
+
+
+class DashboardLayoutUpdate(BaseModel):
+    # Capped so a client can't persist an unbounded blob; the real dashboard has
+    # a handful of widgets.
+    entries: list[LayoutEntry] = Field(max_length=50)

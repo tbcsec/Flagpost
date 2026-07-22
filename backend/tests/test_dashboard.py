@@ -161,3 +161,133 @@ async def test_dashboard_requires_competition_access(client):
         f"/api/competitions/{comp}/dashboard/stats", headers=_auth(outsider)
     )
     assert resp.status_code == 403
+
+
+# --- Layout customization (Phase 6, §10.2–10.5) ----------------------------
+
+
+async def test_layout_defaults_to_null_then_round_trips(client):
+    comp = await _competition(client)
+    admin = await admin_token(client)
+
+    # No saved layout yet → null (frontend falls back to the code default).
+    got = await client.get(
+        f"/api/competitions/{comp}/dashboard/layout", headers=_auth(admin)
+    )
+    assert got.status_code == 200
+    assert got.json() is None
+
+    entries = [
+        {"widget_id": "stats", "cols": 4, "rows": 1, "hidden": False},
+        {"widget_id": "activity", "cols": 2, "rows": 2, "hidden": True},
+    ]
+    put = await client.put(
+        f"/api/competitions/{comp}/dashboard/layout",
+        json={"entries": entries},
+        headers=_auth(admin),
+    )
+    assert put.status_code == 200
+    assert put.json()["entries"] == entries
+
+    # Read back — persisted verbatim.
+    got = (
+        await client.get(
+            f"/api/competitions/{comp}/dashboard/layout", headers=_auth(admin)
+        )
+    ).json()
+    assert got["dashboard_key"] == "manager"
+    assert got["entries"] == entries
+
+
+async def test_layout_put_is_upsert(client):
+    comp = await _competition(client)
+    admin = await admin_token(client)
+    first = [{"widget_id": "stats", "cols": 4, "rows": 1, "hidden": False}]
+    second = [{"widget_id": "standing", "cols": 2, "rows": 1, "hidden": False}]
+    await client.put(
+        f"/api/competitions/{comp}/dashboard/layout",
+        json={"entries": first},
+        headers=_auth(admin),
+    )
+    await client.put(
+        f"/api/competitions/{comp}/dashboard/layout",
+        json={"entries": second},
+        headers=_auth(admin),
+    )
+    got = (
+        await client.get(
+            f"/api/competitions/{comp}/dashboard/layout", headers=_auth(admin)
+        )
+    ).json()
+    assert got["entries"] == second
+
+
+async def test_layout_reset_deletes_saved(client):
+    comp = await _competition(client)
+    admin = await admin_token(client)
+    await client.put(
+        f"/api/competitions/{comp}/dashboard/layout",
+        json={"entries": [{"widget_id": "stats", "cols": 4, "rows": 1}]},
+        headers=_auth(admin),
+    )
+    delete = await client.delete(
+        f"/api/competitions/{comp}/dashboard/layout", headers=_auth(admin)
+    )
+    assert delete.status_code == 204
+    got = await client.get(
+        f"/api/competitions/{comp}/dashboard/layout", headers=_auth(admin)
+    )
+    assert got.json() is None
+    # Idempotent — resetting again is a no-op, not a 404.
+    again = await client.delete(
+        f"/api/competitions/{comp}/dashboard/layout", headers=_auth(admin)
+    )
+    assert again.status_code == 204
+
+
+async def test_layout_is_per_user(client):
+    comp = await _competition(client)
+    admin = await admin_token(client)
+    await client.put(
+        f"/api/competitions/{comp}/dashboard/layout",
+        json={"entries": [{"widget_id": "stats", "cols": 4, "rows": 1}]},
+        headers=_auth(admin),
+    )
+    # A Judge (holds customize_dashboard) sees their own empty layout, not admin's.
+    judge = await _register(client, "judge@example.com")
+    me = (await client.get("/api/auth/me", headers=_auth(judge))).json()
+    from db import SessionLocal
+    from sqlalchemy import select
+    from models.role import Role, RoleAssignment
+
+    async with SessionLocal() as session:
+        role = await session.scalar(select(Role).where(Role.name == "Judge"))
+        session.add(
+            RoleAssignment(user_id=me["id"], competition_id=comp, role_id=role.id)
+        )
+        await session.commit()
+
+    got = await client.get(
+        f"/api/competitions/{comp}/dashboard/layout", headers=_auth(judge)
+    )
+    assert got.json() is None
+
+
+async def test_layout_requires_customize_permission(client):
+    comp = await _competition(client)
+    # A plain participant lacks customize_dashboard.
+    token = await _team_player(client, comp, "p1@example.com", "Alpha")
+    resp = await client.get(
+        f"/api/competitions/{comp}/dashboard/layout", headers=_auth(token)
+    )
+    assert resp.status_code == 403
+
+
+async def test_layout_rejects_unknown_key(client):
+    comp = await _competition(client)
+    admin = await admin_token(client)
+    resp = await client.get(
+        f"/api/competitions/{comp}/dashboard/layout?dashboard_key=bogus",
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 400

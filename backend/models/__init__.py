@@ -12,6 +12,7 @@ from models.automation import Achievement, AutomationRule
 from models.challenge import Category, Challenge
 from models.competition import Competition
 from models.competition_module import CompetitionModule
+from models.dashboard_layout import DashboardLayout
 from models.feedback import (
     Survey,
     SurveyAnswer,
@@ -38,6 +39,7 @@ __all__ = [
     "Challenge",
     "Competition",
     "CompetitionModule",
+    "DashboardLayout",
     "Hint",
     "HintReveal",
     "Notification",

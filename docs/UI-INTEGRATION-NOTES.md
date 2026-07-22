@@ -11,10 +11,12 @@ widgets. The shell and every section were built, but only the sections with a
 real backend are wired; the rest render as faithful UI seeded with placeholder
 data and flagged in-app with a **"Preview — …"** banner (`NotWiredNote`).
 
-**Status: Tier 2 complete; Tier 3 in progress (Phases 0–3 shipped).** Since the
+**Status: Tier 2 complete; Tier 3 in progress (Phases 0–6 shipped).** Since the
 original handoff the backend has caught up through all of Tier 1 and Tier 2 and
-into Tier 3 (per `claude_plans/phase_3.md`): the notification bell (Phase 0) and
-the whole automation surface — rules + the visual builder (Phases 1–3) — are now
+into Tier 3 (per `claude_plans/phase_3.md`): the notification bell (Phase 0), the
+whole automation surface — rules + the visual builder (Phases 1–3), feedback /
+surveys (Phase 4), challenge & team analytics (Phase 5), and **dashboard
+customization** — drag-reorder / resize / show-hide edit mode (Phase 6) — are all
 real too. The tables below are kept current; the remaining placeholder surfaces
 are the Admin → Users directory, the Admin → Plugins toggle UI (its
 per-competition module-toggle *backend* now exists), Admin → Dashboard global
@@ -70,7 +72,7 @@ code.
 | Lobby — join public / join by code | **Wired** (pre-Tier-2 — `useJoinCompetition` / `useJoinByCode`; refetches permissions so the nav leaves the lobby) |
 | Role-aware navigation | **Wired** (pre-Tier-2 — `useAccess` off `/me/permissions` gates manager-only nav + the Admin section; direct admin URLs are guarded) |
 | Admin → Event log | **Wired** — audit-log viewer over every emitted event (§3.3), gated on `view_audit_log`; GitLab-style filtering by event/competition/team/actor/time/free-text, pagination, expandable payloads (`use-audit-log`) |
-| Dashboard | **Wired** (Tier 2 Phase 1) — widget-registration architecture (§10.1) with fixed per-audience layouts off `dashboard` module endpoints: manager stats/recent-solves/challenge-health/support-queue, participant standing/solves, announcements (`use-dashboard`) |
+| Dashboard | **Wired** (Tier 2 Phase 1 + Tier 3 Phase 6) — widget-registration architecture (§10.1) off `dashboard` module endpoints: manager stats/recent-solves/challenge-health/support-queue, participant standing/solves, announcements. Managers (`customize_dashboard`) get an **edit mode** (§10.2–10.5): drag-reorder, per-widget size-cycle, show/hide, save / cancel / reset-to-default, persisted per-user in `dashboard_layouts` (`use-dashboard`, `DashboardGrid`) |
 | Support tickets | **Wired** (Tier 2 Phase 2) — `tickets` module: competitor create/reply, staff assign/resolve/internal-notes, ownership scoping; live thread + staff-queue WS rooms with the §4.4 audio cue (`use-tickets`) |
 | Presence indicators | **Wired** (Tier 2 Phase 3, §4.1) — WS presence with debounced clear: "N others viewing" on the challenge dialog (new presence-only `challenge` room) and "a judge is looking at this ticket" on the ticket thread (`usePresence` + `PresenceIndicator`) |
 | Admin → Appearance (site-wide theming) | **Wired** (Tier 2 Phase 4, §9) — platform name + palette + accent (preset or custom hex) with live preview, `manage_site_settings`-gated `site_settings` module; login/register/sidebar/tab-title brand from the public read (`use-site-settings`, `lib/theme.ts`) |
@@ -85,9 +87,10 @@ code.
 These need features that are still on the roadmap. UI is in place so they're not
 a retrofit later; **none of the data is real**.
 
-- **Dashboard** — now fully wired (Tier 2 Phase 1, see the wired table above).
-  Ships as a **fixed layout** built on the widget-registration architecture so
-  the drag-and-drop customization layer is additive later (§10.2, deferred).
+- **Dashboard** — now fully wired *and customizable* (Tier 2 Phase 1 + Tier 3
+  Phase 6, see the wired table above). The widget-registration architecture that
+  shipped as a fixed layout made the drag-and-drop customization layer additive,
+  exactly as intended (§10.2) — it's now built for the manager dashboard.
 - **Admin → Dashboard** (global stats / module health) — no aggregate endpoint.
 - **Admin → Users** — no user-directory / create / ban API. (Note: role
   *assignment* is handled on Admin → Roles by email, so no directory is needed

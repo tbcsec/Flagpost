@@ -26,6 +26,7 @@ export interface WidgetSize {
 
 export interface WidgetDef {
   id: string;
+  label: string; // shown in edit-mode chrome (§10.4)
   sizes: WidgetSize[]; // legitimate sizes this widget renders at (§10.2)
   defaultSize: WidgetSize;
   Component: React.ComponentType<{ competitionId: string }>;
@@ -34,42 +35,49 @@ export interface WidgetDef {
 export const WIDGETS: Record<string, WidgetDef> = {
   stats: {
     id: "stats",
-    sizes: [{ cols: 4, rows: 1 }],
+    label: "At a glance",
+    sizes: [{ cols: 4, rows: 1 }, { cols: 2, rows: 1 }],
     defaultSize: { cols: 4, rows: 1 },
     Component: StatsWidget,
   },
   standing: {
     id: "standing",
+    label: "Your standing",
     sizes: [{ cols: 4, rows: 1 }, { cols: 2, rows: 1 }],
     defaultSize: { cols: 4, rows: 1 },
     Component: StandingWidget,
   },
   activity: {
     id: "activity",
+    label: "Recent solves",
     sizes: [{ cols: 2, rows: 2 }, { cols: 4, rows: 2 }],
     defaultSize: { cols: 2, rows: 2 },
     Component: ActivityWidget,
   },
   announcements: {
     id: "announcements",
+    label: "Announcements",
     sizes: [{ cols: 2, rows: 2 }, { cols: 4, rows: 2 }],
     defaultSize: { cols: 2, rows: 2 },
     Component: AnnouncementsWidget,
   },
   "challenge-health": {
     id: "challenge-health",
+    label: "Challenge health",
     sizes: [{ cols: 2, rows: 2 }, { cols: 4, rows: 2 }],
     defaultSize: { cols: 2, rows: 2 },
     Component: ChallengeHealthWidget,
   },
   "support-queue": {
     id: "support-queue",
+    label: "Support queue",
     sizes: [{ cols: 2, rows: 2 }, { cols: 4, rows: 2 }],
     defaultSize: { cols: 2, rows: 2 },
     Component: SupportQueueWidget,
   },
   "my-solves": {
     id: "my-solves",
+    label: "Your solves",
     sizes: [{ cols: 2, rows: 2 }, { cols: 4, rows: 2 }],
     defaultSize: { cols: 2, rows: 2 },
     Component: MySolvesWidget,
@@ -79,6 +87,7 @@ export const WIDGETS: Record<string, WidgetDef> = {
 export interface LayoutEntry {
   widgetId: string;
   size: WidgetSize;
+  hidden?: boolean; // customized-out but re-addable in edit mode (§10.4)
 }
 
 const at = (id: string): LayoutEntry => ({ widgetId: id, size: WIDGETS[id].defaultSize });

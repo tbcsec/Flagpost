@@ -763,6 +763,19 @@ other dashboards (team dashboard, per-competition organiser dashboard)
 later without redesign, since nothing about the approach below is
 judge-specific.
 
+> **Status (Tier 3 Phase 6):** the widget-registration layer (§10.1) shipped
+> in Tier 2 with a *fixed* layout; the customization layer described below is
+> now built for the **manager** dashboard — per-user `dashboard_layouts`
+> persistence (§10.3), an edit mode with drag-reorder, a size-cycle control,
+> show/hide, and save / cancel / reset-to-default (§10.4–10.5), gated on
+> `customize_dashboard`. Two simplifications from the spec below: the grid is an
+> **ordered flow** of column-spanned widgets (CSS grid reflow) rather than a 2D
+> `{row, col}` positioning engine, and row-spans stay declared metadata (widgets
+> keep natural height); reorder + size-cycle + show/hide over the fixed-column
+> grid deliver §10.2–10.5's intent without a free-form positioning layer. The
+> layout JSON is opaque to the backend — the frontend registry owns the widget
+> catalog and legitimate sizes, so a new widget is a frontend-only change.
+
 ### 10.1 Why This Has to Be an Architectural Decision, Not a Feature Bolted On Later
 
 If dashboard sections are built as components hardcoded into a page layout

@@ -72,6 +72,19 @@ export interface MyStanding {
   solved_count: number;
 }
 
+/** Per-user dashboard layout customization (§10.2–10.5). */
+export interface DashboardLayoutEntry {
+  widget_id: string;
+  cols: number;
+  rows: number;
+  hidden: boolean;
+}
+
+export interface DashboardLayout {
+  dashboard_key: string;
+  entries: DashboardLayoutEntry[];
+}
+
 /** Support tickets (§4.4, ROADMAP #18). */
 export type TicketStatus = "open" | "resolved";
 

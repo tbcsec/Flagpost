@@ -166,12 +166,15 @@ what we have."
 
 **Status: in progress**, built phase-by-phase per `docs/claude_plans/phase_3.md`
 (automation-first, full spec). Shipped so far: Phase 0 (notification-center +
-event-dispatch groundwork, ADR-0012), and the **full automation engine (#25)**
+event-dispatch groundwork, ADR-0012); the **full automation engine (#25)**
 across Phases 1–3 — the engine + all eight §5.3 actions + the first optional
 per-competition-toggleable module (Phase 1), webhook hardening (Phase 2,
-ADR-0013), and the §5.5 visual rule builder (Phase 3). Remaining: feedback/survey
-(#22), analytics (#23), dashboard drag-and-drop (#26), CRDT co-editing (#27),
-onboarding (#24), and the a11y/optimization pass (#28).
+ADR-0013), and the §5.5 visual rule builder (Phase 3); **feedback/survey (#22)**
+(Phase 4, the second optional module + automation glue); **challenge & team
+analytics (#23)** (Phase 5, the third optional module); and **dashboard
+drag-and-drop (#26)** (Phase 6, per-user layout customization on the Tier-2
+widget registry). Remaining: CRDT co-editing (#27), onboarding (#24), and the
+a11y/optimization pass (#28).
 
 Worth doing before a public/1.0 release, not worth doing before Tiers 1–2
 are solid.
@@ -193,7 +196,10 @@ are solid.
     hardening before there's a stable set of events to automate against.
 26. **Dashboard drag-and-drop customization** (Architecture §10) — ships as
     a fixed layout in Tier 2; the customizable layer is additive UI on top
-    of a dashboard that already works, not a blocker for one.
+    of a dashboard that already works, not a blocker for one. *(Shipped —
+    Tier 3 Phase 6: per-user `dashboard_layouts` + edit mode with
+    drag-reorder / size-cycle / show-hide / reset-to-default, gated on
+    `customize_dashboard`.)*
 27. **Collaborative rich-text editing** (Architecture §4.2) — both the
     staff and team-facing cases. Real-time *presence* (Tier 2, #19) ships
     first; true CRDT co-editing is a bigger lift, pulled into Tier 3 from

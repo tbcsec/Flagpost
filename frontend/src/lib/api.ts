@@ -25,6 +25,8 @@ import type {
   SurveySummary,
   Category,
   ChallengeHealth,
+  DashboardLayout,
+  DashboardLayoutEntry,
   DashboardStats,
   MyStanding,
   RecentSolve,
@@ -378,6 +380,21 @@ export const dashboardApi = {
     apiFetch<ChallengeHealth[]>(`${dashboardApi.base(competitionId)}/challenge-health`),
   me: (competitionId: string) =>
     apiFetch<MyStanding>(`${dashboardApi.base(competitionId)}/me`),
+  // Layout customization (§10.2–10.5). Per-user; `key` selects which dashboard.
+  getLayout: (competitionId: string, key: string) =>
+    apiFetch<DashboardLayout | null>(
+      `${dashboardApi.base(competitionId)}/layout?dashboard_key=${encodeURIComponent(key)}`,
+    ),
+  saveLayout: (competitionId: string, key: string, entries: DashboardLayoutEntry[]) =>
+    apiFetch<DashboardLayout>(
+      `${dashboardApi.base(competitionId)}/layout?dashboard_key=${encodeURIComponent(key)}`,
+      { method: "PUT", body: JSON.stringify({ entries }) },
+    ),
+  resetLayout: (competitionId: string, key: string) =>
+    apiFetch<void>(
+      `${dashboardApi.base(competitionId)}/layout?dashboard_key=${encodeURIComponent(key)}`,
+      { method: "DELETE" },
+    ),
 };
 
 export const rolesApi = {

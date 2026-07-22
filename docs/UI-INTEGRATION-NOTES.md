@@ -7,11 +7,17 @@ real Next.js frontend.
 The mock is a single-page prototype of the *whole* product vision — dashboard,
 challenges, scoreboard, participants, support, analytics, automations, a full
 admin console, notifications, per-competition theming, drag-and-drop dashboard
-widgets. The backend today only reaches **Tier 1 Phase 5** (auth, competitions,
-teams, challenges + categories, file attachments). So the shell and every
-section were built, but only the sections with a real backend are wired; the
-rest render as faithful UI seeded with placeholder data and flagged in-app with
-a **"Preview — …"** banner (`NotWiredNote`).
+widgets. The shell and every section were built, but only the sections with a
+real backend are wired; the rest render as faithful UI seeded with placeholder
+data and flagged in-app with a **"Preview — …"** banner (`NotWiredNote`).
+
+**Status: through Tier 2 (complete).** Since the original handoff the backend
+has caught up through all of Tier 1 and Tier 2, so most of what was placeholder
+is now wired — the dashboard, support tickets, presence, site-wide theming
+(Appearance), and the custom-role editor (Roles) are all real. The tables below
+have been kept current; the remaining placeholder surfaces are the genuinely
+deferred ones (Analytics, Automations, Users directory, Plugins toggle,
+Notifications inbox).
 
 ## Design system adopted
 
@@ -26,8 +32,12 @@ a **"Preview — …"** banner (`NotWiredNote`).
 - App shell: `components/app/app-shell.tsx` (persistent sidebar + topbar with the
   competition switcher, notifications, and the light/dark toggle) and
   `components/app/section-header.tsx` (`SectionHeader`, `NotWiredNote`).
-- Palette is a client-state preference on the auth store (`palette` /
-  `togglePalette`); the topbar mirrors it onto `<html data-palette>`.
+- Theming is site-wide (Tier 2 Phase 4, §9): an admin sets the default palette +
+  accent (Admin → Appearance), stored in a SiteSettings singleton and read
+  publicly. `ThemeApplier` (mounted above every page) applies palette + accent to
+  `<html>`; a user can override just the *palette* for themselves via the topbar
+  palette menu (`paletteOverride` on the auth store). Shipped palettes: Harbor,
+  Eclipse, Umbra (dark), Daybreak, Sandstone (light).
 
 ## Routing
 
@@ -61,6 +71,9 @@ code.
 | Admin → Event log | **Wired** — audit-log viewer over every emitted event (§3.3), gated on `view_audit_log`; GitLab-style filtering by event/competition/team/actor/time/free-text, pagination, expandable payloads (`use-audit-log`) |
 | Dashboard | **Wired** (Tier 2 Phase 1) — widget-registration architecture (§10.1) with fixed per-audience layouts off `dashboard` module endpoints: manager stats/recent-solves/challenge-health/support-queue, participant standing/solves, announcements (`use-dashboard`) |
 | Support tickets | **Wired** (Tier 2 Phase 2) — `tickets` module: competitor create/reply, staff assign/resolve/internal-notes, ownership scoping; live thread + staff-queue WS rooms with the §4.4 audio cue (`use-tickets`) |
+| Presence indicators | **Wired** (Tier 2 Phase 3, §4.1) — WS presence with debounced clear: "N others viewing" on the challenge dialog (new presence-only `challenge` room) and "a judge is looking at this ticket" on the ticket thread (`usePresence` + `PresenceIndicator`) |
+| Admin → Appearance (site-wide theming) | **Wired** (Tier 2 Phase 4, §9) — platform name + palette + accent (preset or custom hex) with live preview, `manage_site_settings`-gated `site_settings` module; login/register/sidebar/tab-title brand from the public read (`use-site-settings`, `lib/theme.ts`) |
+| Admin → Roles (custom role editor) | **Wired** (Tier 2 Phase 5, §7.4) — `roles` module gated on `manage_roles`: list + permission catalog, create/clone/edit/delete custom roles, assign(by-email)/unassign; system roles read-only, last-admin guard (`use-roles`) |
 
 ## Built as UI, NOT wired (placeholder data + in-app "Preview" banner)
 
@@ -73,11 +86,11 @@ a retrofit later; **none of the data is real**.
 - **Analytics** — Tier 3.
 - **Automations** (competition + admin) — deferred past MVP.
 - **Admin → Dashboard** (global stats / module health) — no aggregate endpoint.
-- **Admin → Users** — no user-directory / create / ban API.
-- **Admin → Roles** — RBAC is real on the backend, but there's no read/edit
-  endpoint; the custom-role editor is Tier 2.
-- **Admin → Appearance / Site settings** — no settings-persistence API; AI/SMTP
-  are deferred.
+- **Admin → Users** — no user-directory / create / ban API. (Note: role
+  *assignment* is handled on Admin → Roles by email, so no directory is needed
+  for that.)
+- **Admin → Site settings** (SMTP / AI / integrations) — deferred; the theming
+  half of this page is now real on Admin → Appearance (see the wired table).
 - **Admin → Plugins** — the module loader is real but exposes no HTTP list/toggle;
   the enable/disable admin UI is deferred.
 - **Notifications** (topbar panel) and **Profile → notification preferences** —
@@ -104,7 +117,9 @@ a retrofit later; **none of the data is real**.
   row whose points change from a live update.
 - **Solve celebration** — the brand mark + points on a correct flag, plus a
   first-blood toast.
-- **Persisted theme** — the light/dark choice is saved to `localStorage`.
+- **Persisted theme** — the per-user palette override is saved to `localStorage`
+  (a no-flash inline script re-applies it before first paint); the site-wide
+  default + accent are set by an admin on Admin → Appearance (Tier 2 Phase 4).
 - **Responsive shell** — the sidebar becomes an off-canvas drawer under `md`
   (hamburger in the topbar).
 - **Timestamps** read as UTC via `lib/datetime` (the backend also now serializes

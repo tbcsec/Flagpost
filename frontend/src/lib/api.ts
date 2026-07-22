@@ -118,9 +118,14 @@ async function apiFetch<T>(
       credentials: "include",
     });
   } catch {
-    // Network error (backend unreachable) — surface a clean ApiError so callers
-    // show a message instead of a raw "Failed to fetch" TypeError.
-    throw new ApiError(0, "Cannot reach the server. Is the backend running?");
+    // Network error (server unreachable, offline, CORS) — surface a clean
+    // ApiError with a user-facing message rather than a raw "Failed to fetch"
+    // TypeError or anything that reveals infrastructure detail. Status 0 marks
+    // "no response" so callers can distinguish it from an HTTP error.
+    throw new ApiError(
+      0,
+      "Can't reach Flagpost — the service may be offline or your connection may be down. Check your connection and try again in a moment.",
+    );
   }
 
   if (res.status === 401 && retryOn401 && auth) {
@@ -137,14 +142,41 @@ async function apiFetch<T>(
   return res.json() as Promise<T>;
 }
 
+// Plain, why-oriented messages for the statuses that don't carry a server
+// `detail`. Clear enough to help a user (or support) understand the failure
+// without leaking stack traces or infrastructure detail.
+const STATUS_MESSAGES: Record<number, string> = {
+  400: "That request couldn't be processed — check the details and try again.",
+  401: "Your session has expired or isn't valid — please sign in again.",
+  403: "You don't have permission to do that.",
+  404: "That couldn't be found — it may have been removed or you may not have access.",
+  409: "That conflicts with something that already exists.",
+  413: "That file is too large to upload.",
+  429: "Too many attempts — please wait a moment and try again.",
+};
+
 async function extractError(res: Response): Promise<string> {
+  // Prefer the server's own reason — it's the most specific (e.g. "Incorrect
+  // email or password", "A team with that name already exists").
   try {
     const body = await res.json();
-    if (typeof body?.detail === "string") return body.detail;
+    if (typeof body?.detail === "string" && body.detail.trim()) {
+      return body.detail;
+    }
+    // FastAPI validation errors (422) arrive as an array under `detail`.
+    if (Array.isArray(body?.detail) && body.detail[0]?.msg) {
+      return `Invalid input: ${body.detail[0].msg}`;
+    }
   } catch {
-    /* non-JSON body */
+    /* non-JSON body — fall through to a status-based message */
   }
-  return `Request failed (${res.status})`;
+  if (res.status >= 500) {
+    return "The Flagpost service ran into a problem. Please try again — if it keeps happening, contact an administrator.";
+  }
+  return (
+    STATUS_MESSAGES[res.status] ??
+    `The request failed (error ${res.status}). Please try again.`
+  );
 }
 
 // --- Typed endpoint helpers (consumed only by hooks) ------------------------

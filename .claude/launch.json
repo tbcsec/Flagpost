@@ -9,8 +9,12 @@
     },
     {
       "name": "backend",
-      "runtimeExecutable": "backend/.venv/bin/uvicorn",
-      "runtimeArgs": ["main:app", "--reload", "--app-dir", "backend", "--host", "0.0.0.0", "--port", "8000"],
+      "comment": "Runs against SQLite by default so `preview` works with zero infra (ADR-0006). Set DATABASE_URL in the environment to use Postgres instead, or use `docker compose up` for the full stack. Migrations run on every start (idempotent).",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd backend && export DATABASE_URL=\"${DATABASE_URL:-sqlite+aiosqlite:///./dev.db}\" && .venv/bin/alembic upgrade head && exec .venv/bin/uvicorn main:app --reload --host 0.0.0.0 --port 8000"
+      ],
       "port": 8000
     }
   ]

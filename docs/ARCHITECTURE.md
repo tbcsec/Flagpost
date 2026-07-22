@@ -127,6 +127,8 @@ challenge.created           challenge.updated          challenge.published
 challenge.deleted           challenge.solved           challenge.hint_requested
 category.created            category.deleted
 user.registered              user.password_changed
+role.created                 role.updated               role.deleted
+role.assigned                role.unassigned
 ticket.created               ticket.assigned            ticket.resolved
 ticket.message_posted
 feedback.submitted
@@ -480,6 +482,22 @@ roles on a real competition: "Co-organiser" (Judge permissions plus
 access). Custom roles default to `scope: competition` unless explicitly
 created as global, since almost everything below Administrator is
 naturally competition-scoped.
+
+The admin surface for this (the `roles` required-core module, gated on
+`manage_roles`) is a small API + editor with a few operational invariants worth
+stating, since other features rely on them:
+
+- **System roles are read-only** — edit/delete is refused; you clone to vary
+  one (mirrors the `is_system` guarantee in 7.3).
+- **An assignment's scope must match its role** — a global role is assigned
+  site-wide (`competition_id = None`), a competition role to one competition.
+- **A role can't be deleted while it's still assigned** — so deleting one never
+  silently strips access mid-competition; unassign first.
+- **The last Administrator can't be unassigned** — an install always keeps at
+  least one account that can manage roles, so it can't lock itself out.
+- A competition-scoped role's editor only offers competition-scoped permissions
+  (a global permission held via a per-competition assignment never grants, so
+  offering it would only mislead). Every role mutation emits its §3.2 event.
 
 ### 7.5 Assignment & Scoping
 

@@ -111,11 +111,11 @@ the MVP line.
 
 ## Tier 2 — Makes It Good, Not Just Functional
 
-**Status: in progress** — phased build plan in `docs/claude_plans/phase_2.md`.
-Phase 0 (pre-Tier-2 gap fixes), Phase 1 (#16, judge/admin dashboard),
-Phase 2 (#18, support tickets), Phase 3 (#19, presence) and Phase 4 (#20,
-site-wide theming) are done; Phase 5 (#21, custom role editor) is next.
-Two owner scope changes from the list below: **#17 (challenge
+**Status: complete** — built phase-by-phase per `docs/claude_plans/phase_2.md`.
+Phase 0 (pre-Tier-2 gap fixes), Phase 1 (#16, judge/admin dashboard), Phase 2
+(#18, support tickets), Phase 3 (#19, presence), Phase 4 (#20, site-wide
+theming) and Phase 5 (#21, custom role editor) all shipped. Two owner scope
+changes from the list below carried through: **#17 (challenge
 lifecycle) is deferred to a future tier** (needs more design), and **#20 is
 rescoped from per-competition to site-wide theming** (the
 per-competition/white-label variant may return later if demand warrants —
@@ -174,9 +174,9 @@ are solid.
 24. **Onboarding / empty states** — first-run experience for a brand-new
     competition with no challenges yet, empty scoreboard states, etc. Easy
     to skip, very noticeable when skipped.
-25. **Accessibility & responsive pass** — keyboard navigation, contrast,
+25. **Accessibility, Responsiveness, and Optimization pass** — keyboard navigation, contrast,
     mobile layout for the competitor-facing screens in particular (people
-    check scoreboards from their phones).
+    check scoreboards from their phones), a full optimization pass.
 
 ---
 

@@ -144,24 +144,28 @@ bespoke (not the reference mockup's): **Harbor/Eclipse/Umbra** (dark),
 - Tests: settings round-trip, RBAC, validation, the event (backend); the colour
   math + `applyTheme` (vitest).
 
-## Phase 5 — Custom role editor, admin (#21, §7.4) — 🔜 NEXT
+## Phase 5 — Custom role editor, admin (#21, §7.4) — ✅ DONE
 
 The three built-in roles already cover Tiers 0–1; this lets an organiser hand
-out narrower access (e.g. a challenge-author-only role).
+out narrower access (e.g. a challenge-author-only role). **This completes Tier 2.**
 
-- Backend: roles API — list roles (system + custom), read a role's permission
-  set, create/clone (from a system or custom role or blank) and edit permissions
-  from the §7.1 catalog, delete custom roles; assign/unassign to users per
-  competition or global. Gated on `manage_roles`. Custom roles default to
-  `scope: competition` (§7.4). Expose the permission catalog (categorized) via
-  an endpoint for the editor. New events likely needed — **add `role.created` /
-  `role.updated` / `role.deleted` to §3.2 first** (none exist yet). Migration:
-  none if the role/assignment tables already suffice (they do — Tier 0).
-- Frontend: wire the placeholder Admin → Roles page — role cards, clone, the
-  categorized permission matrix (real toggles), and assignment; a `use-roles.ts`
-  hook. System roles are read-only (clone-to-edit).
-- Tests: clone/edit/delete, catalog exposure, scope defaults, RBAC, and that a
-  custom role's permissions actually gate a request end to end.
+- Backend (`roles` required-core module): roles API gated on `manage_roles` —
+  list roles, the categorized permission **catalog** endpoint, create/clone
+  (from any role, or blank), edit + delete **custom** roles, and
+  list/assign/unassign assignments. Custom roles default to `scope: competition`
+  (§7.4); permission keys are catalog-validated. Invariants: **system roles are
+  read-only** (409 on edit/delete), **assignment scope must match the role**, a
+  role **can't be deleted while assigned**, and the **last Administrator can't be
+  unassigned** (no lockout). Assignment is **by email** (no user directory
+  needed). Emits `role.created`/`updated`/`deleted`/`assigned`/`unassigned`
+  (added to §3.2). No migration — the role/assignment tables are Tier-0.
+- Frontend: wired Admin → Roles — role cards (system + custom), clone, a New-role
+  dialog, the categorized permission **matrix** (editable for custom, read-only
+  for system; global permissions hidden on competition-scoped roles via
+  `groupCatalog`), delete, and the assignment form + list; a `use-roles.ts` hook.
+- Tests: clone/edit/delete, catalog, scope defaults, RBAC, system-role
+  immutability, the last-admin guard, the events, and a custom role gating a
+  request end to end (backend); `groupCatalog` (vitest).
 
 ---
 

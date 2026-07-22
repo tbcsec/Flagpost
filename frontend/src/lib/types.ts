@@ -290,3 +290,35 @@ export interface SiteSettings {
 export interface SiteSettingsAdmin extends SiteSettings {
   updated_at: string | null;
 }
+
+// RBAC admin (§7.4). Roles are data: a permission-key array + scope.
+export type RoleScope = "global" | "competition";
+
+export interface Role {
+  id: string;
+  name: string;
+  description: string;
+  is_system: boolean;
+  scope: RoleScope;
+  permissions: string[];
+}
+
+// One catalog entry for the editor's permission matrix (§7.1).
+export interface PermissionEntry {
+  key: string;
+  category: string;
+  scope: RoleScope;
+  reserved: boolean;
+}
+
+export interface RoleAssignment {
+  id: string;
+  user_id: string;
+  user_email: string;
+  user_display_name: string;
+  role_id: string;
+  role_name: string;
+  role_scope: RoleScope;
+  competition_id: string | null;
+  competition_name: string | null;
+}

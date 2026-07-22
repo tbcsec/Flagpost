@@ -28,11 +28,11 @@ file, don't ignore it.
 ## Current build stage
 
 <!-- Update this line as tiers/phases complete. -->
-**Tier 0 and Tier 1 are complete. Tier 2 ("Makes It Good") is underway,
-planned phase-by-phase in `docs/claude_plans/phase_2.md`. Phases 0–4 are
-done; Phase 5 (custom role editor) is next.** See `docs/ROADMAP.md` for
-the full tier breakdown. Don't sneak Tier 3 polish into Tier 2 work —
-that's scope creep, not helpfulness.
+**Tier 0, Tier 1, and Tier 2 ("Makes It Good") are all complete — Tier 2 was
+built phase-by-phase per `docs/claude_plans/phase_2.md` (Phases 0–5 all
+shipped). Tier 3 is the next tier; check `docs/ROADMAP.md` before starting new
+work, and don't start Tier 3 items without confirming scope.** See
+`docs/ROADMAP.md` for the full tier breakdown.
 
 What's built:
 
@@ -87,6 +87,16 @@ What's built:
   topbar palette menu + the wired Admin → Appearance page. System roles now
   **re-sync from the permission catalog on every startup** (`seed_system_roles`)
   so a newly-added permission reaches an already-migrated Administrator.
+- **Tier 2 Phase 5** — **custom role editor** (§7.4), a required-core `roles`
+  module gated on `manage_roles`: list roles + the categorized permission
+  **catalog**, create/clone/edit/delete **custom** roles, and
+  list/assign(by-email)/unassign assignments. Invariants: system roles are
+  read-only (clone to vary), assignment scope matches the role, no deleting an
+  assigned role, no unassigning the last Administrator. Emits
+  `role.created`/`updated`/`deleted`/`assigned`/`unassigned`. Frontend: the
+  wired Admin → Roles page (matrix editable for custom / read-only for system;
+  competition roles hide global permissions) + `use-roles.ts`. No migration —
+  the role/assignment tables are Tier-0.
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0009 (synchronous event dispatch), ADR-0010 (seeded default

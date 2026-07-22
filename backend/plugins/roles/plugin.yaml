@@ -1,0 +1,10 @@
+id: roles
+name: Roles Admin
+version: 1.0.0
+# Required-core (§11.3): RBAC itself is kernel (§7), but the admin surface that
+# reads/edits custom roles and assignments mounts through the loader — the same
+# split as the audit-log module (consumer is kernel, query router is a module).
+required_core: true
+provides:
+  routes: true
+  event_listeners: false

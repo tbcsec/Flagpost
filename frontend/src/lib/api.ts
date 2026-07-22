@@ -28,6 +28,9 @@ import type {
   HintAuthored,
   MyTeam,
   Permissions,
+  PermissionEntry,
+  Role,
+  RoleAssignment,
   Scoreboard,
   SignedUrl,
   SiteSettings,
@@ -364,6 +367,31 @@ export const dashboardApi = {
     apiFetch<ChallengeHealth[]>(`${dashboardApi.base(competitionId)}/challenge-health`),
   me: (competitionId: string) =>
     apiFetch<MyStanding>(`${dashboardApi.base(competitionId)}/me`),
+};
+
+export const rolesApi = {
+  list: () => apiFetch<Role[]>("/api/roles"),
+  catalog: () => apiFetch<PermissionEntry[]>("/api/roles/catalog"),
+  create: (input: {
+    name: string;
+    description?: string;
+    scope?: "global" | "competition";
+    permissions?: string[];
+    clone_from?: string;
+  }) => apiFetch<Role>("/api/roles", { method: "POST", body: JSON.stringify(input) }),
+  update: (
+    id: string,
+    input: { name?: string; description?: string; permissions?: string[] },
+  ) => apiFetch<Role>(`/api/roles/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+  remove: (id: string) => apiFetch<void>(`/api/roles/${id}`, { method: "DELETE" }),
+  assignments: () => apiFetch<RoleAssignment[]>("/api/roles/assignments"),
+  assign: (input: { email: string; role_id: string; competition_id?: string | null }) =>
+    apiFetch<RoleAssignment>("/api/roles/assignments", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  unassign: (assignmentId: string) =>
+    apiFetch<void>(`/api/roles/assignments/${assignmentId}`, { method: "DELETE" }),
 };
 
 export const siteSettingsApi = {

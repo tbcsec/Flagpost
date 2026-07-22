@@ -168,29 +168,42 @@ async def handle_event(db_factory, event_name: str, payload: dict[str, Any]) -> 
         token = _depth.set(depth + 1)
         try:
             for rule in matched:
-                for action in rule.actions or []:
-                    try:
-                        await execute_action(db, rule, event_name, payload, action)
-                    except Exception:  # noqa: BLE001 — isolate per action
-                        logger.exception(
-                            "action %r failed on rule %s (%s)",
-                            action.get("type"),
-                            rule.id,
-                            rule.name,
-                        )
-                        await db.rollback()
-                rule.trigger_count += 1
-                rule.last_triggered_at = utcnow()
-                await db.commit()
-                await event_bus.emit(
-                    "automation.rule_triggered",
-                    {
-                        "rule_id": rule.id,
-                        "rule_name": rule.name,
-                        "trigger_type": event_name,
-                        "competition_id": competition_id,
-                        "triggered_by_user_id": payload.get("user_id"),
-                    },
-                )
+                await run_rule(db, rule, event_name, payload)
         finally:
             _depth.reset(token)
+
+
+async def run_rule(
+    db, rule: AutomationRule, event_name: str, payload: dict[str, Any]
+) -> None:
+    """Execute a matched rule's actions, update its stats, and announce it.
+
+    Factored out of :func:`handle_event` so the time-based scheduler
+    (utils/automation_scheduler.py) fires a rule through the exact same path —
+    per-action isolation, ``trigger_count``/``last_triggered_at`` bump, and the
+    ``automation.rule_triggered`` event. Condition matching and the cascade
+    guard belong to the *caller* (the scheduler computes its own payload)."""
+    for action in rule.actions or []:
+        try:
+            await execute_action(db, rule, event_name, payload, action)
+        except Exception:  # noqa: BLE001 — isolate per action
+            logger.exception(
+                "action %r failed on rule %s (%s)",
+                action.get("type"),
+                rule.id,
+                rule.name,
+            )
+            await db.rollback()
+    rule.trigger_count += 1
+    rule.last_triggered_at = utcnow()
+    await db.commit()
+    await event_bus.emit(
+        "automation.rule_triggered",
+        {
+            "rule_id": rule.id,
+            "rule_name": rule.name,
+            "trigger_type": event_name,
+            "competition_id": payload.get("competition_id"),
+            "triggered_by_user_id": payload.get("user_id"),
+        },
+    )

@@ -31,8 +31,8 @@ file, don't ignore it.
 **Tier 0, Tier 1, and Tier 2 ("Makes It Good") are all complete — Tier 2 was
 built phase-by-phase per `docs/claude_plans/phase_2.md` (Phases 0–5 all
 shipped). Tier 3 is the current tier and is now scoped/planned in
-`docs/claude_plans/phase_3.md` (Phases 0–9; **Phases 0–3 shipped**, Phase 4 —
-feedback/survey — next).
+`docs/claude_plans/phase_3.md` (Phases 0–9; **Phases 0–4 shipped**, Phase 5 —
+challenge & team analytics — next).
 An owner revision pulled three previously-deferred subsystems up into Tier 3 —
 the **full automation engine** (§5), **dashboard drag-and-drop** (§10), and
 **collaborative rich-text/CRDT editing** (§4.2) — alongside the polish items
@@ -149,6 +149,28 @@ What's built:
   `lib/automation-builder.ts` (unit-tested). Lives on `/automations` (competition
   rules + a personal notify-self section); Admin → Automations hosts global
   rules. No migration; the builder is additive over the Phase-1 engine/schema.
+- **Tier 3 Phase 4** — **feedback / surveys** (ROADMAP #22): the `feedback`
+  optional module (the **second** one — shares the per-competition toggle with
+  `automations`; routes 404 when disabled). `Survey` + `SurveyQuestion`
+  (rating_1_10/rating_1_5/short_text/long_text/multiple_choice) + per-**user**
+  `SurveyResponse`/`SurveyAnswer` (+ migration). Staff build/reorder/open
+  surveys and read results + **CSV export** (`feedback_manage` /
+  `feedback_view_responses`); competitors answer open ones once
+  (`feedback_submit`), emitting **`feedback.submitted`** (a live automation
+  trigger). Marking a survey open emits **`survey.opened`** (another trigger).
+  New §7.1 Feedback perms (Judge gets all, Participant gets submit).
+  Frontend: gated **Feedback** nav → `/feedback` (survey editor, response form,
+  results dialog), `use-feedback.ts`.
+- **Tier 3 Phase 4 automation glue** (owner ask) — closes the loop between
+  feedback and automations: the **`open_survey`** action (§5.3, marks a survey
+  open + emits `survey.opened`), and the **first time-based trigger**
+  **`competition.time_remaining`** — a per-minute scheduler
+  (`utils/automation_scheduler.py`, started in the lifespan) fires
+  competition-scoped rules once when `minutes_remaining` crosses their threshold
+  condition (dedup via `trigger_count`; `run_rule` factored out of the engine so
+  the scheduler reuses it). Enables "an hour before the end → open the survey →
+  notify participants". No new migration; all catalog-driven (the builder shows
+  the new trigger/action automatically).
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0012 (event-dispatch sync-critical vs background, supersedes

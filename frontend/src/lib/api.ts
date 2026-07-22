@@ -16,6 +16,11 @@ import type {
   AutomationCatalog,
   AutomationRule,
   AutomationRuleInput,
+  QuestionInput,
+  SurveyDetail,
+  SurveyQuestion,
+  SurveyResults,
+  SurveySummary,
   Category,
   ChallengeHealth,
   DashboardStats,
@@ -539,6 +544,91 @@ export const notificationsApi = {
     apiFetch<AppNotification>(`/api/notifications/${id}/read`, { method: "POST" }),
   markAllRead: () =>
     apiFetch<void>("/api/notifications/read-all", { method: "POST" }),
+};
+
+/** Fetch a file with the access token and trigger a browser download. Used for
+ *  the survey CSV export, which isn't JSON so it can't go through apiFetch. */
+async function downloadFile(path: string, filename: string): Promise<void> {
+  const token = useAuthStore.getState().accessToken;
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    credentials: "include",
+  });
+  if (!res.ok) throw new ApiError(res.status, "Export failed");
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+export const feedbackApi = {
+  base: (competitionId: string) => `/api/competitions/${competitionId}/surveys`,
+  list: (competitionId: string) =>
+    apiFetch<SurveySummary[]>(feedbackApi.base(competitionId)),
+  get: (competitionId: string, surveyId: string) =>
+    apiFetch<SurveyDetail>(`${feedbackApi.base(competitionId)}/${surveyId}`),
+  create: (competitionId: string, input: { title: string; description?: string | null }) =>
+    apiFetch<SurveyDetail>(feedbackApi.base(competitionId), {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  update: (
+    competitionId: string,
+    surveyId: string,
+    input: { title: string; description: string | null; is_open: boolean },
+  ) =>
+    apiFetch<SurveyDetail>(`${feedbackApi.base(competitionId)}/${surveyId}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  remove: (competitionId: string, surveyId: string) =>
+    apiFetch<void>(`${feedbackApi.base(competitionId)}/${surveyId}`, { method: "DELETE" }),
+  addQuestion: (competitionId: string, surveyId: string, input: QuestionInput) =>
+    apiFetch<SurveyQuestion>(`${feedbackApi.base(competitionId)}/${surveyId}/questions`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  updateQuestion: (
+    competitionId: string,
+    surveyId: string,
+    questionId: string,
+    input: QuestionInput,
+  ) =>
+    apiFetch<SurveyQuestion>(
+      `${feedbackApi.base(competitionId)}/${surveyId}/questions/${questionId}`,
+      { method: "PUT", body: JSON.stringify(input) },
+    ),
+  removeQuestion: (competitionId: string, surveyId: string, questionId: string) =>
+    apiFetch<void>(
+      `${feedbackApi.base(competitionId)}/${surveyId}/questions/${questionId}`,
+      { method: "DELETE" },
+    ),
+  reorder: (competitionId: string, surveyId: string, question_ids: string[]) =>
+    apiFetch<SurveyQuestion[]>(
+      `${feedbackApi.base(competitionId)}/${surveyId}/questions/order`,
+      { method: "PUT", body: JSON.stringify({ question_ids }) },
+    ),
+  submit: (
+    competitionId: string,
+    surveyId: string,
+    answers: { question_id: string; value: string }[],
+  ) =>
+    apiFetch<void>(`${feedbackApi.base(competitionId)}/${surveyId}/responses`, {
+      method: "POST",
+      body: JSON.stringify({ answers }),
+    }),
+  results: (competitionId: string, surveyId: string) =>
+    apiFetch<SurveyResults>(`${feedbackApi.base(competitionId)}/${surveyId}/results`),
+  exportCsv: (competitionId: string, surveyId: string) =>
+    downloadFile(
+      `${feedbackApi.base(competitionId)}/${surveyId}/responses.csv`,
+      `survey-${surveyId}-responses.csv`,
+    ),
 };
 
 /** Unauthenticated connectivity check (skeleton hello endpoint). */

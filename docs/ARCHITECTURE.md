@@ -120,7 +120,7 @@ Event names are `<entity>.<verb>`, past tense, e.g.:
 
 ```
 competition.created         competition.updated        competition.started
-competition.ended           competition.member_joined
+competition.ended           competition.member_joined  competition.time_remaining
 team.created                team.member_joined         team.member_left
 team.deleted
 challenge.created           challenge.updated          challenge.published
@@ -132,7 +132,7 @@ role.created                 role.updated               role.deleted
 role.assigned                role.unassigned
 ticket.created               ticket.assigned            ticket.resolved
 ticket.message_posted
-feedback.submitted
+feedback.submitted           survey.opened
 announcement.published
 site.settings_updated
 score.adjusted               achievement.awarded
@@ -325,6 +325,17 @@ further rules (the fuller runaway detection stays open in §15). If the
 automations module is disabled for the event's competition (§11.3), nothing
 fires for that event — global rules included.
 
+**One trigger is time-based, not event-based** (`competition.time_remaining`):
+a rule can fire "N minutes before a competition ends", which has no mutation to
+hang an event off. A periodic scheduler (`utils/automation_scheduler.py`,
+started by the lifespan alongside the audit consumer) ticks each minute,
+computes each competition's `minutes_remaining`, and fires matching
+competition-scoped rules through the same `run_rule` path — **once**, when the
+rule's threshold condition (`minutes_remaining <= 60`, say) first goes true
+(dedup via `trigger_count`). This pairs naturally with the `open_survey` action:
+"an hour before the end, open the post-event survey" → `survey.opened` → "notify
+participants". Global time rules are skipped (they'd need per-competition dedup).
+
 ### 5.3 Action Types (initial set)
 
 | Action | Notes |
@@ -337,6 +348,7 @@ fires for that event — global rules included.
 | `award_achievement` | badge/points outside the normal scoring path |
 | `create_ticket` | e.g. auto-flag a challenge with high fail rate |
 | `update_score` | bonus/penalty adjustments |
+| `open_survey` | mark a feedback survey open for responses (emits `survey.opened`) |
 
 ### 5.4 Webhook Action Hardening
 
@@ -474,6 +486,8 @@ Teams                     team_view_all, team_edit_any, team_disqualify
 Support Tickets           ticket_view, ticket_respond, ticket_assign,
                           ticket_view_internal_notes
 Announcements             announcement_create, announcement_delete
+Feedback                  feedback_manage, feedback_view_responses,
+                          feedback_submit
 Users & Roles             manage_users, manage_roles, view_all_users
 Site Settings             manage_site_settings  (global — the site-wide
                           theme/branding an administrator sets, §9)

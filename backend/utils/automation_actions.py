@@ -267,6 +267,35 @@ async def _execute_unlock_challenge(db, rule, event_name, payload, config) -> No
     )
 
 
+# --- open_survey (§5.3 extension): mark a survey open for responses ----------
+
+
+async def _execute_open_survey(db, rule, event_name, payload, config) -> None:
+    from models.feedback import Survey
+
+    competition_id = payload.get("competition_id")
+    survey = await db.get(Survey, config.get("survey_id"))
+    # Tenant guard (§6.2): only open a survey in the event's own competition.
+    if survey is None or not competition_id or survey.competition_id != competition_id:
+        logger.warning("open_survey: survey not in competition; rule %s", rule.id)
+        return
+    if survey.is_open:
+        return  # idempotent
+    survey.is_open = True
+    await db.commit()
+    # Same event the feedback router emits on a manual open — so "notify on
+    # survey.opened" rules fire whether a human or a rule opened it.
+    await event_bus.emit(
+        "survey.opened",
+        {
+            "competition_id": competition_id,
+            "survey_id": survey.id,
+            "title": survey.title,
+            "rule_id": rule.id,
+        },
+    )
+
+
 # --- create_ticket (§5.3): open a thread in the event's context --------------
 
 
@@ -405,6 +434,7 @@ ACTIONS: dict[str, ActionSpec] = {
     "webhook": ActionSpec(_execute_webhook),
     "release_hint": ActionSpec(_execute_release_hint),
     "unlock_challenge": ActionSpec(_execute_unlock_challenge),
+    "open_survey": ActionSpec(_execute_open_survey),
     "create_ticket": ActionSpec(_execute_create_ticket),
     "update_score": ActionSpec(_execute_update_score),
     "award_achievement": ActionSpec(_execute_award_achievement),

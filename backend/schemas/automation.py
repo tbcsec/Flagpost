@@ -90,6 +90,11 @@ class UnlockChallengeAction(BaseModel):
     challenge_id: str = Field(min_length=1)
 
 
+class OpenSurveyAction(BaseModel):
+    type: Literal["open_survey"]
+    survey_id: str = Field(min_length=1)
+
+
 class CreateTicketAction(BaseModel):
     type: Literal["create_ticket"]
     subject: str = Field(min_length=1, max_length=200)
@@ -117,6 +122,7 @@ Action = Annotated[
         WebhookAction,
         ReleaseHintAction,
         UnlockChallengeAction,
+        OpenSurveyAction,
         CreateTicketAction,
         UpdateScoreAction,
         AwardAchievementAction,

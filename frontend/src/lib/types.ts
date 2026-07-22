@@ -136,6 +136,63 @@ export interface AutomationRuleInput {
   is_enabled: boolean;
 }
 
+/** Feedback / surveys (ROADMAP #22). */
+export type QuestionType =
+  | "rating_1_10"
+  | "rating_1_5"
+  | "short_text"
+  | "long_text"
+  | "multiple_choice";
+
+export interface SurveyQuestion {
+  id: string;
+  prompt: string;
+  type: QuestionType;
+  options: string[];
+  required: boolean;
+  position: number;
+}
+
+export interface QuestionInput {
+  prompt: string;
+  type: QuestionType;
+  options: string[];
+  required: boolean;
+}
+
+export interface SurveySummary {
+  id: string;
+  title: string;
+  description: string | null;
+  is_open: boolean;
+  question_count: number;
+  response_count: number;
+  created_at: string;
+  /** For a competitor: whether they've responded. null for staff. */
+  responded: boolean | null;
+}
+
+export interface SurveyDetail extends SurveySummary {
+  questions: SurveyQuestion[];
+}
+
+export interface QuestionResults {
+  question_id: string;
+  prompt: string;
+  type: QuestionType;
+  answered: number;
+  average: number | null;
+  counts: Record<string, number> | null;
+  texts: string[] | null;
+}
+
+export interface SurveyResults {
+  survey_id: string;
+  title: string;
+  response_count: number;
+  questions: QuestionResults[];
+}
+
 /** The editor catalog (§5.5) — the builder is generated from it. */
 export interface CatalogField {
   key: string;

@@ -12,6 +12,12 @@ from models.automation import Achievement, AutomationRule
 from models.challenge import Category, Challenge
 from models.competition import Competition
 from models.competition_module import CompetitionModule
+from models.feedback import (
+    Survey,
+    SurveyAnswer,
+    SurveyQuestion,
+    SurveyResponse,
+)
 from models.hint import Hint, HintReveal
 from models.notification import Notification
 from models.role import Role, RoleAssignment
@@ -38,6 +44,10 @@ __all__ = [
     "Role",
     "RoleAssignment",
     "ScoreAdjustment",
+    "Survey",
+    "SurveyAnswer",
+    "SurveyQuestion",
+    "SurveyResponse",
     "SiteSettings",
     "Submission",
     "RefreshSession",

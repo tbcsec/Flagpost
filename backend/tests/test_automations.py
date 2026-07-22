@@ -6,16 +6,21 @@ gating both the API and the engine, and the §3.2 events.
 The engine runs on the background lane (ADR-0012), so tests that trigger it
 await ``event_bus.wait_for_background()`` before asserting effects."""
 
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy import func, select
 
 from db import SessionLocal
 from models.audit_log import AuditLogEntry
 from models.automation import Achievement, AutomationRule
 from models.challenge import Challenge
+from models.competition import Competition
+from models.feedback import Survey
 from models.hint import Hint, HintReveal
 from models.score_adjustment import ScoreAdjustment
 from models.ticket import Ticket
 from tests.conftest import admin_token
+from utils.automation_scheduler import run_time_rules
 from utils.event_bus import event_bus
 
 import main  # noqa: E402
@@ -259,7 +264,7 @@ async def test_catalog_generates_the_builder(client):
     by_type = {a["type"]: a for a in catalog["actions"]}
     assert set(by_type) == {
         "notify", "send_email", "webhook", "release_hint", "unlock_challenge",
-        "create_ticket", "update_score", "award_achievement",
+        "open_survey", "create_ticket", "update_score", "award_achievement",
     }
     assert by_type["notify"]["personal_allowed"] is True
     assert by_type["webhook"]["personal_allowed"] is False
@@ -784,9 +789,10 @@ async def test_module_toggle_rbac_and_invariants(client):
     listed = (
         await client.get(f"/api/competitions/{comp}/modules", headers=_auth(admin))
     ).json()
-    assert listed == [
-        {"id": "automations", "name": "Automations", "version": "1.0.0", "enabled": True}
-    ]
+    by_id = {m["id"]: m for m in listed}
+    assert by_id["automations"] == {
+        "id": "automations", "name": "Automations", "version": "1.0.0", "enabled": True
+    }
 
     # Participants can't see or flip module state.
     resp = await client.get(f"/api/competitions/{comp}/modules", headers=_auth(ada))
@@ -860,3 +866,163 @@ async def test_disabled_module_stops_engine_and_api(client):
     chal2 = await _challenge(client, comp, title="Two", flag="flag{two}")
     await _solve(client, comp, chal2, ada, flag="flag{two}")
     assert len(await _notifications(client, ada)) == 1
+
+
+# --- open_survey action + the time-remaining scheduler (survey/automation glue) ---
+
+
+async def _create_survey(client, comp, admin, *, title="Feedback") -> str:
+    return (
+        await client.post(
+            f"/api/competitions/{comp}/surveys",
+            json={"title": title, "description": None},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+
+
+async def _set_end_at(comp: str, when) -> None:
+    async with SessionLocal() as session:
+        competition = await session.get(Competition, comp)
+        competition.end_at = when
+        await session.commit()
+
+
+async def test_open_survey_action_opens_and_emits(client):
+    comp = await _competition(client)
+    chal = await _challenge(client, comp)
+    admin = await admin_token(client)
+    ada = await _participant(client, comp, "ada@example.com")
+    survey = await _create_survey(client, comp, admin)  # closed
+
+    await _create_rule(
+        client, admin, comp,
+        actions=[{"type": "open_survey", "survey_id": survey}],
+    )
+    await _solve(client, comp, chal, ada)
+
+    async with SessionLocal() as session:
+        assert (await session.get(Survey, survey)).is_open is True
+        names = (await session.scalars(select(AuditLogEntry.event_name))).all()
+    assert "survey.opened" in names
+
+
+async def test_open_survey_action_respects_tenancy(client):
+    comp = await _competition(client)
+    other = await _competition(client)
+    chal = await _challenge(client, comp)
+    admin = await admin_token(client)
+    ada = await _participant(client, comp, "ada@example.com")
+    foreign = await _create_survey(client, other, admin)  # a survey in another comp
+
+    await _create_rule(
+        client, admin, comp,
+        actions=[{"type": "open_survey", "survey_id": foreign}],
+    )
+    await _solve(client, comp, chal, ada)
+    # §6.2: the cross-competition survey is untouched.
+    async with SessionLocal() as session:
+        assert (await session.get(Survey, foreign)).is_open is False
+
+
+async def test_time_remaining_rule_fires_once_when_threshold_crossed(client):
+    comp = await _competition(client)
+    admin = await admin_token(client)
+    now = datetime.now(timezone.utc)
+    await _set_end_at(comp, now + timedelta(minutes=30))  # 30 min left
+    survey = await _create_survey(client, comp, admin)
+
+    rule = await _create_rule(
+        client, admin, comp,
+        trigger="competition.time_remaining",
+        conditions=[{"field": "minutes_remaining", "operator": "lte", "value": 60}],
+        actions=[{"type": "open_survey", "survey_id": survey}],
+    )
+
+    await run_time_rules(SessionLocal, now=now)
+    await event_bus.wait_for_background()
+    async with SessionLocal() as session:
+        assert (await session.get(Survey, survey)).is_open is True
+        assert (await session.get(AutomationRule, rule["id"])).trigger_count == 1
+
+    # Dedup: close the survey and tick again — the already-fired rule is skipped.
+    async with SessionLocal() as session:
+        (await session.get(Survey, survey)).is_open = False
+        await session.commit()
+    await run_time_rules(SessionLocal, now=now)
+    await event_bus.wait_for_background()
+    async with SessionLocal() as session:
+        assert (await session.get(Survey, survey)).is_open is False
+
+
+async def test_time_remaining_not_fired_before_threshold(client):
+    comp = await _competition(client)
+    admin = await admin_token(client)
+    now = datetime.now(timezone.utc)
+    await _set_end_at(comp, now + timedelta(hours=5))  # 300 min left
+    survey = await _create_survey(client, comp, admin)
+    await _create_rule(
+        client, admin, comp,
+        trigger="competition.time_remaining",
+        conditions=[{"field": "minutes_remaining", "operator": "lte", "value": 60}],
+        actions=[{"type": "open_survey", "survey_id": survey}],
+    )
+    await run_time_rules(SessionLocal, now=now)
+    async with SessionLocal() as session:
+        assert (await session.get(Survey, survey)).is_open is False  # 300 !<= 60
+
+
+async def test_time_remaining_skips_disabled_module(client):
+    comp = await _competition(client)
+    admin = await admin_token(client)
+    now = datetime.now(timezone.utc)
+    await _set_end_at(comp, now + timedelta(minutes=30))
+    survey = await _create_survey(client, comp, admin)
+    await _create_rule(
+        client, admin, comp,
+        trigger="competition.time_remaining",
+        conditions=[{"field": "minutes_remaining", "operator": "lte", "value": 60}],
+        actions=[{"type": "open_survey", "survey_id": survey}],
+    )
+    await client.put(
+        f"/api/competitions/{comp}/modules/automations",
+        json={"enabled": False}, headers=_auth(admin),
+    )
+    await run_time_rules(SessionLocal, now=now)
+    async with SessionLocal() as session:
+        assert (await session.get(Survey, survey)).is_open is False
+
+
+async def test_time_remaining_to_open_survey_to_notify_participants(client):
+    """The headline flow the user asked for: an hour before the competition
+    ends, open the post-event survey, which notifies participants."""
+    comp = await _competition(client)
+    admin = await admin_token(client)
+    ada = await _participant(client, comp, "ada@example.com")
+    now = datetime.now(timezone.utc)
+    await _set_end_at(comp, now + timedelta(minutes=45))
+    survey = await _create_survey(client, comp, admin, title="Post-event feedback")
+
+    await _create_rule(
+        client, admin, comp, name="Open survey near end",
+        trigger="competition.time_remaining",
+        conditions=[{"field": "minutes_remaining", "operator": "lte", "value": 60}],
+        actions=[{"type": "open_survey", "survey_id": survey}],
+    )
+    await _create_rule(
+        client, admin, comp, name="Announce the survey",
+        trigger="survey.opened",
+        actions=[{
+            "type": "notify", "target": "role", "role_name": "Participant",
+            "title": "The survey is open: {title}",
+        }],
+    )
+
+    await run_time_rules(SessionLocal, now=now)
+    await event_bus.wait_for_background()
+
+    async with SessionLocal() as session:
+        assert (await session.get(Survey, survey)).is_open is True
+    notifs = await _notifications(client, ada)
+    assert [n["type"] for n in notifs] == ["survey.opened"]
+    assert notifs[0]["title"] == "The survey is open: Post-event feedback"

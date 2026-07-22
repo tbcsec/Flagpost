@@ -52,10 +52,12 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     ],
     "achievement.awarded": ["competition_id", "user_id", "team_id", "name"],
     "competition.member_joined": ["competition_id", "user_id"],
+    "competition.time_remaining": ["competition_id", "minutes_remaining"],
     "team.created": ["competition_id", "team_id"],
     "team.member_joined": ["competition_id", "team_id", "user_id"],
     "announcement.published": ["competition_id"],
-    "feedback.submitted": ["competition_id", "user_id"],
+    "feedback.submitted": ["competition_id", "user_id", "survey_id", "response_id"],
+    "survey.opened": ["competition_id", "survey_id", "title"],
     "user.registered": ["user_id"],
 }
 
@@ -135,6 +137,7 @@ ACTION_FIELDS: dict[str, list[dict]] = {
     ],
     "release_hint": [_field("hint_id", "Hint ID")],
     "unlock_challenge": [_field("challenge_id", "Challenge ID")],
+    "open_survey": [_field("survey_id", "Survey ID")],
     "create_ticket": [
         _field("subject", "Subject", templateable=True),
         _field("body", "Body", "textarea", templateable=True),

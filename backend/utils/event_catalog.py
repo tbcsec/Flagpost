@@ -22,6 +22,9 @@ EVENT_TYPES: tuple[str, ...] = (
     "competition.started",
     "competition.ended",
     "competition.member_joined",
+    # Emitted by the scheduler as a competition nears its end_at (§5.2) — a
+    # time-based trigger, unlike the mutation events around it.
+    "competition.time_remaining",
     "team.created",
     "team.member_joined",
     "team.member_left",
@@ -47,6 +50,7 @@ EVENT_TYPES: tuple[str, ...] = (
     "ticket.resolved",
     "ticket.message_posted",
     "feedback.submitted",
+    "survey.opened",
     "announcement.published",
     "site.settings_updated",
     "score.adjusted",

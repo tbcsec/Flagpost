@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     # rules; evaluation stops past this depth (basic runaway-loop guard — the
     # fuller detection scheme stays open in §15).
     automation_max_depth: int = 3
+    # How often the time-trigger scheduler ticks (competition.time_remaining,
+    # §5.2). A minute is plenty for "N minutes before end" rules.
+    automation_scheduler_interval_seconds: float = 60.0
 
     # --- Object storage (MinIO / S3, §13.3) ---
     # Endpoint the backend talks to. Defaults to the compose MinIO as exposed on

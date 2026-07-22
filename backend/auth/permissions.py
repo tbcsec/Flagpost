@@ -71,6 +71,10 @@ PERMISSIONS: tuple[Permission, ...] = (
     # Announcements
     Permission("announcement_create", "Announcements", Scope.COMPETITION),
     Permission("announcement_delete", "Announcements", Scope.COMPETITION),
+    # Feedback (§5-adjacent, ROADMAP #22) — post-competition surveys.
+    Permission("feedback_manage", "Feedback", Scope.COMPETITION),
+    Permission("feedback_view_responses", "Feedback", Scope.COMPETITION),
+    Permission("feedback_submit", "Feedback", Scope.COMPETITION),
     # Users & Roles
     Permission("manage_users", "Users & Roles", Scope.GLOBAL),
     Permission("manage_roles", "Users & Roles", Scope.GLOBAL),
@@ -136,6 +140,11 @@ JUDGE_PERMISSIONS: list[str] = [
     "ticket_view_internal_notes",
     "announcement_create",
     "announcement_delete",
+    # Feedback (ROADMAP #22): a Judge builds surveys and reads results, and can
+    # answer one too.
+    "feedback_manage",
+    "feedback_view_responses",
+    "feedback_submit",
     "view_competition_analytics",
     "customize_dashboard",
     # Automations (§5): a Judge runs their competition's rules — "full
@@ -153,4 +162,6 @@ PARTICIPANT_PERMISSIONS: list[str] = [
     "challenge_view",
     "ticket_view",
     "ticket_respond",
+    # Answer a post-competition survey (ROADMAP #22).
+    "feedback_submit",
 ]

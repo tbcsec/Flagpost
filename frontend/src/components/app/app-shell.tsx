@@ -45,6 +45,9 @@ const analyticsIcon: Icon = (
 const boltIcon: Icon = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z" /></svg>
 );
+const feedbackIcon: Icon = (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 3h6a2 2 0 0 1 2 2v0h1a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1a2 2 0 0 1 2-2z" /><path d="M9 12l2 2 4-4" /></svg>
+);
 const shieldIcon: Icon = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2 4 6v6c0 5 3.4 8.7 8 10 4.6-1.3 8-5 8-10V6z" /></svg>
 );
@@ -63,6 +66,7 @@ const COMP_NAV: { href: string; label: string; icon: Icon; manage?: boolean }[] 
   { href: "/scoreboard", label: "Scoreboard", icon: scoreboardIcon },
   { href: "/participants", label: "Participants", icon: peopleIcon },
   { href: "/support", label: "Support", icon: supportIcon },
+  { href: "/feedback", label: "Feedback", icon: feedbackIcon },
   { href: "/analytics", label: "Analytics", icon: analyticsIcon, manage: true },
   { href: "/automations", label: "Automations", icon: boltIcon, manage: true },
   { href: "/settings", label: "Settings", icon: settingsIcon, manage: true },

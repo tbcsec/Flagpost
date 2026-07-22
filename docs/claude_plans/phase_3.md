@@ -201,7 +201,7 @@ pickers are a later polish. Frontend green +7 vitest; verified live: built a
 `notify` rule through the UI (optional fields correctly dropped), it persisted
 and re-opened for edit intact.
 
-## Phase 4 — Feedback / Survey (#22, optional module)
+## Phase 4 — Feedback / Survey (#22, optional module) — ✅ DONE
 
 Post-competition surveys as an **optional system module** `feedback` (§11.3),
 now that the automation engine exists to consume its trigger.
@@ -221,6 +221,33 @@ now that the automation engine exists to consume its trigger.
   a competitor-facing "post-competition survey" surface.
 - Tests: editor CRUD, each question type, one-response invariant, scoping/RBAC,
   the event fires and triggers a rule, CSV shape.
+
+**As built:** `feedback` is the **second optional module** (so it now shares the
+per-competition toggle surface with `automations`, and its routes 404 when
+disabled). Responses are **per-user** (feedback is an individual opinion — even
+in team mode), and a competition may hold **multiple** surveys. Three §7.1
+Feedback perms (`feedback_manage`/`feedback_view_responses`/`feedback_submit`);
+Judge gets all three, Participant gets `feedback_submit`. The `feedback.submitted`
+payload carries `survey_id`/`response_id` (added to the catalog's trigger
+fields). Frontend: a new gated **Feedback** nav item → `/feedback` with the
+staff survey builder (question CRUD + reorder + open/close), the competitor
+response form (rating chips / radio / text controls per type), a results dialog
+(rating histograms, choice tallies, text lists) and CSV download; `use-feedback.ts`.
+Verified live: built a 3-question survey, three competitors answered, the
+`feedback.submitted` rule notified a submitter, and results + CSV matched.
+
+**Post-Phase-4 automation glue (owner ask):** three additions wire feedback to
+automations end to end. (1) Marking a survey open now emits **`survey.opened`**
+(a trigger). (2) A new **`open_survey`** action (§5.3) marks a survey open from a
+rule (tenant-guarded, idempotent, emits `survey.opened`). (3) The **first
+time-based trigger, `competition.time_remaining`** — a per-minute scheduler
+(`utils/automation_scheduler.py`, lifespan-started, `run_rule` factored out of
+the engine) fires a competition-scoped rule **once** when `minutes_remaining`
+first crosses its threshold condition (dedup via `trigger_count`; global time
+rules skipped to avoid per-competition dedup). Together they express "an hour
+before the competition ends, open the post-event survey, which notifies
+participants" — verified end to end in tests. All catalog-driven, so the builder
+shows the new trigger/action with no frontend change; no migration.
 
 ## Phase 5 — Challenge & Team analytics (#23)
 

@@ -23,6 +23,7 @@ from plugins.loader import load_modules
 from realtime import router as realtime_router
 from routers import auth as auth_router
 from routers import modules as modules_router
+from utils import automation_scheduler
 from utils.audit_log import register_audit_log
 from utils.event_bus import event_bus
 
@@ -50,7 +51,15 @@ async def lifespan(app: FastAPI):
                 "password. Change it now via POST /api/auth/change-password.",
                 DEFAULT_ADMIN_EMAIL,
             )
+    # Start the automation time-trigger scheduler (§5.2) — kernel wiring like the
+    # audit-log consumer; the tick no-ops until a competition.time_remaining rule
+    # exists. Not started under the test transport (no lifespan), so tests drive
+    # run_time_rules directly.
+    automation_scheduler.start(
+        SessionLocal, settings.automation_scheduler_interval_seconds
+    )
     yield
+    automation_scheduler.stop()
 
 
 app = FastAPI(title="Flagpost API", version="0.0.0", lifespan=lifespan)

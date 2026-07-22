@@ -15,8 +15,7 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, Field, field_validator
 
-from utils.automation_engine import CONDITION_OPERATORS
-from utils.event_catalog import TRIGGERABLE_EVENTS, is_triggerable
+from utils.event_catalog import is_triggerable
 
 _TEMPLATE_MAX = 2000
 
@@ -183,17 +182,45 @@ class RuleOut(BaseModel):
     created_at: datetime
 
 
+class CatalogField(BaseModel):
+    """One config input the builder renders for an action (§5.5)."""
+
+    key: str
+    label: str
+    kind: Literal["text", "textarea", "number", "select", "string_list", "keyvalue"]
+    required: bool = True
+    options: list[str] | None = None
+    placeholder: str | None = None
+    # Supports {field} interpolation from the event payload — a UI hint.
+    templateable: bool = False
+
+
+class TriggerEntry(BaseModel):
+    event: str
+    label: str
+    # Payload fields available for conditions / {placeholders}.
+    fields: list[str]
+
+
+class OperatorEntry(BaseModel):
+    value: str
+    label: str
+    # exists / not_exists take no value input.
+    unary: bool
+
+
 class ActionCatalogEntry(BaseModel):
     type: str
+    label: str
     personal_allowed: bool
+    fields: list[CatalogField]
 
 
 class AutomationCatalog(BaseModel):
-    """What the rule editor needs to offer: triggers, operators, action types.
-    (Phase 3's builder enriches this with payload field hints.)"""
+    """Everything the rule editor is generated from (§5.5): triggers with their
+    payload fields, condition operators, and action types with their config
+    fields. Built by ``utils.automation_catalog.build_catalog``."""
 
-    triggers: list[str] = Field(default_factory=lambda: list(TRIGGERABLE_EVENTS))
-    operators: list[str] = Field(
-        default_factory=lambda: list(CONDITION_OPERATORS)
-    )
+    triggers: list[TriggerEntry]
+    operators: list[OperatorEntry]
     actions: list[ActionCatalogEntry]

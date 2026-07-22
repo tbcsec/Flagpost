@@ -172,7 +172,7 @@ runaway-loop guard"; destination rate-limiting and the resolve→connect TOCTOU
 §15. Backend-only, no migration, not browser-observable — covered by unit tests
 (`test_webhook_security.py` + template/header cases in `test_automations.py`).
 
-## Phase 3 — Visual rule builder UI (§5.5)
+## Phase 3 — Visual rule builder UI (§5.5) — ✅ DONE
 
 Built **after** the JSON model is stable (§5.5's own guidance) — the schema is
 what tests and any future plugins depend on, so it settles first.
@@ -186,6 +186,20 @@ what tests and any future plugins depend on, so it settles first.
   `owner_user_id` rules) without the admin automation permissions.
 - Tests (vitest): builder serializes to/from the Phase-1 JSON model; catalog
   gating; the module-disabled empty state.
+
+**As built:** the builder is **catalog-driven** — the Phase-1 `/catalog`
+endpoint grew from a bare list into `utils/automation_catalog.py` (triggers +
+their payload fields, operators with a `unary` flag, actions with config-field
+descriptors keyed by UI `kind`); a backend drift test asserts every executor has
+descriptors and vice versa. The node-flow lives on the competition-scoped
+`/automations` page (not Admin — that page hosts the **global** rules), which
+also gained the **personal-rules** section (notify-self, any user). Serialization
+is the pure `lib/automation-builder.ts` (`blankRule`/`toRuleInput`/`fromRule`),
+unit-tested for the number/list/keyvalue coercion + unary-operator + round-trip
+cases. Config `id` fields (hint/challenge) are text inputs for now — entity
+pickers are a later polish. Frontend green +7 vitest; verified live: built a
+`notify` rule through the UI (optional fields correctly dropped), it persisted
+and re-opened for edit intact.
 
 ## Phase 4 — Feedback / Survey (#22, optional module)
 

@@ -136,10 +136,40 @@ export interface AutomationRuleInput {
   is_enabled: boolean;
 }
 
+/** The editor catalog (§5.5) — the builder is generated from it. */
+export interface CatalogField {
+  key: string;
+  label: string;
+  kind: "text" | "textarea" | "number" | "select" | "string_list" | "keyvalue";
+  required: boolean;
+  options: string[] | null;
+  placeholder: string | null;
+  templateable: boolean;
+}
+
+export interface TriggerEntry {
+  event: string;
+  label: string;
+  fields: string[];
+}
+
+export interface OperatorEntry {
+  value: string;
+  label: string;
+  unary: boolean;
+}
+
+export interface ActionCatalogEntry {
+  type: string;
+  label: string;
+  personal_allowed: boolean;
+  fields: CatalogField[];
+}
+
 export interface AutomationCatalog {
-  triggers: string[];
-  operators: string[];
-  actions: { type: string; personal_allowed: boolean }[];
+  triggers: TriggerEntry[];
+  operators: OperatorEntry[];
+  actions: ActionCatalogEntry[];
 }
 
 /** One in-app notification for the bell (§4.4). `read` is derived server-side

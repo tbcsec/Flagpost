@@ -32,14 +32,13 @@ from models.competition import Competition
 from models.user import User
 from plugins.loader import is_module_enabled
 from schemas.automation import (
-    ActionCatalogEntry,
     AutomationCatalog,
     PersonalRuleCreate,
     RuleCreate,
     RuleOut,
     RuleUpdate,
 )
-from utils.automation_actions import ACTIONS
+from utils.automation_catalog import build_catalog
 from utils.event_bus import event_bus
 
 router = APIRouter(prefix="/api/automations", tags=["automations"])
@@ -103,14 +102,10 @@ async def _emit_rule_event(verb: str, rule: AutomationRule, actor: User) -> None
 async def automation_catalog(
     current_user: User = Depends(get_current_user),
 ) -> AutomationCatalog:
-    """Triggers/operators/action types the editor offers (§5.5 groundwork).
-    Authenticated-only (personal-rule authors need it too, §5.1)."""
-    return AutomationCatalog(
-        actions=[
-            ActionCatalogEntry(type=key, personal_allowed=spec.personal_allowed)
-            for key, spec in sorted(ACTIONS.items())
-        ]
-    )
+    """Everything the visual builder is generated from — triggers + their
+    payload fields, operators, and action config fields (§5.5). Authenticated-
+    only (personal-rule authors need it too, §5.1)."""
+    return AutomationCatalog(**build_catalog())
 
 
 # --- personal rules (§5.1) ---------------------------------------------------

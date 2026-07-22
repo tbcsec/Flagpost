@@ -90,3 +90,41 @@ export function useToggleAutomation() {
       }),
   };
 }
+
+// --- personal rules (§5.1): notify-self, no automation permission needed -----
+
+type PersonalInput = AutomationRuleInput & { competition_id?: string | null };
+
+export function usePersonalAutomations() {
+  const isAuthenticated = useAuthStore((s) => s.status === "authenticated");
+  return useQuery({
+    queryKey: automationKeys.personal,
+    queryFn: () => automationsApi.personal.list(),
+    enabled: isAuthenticated,
+  });
+}
+
+export function useCreatePersonalAutomation() {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (input: PersonalInput) => automationsApi.personal.create(input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUpdatePersonalAutomation() {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({ ruleId, input }: { ruleId: string; input: PersonalInput }) =>
+      automationsApi.personal.update(ruleId, input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDeletePersonalAutomation() {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (ruleId: string) => automationsApi.personal.remove(ruleId),
+    onSuccess: invalidate,
+  });
+}

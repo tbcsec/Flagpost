@@ -377,6 +377,18 @@ addition once the JSON model above is stable — don't build the visual layer
 before the schema, since the schema is what plugins and tests actually
 depend on.
 
+**As built (Tier 3 Phase 3):** a numbered node-flow (When → If → Then) editor,
+**generated from a catalog endpoint** (`GET /api/automations/catalog`) rather
+than hand-coded per action — `utils/automation_catalog.py` describes each
+trigger's payload fields, each operator (with a `unary` flag), and each action
+type's config fields (with a UI `kind`), so adding an action is a backend-only
+change the builder picks up (a drift test keeps the descriptors and the executor
+registry in lockstep). Builder-state↔JSON serialization is a pure, unit-tested
+module (`lib/automation-builder.ts`). The same builder serves org rules
+(competition-scoped and, on Admin → Automations, global) and the lighter
+**personal-rule** surface (notify-self only, §5.1); the `notify` target options
+are filtered by context (personal → self; org → everyone but self).
+
 ---
 
 ## 6. Multi-Competition Tenancy

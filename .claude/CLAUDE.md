@@ -31,8 +31,8 @@ file, don't ignore it.
 **Tier 0, Tier 1, and Tier 2 ("Makes It Good") are all complete — Tier 2 was
 built phase-by-phase per `docs/claude_plans/phase_2.md` (Phases 0–5 all
 shipped). Tier 3 is the current tier and is now scoped/planned in
-`docs/claude_plans/phase_3.md` (Phases 0–9; **Phases 0–2 shipped**, Phase 3 —
-the visual rule builder — next).
+`docs/claude_plans/phase_3.md` (Phases 0–9; **Phases 0–3 shipped**, Phase 4 —
+feedback/survey — next).
 An owner revision pulled three previously-deferred subsystems up into Tier 3 —
 the **full automation engine** (§5), **dashboard drag-and-drop** (§10), and
 **collaborative rich-text/CRDT editing** (§4.2) — alongside the polish items
@@ -140,6 +140,15 @@ What's built:
   (Discord `@everyone`, Slack `<!…>`/`<@…>`, markdown links) of the values
   substituted into an optional `body_template`. Residual/open: resolve→connect
   TOCTOU + destination rate-limiting (§15). No migration; backend-only.
+- **Tier 3 Phase 3** — the **visual rule builder** (§5.5): a catalog-driven
+  node-flow (When→If→Then) editor. `GET /api/automations/catalog`
+  (`utils/automation_catalog.py`) now describes triggers + their payload fields,
+  operators (`unary` flag), and each action's config fields (UI `kind`) — so a
+  new action is backend-only and the UI follows (drift test guards it).
+  `components/automations/rule-builder.tsx` + pure serialization in
+  `lib/automation-builder.ts` (unit-tested). Lives on `/automations` (competition
+  rules + a personal notify-self section); Admin → Automations hosts global
+  rules. No migration; the builder is additive over the Phase-1 engine/schema.
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0012 (event-dispatch sync-critical vs background, supersedes

@@ -241,11 +241,21 @@ async def test_rule_crud_emits_events(client):
     assert "automation.rule_deleted" in names
 
 
-async def test_catalog_lists_triggers_and_actions(client):
+async def test_catalog_generates_the_builder(client):
     token = await _register(client, "anyone@example.com")
     catalog = (await client.get("/api/automations/catalog", headers=_auth(token))).json()
-    assert "challenge.solved" in catalog["triggers"]
-    assert not any(t.startswith("automation.") for t in catalog["triggers"])
+
+    triggers = {t["event"] for t in catalog["triggers"]}
+    assert "challenge.solved" in triggers
+    assert not any(e.startswith("automation.") for e in triggers)
+    # Trigger carries its payload fields for condition/placeholder pickers.
+    solved = next(t for t in catalog["triggers"] if t["event"] == "challenge.solved")
+    assert "is_first_blood" in solved["fields"] and "points" in solved["fields"]
+
+    ops = {o["value"]: o for o in catalog["operators"]}
+    assert ops["exists"]["unary"] is True
+    assert ops["equals"]["unary"] is False
+
     by_type = {a["type"]: a for a in catalog["actions"]}
     assert set(by_type) == {
         "notify", "send_email", "webhook", "release_hint", "unlock_challenge",
@@ -253,6 +263,19 @@ async def test_catalog_lists_triggers_and_actions(client):
     }
     assert by_type["notify"]["personal_allowed"] is True
     assert by_type["webhook"]["personal_allowed"] is False
+    # Each action ships its config-field descriptors for the generated editor.
+    notify_fields = {f["key"]: f for f in by_type["notify"]["fields"]}
+    assert notify_fields["target"]["kind"] == "select"
+    assert notify_fields["title"]["templateable"] is True
+
+
+def test_catalog_covers_every_action_without_drift():
+    # The hand-authored field descriptors must stay in lockstep with the
+    # executor registry — no action without fields, no fields without an action.
+    from utils.automation_actions import ACTIONS
+    from utils.automation_catalog import ACTION_FIELDS
+
+    assert set(ACTION_FIELDS) == set(ACTIONS)
 
 
 # --- personal rules (§5.1) ----------------------------------------------------

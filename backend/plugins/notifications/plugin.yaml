@@ -1,0 +1,15 @@
+id: notifications
+name: In-App Notifications
+version: 1.0.0
+# Required-core (§11.3, §4.4): the baseline notification center (bell + per-user
+# read/unread) that lets users notice activity before the automation engine's
+# `notify` action exists. Owns the per-user `/ws/user/<id>` room and turns the
+# required-core ticket events into notifications. Depends only on the tenancy
+# root — NOT on tickets: the ticket-event listeners are harmless no-ops if no
+# ticket events fire, and the module also serves automations later.
+required_core: true
+provides:
+  routes: true
+  event_listeners: true
+dependencies:
+  - competitions

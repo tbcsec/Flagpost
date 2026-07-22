@@ -101,6 +101,19 @@ export interface TicketDetail extends Ticket {
   messages: TicketMessage[];
 }
 
+/** One in-app notification for the bell (§4.4). `read` is derived server-side
+ *  from the row's nullable `read_at`. */
+export interface AppNotification {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  competition_id: string | null;
+  read: boolean;
+  created_at: string;
+}
+
 /** One persisted event from the audit log (§3.3). */
 export interface AuditLogEntry {
   id: string;

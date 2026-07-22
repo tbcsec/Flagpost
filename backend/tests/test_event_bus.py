@@ -82,6 +82,46 @@ async def test_slow_handler_times_out_without_blocking_siblings():
     assert fast_done == ["x.y"]
 
 
+async def test_background_handler_runs_without_blocking():
+    """A background handler (ADR-0012) is scheduled, not awaited — emit returns
+    before it finishes, and wait_for_background lets a test observe its effect."""
+    bus = EventBus()
+    order: list[str] = []
+
+    @bus.on("x.y", background=True)
+    async def _bg(name, payload):
+        await asyncio.sleep(0.05)
+        order.append("bg")
+
+    @bus.on("x.y")
+    async def _fg(name, payload):
+        order.append("fg")
+
+    await bus.emit("x.y", {})
+    # Only the foreground handler has run when emit returns.
+    assert order == ["fg"]
+    await bus.wait_for_background()
+    assert order == ["fg", "bg"]
+
+
+async def test_background_handler_failure_is_isolated():
+    bus = EventBus()
+    ran: list[str] = []
+
+    @bus.on("x.y", background=True)
+    async def _boom(name, payload):
+        raise RuntimeError("bg blew up")
+
+    @bus.on("x.y", background=True)
+    async def _ok(name, payload):
+        ran.append("ok")
+
+    await bus.emit("x.y", {})
+    await bus.wait_for_background()
+    # A raising background handler is logged, never breaks its sibling.
+    assert ran == ["ok"]
+
+
 async def test_unsubscribe_owner_detaches_handlers():
     bus = EventBus()
     seen: list[str] = []

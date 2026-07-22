@@ -9,6 +9,7 @@
 import { useAuthStore } from "@/stores/auth";
 import type {
   Announcement,
+  AppNotification,
   AuditLogPage,
   AuditLogQuery,
   Attachment,
@@ -480,6 +481,18 @@ export const attachmentsApi = {
       `/api/competitions/${competitionId}/challenges/${challengeId}/attachments/${attachmentId}`,
       { method: "DELETE" },
     ),
+};
+
+export const notificationsApi = {
+  // The current user's own notification center (§4.4) — site-wide, not nested
+  // under a competition, since a user's notifications span every competition.
+  list: () => apiFetch<AppNotification[]>("/api/notifications"),
+  unreadCount: () =>
+    apiFetch<{ unread: number }>("/api/notifications/unread-count"),
+  markRead: (id: string) =>
+    apiFetch<AppNotification>(`/api/notifications/${id}/read`, { method: "POST" }),
+  markAllRead: () =>
+    apiFetch<void>("/api/notifications/read-all", { method: "POST" }),
 };
 
 /** Unauthenticated connectivity check (skeleton hello endpoint). */

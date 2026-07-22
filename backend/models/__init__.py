@@ -11,6 +11,7 @@ from models.audit_log import AuditLogEntry
 from models.challenge import Category, Challenge
 from models.competition import Competition
 from models.hint import Hint, HintReveal
+from models.notification import Notification
 from models.role import Role, RoleAssignment
 from models.site_settings import SiteSettings
 from models.submission import Submission
@@ -27,6 +28,7 @@ __all__ = [
     "Competition",
     "Hint",
     "HintReveal",
+    "Notification",
     "Role",
     "RoleAssignment",
     "SiteSettings",

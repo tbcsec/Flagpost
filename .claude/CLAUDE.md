@@ -31,9 +31,9 @@ file, don't ignore it.
 **Tier 0, Tier 1, and Tier 2 ("Makes It Good") are all complete — Tier 2 was
 built phase-by-phase per `docs/claude_plans/phase_2.md` (Phases 0–5 all
 shipped). Tier 3 is the current tier and is now scoped/planned in
-`docs/claude_plans/phase_3.md` (Phases 0–9, nothing started yet). An owner
-revision pulled three previously-deferred subsystems up into Tier 3 — the
-**full automation engine** (§5), **dashboard drag-and-drop** (§10), and
+`docs/claude_plans/phase_3.md` (Phases 0–9; **Phase 0 shipped**, Phase 1 next).
+An owner revision pulled three previously-deferred subsystems up into Tier 3 —
+the **full automation engine** (§5), **dashboard drag-and-drop** (§10), and
 **collaborative rich-text/CRDT editing** (§4.2) — alongside the polish items
 (feedback/survey, analytics, onboarding, a11y). Build order is **automation
 engine first** (full spec), then the rest; work the phases in order and don't
@@ -103,10 +103,21 @@ What's built:
   wired Admin → Roles page (matrix editable for custom / read-only for system;
   competition roles hide global permissions) + `use-roles.ts`. No migration —
   the role/assignment tables are Tier-0.
+- **Tier 3 Phase 0** (automation groundwork) — the **event-dispatch split**
+  (ADR-0012, supersedes ADR-0009): `emit()` awaits foreground handlers (audit +
+  WS broadcasts, the default) but schedules `background=True` handlers
+  fire-and-forget so a slow webhook/email handler can't block the request — the
+  lane the automation engine's webhook/email actions use. Plus the real **§4.4
+  in-app notification center** (was placeholder): a `notifications` required-core
+  module with a per-user `Notification` model, `GET/mark-read` REST, the
+  `/ws/user/<id>` room, and ticket-event listeners that notify staff/opener the
+  same way the audio cue routes; `use-notifications.ts` + the wired topbar bell.
+  `auth.deps.users_with_permission` (the "who can do X here" audience query).
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
-sessions), ADR-0009 (synchronous event dispatch), ADR-0010 (seeded default
-admin creds), ADR-0011 (site-wide theming only — per-competition deferred).
+sessions), ADR-0012 (event-dispatch sync-critical vs background, supersedes
+ADR-0009), ADR-0010 (seeded default admin creds), ADR-0011 (site-wide theming
+only — per-competition deferred).
 The admin is a **seeded default account** (`admin@example.com` / `changeme`,
 ADR-0010, superseding the first-user bootstrap of ADR-0007); public
 registration never grants above Participant, and a loud startup warning

@@ -14,7 +14,12 @@ import { useAccess } from "@/lib/hooks/use-permissions";
 import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
 import { useLogout } from "@/lib/hooks/use-users";
 import { cn } from "@/lib/utils";
-import { NOTIFICATIONS } from "@/lib/placeholder-data";
+import { relativeTime } from "@/lib/datetime";
+import {
+  useMarkAllNotificationsRead,
+  useMarkNotificationRead,
+  useNotifications,
+} from "@/lib/hooks/use-notifications";
 import { useAuthStore } from "@/stores/auth";
 
 // Icons are the plain inline SVGs from the design mock — Flagpost ships no icon
@@ -295,7 +300,11 @@ function Topbar({
 
   const [notifOpen, setNotifOpen] = React.useState(false);
   const notifRef = React.useRef<HTMLDivElement>(null);
-  const hasUnread = NOTIFICATIONS.some((n) => n.unread);
+  const { data: notifications } = useNotifications();
+  const markRead = useMarkNotificationRead();
+  const markAllRead = useMarkAllNotificationsRead();
+  const items = notifications ?? [];
+  const hasUnread = items.some((n) => !n.read);
 
   // Default the active competition to the first one once the list loads.
   React.useEffect(() => {
@@ -361,22 +370,59 @@ function Topbar({
           <div className="absolute right-0 top-[calc(100%+10px)] z-50 w-[400px] overflow-hidden rounded-lg border border-border bg-card shadow-lg">
             <div className="flex items-center justify-between border-b border-border px-4 py-3.5">
               <span className="text-sm font-semibold">Notifications</span>
-              <span className="text-xs text-muted-foreground">Placeholder — not wired</span>
-            </div>
-            <ul className="max-h-80 overflow-y-auto">
-              {NOTIFICATIONS.map((n) => (
-                <li
-                  key={n.id}
-                  className={cn("border-b border-border px-4 py-3", n.unread && "bg-primary/5")}
+              {hasUnread && (
+                <button
+                  onClick={() => markAllRead.mutate()}
+                  className="text-xs text-primary hover:underline"
                 >
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="text-[13px] font-medium">{n.from}</span>
-                    <span className="whitespace-nowrap text-[11px] text-muted-foreground">{n.time}</span>
-                  </div>
-                  <div className="mt-0.5 text-[13px]">{n.text}</div>
-                </li>
-              ))}
-            </ul>
+                  Mark all read
+                </button>
+              )}
+            </div>
+            {items.length === 0 ? (
+              <div className="px-4 py-8 text-center text-[13px] text-muted-foreground">
+                No notifications yet.
+              </div>
+            ) : (
+              <ul className="max-h-80 overflow-y-auto">
+                {items.map((n) => {
+                  const body = (
+                    <>
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-[13px] font-medium">{n.title}</span>
+                        <span className="whitespace-nowrap text-[11px] text-muted-foreground">
+                          {relativeTime(n.created_at)}
+                        </span>
+                      </div>
+                      {n.body && <div className="mt-0.5 text-[13px]">{n.body}</div>}
+                    </>
+                  );
+                  const onActivate = () => {
+                    if (!n.read) markRead.mutate(n.id);
+                    setNotifOpen(false);
+                  };
+                  return (
+                    <li
+                      key={n.id}
+                      className={cn(
+                        "border-b border-border",
+                        !n.read && "bg-primary/5",
+                      )}
+                    >
+                      {n.link ? (
+                        <Link href={n.link} onClick={onActivate} className="block px-4 py-3 hover:bg-muted/50">
+                          {body}
+                        </Link>
+                      ) : (
+                        <button onClick={onActivate} className="block w-full px-4 py-3 text-left hover:bg-muted/50">
+                          {body}
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
         )}
       </div>

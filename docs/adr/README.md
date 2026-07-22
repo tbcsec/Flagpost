@@ -42,6 +42,7 @@ Status is one of:
 | [0006](0006-testing-stack.md) | Testing stack — pytest (backend) + Vitest (frontend) | Accepted |
 | [0007](0007-first-user-admin-bootstrap.md) | First registered user becomes the Administrator | Superseded by ADR-0010 |
 | [0008](0008-stateful-refresh-sessions.md) | Refresh tokens are stateful, hashed, rotating DB sessions | Accepted |
-| [0009](0009-synchronous-event-dispatch-tier0.md) | Event dispatch is synchronous (awaited) in Tier 0 | Accepted |
+| [0009](0009-synchronous-event-dispatch-tier0.md) | Event dispatch is synchronous (awaited) in Tier 0 | Superseded by ADR-0012 |
 | [0010](0010-seeded-admin-default-credentials.md) | Seed a default administrator with default credentials | Accepted |
 | [0011](0011-site-wide-theming-only.md) | Site-wide theming only for now (per-competition deferred) | Accepted |
+| [0012](0012-event-dispatch-sync-critical-vs-background.md) | Event dispatch splits into sync-critical vs async-background handlers | Accepted |

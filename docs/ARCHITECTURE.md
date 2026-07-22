@@ -1048,13 +1048,12 @@ Keep this section honest — update as decisions are made:
   login, and/or make the seed a no-op unless credentials are explicitly
   provided (so no instance ships with a known-default admin). Not urgent
   for the local/self-hosted model, but a hard blocker for public launch.
-- Event-dispatch model & delivery durability (surfaced in Tier 0, see
-  ADR-0009): `emit()` currently awaits all handlers, so §3.1's
-  "non-blocking emit" is not yet real. When the first slow/external
-  handler arrives (the automation `webhook` action, §5.3), does emit go
-  fire-and-forget with an **outbox** for durable async delivery, or split
-  into sync-critical handlers (audit) vs async-background handlers
-  (webhooks/notifications)? This also decides whether the audit log is
-  allowed to be lossy on a crash — today it isn't, precisely because
-  dispatch is synchronous. Tie this to ADR-0005's flagged
-  single-process/durability limits rather than deciding it piecemeal.
+- ~~Event-dispatch model & delivery durability~~ **(resolved, ADR-0012).**
+  `emit()` now runs foreground handlers awaited (the default — the audit log
+  stays synchronous and lossless, tests stay deterministic) and schedules
+  `background=True` handlers fire-and-forget, so a slow/external handler (the
+  automation `webhook`/`send_email` actions, §5.3) never blocks the request and
+  §3.1's "non-blocking emit" is real for the handlers that need it. A durable
+  **outbox** for at-least-once delivery across a crash/restart was deliberately
+  *not* built — it remains an additive layer behind the same `background` lane
+  if that requirement ever lands. ADR-0005's single-process scope is unchanged.

@@ -1,8 +1,14 @@
 # ADR-0009: Event dispatch is synchronous (awaited) in Tier 0
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-0012](0012-event-dispatch-sync-critical-vs-background.md)
 **Date:** 2026-07-18
 **Architecture reference:** `ARCHITECTURE.md` §3.1 (refines ADR-0005)
+
+> **Superseded (2026-07-22).** ADR-0012 resolves the temporary divergence this
+> ADR recorded: `emit()` now runs foreground handlers awaited (the default —
+> audit stays durable and tests deterministic) and schedules background handlers
+> (the automation `webhook`/`send_email` actions) fire-and-forget, so a slow
+> handler no longer blocks the request. The reasoning below is kept for history.
 
 ## Context
 

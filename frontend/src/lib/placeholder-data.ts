@@ -57,20 +57,6 @@ export const PLUGINS: PluginRow[] = [
   { id: "p3", name: "Discord Bridge", description: "Mirrors announcements to a Discord channel.", enabled: false },
 ];
 
-export interface AppNotification {
-  id: string;
-  from: string;
-  text: string;
-  time: string;
-  unread: boolean;
-}
-
-export const NOTIFICATIONS: AppNotification[] = [
-  { id: "n1", from: "Grace Hopper (judge)", text: 'Replied to your ticket "Invite code not working".', time: "4 min ago", unread: true },
-  { id: "n2", from: "Spring CTF 2026", text: "New announcement: Scoring freeze at T-1h.", time: "1h ago", unread: true },
-  { id: "n3", from: "Flagpost", text: 'Your solve on "Baby RSA" was confirmed.', time: "3h ago", unread: false },
-];
-
 export const PERMISSION_CATEGORIES = [
   "Competition Management",
   "Challenges",

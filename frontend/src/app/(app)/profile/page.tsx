@@ -13,7 +13,8 @@ import { toast } from "@/stores/toast";
 
 // Profile. Changing your password IS wired (POST /api/auth/change-password).
 // Editing display name / email needs a user-update endpoint that doesn't exist
-// yet, and the personal notification inbox is unbuilt — both flagged.
+// yet — the notification inbox itself is live (topbar bell), only per-user
+// preferences (mute/channels) remain unbuilt; flagged.
 export default function ProfilePage() {
   const user = useAuthStore((s) => s.user);
   const changePassword = useChangePassword();
@@ -105,7 +106,7 @@ export default function ProfilePage() {
           <CardDescription>Your personal inbox — separate from broadcast announcements</CardDescription>
         </CardHeader>
         <CardContent>
-          <NotWiredNote>The personal notification inbox and preferences are not built yet.</NotWiredNote>
+          <NotWiredNote>The notification inbox is live in the topbar bell; these per-user preferences (mute, delivery channels) aren&apos;t built yet.</NotWiredNote>
           <ul className="mt-4 grid max-w-md gap-3">
             {prefs.map((label, i) => (
               <li key={label} className="flex items-center justify-between gap-3">

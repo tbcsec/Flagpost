@@ -87,6 +87,37 @@ async def user_has_permission(
     return False
 
 
+async def users_with_permission(
+    db: AsyncSession,
+    permission_key: str,
+    competition_id: str | None,
+) -> set[str]:
+    """The set of user ids that hold ``permission_key`` in the given context.
+
+    The inverse of :func:`user_has_permission` — "who can do X here" rather than
+    "can this user do X". A **global** assignment (``competition_id IS NULL``)
+    grants everywhere, so global Administrators are always included; a
+    **competition** assignment grants only for its competition (§7.5). Used to
+    resolve a notification/automation audience like "every staff member on this
+    competition" (§4.4).
+    """
+    rows = (
+        await db.execute(
+            select(RoleAssignment.user_id, Role.permissions)
+            .join(Role, Role.id == RoleAssignment.role_id)
+            .where(
+                (RoleAssignment.competition_id == competition_id)
+                | (RoleAssignment.competition_id.is_(None))
+            )
+        )
+    ).all()
+    return {
+        user_id
+        for user_id, permissions in rows
+        if permission_key in permissions
+    }
+
+
 def _competition_id_from_request(request: Request) -> str | None:
     """Best-effort extraction of the request's competition context.
 

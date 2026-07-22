@@ -165,16 +165,29 @@ what we have."
 Worth doing before a public/1.0 release, not worth doing before Tiers 1–2
 are solid.
 
-22. **Basic feedback/survey** — post-competition survey per `VISION.md`,
-    simple question types only (not the full builder), exportable results.
-23. **Basic challenge analytics** — solve count, completion rate, average
+22. **Feedback/Survey** — post-competition survey (competition scoped) per `VISION.md`,
+    with full editor. Include rating scale (1-10, 1-5), short text, long text, multiple choice.
+    Ability to export competition survey responses in .csv format as well as a trigger.
+23. **Challenge & Team analytics** — solve count, completion rate, average
     solve time per challenge. Read-only reporting off data that's already
     being captured by Tier 1 — no new instrumentation required, just
     surfacing it.
 24. **Onboarding / empty states** — first-run experience for a brand-new
     competition with no challenges yet, empty scoreboard states, etc. Easy
     to skip, very noticeable when skipped.
-25. **Accessibility, Responsiveness, and Optimization pass** — keyboard navigation, contrast,
+25. **Full automation engine** (Architecture §5) — conditions/actions UI,
+    webhook actions and their hardening, personal automation rules. The
+    event bus built in Tier 0 is what makes this addable later without a
+    rewrite; it's just not worth building the rule engine and its security
+    hardening before there's a stable set of events to automate against.
+26. **Dashboard drag-and-drop customization** (Architecture §10) — ships as
+    a fixed layout in Tier 2; the customizable layer is additive UI on top
+    of a dashboard that already works, not a blocker for one.
+27. **Collaborative rich-text editing** (Architecture §4.2) — both the
+    staff and team-facing cases. Real-time *presence* (Tier 2, #19) ships
+    first; true CRDT co-editing is a bigger lift, pulled into Tier 3 from
+    the previously-deferred list.
+28. **Accessibility, Responsiveness, and Optimization pass** — keyboard navigation, contrast,
     mobile layout for the competitor-facing screens in particular (people
     check scoreboards from their phones), a full optimization pass.
 
@@ -184,11 +197,6 @@ are solid.
 
 Real parts of the long-term vision, intentionally not in this roadmap:
 
-- **Full automation engine** (Architecture §5) — conditions/actions UI,
-  webhook actions and their hardening, personal automation rules. The
-  event bus built in Tier 0 is what makes this addable later without a
-  rewrite; it's just not worth building the rule engine and its security
-  hardening before there's a stable set of events to automate against.
 - **AI integration** (Architecture §12) — both the administrator and
   competitor assistants. Needs real usage data and a settled event/data
   layer to be useful rather than decorative.
@@ -211,10 +219,3 @@ Real parts of the long-term vision, intentionally not in this roadmap:
   cross-site rollup views, global-organiser role, and multi-site
   reporting are a distinct feature for a later release once there's a
   concrete multi-site event to build it against.
-- **Dashboard drag-and-drop customization** (Architecture §10) — ships as
-  a fixed layout in Tier 2; the customizable layer is additive UI on top
-  of a dashboard that already works, not a blocker for one.
-- **Collaborative rich-text editing** (Architecture §4.2) — both the
-  staff and team-facing cases. Real-time *presence* (Tier 2, #19) ships
-  first; true CRDT co-editing is a bigger lift for a feature that isn't
-  on the critical path to running a first competition.

@@ -30,9 +30,15 @@ file, don't ignore it.
 <!-- Update this line as tiers/phases complete. -->
 **Tier 0, Tier 1, and Tier 2 ("Makes It Good") are all complete — Tier 2 was
 built phase-by-phase per `docs/claude_plans/phase_2.md` (Phases 0–5 all
-shipped). Tier 3 is the next tier; check `docs/ROADMAP.md` before starting new
-work, and don't start Tier 3 items without confirming scope.** See
-`docs/ROADMAP.md` for the full tier breakdown.
+shipped). Tier 3 is the current tier and is now scoped/planned in
+`docs/claude_plans/phase_3.md` (Phases 0–9, nothing started yet). An owner
+revision pulled three previously-deferred subsystems up into Tier 3 — the
+**full automation engine** (§5), **dashboard drag-and-drop** (§10), and
+**collaborative rich-text/CRDT editing** (§4.2) — alongside the polish items
+(feedback/survey, analytics, onboarding, a11y). Build order is **automation
+engine first** (full spec), then the rest; work the phases in order and don't
+start a phase without confirming scope.** See `docs/ROADMAP.md` for the tier
+breakdown and `phase_3.md` for the phase-by-phase plan.
 
 What's built:
 
@@ -150,21 +156,22 @@ Explicitly deferred past MVP (`docs/ROADMAP.md`, "Explicitly Deferred"
 section). If a task seems to need one of these, flag it and ask rather
 than quietly building a scoped-down version:
 
-- Full automation engine (webhook actions, conditions/actions UI,
-  personal rules) — the event bus exists from Tier 0; the engine
-  consuming it doesn't yet.
 - AI integration — administrator or competitor assistant.
 - SSO / LDAP / SAML — password auth only until after public launch
   (`docs/adr/0003-jwt-access-refresh-auth.md`).
 - Plugin marketplace / third-party modules — the module *mechanism* is
   used for required-core features starting in Tier 0, but the
-  marketplace path stays closed.
+  marketplace path (listing/discovery + untrusted-code sandboxing) stays
+  closed.
 - Multi-competition tenancy *consolidation views* — `competition_id`
   scoping is required from Tier 0; cross-site rollups are not.
-- Dashboard drag-and-drop — ships as a fixed layout first (Tier 2), the
-  customizable layer comes later.
-- Collaborative rich-text (Y.js/CRDT) editing — presence-only in Tier 2;
-  true co-editing is a later lift.
+- Per-competition / white-label theming — site-wide only for now
+  (ADR-0011); the per-competition variant may return later.
+
+Note: the **automation engine**, **dashboard drag-and-drop**, and
+**collaborative rich-text/CRDT editing** were on this list but an owner
+revision moved them into **Tier 3** (see `phase_3.md`). Build them in
+phase order, not ad hoc — the plan is what to follow.
 
 ## Stack
 

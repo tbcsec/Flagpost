@@ -11,13 +11,14 @@ widgets. The shell and every section were built, but only the sections with a
 real backend are wired; the rest render as faithful UI seeded with placeholder
 data and flagged in-app with a **"Preview — …"** banner (`NotWiredNote`).
 
-**Status: through Tier 2 (complete).** Since the original handoff the backend
-has caught up through all of Tier 1 and Tier 2, so most of what was placeholder
-is now wired — the dashboard, support tickets, presence, site-wide theming
-(Appearance), and the custom-role editor (Roles) are all real. The tables below
-have been kept current; the remaining placeholder surfaces are the genuinely
-deferred ones (Analytics, Automations, Users directory, Plugins toggle,
-Notifications inbox).
+**Status: Tier 2 complete; Tier 3 in progress (Phases 0–3 shipped).** Since the
+original handoff the backend has caught up through all of Tier 1 and Tier 2 and
+into Tier 3 (per `claude_plans/phase_3.md`): the notification bell (Phase 0) and
+the whole automation surface — rules + the visual builder (Phases 1–3) — are now
+real too. The tables below are kept current; the remaining placeholder surfaces
+are Analytics, the Admin → Users directory, the Admin → Plugins toggle UI (its
+per-competition module-toggle *backend* now exists), Admin → Dashboard global
+stats, and per-user notification *preferences* (the inbox itself is wired).
 
 ## Design system adopted
 
@@ -74,6 +75,8 @@ code.
 | Presence indicators | **Wired** (Tier 2 Phase 3, §4.1) — WS presence with debounced clear: "N others viewing" on the challenge dialog (new presence-only `challenge` room) and "a judge is looking at this ticket" on the ticket thread (`usePresence` + `PresenceIndicator`) |
 | Admin → Appearance (site-wide theming) | **Wired** (Tier 2 Phase 4, §9) — platform name + palette + accent (preset or custom hex) with live preview, `manage_site_settings`-gated `site_settings` module; login/register/sidebar/tab-title brand from the public read (`use-site-settings`, `lib/theme.ts`) |
 | Admin → Roles (custom role editor) | **Wired** (Tier 2 Phase 5, §7.4) — `roles` module gated on `manage_roles`: list + permission catalog, create/clone/edit/delete custom roles, assign(by-email)/unassign; system roles read-only, last-admin guard (`use-roles`) |
+| Notifications (topbar bell) | **Wired** (Tier 3 Phase 0, §4.4) — real per-user inbox: `notifications` required-core module, `/ws/user/<id>` live push, list/mark-read/read-all; ticket events routed like the audio cue (`use-notifications`). Per-user *preferences*/mute still unbuilt |
+| Automations (competition + admin) | **Wired** (Tier 3 Phases 1–3, §5) — the `automations` optional module + engine (all 8 §5.3 actions, per-competition toggle) and the §5.5 **visual rule builder**: catalog-driven When→If→Then editor for competition + global rules, plus a personal notify-self section (`use-automations`, `rule-builder`) |
 
 ## Built as UI, NOT wired (placeholder data + in-app "Preview" banner)
 
@@ -83,18 +86,21 @@ a retrofit later; **none of the data is real**.
 - **Dashboard** — now fully wired (Tier 2 Phase 1, see the wired table above).
   Ships as a **fixed layout** built on the widget-registration architecture so
   the drag-and-drop customization layer is additive later (§10.2, deferred).
-- **Analytics** — Tier 3.
-- **Automations** (competition + admin) — deferred past MVP.
+- **Analytics** — Tier 3 (`phase_3.md` Phase 5, not yet built).
 - **Admin → Dashboard** (global stats / module health) — no aggregate endpoint.
 - **Admin → Users** — no user-directory / create / ban API. (Note: role
   *assignment* is handled on Admin → Roles by email, so no directory is needed
   for that.)
 - **Admin → Site settings** (SMTP / AI / integrations) — deferred; the theming
   half of this page is now real on Admin → Appearance (see the wired table).
-- **Admin → Plugins** — the module loader is real but exposes no HTTP list/toggle;
-  the enable/disable admin UI is deferred.
-- **Notifications** (topbar panel) and **Profile → notification preferences** —
-  no personal-inbox backend.
+  (Note: the automation `send_email` action does use SMTP config, but there's no
+  admin UI to set it — it's env-configured, §5.3.)
+- **Admin → Plugins** — the per-competition module enable/disable **backend** is
+  now real (`GET`/`PUT /api/competitions/{id}/modules`, Tier 3 Phase 1), but this
+  page still renders the static `PLUGINS` list; a UI over the real toggle is
+  unbuilt.
+- **Profile → notification preferences** — the notification *inbox* is wired
+  (topbar bell, see above), but per-user mute/channel preferences aren't built.
 - **Lobby join actions / Admin archive+delete competition** — no endpoint;
   buttons present but disabled.
 

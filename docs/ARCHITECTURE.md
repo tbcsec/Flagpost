@@ -252,9 +252,13 @@ after.
 Notifications ride the same WebSocket infrastructure as the rest of this
 layer, but over a per-user room (`/ws/user/<user_id>`) rather than the
 per-resource rooms in §4.1, since a notification isn't scoped to one
-resource the way presence is. Email/push delivery stays deferred — once
-the automation engine ships, they're just another `notify` action target,
-not a second notification system to keep in sync with this one.
+resource the way presence is. **As built** (Tier 3 Phase 0): the in-app
+bell + per-user read/unread state is real (a required-core `notifications`
+module), and email delivery arrived as promised as the automation
+`send_email` action (§5.3, Tier 3 Phase 1) rather than a second notification
+system — SMTP is env-configured and the action no-ops when it's unset. What
+stays deferred is *push* delivery and a per-user notification-**preferences**
+surface (mute/channels); the baseline bell has no per-user settings yet.
 
 ---
 
@@ -850,6 +854,17 @@ The loader:
    entry point.
 3. Mounts any FastAPI router the plugin provides, gated on the plugin's
    `enabled` flag being checked on every request, not just at mount time.
+
+**As built** (Tier 3 Phase 1): the `automations` module is the first genuinely
+*optional* one (`required_core: false`), so it's the first to exercise the
+per-request enable gate — a loaded optional module always *mounts*, but its
+per-competition state lives in the `competition_modules` table (absent row =
+enabled) and is checked per request via `plugins.loader.is_module_enabled`
+(`GET`/`PUT /api/competitions/{id}/modules`). Required-core modules skip the
+gate (always on). Manifest `dependencies` are enforced at load (the loader
+refuses a module whose dependency isn't present); `settings`/`widgets`/
+`nav_items`/`extensions` from the manifest above remain declared-but-unused
+until a module needs them.
 
 ### 11.2 Extension Slots
 

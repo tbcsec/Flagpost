@@ -100,8 +100,10 @@ This is the actual MVP: enough to run one competition, live, end to end.
     ideally pushed live rather than requiring a refresh (same WebSocket
     layer as the scoreboard).
 15. **Basic hints** — a hint attached to a challenge, revealed on request,
-    optionally at a point cost. No automation-driven hint release yet
-    (that's an automation *action* type per Architecture §5.3, deferred).
+    optionally at a point cost. Automation-*driven* release (unlocking a hint
+    from a rule) is the `release_hint` action (Architecture §5.3) — since
+    shipped in Tier 3 Phase 1; the Tier 1 reveal itself is the explicit,
+    point-costed one.
 
 At the end of Tier 1, someone can run a real competition on the platform,
 live, with a scoreboard, and it will look and feel modern doing it. That's
@@ -161,6 +163,15 @@ what we have."
 ---
 
 ## Tier 3 — Pre-Launch Polish
+
+**Status: in progress**, built phase-by-phase per `docs/claude_plans/phase_3.md`
+(automation-first, full spec). Shipped so far: Phase 0 (notification-center +
+event-dispatch groundwork, ADR-0012), and the **full automation engine (#25)**
+across Phases 1–3 — the engine + all eight §5.3 actions + the first optional
+per-competition-toggleable module (Phase 1), webhook hardening (Phase 2,
+ADR-0013), and the §5.5 visual rule builder (Phase 3). Remaining: feedback/survey
+(#22), analytics (#23), dashboard drag-and-drop (#26), CRDT co-editing (#27),
+onboarding (#24), and the a11y/optimization pass (#28).
 
 Worth doing before a public/1.0 release, not worth doing before Tiers 1–2
 are solid.

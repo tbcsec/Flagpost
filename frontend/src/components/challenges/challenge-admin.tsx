@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { AttachmentsSection } from "@/components/challenges/attachments-section";
 import { HintsSection } from "@/components/challenges/hints-section";
@@ -181,6 +181,10 @@ function ChallengeForm({
   onDone: () => void;
 }) {
   const isEdit = challenge !== null;
+  // Own id so the submit button can live *outside* the <form> (below the
+  // attachments/hints sub-forms) and still submit it — a <form> can't nest
+  // another <form>, so those sections must be siblings, not children.
+  const formId = useId();
   const create = useCreateChallenge(competitionId);
   const update = useUpdateChallenge(competitionId, challenge?.id ?? "");
   const mutation = isEdit ? update : create;
@@ -226,8 +230,8 @@ function ChallengeForm({
           </CardDescription>
         )}
       </CardHeader>
-      <CardContent>
-        <form onSubmit={onSubmit} className="space-y-4">
+      <CardContent className="space-y-4">
+        <form id={formId} onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="title">Title</Label>
             <Input
@@ -302,40 +306,43 @@ function ChallengeForm({
             />
             Case-insensitive flag
           </label>
-
-          {/* Attachments and hints need a persisted challenge id, so they're
-              only available once the challenge exists (edit mode). */}
-          {isEdit && (
-            <>
-              <AttachmentsSection
-                competitionId={competitionId}
-                challengeId={challenge.id}
-              />
-              <HintsSection
-                competitionId={competitionId}
-                challengeId={challenge.id}
-              />
-            </>
-          )}
-
-          {mutation.isError && (
-            <p className="text-sm text-destructive">
-              {(mutation.error as Error).message}
-            </p>
-          )}
-          <div className="flex gap-2">
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending
-                ? "Saving…"
-                : isEdit
-                  ? "Save changes"
-                  : "Create challenge"}
-            </Button>
-            <Button type="button" variant="ghost" onClick={onDone}>
-              Cancel
-            </Button>
-          </div>
         </form>
+
+        {/* Attachments and hints have their own sub-forms, so they sit *outside*
+            the challenge <form> (no nested forms). They need a persisted
+            challenge id, so they're edit-mode only. */}
+        {isEdit && (
+          <>
+            <AttachmentsSection
+              competitionId={competitionId}
+              challengeId={challenge.id}
+            />
+            <HintsSection
+              competitionId={competitionId}
+              challengeId={challenge.id}
+            />
+          </>
+        )}
+
+        {mutation.isError && (
+          <p className="text-sm text-destructive">
+            {(mutation.error as Error).message}
+          </p>
+        )}
+        {/* `form={formId}` submits the challenge form even though this button is
+            outside it, so the layout (fields → sub-sections → actions) holds. */}
+        <div className="flex gap-2">
+          <Button type="submit" form={formId} disabled={mutation.isPending}>
+            {mutation.isPending
+              ? "Saving…"
+              : isEdit
+                ? "Save changes"
+                : "Create challenge"}
+          </Button>
+          <Button type="button" variant="ghost" onClick={onDone}>
+            Cancel
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

@@ -490,6 +490,13 @@ Items (this list grows as the owner adds them):
   load with a non-default cached theme). Fixed with `suppressHydrationWarning` on
   the root `<html>` (`app/layout.tsx`) — the standard pattern for a pre-hydration
   theme script.
+- **Cleanup: nested `<form>` on the challenge editor** ✅ — `ChallengeForm`
+  rendered `AttachmentsSection` + `HintsSection` (each with its own `<form>`)
+  *inside* the challenge `<form>`, which is invalid HTML (a hydration warning).
+  Restructured so those sub-sections and the action buttons sit as **siblings**
+  of the challenge form (not children); the submit button lives outside it and
+  submits via a `form={useId()}` attribute, preserving the fields → sub-sections
+  → actions layout. No behaviour change.
 
 ## Phase 10 — Accessibility, responsiveness & optimization pass (#28)
 

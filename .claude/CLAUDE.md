@@ -512,6 +512,14 @@ What's built:
       submissions (no migration/event). Frontend: `useChallengeSolves` +
       a "Solves (N)" section in the challenge dialog with a 🩸 first-blood marker;
       auto-refreshes on solve (shares the `["challenges", comp]` invalidation).
+    - **Public / spectator scoreboard** — the one **unauthenticated** read:
+      `GET /api/public/competitions/{id}/scoreboard` (`routers/public_scoreboard.py`,
+      mounted by the scoring plugin) serves a `public`, non-archived competition's
+      board (`PublicScoreboardOut` = board + name/start/end); anything else 404s so
+      private competitions aren't disclosed. Respects the freeze (spectator =
+      non-staff). Frontend: a standalone `/public/[competitionId]` route **outside
+      the (app) shell** (no auth), `usePublicScoreboard` (30s poll, no auth gate),
+      branded via public site settings + the mandatory Powered-by footer.
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

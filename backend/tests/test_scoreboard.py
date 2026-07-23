@@ -221,3 +221,25 @@ async def test_freeze_requires_permission(client):
         f"/api/competitions/{comp}/scoreboard/freeze", json={}, headers=_auth(player)
     )
     assert resp.status_code == 403
+
+
+# --- public (spectator) scoreboard (Phase 9) ---------------------------------
+
+
+async def test_public_scoreboard_only_for_public_competitions(client):
+    admin = await admin_token(client)
+    # A public competition + a private one.
+    pub = (await client.post("/api/competitions", json={"name": "Open CTF", "participation_mode": "individual", "visibility": "public"}, headers=_auth(admin))).json()["id"]
+    priv = (await client.post("/api/competitions", json={"name": "Closed CTF", "participation_mode": "individual", "visibility": "private"}, headers=_auth(admin))).json()["id"]
+
+    # No Authorization header at all — the whole point of the spectator board.
+    ok = await client.get(f"/api/public/competitions/{pub}/scoreboard")
+    assert ok.status_code == 200
+    body = ok.json()
+    assert body["name"] == "Open CTF"
+    assert body["frozen"] is False
+    assert "entries" in body
+
+    # A private competition isn't disclosed.
+    hidden = await client.get(f"/api/public/competitions/{priv}/scoreboard")
+    assert hidden.status_code == 404

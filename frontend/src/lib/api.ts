@@ -57,6 +57,7 @@ import type {
   SetupRequest,
   SetupStatus,
   RoleAssignment,
+  PublicScoreboard,
   Scoreboard,
   SignedUrl,
   OperationalSettings,
@@ -469,6 +470,14 @@ export const scoreboardApi = {
     apiFetch<Scoreboard>(`/api/competitions/${competitionId}/scoreboard/unfreeze`, {
       method: "POST",
     }),
+};
+
+export const publicApi = {
+  // The unauthenticated spectator board (public competitions only).
+  scoreboard: (competitionId: string) =>
+    apiFetch<PublicScoreboard>(
+      `/api/public/competitions/${competitionId}/scoreboard`,
+    ),
 };
 
 export const ticketsApi = {

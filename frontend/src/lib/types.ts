@@ -582,6 +582,13 @@ export interface Scoreboard {
   frozen_at: string | null;
 }
 
+/** The spectator (no-login) board for a public competition. */
+export interface PublicScoreboard extends Scoreboard {
+  name: string;
+  start_at: string | null;
+  end_at: string | null;
+}
+
 /** A broadcast announcement (Phase 8). */
 export interface Announcement {
   id: string;

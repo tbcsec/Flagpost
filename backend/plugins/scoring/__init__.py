@@ -20,10 +20,13 @@ def setup(app, event_bus, db_factory) -> None:
     from auth.deps import user_has_permission
     from models.competition import Competition
     from realtime import manager, register_room_type
+    from routers.public_scoreboard import router as public_router
     from routers.scoreboard import router as scoreboard_router
     from utils.scoreboard import compute_scoreboard
 
     app.include_router(scoreboard_router)
+    # The unauthenticated spectator board for public competitions (Phase 9).
+    app.include_router(public_router)
 
     async def authorize(db, user, competition_id: str) -> bool:
         # Same gate as the REST route (§7.6): competitor access to the

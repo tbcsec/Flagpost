@@ -34,3 +34,12 @@ class FreezeRequest(BaseModel):
     # When to freeze the board at. Omitted = now. A future time schedules the
     # freeze (the board keeps moving until it's reached).
     frozen_at: datetime | None = None
+
+
+class PublicScoreboardOut(ScoreboardOut):
+    """The spectator board (no login): the same standings plus enough context to
+    render a standalone page. Only served for a ``public`` competition."""
+
+    name: str
+    start_at: datetime | None = None
+    end_at: datetime | None = None

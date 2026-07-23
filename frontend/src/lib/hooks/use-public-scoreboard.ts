@@ -1,0 +1,18 @@
+"use client";
+
+// One hook module per domain (§8). The public spectator board — no auth gate,
+// since the whole point is that a logged-out viewer can watch a public
+// competition. Polls periodically (no socket) so a spectator page stays fresh.
+
+import { useQuery } from "@tanstack/react-query";
+
+import { publicApi } from "@/lib/api";
+
+export function usePublicScoreboard(competitionId: string) {
+  return useQuery({
+    queryKey: ["public-scoreboard", competitionId],
+    queryFn: () => publicApi.scoreboard(competitionId),
+    enabled: Boolean(competitionId),
+    refetchInterval: 30_000,
+  });
+}

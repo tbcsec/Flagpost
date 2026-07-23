@@ -19,12 +19,18 @@ import { toast } from "@/stores/toast";
 const toInput = (iso: string | null) => (iso ? iso.slice(0, 16) : "");
 const fromInput = (v: string) => (v ? new Date(`${v}Z`).toISOString() : null);
 
+export type SettingsSection = "general" | "schedule" | "scoring";
+
 // Feature component. Edits go through the domain hook; RBAC is enforced
-// server-side (a non-organiser's PATCH 403s, surfaced inline).
+// server-side (a non-organiser's PATCH 403s, surfaced inline). One form + one
+// Save across all sections — the page shows one section at a time via tabs, but
+// the state lives here so switching tabs never loses an unsaved edit.
 export function CompetitionSettingsForm({
   competition,
+  section,
 }: {
   competition: Competition;
+  section: SettingsSection;
 }) {
   const update = useUpdateCompetition(competition.id);
   const [form, setForm] = useState({
@@ -64,104 +70,113 @@ export function CompetitionSettingsForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="name">Name</Label>
-        <Input
-          id="name"
-          value={form.name}
-          onChange={(e) => set("name", e.target.value)}
-          required
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="description">Description</Label>
-        <Input
-          id="description"
-          value={form.description}
-          onChange={(e) => set("description", e.target.value)}
-        />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label htmlFor="participation_mode">Participation mode</Label>
-          <Select
-            id="participation_mode"
-            value={form.participation_mode}
-            onChange={(e) =>
-              set("participation_mode", e.target.value as ParticipationMode)
-            }
-          >
-            <option value="team">Team</option>
-            <option value="individual">Individual</option>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="visibility">Visibility</Label>
-          <Select
-            id="visibility"
-            value={form.visibility}
-            onChange={(e) => set("visibility", e.target.value as Visibility)}
-          >
-            <option value="private">Private</option>
-            <option value="public">Public</option>
-          </Select>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label htmlFor="start_at">Starts</Label>
-          <Input
-            id="start_at"
-            type="datetime-local"
-            value={form.start_at}
-            onChange={(e) => set("start_at", e.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="end_at">Ends</Label>
-          <Input
-            id="end_at"
-            type="datetime-local"
-            value={form.end_at}
-            onChange={(e) => set("end_at", e.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="registration_opens_at">Registration opens</Label>
-          <Input
-            id="registration_opens_at"
-            type="datetime-local"
-            value={form.registration_opens_at}
-            onChange={(e) => set("registration_opens_at", e.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="registration_closes_at">Registration closes</Label>
-          <Input
-            id="registration_closes_at"
-            type="datetime-local"
-            value={form.registration_closes_at}
-            onChange={(e) => set("registration_closes_at", e.target.value)}
-          />
-        </div>
-      </div>
+      {section === "general" && (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="name">Name</Label>
+            <Input
+              id="name"
+              value={form.name}
+              onChange={(e) => set("name", e.target.value)}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <Input
+              id="description"
+              value={form.description}
+              onChange={(e) => set("description", e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="participation_mode">Participation mode</Label>
+              <Select
+                id="participation_mode"
+                value={form.participation_mode}
+                onChange={(e) =>
+                  set("participation_mode", e.target.value as ParticipationMode)
+                }
+              >
+                <option value="team">Team</option>
+                <option value="individual">Individual</option>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="visibility">Visibility</Label>
+              <Select
+                id="visibility"
+                value={form.visibility}
+                onChange={(e) => set("visibility", e.target.value as Visibility)}
+              >
+                <option value="private">Private</option>
+                <option value="public">Public</option>
+              </Select>
+            </div>
+          </div>
+        </>
+      )}
 
-      <div className="max-w-xs space-y-2">
-        <Label htmlFor="mc_guess_limit">Multiple-choice guess limit</Label>
-        <Input
-          id="mc_guess_limit"
-          type="number"
-          min={1}
-          max={1000}
-          placeholder="Unlimited"
-          value={form.mc_guess_limit}
-          onChange={(e) => set("mc_guess_limit", e.target.value)}
-        />
-        <p className="text-xs text-muted-foreground">
-          Guesses each competitor (or team) gets per multiple-choice question, to
-          curb brute-forcing. Blank = unlimited. Applies competition-wide.
-        </p>
-      </div>
+      {section === "schedule" && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="start_at">Starts</Label>
+            <Input
+              id="start_at"
+              type="datetime-local"
+              value={form.start_at}
+              onChange={(e) => set("start_at", e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="end_at">Ends</Label>
+            <Input
+              id="end_at"
+              type="datetime-local"
+              value={form.end_at}
+              onChange={(e) => set("end_at", e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="registration_opens_at">Registration opens</Label>
+            <Input
+              id="registration_opens_at"
+              type="datetime-local"
+              value={form.registration_opens_at}
+              onChange={(e) => set("registration_opens_at", e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="registration_closes_at">Registration closes</Label>
+            <Input
+              id="registration_closes_at"
+              type="datetime-local"
+              value={form.registration_closes_at}
+              onChange={(e) => set("registration_closes_at", e.target.value)}
+            />
+          </div>
+        </div>
+      )}
+
+      {section === "scoring" && (
+        <div className="max-w-xs space-y-2">
+          <Label htmlFor="mc_guess_limit">Multiple-choice guess limit</Label>
+          <Input
+            id="mc_guess_limit"
+            type="number"
+            min={1}
+            max={1000}
+            placeholder="Unlimited"
+            value={form.mc_guess_limit}
+            onChange={(e) => set("mc_guess_limit", e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Guesses each competitor (or team) gets per multiple-choice question, to
+            curb brute-forcing. Blank = unlimited. Applies competition-wide.
+          </p>
+        </div>
+      )}
 
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={update.isPending}>

@@ -669,8 +669,9 @@ Items (this list grows as the owner adds them):
     graded server-side by the same hash path. `has_flag` for MC needs both a hash
     and choices; publishing still requires it.
   - *Guess cap.* A finite option set is trivially brute-forced, so
-    `Competition.mc_guess_limit` (null = unlimited, owner call: **competition-wide,
-    not per-challenge**, set in competition settings) caps guesses per subject per
+    `Competition.mc_guess_limit` (**defaults to 2**, null = unlimited; owner call:
+    **competition-wide, not per-challenge**, set in competition settings) caps
+    guesses per subject per
     MC challenge. `submit_flag` refuses further guesses **before grading** once the
     cap is hit (so the block can't be probed for correctness) and returns
     `attempts_remaining`; the challenge list/detail expose it too
@@ -686,6 +687,11 @@ Items (this list grows as the owner adds them):
     blocks a 3rd guess (even the correct one), a fresh subject still gets its own
     allotment, correct-within-limit solves, and validation (≥2 unique options,
     answer among them).
+- **Competition Settings → tabs** ✅ — the growing settings page is organised into
+  **General / Schedule / Scoring / Modules** tabs (new dependency-free `Tabs`
+  primitive). One form + one Save across the non-module tabs; the form stays
+  *mounted* (hidden, not unmounted) as tabs switch, so an unsaved edit on one tab
+  survives visiting another. Modules (§11.3) is its own tab.
 
 ## Phase 10 — Accessibility, responsiveness & optimization pass (#28)
 

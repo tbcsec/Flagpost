@@ -70,7 +70,10 @@ class Competition(Base, TimestampMixin):
     # Reversible (unarchive). Null = active.
     archived_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
     # Competition-wide cap on guesses per subject per multiple-choice challenge, to
-    # blunt brute-forcing a finite option set. Null = unlimited. Applies only to
-    # multiple_choice challenges (static/regex are covered by the submission rate
-    # limiter). Not scoped per-challenge by design (owner decision).
+    # blunt brute-forcing a finite option set. Null = unlimited. New competitions
+    # **default to 2** — applied at the API layer (``CompetitionCreate``), not as a
+    # column default, so an explicit null (unlimited) isn't clobbered by the
+    # SQLAlchemy default-on-None behaviour. Applies only to multiple_choice
+    # challenges (static/regex are covered by the submission rate limiter). Not
+    # scoped per-challenge by design (owner decision).
     mc_guess_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)

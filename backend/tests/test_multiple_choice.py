@@ -32,12 +32,21 @@ async def _assign_participant(user_id: str, competition_id: str) -> None:
 
 
 async def _mc_competition(client, token, *, limit: int | None) -> str:
-    body = {"name": "MC", "participation_mode": "individual"}
-    if limit is not None:
-        body["mc_guess_limit"] = limit
+    # Always send the key: the default is now 2, so "unlimited" needs explicit null.
+    body = {"name": "MC", "participation_mode": "individual", "mc_guess_limit": limit}
     resp = await client.post("/api/competitions", json=body, headers=_auth(token))
     assert resp.status_code == 201, resp.text
     return resp.json()["id"]
+
+
+async def test_default_guess_limit_is_two(client):
+    token = await admin_token(client)
+    resp = await client.post(
+        "/api/competitions",
+        json={"name": "Defaults", "participation_mode": "individual"},
+        headers=_auth(token),
+    )
+    assert resp.json()["mc_guess_limit"] == 2
 
 
 async def _mc_challenge(client, token, comp, *, correct="Paris") -> str:

@@ -18,9 +18,9 @@ class CompetitionCreate(BaseModel):
     registration_closes_at: datetime | None = None
     participation_mode: ParticipationMode = "team"
     visibility: Visibility = "private"
-    # Competition-wide cap on guesses per subject per multiple-choice challenge
-    # (null = unlimited).
-    mc_guess_limit: int | None = Field(default=None, ge=1, le=1000)
+    # Competition-wide cap on guesses per subject per multiple-choice challenge.
+    # Defaults to 2; send an explicit null for unlimited.
+    mc_guess_limit: int | None = Field(default=2, ge=1, le=1000)
 
 
 class CompetitionUpdate(BaseModel):

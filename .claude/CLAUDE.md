@@ -375,16 +375,20 @@ What's built:
     the answer never leaves the server — the competitor submits the option they
     picked and it grades server-side unchanged. `ChallengeOut` exposes `choices` +
     `attempts_remaining` (per subject). Because a finite option set is trivially
-    brute-forced, a **competition-wide** `Competition.mc_guess_limit` (null =
-    unlimited, set in **competition settings**, *not* per-challenge — owner call)
-    caps guesses per subject per MC challenge; `submit_flag` refuses further
+    brute-forced, a **competition-wide** `Competition.mc_guess_limit` (**defaults to
+    2**, applied at the API layer not as a column default so an explicit null =
+    unlimited isn't clobbered; set in **competition settings**, *not* per-challenge —
+    owner call) caps guesses per subject per MC challenge; `submit_flag` refuses further
     guesses **before grading** once the cap is hit (`subject_attempt_count[s]` in
     `utils/scoring`), returning `attempts_remaining`. Migration `d6e7f8a9b0c1`
     (adds both columns). Clone + the generic backup carry them. Frontend: the
     challenge editor gains an options editor (radio = correct), the challenge
     dialog renders radios + "N guesses remaining" + a locked state, and the
     competition settings form gains the guess-limit input. Reuses
-    `challenge.created/updated` + `challenge.solved`; no new event.
+    `challenge.created/updated` + `challenge.solved`; no new event. **Competition
+    Settings is tabbed** (General / Schedule / Scoring / Modules) via a new
+    dependency-free `Tabs` primitive; the settings form stays mounted across the
+    non-module tabs (hidden, not unmounted) so switching never drops an unsaved edit.
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

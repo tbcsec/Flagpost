@@ -29,10 +29,11 @@ from models.competition import Competition
 from models.hint import HintReveal
 from models.role import Role, RoleAssignment
 from models.score_adjustment import ScoreAdjustment
-from utils.scoring import challenge_value
 from models.submission import Submission
 from models.team import Team
 from models.user import User
+from utils.brackets import brackets_by_subject
+from utils.scoring import challenge_value
 
 
 async def _hint_costs_by_subject(
@@ -188,13 +189,18 @@ async def _awarded_by_subject(
 
 
 async def compute_scoreboard(
-    db: AsyncSession, competition: Competition, *, live: bool = False
+    db: AsyncSession,
+    competition: Competition,
+    *,
+    live: bool = False,
+    bracket: str | None = None,
 ) -> dict[str, Any]:
     """Return the ranked scoreboard as a JSON-serializable dict.
 
     ``live=True`` bypasses a scoreboard freeze (§13, Phase 9) so a staff caller
     can see the true standings; otherwise a frozen board is computed **as of**
     the freeze instant, so standings publicly stop moving once it passes.
+    ``bracket`` filters to one division and ranks within it (Phase 9, Group C).
     """
     team_mode = competition.participation_mode == "team"
     as_of = None if live else freeze_cutoff(competition)
@@ -203,6 +209,7 @@ async def compute_scoreboard(
     adjustments = await _adjustments_by_subject(db, competition.id, team_mode, as_of)
     award_points = await _award_points_by_subject(db, competition.id, team_mode, as_of)
     awarded = await _awarded_by_subject(db, competition, team_mode, as_of)
+    subject_brackets = await brackets_by_subject(db, competition.id)
 
     # The ranked entities (every registered subject, scored or not).
     if team_mode:
@@ -228,6 +235,10 @@ async def compute_scoreboard(
                 .distinct()
             )
         ).all()
+
+    # A bracket filter ranks within that division only.
+    if bracket is not None:
+        subjects = [s for s in subjects if subject_brackets.get(s[0]) == bracket]
 
     # Net points = awarded solves − hint costs + signed adjustments (§5.3
     # update_score) + award points (§5.3 create_award / manual awards), clamped
@@ -271,6 +282,7 @@ async def compute_scoreboard(
                 "last_solve_at": (
                     last_solve_at.isoformat() if last_solve_at is not None else None
                 ),
+                "bracket": subject_brackets.get(subject_id),
             }
         )
 
@@ -280,4 +292,5 @@ async def compute_scoreboard(
         "entries": entries,
         "frozen": as_of is not None,
         "frozen_at": as_of.isoformat() if as_of is not None else None,
+        "brackets": list(competition.brackets or []),
     }

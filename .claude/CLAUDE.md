@@ -601,6 +601,21 @@ What's built:
       - **Categories moved to Settings → Challenges** (alongside the tag/difficulty
         vocab, for uniformity); `CategoryManager` exported + removed from the
         Manage-challenges area.
+    - **Brackets / divisions** (Group C) — parallel rankings a competitor
+      **self-selects**. `Competition.brackets` (JSON vocab, Settings → General) +
+      a subject-keyed `bracket_memberships` table (`subject_id` = team id
+      team-mode / user id individual-mode — the §13.2 scoring subject, so one
+      table serves both modes; migration `c7d8e9fab0c1`). `PUT/GET
+      .../bracket` (self, via `resolve_subject`) + `PUT .../bracket/{subject_id}`
+      (staff `team_view_all` override); validated against the vocab
+      (`utils/brackets`). `compute_scoreboard` labels each entry with its
+      `bracket`, carries the vocab, and takes a `bracket=` filter (ranks within
+      the division). `ScoreboardOut` gains `bracket` per entry + `brackets`.
+      Frontend: `VocabEditor` on Settings → General, a Division **filter**
+      (client-side off the labeled board, so it stays live over WS) + a "Your
+      division" **picker** on the scoreboard (`use-brackets`). Clone carries the
+      vocab; `bracket_memberships` excluded from backup (per-subject state, like
+      scores' finer bits — polymorphic subject_id can't be cleanly remapped).
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

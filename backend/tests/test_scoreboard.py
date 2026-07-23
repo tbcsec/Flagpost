@@ -261,3 +261,41 @@ async def test_ctftime_feed_opt_in(client):
     # A competition without the feed enabled has none.
     off = (await client.post("/api/competitions", json={"name": "NoFeed", "participation_mode": "individual"}, headers=_auth(admin))).json()["id"]
     assert (await client.get(f"/api/public/competitions/{off}/ctftime")).status_code == 404
+
+
+# --- brackets / divisions (Phase 9, Group C) ---------------------------------
+
+
+async def test_bracket_self_select_and_scoreboard_filter(client):
+    admin = await admin_token(client)
+    comp = (await client.post("/api/competitions", json={"name": "Div CTF", "participation_mode": "individual", "brackets": ["Students", "Open"]}, headers=_auth(admin))).json()["id"]
+    c1 = await _published_challenge(client, comp, "flag{a}", 100)
+
+    ada, ada_id = await _register(client, "ada@example.com")
+    bob, bob_id = await _register(client, "bob@example.com")
+    for uid in (ada_id, bob_id):
+        async with __import__("db").SessionLocal() as s:
+            from sqlalchemy import select as _sel
+            from models.role import Role, RoleAssignment
+            role = await s.scalar(_sel(Role).where(Role.name == "Participant"))
+            s.add(RoleAssignment(user_id=uid, competition_id=comp, role_id=role.id))
+            await s.commit()
+
+    # Each picks a bracket; an off-vocab one is rejected.
+    assert (await client.put(f"/api/competitions/{comp}/bracket", json={"bracket": "Students"}, headers=_auth(ada))).status_code == 200
+    assert (await client.put(f"/api/competitions/{comp}/bracket", json={"bracket": "Open"}, headers=_auth(bob))).status_code == 200
+    assert (await client.put(f"/api/competitions/{comp}/bracket", json={"bracket": "Nope"}, headers=_auth(ada))).status_code == 400
+
+    await _submit(client, comp, c1, ada, "flag{a}")
+    await _submit(client, comp, c1, bob, "flag{a}")
+
+    # Full board labels each entry with its bracket + carries the vocab.
+    full = (await client.get(f"/api/competitions/{comp}/scoreboard", headers=_auth(ada))).json()
+    assert full["brackets"] == ["Students", "Open"]
+    labels = {e["name"]: e["bracket"] for e in full["entries"]}
+    assert labels["ada"] == "Students" and labels["bob"] == "Open"
+
+    # Filtering to a bracket ranks within it.
+    students = (await client.get(f"/api/competitions/{comp}/scoreboard?bracket=Students", headers=_auth(ada))).json()
+    assert [e["name"] for e in students["entries"]] == ["ada"]
+    assert students["entries"][0]["rank"] == 1

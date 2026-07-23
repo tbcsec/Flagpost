@@ -18,6 +18,8 @@ class ScoreboardEntry(BaseModel):
     points: int
     # When the subject reached its current score — the ranking tie-break.
     last_solve_at: datetime | None
+    # The subject's chosen bracket/division, or null (Phase 9, Group C).
+    bracket: str | None = None
 
 
 class ScoreboardOut(BaseModel):
@@ -28,6 +30,8 @@ class ScoreboardOut(BaseModel):
     # frozen_at is the instant they stopped moving.
     frozen: bool = False
     frozen_at: datetime | None = None
+    # The competition's bracket/division vocab (empty = no brackets).
+    brackets: list[str] = []
 
 
 class FreezeRequest(BaseModel):

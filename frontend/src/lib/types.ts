@@ -48,6 +48,8 @@ export interface Competition {
   /** Public spectator board + CTFtime feed opt-ins. */
   public_scoreboard: boolean;
   ctftime_enabled: boolean;
+  /** Brackets/divisions competitors self-select at join. */
+  brackets: string[];
 }
 
 /** Aggregate ratings for one challenge (staff — Feedback page). */
@@ -372,6 +374,7 @@ export interface CompetitionCreate {
   difficulty_tiers?: string[];
   public_scoreboard?: boolean;
   ctftime_enabled?: boolean;
+  brackets?: string[];
 }
 
 export type CompetitionUpdate = Partial<CompetitionCreate>;
@@ -595,6 +598,8 @@ export interface ScoreboardEntry {
   points: number;
   /** When the subject reached its current score — the ranking tie-break. */
   last_solve_at: string | null;
+  /** The subject's chosen bracket/division, or null. */
+  bracket: string | null;
 }
 
 export interface Scoreboard {
@@ -604,6 +609,8 @@ export interface Scoreboard {
   /** True when these standings are a frozen snapshot (§13 scoreboard freeze). */
   frozen: boolean;
   frozen_at: string | null;
+  /** The competition's bracket/division vocab (empty = no brackets). */
+  brackets: string[];
 }
 
 /** The spectator (no-login) board for a public competition. */

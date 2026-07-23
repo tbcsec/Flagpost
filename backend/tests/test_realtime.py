@@ -90,6 +90,7 @@ async def test_scoreboard_room_handshake_snapshot_and_live_update(client):
             "name": "Livewires",
             "points": 100,
             "last_solve_at": update["entries"][0]["last_solve_at"],
+            "bracket": None,
         }
         assert update["entries"][0]["last_solve_at"] is not None
 

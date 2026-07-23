@@ -163,6 +163,7 @@ async def create_competition(
         difficulty_tiers=body.difficulty_tiers or None,
         public_scoreboard=body.public_scoreboard,
         ctftime_enabled=body.ctftime_enabled,
+        brackets=body.brackets or None,
     )
     db.add(competition)
     await db.commit()

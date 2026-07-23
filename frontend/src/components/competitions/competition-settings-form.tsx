@@ -50,6 +50,7 @@ export function CompetitionSettingsForm({
     difficulty_tiers: competition.difficulty_tiers ?? [],
     public_scoreboard: competition.public_scoreboard,
     ctftime_enabled: competition.ctftime_enabled,
+    brackets: competition.brackets ?? [],
   });
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
@@ -75,6 +76,7 @@ export function CompetitionSettingsForm({
         difficulty_tiers: form.difficulty_tiers,
         public_scoreboard: form.public_scoreboard,
         ctftime_enabled: form.ctftime_enabled,
+        brackets: form.brackets,
       },
       { onSuccess: () => toast("Changes saved", { variant: "success" }) },
     );
@@ -179,6 +181,16 @@ export function CompetitionSettingsForm({
                 </a>
               </p>
             )}
+          </div>
+
+          <div className="border-t border-border pt-4">
+            <VocabEditor
+              label="Brackets / divisions"
+              hint="Parallel rankings competitors self-select (e.g. Students, Open). Leave empty for a single ranking."
+              values={form.brackets}
+              onChange={(v) => set("brackets", v)}
+              placeholder="Add a bracket…"
+            />
           </div>
         </>
       )}

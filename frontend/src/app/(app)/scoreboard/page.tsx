@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
 import { Card, CardContent } from "@/components/ui/card";
+import { Select } from "@/components/ui/select";
 import { EmptyState, TrophyEmptyIcon } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -22,6 +23,7 @@ import { parseServerDate } from "@/lib/datetime";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
 import { useAccess } from "@/lib/hooks/use-permissions";
 import { useMyTeam } from "@/lib/hooks/use-teams";
+import { useMyBracket, useSetBracket } from "@/lib/hooks/use-brackets";
 import { useFreezeScoreboard, useScoreboard } from "@/lib/hooks/use-scoreboard";
 import { useAuthStore } from "@/stores/auth";
 import { toast } from "@/stores/toast";
@@ -60,6 +62,10 @@ export default function ScoreboardPage() {
   const freeze = useFreezeScoreboard(competitionId ?? "");
   const confirm = useConfirm();
   const frozen = board.data?.frozen ?? false;
+  const brackets = board.data?.brackets ?? [];
+  const [bracketFilter, setBracketFilter] = useState<string>("all");
+  const myBracket = useMyBracket(competitionId ?? "", brackets.length > 0);
+  const setBracket = useSetBracket(competitionId ?? "");
 
   async function toggleFreeze() {
     // Clarify the semantics: a freeze stops the *board* from moving publicly;
@@ -116,7 +122,15 @@ export default function ScoreboardPage() {
   }
 
   const mySubjectId = isTeam ? myTeam.data?.id : userId;
-  const top = entries.slice(0, 10);
+  // Bracket filter is client-side (each entry already carries its bracket), so
+  // it stays live over the WS; ranks are renumbered within the division.
+  const shown =
+    bracketFilter === "all"
+      ? entries
+      : entries
+          .filter((e) => e.bracket === bracketFilter)
+          .map((e, i) => ({ ...e, rank: i + 1 }));
+  const top = shown.slice(0, 10);
   const maxPoints = Math.max(1, ...top.map((e) => e.points));
   const live = board.socketStatus === "open";
 
@@ -167,6 +181,44 @@ export default function ScoreboardPage() {
         </div>
       )}
 
+      {brackets.length > 0 && (
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Division</span>
+            <Select
+              value={bracketFilter}
+              onChange={(e) => setBracketFilter(e.target.value)}
+              className="h-8 w-auto"
+            >
+              <option value="all">All</option>
+              {brackets.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </Select>
+          </div>
+          {mySubjectId && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Your division</span>
+              <Select
+                value={myBracket.data?.bracket ?? ""}
+                onChange={(e) => setBracket.mutate(e.target.value || null)}
+                disabled={setBracket.isPending}
+                className="h-8 w-auto"
+              >
+                <option value="">—</option>
+                {brackets.map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
+        </div>
+      )}
+
       {board.isLoading && (
         <div className="grid gap-4">
           <Skeleton className="h-44 w-full" />
@@ -213,7 +265,7 @@ export default function ScoreboardPage() {
         </Card>
       )}
 
-      {entries.length > 0 && (
+      {shown.length > 0 && (
         <Card>
           <CardContent className="pt-2">
             <Table>
@@ -221,12 +273,15 @@ export default function ScoreboardPage() {
                 <TableRow>
                   <TableHead>Rank</TableHead>
                   <TableHead>{isTeam ? "Team" : "Participant"}</TableHead>
+                  {brackets.length > 0 && bracketFilter === "all" && (
+                    <TableHead>Division</TableHead>
+                  )}
                   <TableHead>Points</TableHead>
                   <TableHead>Last solve</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {entries.map((e) => (
+                {shown.map((e) => (
                   <TableRow
                     key={e.subject_id}
                     className={cn(
@@ -244,6 +299,11 @@ export default function ScoreboardPage() {
                         <span className="ml-2 text-[11px] text-primary">you</span>
                       )}
                     </TableCell>
+                    {brackets.length > 0 && bracketFilter === "all" && (
+                      <TableCell className="text-xs text-muted-foreground">
+                        {e.bracket ?? "—"}
+                      </TableCell>
+                    )}
                     <TableCell className="font-mono">{e.points}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {e.last_solve_at

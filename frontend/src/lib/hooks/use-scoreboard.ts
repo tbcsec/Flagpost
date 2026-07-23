@@ -44,6 +44,7 @@ export function useScoreboard(competitionId: string) {
             entries: frame.entries,
             frozen: frame.frozen,
             frozen_at: frame.frozen_at,
+            brackets: frame.brackets,
           },
         );
       },

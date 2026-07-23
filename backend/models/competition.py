@@ -87,6 +87,9 @@ class Competition(Base, TimestampMixin):
     # validate their tags/difficulty against these (a true managed taxonomy).
     challenge_tags: Mapped[list | None] = mapped_column(JSON, nullable=True)
     difficulty_tiers: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Brackets/divisions a competitor self-selects at join (e.g. Students, Open).
+    # Null/[] = no brackets. Scoreboard can filter by one.
+    brackets: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Scoreboard freeze (§13, Phase 9): the instant public standings stop moving.
     # Null = live. Reached-and-set → the board is computed as of this time for
     # everyone but staff who explicitly ask for the live view. Can be a future

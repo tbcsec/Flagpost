@@ -473,8 +473,10 @@ export const submissionsApi = {
 
 export const scoreboardApi = {
   // Initial load only — live updates arrive over the scoreboard WS room (§4.1).
-  get: (competitionId: string) =>
-    apiFetch<Scoreboard>(`/api/competitions/${competitionId}/scoreboard`),
+  get: (competitionId: string, bracket?: string | null) =>
+    apiFetch<Scoreboard>(
+      `/api/competitions/${competitionId}/scoreboard${bracket ? `?bracket=${encodeURIComponent(bracket)}` : ""}`,
+    ),
   // Staff freeze/unfreeze the public board (scoreboard_freeze).
   freeze: (competitionId: string) =>
     apiFetch<Scoreboard>(`/api/competitions/${competitionId}/scoreboard/freeze`, {
@@ -485,6 +487,19 @@ export const scoreboardApi = {
     apiFetch<Scoreboard>(`/api/competitions/${competitionId}/scoreboard/unfreeze`, {
       method: "POST",
     }),
+};
+
+export const bracketsApi = {
+  // The acting subject's chosen bracket (self-select).
+  mine: (competitionId: string) =>
+    apiFetch<{ bracket: string | null }>(
+      `/api/competitions/${competitionId}/bracket`,
+    ),
+  set: (competitionId: string, bracket: string | null) =>
+    apiFetch<{ bracket: string | null }>(
+      `/api/competitions/${competitionId}/bracket`,
+      { method: "PUT", body: JSON.stringify({ bracket }) },
+    ),
 };
 
 export const publicApi = {

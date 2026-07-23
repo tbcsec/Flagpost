@@ -28,6 +28,8 @@ class CompetitionCreate(BaseModel):
     # Public spectator board + CTFtime feed opt-ins (Phase 9).
     public_scoreboard: bool = False
     ctftime_enabled: bool = False
+    # Brackets/divisions competitors self-select at join (Phase 9).
+    brackets: list[str] = Field(default_factory=list, max_length=20)
 
 
 class CompetitionUpdate(BaseModel):
@@ -49,6 +51,7 @@ class CompetitionUpdate(BaseModel):
     difficulty_tiers: list[str] | None = Field(default=None, max_length=20)
     public_scoreboard: bool | None = None
     ctftime_enabled: bool | None = None
+    brackets: list[str] | None = Field(default=None, max_length=20)
 
 
 class CompetitionOut(BaseModel):
@@ -75,8 +78,9 @@ class CompetitionOut(BaseModel):
     difficulty_tiers: list[str] = Field(default_factory=list)
     public_scoreboard: bool = False
     ctftime_enabled: bool = False
+    brackets: list[str] = Field(default_factory=list)
 
-    @field_validator("challenge_tags", "difficulty_tiers", mode="before")
+    @field_validator("challenge_tags", "difficulty_tiers", "brackets", mode="before")
     @classmethod
     def _vocab_default(cls, v: object) -> list:
         return v or []

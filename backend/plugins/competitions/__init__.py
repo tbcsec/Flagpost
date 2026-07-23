@@ -12,6 +12,7 @@ def setup(app, event_bus, db_factory) -> None:
     # Imported lazily so discovery can read the manifest without importing the
     # whole domain, and to keep module wiring out of import time.
     from routers.awards import router as awards_router
+    from routers.brackets import router as brackets_router
     from routers.competitions import router
     from routers.participants import router as participants_router
 
@@ -21,3 +22,5 @@ def setup(app, event_bus, db_factory) -> None:
     app.include_router(participants_router)
     # Manual judge awards (title/description/points) over the same roster.
     app.include_router(awards_router)
+    # Bracket/division self-selection (both modes).
+    app.include_router(brackets_router)

@@ -409,9 +409,25 @@ across the board, base `max-w-lg`→`max-w-[40rem]` (512→640px) and the two
 override tiers scaled to match, so the collaborative notes sections get more
 room; the `<CollabNote>` editor min-height also bumped `min-h-24`→`min-h-32`.)*
 
-## Phase 9 — Accessibility, responsiveness & optimization pass (#28)
+## Phase 9 — Ad-hoc: pre-release features & cleanup (owner-driven)
 
-Last, over finished surfaces — a polish pass, not a feature.
+An owner-inserted phase (added 2026-07-23) for a set of features and cleanup
+items wanted for the **initial public release** that weren't scoped into the
+roadmap earlier. Items range from small to large and are added here as the owner
+specifies them — each one gets designed, built, and documented across **all**
+the docs (ARCHITECTURE / ROADMAP / this plan / CLAUDE / UI-INTEGRATION-NOTES, plus
+an ADR when it's a real decision) as it lands. Unlike the other phases, this one
+is **one push at the end** (not per-item) — the owner signals when the set is
+complete; work accumulates until then.
+
+Items (this list grows as the owner adds them):
+
+- _None yet — awaiting the owner's first item._
+
+## Phase 10 — Accessibility, responsiveness & optimization pass (#28)
+
+Last, over finished surfaces — a polish pass, not a feature. (Was Phase 9;
+renumbered when the ad-hoc Phase 9 was inserted.)
 
 - Keyboard navigation across interactive surfaces (dialogs, the automation
   builder, the dashboard edit mode, the survey editor); focus management; visible

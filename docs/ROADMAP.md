@@ -176,7 +176,10 @@ drag-and-drop (#26)** (Phase 6, per-user layout customization on the Tier-2
 widget registry); **collaborative rich-text / CRDT editing (#27)** (Phase 7,
 Y.js team scratchpad + staff ticket notes, ADR-0014); and **onboarding / empty
 states (#24)** (Phase 8, guided first-run states + a manager getting-started
-guide). Remaining: the a11y/optimization pass (#28).
+guide). Remaining: an **owner-inserted ad-hoc Phase 9** of pre-release features
+& cleanup (added 2026-07-23 — items listed in `phase_3.md`, shipped as one push
+at the end), then the a11y/optimization pass (#28), now **Phase 10** and the
+final phase before initial public release.
 
 Worth doing before a public/1.0 release, not worth doing before Tiers 1–2
 are solid.

@@ -31,8 +31,11 @@ file, don't ignore it.
 **Tier 0, Tier 1, and Tier 2 ("Makes It Good") are all complete — Tier 2 was
 built phase-by-phase per `docs/claude_plans/phase_2.md` (Phases 0–5 all
 shipped). Tier 3 is the current tier and is now scoped/planned in
-`docs/claude_plans/phase_3.md` (Phases 0–9; **Phases 0–8 shipped**, Phase 9 —
-accessibility / responsiveness / optimization pass — next, the final phase).
+`docs/claude_plans/phase_3.md` (Phases 0–10; **Phases 0–8 shipped**, Phase 9 —
+an **owner-inserted ad-hoc phase** of pre-release features & cleanup — is the
+current one (built item-by-item, **one push at the end**), and Phase 10 —
+accessibility / responsiveness / optimization pass — is the final phase before
+initial public release).
 An owner revision pulled three previously-deferred subsystems up into Tier 3 —
 the **full automation engine** (§5), **dashboard drag-and-drop** (§10), and
 **collaborative rich-text/CRDT editing** (§4.2) — alongside the polish items

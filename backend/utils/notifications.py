@@ -16,9 +16,46 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from sqlalchemy import select
+
 from db import ensure_aware_utc
 from models.notification import Notification
+from models.user import User
 from realtime.manager import manager
+
+# Per-user notification preferences (§4.4). ``inapp_*`` gate *creation* of an
+# in-app notification by category — honored centrally here so every producer
+# (ticket listeners, the automation ``notify`` action) respects them; ``browser``
+# and ``sound`` are client-honored delivery hints (the same in-app row is still
+# created). A missing key resolves to its default, so an unset user gets
+# everything except browser notifications (which need an explicit opt-in + an
+# OS permission grant).
+DEFAULT_PREFS: dict[str, bool] = {
+    "inapp_tickets": True,
+    "inapp_automations": True,
+    "browser": False,
+    "sound": True,
+}
+
+
+def resolve_prefs(raw: dict | None) -> dict[str, bool]:
+    """Merge a stored (possibly null/partial) prefs bag over the defaults."""
+    merged = dict(DEFAULT_PREFS)
+    if raw:
+        for key in DEFAULT_PREFS:
+            if isinstance(raw.get(key), bool):
+                merged[key] = raw[key]
+    return merged
+
+
+def inapp_key_for_type(type: str) -> str:
+    """Which ``inapp_*`` preference governs a notification of this ``type``.
+
+    Ticket events form the one distinct category a user might reasonably mute;
+    everything else (chiefly automation ``notify`` actions, which carry the
+    trigger event name as their type) falls under automations & alerts.
+    """
+    return "inapp_tickets" if type.startswith("ticket.") else "inapp_automations"
 
 
 async def create_notifications(
@@ -33,10 +70,25 @@ async def create_notifications(
 ) -> list[Notification]:
     """Persist one notification per recipient (deduped), flushed but not committed.
 
-    Returns the created rows so the caller can commit and then broadcast them.
+    Recipients who have muted this notification's category (``inapp_*``) are
+    dropped before creation. Returns the created rows so the caller can commit
+    and then broadcast them.
     """
+    wanted = [u for u in dict.fromkeys(recipients) if u]  # dedupe, drop falsy
+    if not wanted:
+        return []
+
+    # Drop recipients who've opted out of this category. A user with no stored
+    # prefs (null) keeps the default (opted in), so this only ever narrows.
+    key = inapp_key_for_type(type)
+    rows = await db.execute(
+        select(User.id, User.notification_prefs).where(User.id.in_(wanted))
+    )
+    prefs = {uid: resolve_prefs(raw) for uid, raw in rows}
+    wanted = [u for u in wanted if prefs.get(u, DEFAULT_PREFS)[key]]
+
     made: list[Notification] = []
-    for user_id in dict.fromkeys(recipients):  # dedupe, preserve order
+    for user_id in wanted:
         notification = Notification(
             user_id=user_id,
             competition_id=competition_id,

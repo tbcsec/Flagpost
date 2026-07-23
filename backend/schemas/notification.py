@@ -19,3 +19,15 @@ class NotificationOut(BaseModel):
 
 class UnreadCount(BaseModel):
     unread: int
+
+
+class NotificationPreferences(BaseModel):
+    """Per-user notification preferences (§4.4). Full set, all defaulted, so a
+    PUT is a complete replacement and a GET always returns every key resolved."""
+
+    # In-app categories — gate whether a bell notification is created at all.
+    inapp_tickets: bool = True
+    inapp_automations: bool = True
+    # Client-honored delivery hints for the in-app notifications that are made.
+    browser: bool = False
+    sound: bool = True

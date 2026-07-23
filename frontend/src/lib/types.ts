@@ -312,6 +312,16 @@ export interface AppNotification {
   created_at: string;
 }
 
+/** Per-user notification preferences (§4.4). `inapp_*` gate whether a bell
+ *  notification is created; `browser`/`sound` are client-honored delivery
+ *  hints for the notifications that are made. */
+export interface NotificationPreferences {
+  inapp_tickets: boolean;
+  inapp_automations: boolean;
+  browser: boolean;
+  sound: boolean;
+}
+
 /** One persisted event from the audit log (§3.3). */
 export interface AuditLogEntry {
   id: string;

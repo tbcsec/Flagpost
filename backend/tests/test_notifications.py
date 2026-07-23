@@ -193,6 +193,53 @@ async def test_mark_read_and_unread_count(client):
     assert count["unread"] == 0
 
 
+# --- per-user preferences (§4.4) ---------------------------------------------
+
+
+async def test_preferences_default_to_everything_in_app(client):
+    token = await admin_token(client)
+    prefs = (
+        await client.get("/api/notifications/preferences", headers=_auth(token))
+    ).json()
+    # A fresh user has no stored prefs → resolved defaults: in-app on, sound on,
+    # browser off (needs an explicit opt-in + OS grant).
+    assert prefs == {
+        "inapp_tickets": True,
+        "inapp_automations": True,
+        "browser": False,
+        "sound": True,
+    }
+
+
+async def test_muting_tickets_suppresses_the_in_app_notification(client):
+    comp = await _competition(client)
+    admin = await admin_token(client)
+    ada = await _participant(client, comp, "ada@example.com")
+
+    # The admin mutes in-app ticket notifications.
+    resp = await client.put(
+        "/api/notifications/preferences",
+        json={
+            "inapp_tickets": False,
+            "inapp_automations": True,
+            "browser": False,
+            "sound": True,
+        },
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 200
+
+    # A new ticket would normally notify staff — now it doesn't reach the admin.
+    await _open_ticket(client, comp, ada, subject="muted")
+    assert await _notifications(client, admin) == []
+
+    # The preference round-trips.
+    prefs = (
+        await client.get("/api/notifications/preferences", headers=_auth(admin))
+    ).json()
+    assert prefs["inapp_tickets"] is False
+
+
 # --- per-user WS room (§4.4) --------------------------------------------------
 
 

@@ -10,6 +10,7 @@ import { useAuthStore } from "@/stores/auth";
 import type {
   Announcement,
   AppNotification,
+  NotificationPreferences,
   AuditLogPage,
   AuditLogQuery,
   Attachment,
@@ -734,6 +735,13 @@ export const notificationsApi = {
     apiFetch<AppNotification>(`/api/notifications/${id}/read`, { method: "POST" }),
   markAllRead: () =>
     apiFetch<void>("/api/notifications/read-all", { method: "POST" }),
+  getPreferences: () =>
+    apiFetch<NotificationPreferences>("/api/notifications/preferences"),
+  updatePreferences: (prefs: NotificationPreferences) =>
+    apiFetch<NotificationPreferences>("/api/notifications/preferences", {
+      method: "PUT",
+      body: JSON.stringify(prefs),
+    }),
 };
 
 /** Fetch a file with the access token and trigger a browser download. Used for

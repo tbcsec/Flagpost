@@ -18,7 +18,12 @@ from auth.deps import get_current_user
 from db import get_db, utcnow
 from models.notification import Notification
 from models.user import User
-from schemas.notification import NotificationOut, UnreadCount
+from schemas.notification import (
+    NotificationOut,
+    NotificationPreferences,
+    UnreadCount,
+)
+from utils.notifications import resolve_prefs
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
@@ -85,6 +90,28 @@ async def mark_read(
         notification.read_at = utcnow()
         await db.commit()
     return _to_out(notification)
+
+
+@router.get("/preferences", response_model=NotificationPreferences)
+async def get_preferences(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> NotificationPreferences:
+    # Resolve stored (possibly null/partial) prefs over the defaults so the
+    # client always receives a complete set.
+    return NotificationPreferences(**resolve_prefs(current_user.notification_prefs))
+
+
+@router.put("/preferences", response_model=NotificationPreferences)
+async def update_preferences(
+    body: NotificationPreferences,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> NotificationPreferences:
+    # Full replacement — the schema carries every key, so store the lot.
+    current_user.notification_prefs = body.model_dump()
+    await db.commit()
+    return body
 
 
 @router.post("/read-all", status_code=status.HTTP_204_NO_CONTENT)

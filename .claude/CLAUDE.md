@@ -461,6 +461,23 @@ What's built:
     `ParticipantsPanel` "Create award" button + `AwardDialog` (multi-select
     recipients, title/description/points), `useCreateAward` (invalidates roster +
     scoreboard). Clone still skips awards (score-state, clean slate).
+  - **Per-user notification preferences** (§4.4) — the `/profile` preferences
+    section (was a placeholder) is now functional. `User.notification_prefs`
+    (JSON, nullable = all-default; migration `b0c1d2e3f4a5`) holds four booleans:
+    **in-app category mutes** `inapp_tickets` / `inapp_automations` (gate whether
+    a bell notification is *created* — honored centrally in
+    `utils/notifications.create_notifications`, so every producer — ticket
+    listeners + the automation `notify` action — respects them; category derived
+    from the notification `type`, `ticket.*` vs. everything-else) and two
+    **client-honored delivery hints** `browser` / `sound`. `GET/PUT
+    /api/notifications/preferences` (own-user, no catalog perm). Owner call: **no
+    per-user email** (email stays automation-rule-driven; would need a
+    backgrounded send + SMTP). Frontend: `lib/notification-prefs.ts` (a
+    module-level delivery-hint cache read by the ticket audio cue + the WS
+    browser-notification path, kept warm by `useNotificationPreferences` mounted
+    in the app shell), `useUpdateNotificationPreferences`, `NotificationPreferencesCard`
+    on `/profile` (browser toggle requests the OS `Notification` permission on
+    enable). Backup carries the column (plain JSON on `users`, no FK).
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

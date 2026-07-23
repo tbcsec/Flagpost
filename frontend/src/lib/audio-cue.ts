@@ -3,9 +3,13 @@
 // didn't post. Synthesized via the Web Audio API so there's no asset to ship,
 // and entirely best-effort: if audio is unavailable or blocked, it's a no-op.
 
+import { getDeliveryPrefs } from "@/lib/notification-prefs";
+
 let ctx: AudioContext | null = null;
 
 export function playTicketCue() {
+  // Honor the per-user sound preference (§4.4 notification preferences).
+  if (!getDeliveryPrefs().sound) return;
   try {
     const Ctor =
       window.AudioContext ||

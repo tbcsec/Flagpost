@@ -20,6 +20,7 @@ import { relativeTime } from "@/lib/datetime";
 import {
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
+  useNotificationPreferences,
   useNotifications,
 } from "@/lib/hooks/use-notifications";
 import { useAuthStore } from "@/stores/auth";
@@ -345,6 +346,9 @@ function Topbar({
   const [notifOpen, setNotifOpen] = React.useState(false);
   const notifRef = React.useRef<HTMLDivElement>(null);
   const { data: notifications } = useNotifications();
+  // Keep the delivery-hint cache (sound/browser) warm for the ticket cue + WS
+  // handler, which read it outside React.
+  useNotificationPreferences();
   const markRead = useMarkNotificationRead();
   const markAllRead = useMarkAllNotificationsRead();
   const items = notifications ?? [];

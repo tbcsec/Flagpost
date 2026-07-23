@@ -273,9 +273,13 @@ resource the way presence is. **As built** (Tier 3 Phase 0): the in-app
 bell + per-user read/unread state is real (a required-core `notifications`
 module), and email delivery arrived as promised as the automation
 `send_email` action (§5.3, Tier 3 Phase 1) rather than a second notification
-system — SMTP is env-configured and the action no-ops when it's unset. What
-stays deferred is *push* delivery and a per-user notification-**preferences**
-surface (mute/channels); the baseline bell has no per-user settings yet.
+system — SMTP is env-configured and the action no-ops when it's unset.
+Per-user **preferences** are now built (Tier 3 Phase 9): `User.notification_prefs`
+holds in-app category mutes (`inapp_tickets` / `inapp_automations`, enforced in
+`create_notifications` so every producer respects them) plus client-honored
+`browser` / `sound` delivery hints, read/written at `/api/notifications/preferences`.
+Per-user **email** delivery stays deferred (email is automation-rule-driven,
+not a per-user channel); *push* (service-worker) delivery stays deferred too.
 
 ---
 

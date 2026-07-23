@@ -14,7 +14,7 @@ hash is stored — the raw token lives solely in the client's httpOnly cookie.
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base, TimestampMixin
@@ -41,6 +41,10 @@ class User(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="1"
     )
+    # Per-user notification preferences (§4.4): a small bag of booleans keyed by
+    # utils/notifications.DEFAULT_PREFS. Null = all defaults (a missing key
+    # always resolves to its default), so an unset user opts into everything.
+    notification_prefs: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
 # Case-insensitive uniqueness for the login identifier: "Alice" and "alice" can't

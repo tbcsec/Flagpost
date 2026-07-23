@@ -163,6 +163,11 @@ def optional_modules() -> list[ModuleManifest]:
     return [m for m in _loaded_manifests.values() if not m.required_core]
 
 
+def all_manifests() -> list[ModuleManifest]:
+    """Every loaded module manifest (core + optional) — the admin inventory."""
+    return list(_loaded_manifests.values())
+
+
 async def is_module_enabled(db, module_id: str, competition_id: str | None) -> bool:
     """Is ``module_id`` active in ``competition_id``'s context? (§11.3, §11.1.3)
 

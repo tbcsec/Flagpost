@@ -877,8 +877,12 @@ async def test_module_toggle_rbac_and_invariants(client):
     ).json()
     by_id = {m["id"]: m for m in listed}
     assert by_id["automations"] == {
-        "id": "automations", "name": "Automations", "version": "1.0.0", "enabled": True
+        "id": "automations", "name": "Automations", "version": "1.0.0",
+        "enabled": True, "required_core": False,
     }
+    # The inventory also lists required-core modules, locked on (§11.3).
+    assert by_id["tickets"]["required_core"] is True
+    assert by_id["tickets"]["enabled"] is True
 
     # Participants can't see or flip module state.
     resp = await client.get(f"/api/competitions/{comp}/modules", headers=_auth(ada))

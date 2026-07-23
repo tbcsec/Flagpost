@@ -434,6 +434,23 @@ Items (this list grows as the owner adds them):
   self-row highlighted) wired into the page. No migration; no new event (pure
   read). Tests: backend +4 (`test_participants.py` — roster+standing, RBAC,
   competition scoping, 404).
+- **Admin → Plugins page** ✅ — the page rendered a static placeholder list. The
+  per-competition module toggle *backend* already existed (Tier 3 Phase 1); this
+  wires the UI. `GET /api/competitions/{id}/modules` now returns the **full
+  inventory** (added `required_core` to `ModuleStateOut` + a `all_manifests()`
+  loader accessor) — required-core modules locked "always on", optional ones with
+  their per-competition enabled state. The page operates on the **active
+  competition** (module state is per-competition, §11.3), gated on
+  `edit_competition`, with a "Core" (locked) and "Optional" (toggleable) split.
+  Frontend: `use-modules.ts` + `modulesApi`; the dead `PLUGINS` placeholder is
+  removed. Tests: the existing module-toggle test updated for the new shape (+ a
+  core-module inventory assertion).
+- **Cleanup: React hydration warning** ✅ — the no-flash theme script rewrites
+  `<html>`'s palette/mode/accent before hydration, so the SSR defaults never
+  matched the client's first paint (a `data-palette` mismatch warning on every
+  load with a non-default cached theme). Fixed with `suppressHydrationWarning` on
+  the root `<html>` (`app/layout.tsx`) — the standard pattern for a pre-hydration
+  theme script.
 
 ## Phase 10 — Accessibility, responsiveness & optimization pass (#28)
 

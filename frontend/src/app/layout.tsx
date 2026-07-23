@@ -18,7 +18,12 @@ const NO_FLASH = `(function(){try{var r=localStorage.getItem('fp:site-theme');if
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" data-palette="harbor" data-mode="dark">
+    // The NO_FLASH script below intentionally rewrites the palette/mode/accent on
+    // <html> *before* hydration from the cached theme, so the server-rendered
+    // defaults here won't match the client's first paint. That's expected — so
+    // suppress the (one-level) hydration warning on this element, the standard
+    // pattern for a pre-hydration theme script.
+    <html lang="en" data-palette="harbor" data-mode="dark" suppressHydrationWarning>
       <body className="min-h-screen bg-background text-foreground antialiased">
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH }} />
         <Providers>{children}</Providers>

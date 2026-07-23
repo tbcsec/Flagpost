@@ -8,6 +8,10 @@ class ModuleStateOut(BaseModel):
     name: str
     version: str
     enabled: bool
+    # Required-core modules are part of the platform floor (§11.3): always on,
+    # never toggleable. The admin inventory lists them locked alongside the
+    # optional (per-competition toggleable) ones.
+    required_core: bool
 
 
 class ModuleToggle(BaseModel):

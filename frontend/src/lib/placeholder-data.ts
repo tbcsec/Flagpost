@@ -2,9 +2,9 @@
 // PLACEHOLDER DATA — NOT WIRED TO A BACKEND.
 //
 // These sample rows come straight from the design handoff mock. They exist so
-// the not-yet-built sections (dashboard widgets, scoreboard, support, analytics,
-// admin users/roles/plugins, notifications) render as the design intends while
-// their features are still on the roadmap. Every consumer of this module is a
+// the not-yet-built sections (admin global dashboard, admin users) render as the
+// design intends while their features are still on the roadmap. Every consumer
+// of this module is a
 // screen that needs a real endpoint before it does anything.
 //
 // See docs/UI-INTEGRATION-NOTES.md for the wired-vs-placeholder breakdown and
@@ -25,19 +25,6 @@ export const DIRECTORY_USERS: DirectoryUser[] = [
   { id: "u3", name: "Katherine Johnson", email: "katherine@university.edu", role: "judge", status: "Active" },
   { id: "u4", name: "Alan Turing", email: "alan@university.edu", role: "participant", status: "Active" },
   { id: "u5", name: "Margaret Hamilton", email: "margaret@university.edu", role: "participant", status: "Banned" },
-];
-
-export interface PluginRow {
-  id: string;
-  name: string;
-  description: string;
-  enabled: boolean;
-}
-
-export const PLUGINS: PluginRow[] = [
-  { id: "p1", name: "Support Ticket Plugin", description: "Adds the Support module to competitions.", enabled: true },
-  { id: "p2", name: "Digital Surveys Plugin", description: "Post-event feedback surveys.", enabled: true },
-  { id: "p3", name: "Discord Bridge", description: "Mirrors announcements to a Discord channel.", enabled: false },
 ];
 
 export const PERMISSION_CATEGORIES = [

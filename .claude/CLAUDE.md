@@ -248,6 +248,15 @@ What's built:
     reused from `compute_scoreboard`); `challenge_view`-gated, competition-scoped,
     no migration/event. Frontend `use-participants.ts` + `ParticipantsPanel`
     replaces the old individual-mode placeholder on `/participants`.
+  - **Admin → Plugins page wired**: `GET /api/competitions/{id}/modules` now
+    returns the full inventory (added `required_core` to `ModuleStateOut` +
+    `all_manifests()` loader accessor) — core modules locked, optional toggleable
+    via `PUT`, gated on `edit_competition`. The page (`use-modules.ts`) operates on
+    the **active** competition (module state is per-competition, §11.3); dead
+    `PLUGINS` placeholder removed.
+  - **Cleanup**: `suppressHydrationWarning` on the root `<html>` (`app/layout.tsx`)
+    silences the no-flash theme script's expected SSR-vs-client `data-palette`
+    mismatch.
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0012 (event-dispatch sync-critical vs background, supersedes

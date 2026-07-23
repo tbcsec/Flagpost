@@ -360,6 +360,15 @@ export interface MyTeam {
   created_at: string;
 }
 
+/** A loaded module's per-competition state (Admin → Plugins, §11.3). */
+export interface ModuleState {
+  id: string;
+  name: string;
+  version: string;
+  enabled: boolean;
+  required_core: boolean;
+}
+
 /** A single competitor in an individual-mode competition's roster. */
 export interface Participant {
   user_id: string;

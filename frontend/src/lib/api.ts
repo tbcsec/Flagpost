@@ -39,6 +39,7 @@ import type {
   HelloResponse,
   Hint,
   HintAuthored,
+  ModuleState,
   MyTeam,
   Participant,
   Permissions,
@@ -276,6 +277,17 @@ export const participantsApi = {
   // The individual-mode roster: Participant-role holders + their standing.
   list: (competitionId: string) =>
     apiFetch<Participant[]>(`/api/competitions/${competitionId}/participants`),
+};
+
+export const modulesApi = {
+  // Per-competition module inventory + toggle (Admin → Plugins, §11.3).
+  list: (competitionId: string) =>
+    apiFetch<ModuleState[]>(`/api/competitions/${competitionId}/modules`),
+  toggle: (competitionId: string, moduleId: string, enabled: boolean) =>
+    apiFetch<ModuleState>(`/api/competitions/${competitionId}/modules/${moduleId}`, {
+      method: "PUT",
+      body: JSON.stringify({ enabled }),
+    }),
 };
 
 export const categoriesApi = {

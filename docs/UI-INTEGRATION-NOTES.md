@@ -70,6 +70,7 @@ code.
 | Hints — reveal (competitor) + authoring (editor) | **Wired** (Phase 9 — `useHints`: reveal-on-request with cost, hidden body until revealed; scoreboard deducts cost live) |
 | Participants — team mode (create/join/leave, browse teams) | **Wired** (reuses `TeamPanel`) |
 | Participants — individual mode (competitor roster + standing) | **Wired** (Tier 3 Phase 9) — `GET /participants` lists Participant-role holders with join time / solves / rank / points (reusing the scoreboard computation); `ParticipantsPanel` shows a "your standing" summary + the roster (`use-participants`) |
+| Admin → Plugins (module enable/disable) | **Wired** (Tier 3 Phase 9, §11.3) — the full module inventory for the **active** competition (module state is per-competition): required-core modules locked "always on", optional ones toggleable via `GET`/`PUT /api/competitions/{id}/modules`, gated on `edit_competition` (`use-modules`) |
 | Competition Settings | **Wired** (`CompetitionSettingsForm` on the active competition) |
 | Admin → Competitions (list + New competition) | **Wired** (`useCompetitions`, `CreateCompetitionDialog`) |
 | Profile — change password | **Wired** (new `authApi.changePassword` + `useChangePassword`) |
@@ -104,10 +105,6 @@ a retrofit later; **none of the data is real**.
   half of this page is now real on Admin → Appearance (see the wired table).
   (Note: the automation `send_email` action does use SMTP config, but there's no
   admin UI to set it — it's env-configured, §5.3.)
-- **Admin → Plugins** — the per-competition module enable/disable **backend** is
-  now real (`GET`/`PUT /api/competitions/{id}/modules`, Tier 3 Phase 1), but this
-  page still renders the static `PLUGINS` list; a UI over the real toggle is
-  unbuilt.
 - **Profile → notification preferences** — the notification *inbox* is wired
   (topbar bell, see above), but per-user mute/channel preferences aren't built.
 - **Lobby join actions / Admin archive+delete competition** — no endpoint;

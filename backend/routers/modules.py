@@ -24,7 +24,7 @@ from db import get_db
 from models.competition import Competition
 from models.competition_module import CompetitionModule
 from models.user import User
-from plugins.loader import loaded_manifest, optional_modules
+from plugins.loader import all_manifests, loaded_manifest
 from schemas.module import ModuleStateOut, ModuleToggle
 from utils.event_bus import event_bus
 
@@ -48,6 +48,9 @@ async def list_modules(
     current_user: User = Depends(require_permission("edit_competition")),
     db: AsyncSession = Depends(get_db),
 ) -> list[ModuleStateOut]:
+    """The full module inventory for this competition — required-core modules
+    (always on, locked) plus the optional ones with their per-competition
+    enabled state. Optional modules first, then core, each id-sorted."""
     await _competition_or_404(db, competition_id)
     overrides = {
         module_id: enabled
@@ -64,10 +67,12 @@ async def list_modules(
             id=m.id,
             name=m.name,
             version=m.version,
-            # No override row = the §11.3 default: enabled.
-            enabled=overrides.get(m.id, True),
+            # Required-core is always on; an optional module has no override row =
+            # the §11.3 default of enabled.
+            enabled=True if m.required_core else overrides.get(m.id, True),
+            required_core=m.required_core,
         )
-        for m in sorted(optional_modules(), key=lambda m: m.id)
+        for m in sorted(all_manifests(), key=lambda m: (m.required_core, m.id))
     ]
 
 
@@ -119,4 +124,5 @@ async def toggle_module(
         name=manifest.name,
         version=manifest.version,
         enabled=body.enabled,
+        required_core=False,  # required-core was rejected above with 409
     )

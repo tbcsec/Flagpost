@@ -410,6 +410,7 @@ export interface MyTeam {
   affiliation: string | null;
   country: string | null;
   website: string | null;
+  approval_required: boolean;
   created_at: string;
 }
 
@@ -419,6 +420,22 @@ export interface TeamUpdate {
   affiliation?: string | null;
   country?: string | null;
   website?: string | null;
+  approval_required?: boolean;
+}
+
+/** Result of joining: an open team returns it; an approval-required one is
+ *  pending until the captain approves. */
+export interface TeamJoinResult {
+  pending: boolean;
+  team: MyTeam | null;
+}
+
+/** A pending join request (captain's view). */
+export interface TeamApplication {
+  id: string;
+  user_id: string;
+  display_name: string;
+  created_at: string;
 }
 
 /** Per-competition health row on the site-admin dashboard (§6.3). */

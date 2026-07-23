@@ -15,6 +15,7 @@ class TeamCreate(BaseModel):
     affiliation: str | None = Field(default=None, max_length=120)
     country: str | None = Field(default=None, max_length=80)
     website: str | None = Field(default=None, max_length=200)
+    approval_required: bool = False
 
 
 class TeamUpdate(BaseModel):
@@ -24,6 +25,14 @@ class TeamUpdate(BaseModel):
     affiliation: str | None = Field(default=None, max_length=120)
     country: str | None = Field(default=None, max_length=80)
     website: str | None = Field(default=None, max_length=200)
+    approval_required: bool | None = None
+
+
+class TeamApplicationOut(BaseModel):
+    id: str
+    user_id: str
+    display_name: str
+    created_at: datetime
 
 
 class TeamJoinRequest(BaseModel):
@@ -62,4 +71,13 @@ class MyTeamOut(BaseModel):
     affiliation: str | None = None
     country: str | None = None
     website: str | None = None
+    approval_required: bool = False
     created_at: datetime
+
+
+class TeamJoinResult(BaseModel):
+    """Joining an open team returns the team; an approval-required one returns
+    ``pending`` with no team until the captain approves."""
+
+    pending: bool
+    team: MyTeamOut | None = None

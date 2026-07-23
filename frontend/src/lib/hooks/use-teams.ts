@@ -51,8 +51,13 @@ function useInvalidateTeams(competitionId: string) {
 export function useCreateTeam(competitionId: string) {
   const invalidate = useInvalidateTeams(competitionId);
   return useMutation({
-    mutationFn: (input: { name: string }) =>
-      teamsApi.create(competitionId, input),
+    mutationFn: (input: {
+      name: string;
+      affiliation?: string | null;
+      country?: string | null;
+      website?: string | null;
+      approval_required?: boolean;
+    }) => teamsApi.create(competitionId, input),
     onSuccess: invalidate,
   });
 }
@@ -79,5 +84,31 @@ export function useLeaveTeam(competitionId: string) {
   return useMutation({
     mutationFn: () => teamsApi.leave(competitionId),
     onSuccess: invalidate,
+  });
+}
+
+/** Pending join requests for the captain's team. */
+export function useJoinRequests(competitionId: string, enabled = true) {
+  const isAuthenticated = useAuthStore((s) => s.status === "authenticated");
+  return useQuery({
+    queryKey: ["team-requests", competitionId],
+    queryFn: () => teamsApi.requests(competitionId),
+    enabled: isAuthenticated && enabled && Boolean(competitionId),
+  });
+}
+
+export function useReviewJoinRequest(competitionId: string) {
+  const invalidate = useInvalidateTeams(competitionId);
+  const qc = useQueryClient();
+  const refresh = () => {
+    invalidate();
+    qc.invalidateQueries({ queryKey: ["team-requests", competitionId] });
+  };
+  return useMutation({
+    mutationFn: async ({ id, approve }: { id: string; approve: boolean }) => {
+      if (approve) await teamsApi.approveRequest(competitionId, id);
+      else await teamsApi.rejectRequest(competitionId, id);
+    },
+    onSuccess: refresh,
   });
 }

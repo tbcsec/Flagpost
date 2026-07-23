@@ -26,12 +26,14 @@ from auth.deps import get_current_user
 from auth.membership import ensure_participant_role
 from db import get_db
 from models.competition import Competition
-from models.team import Team, TeamMembership
+from models.team import Team, TeamApplication, TeamMembership
 from models.user import User
 from schemas.team import (
     MyTeamOut,
+    TeamApplicationOut,
     TeamCreate,
     TeamJoinRequest,
+    TeamJoinResult,
     TeamMemberOut,
     TeamOut,
     TeamUpdate,
@@ -93,6 +95,7 @@ async def _my_team_out(db: AsyncSession, team: Team) -> MyTeamOut:
         affiliation=team.affiliation,
         country=team.country,
         website=team.website,
+        approval_required=team.approval_required,
         created_at=team.created_at,
     )
 
@@ -211,6 +214,7 @@ async def create_team(
         affiliation=body.affiliation,
         country=body.country,
         website=body.website,
+        approval_required=body.approval_required,
     )
     db.add(team)
     await db.flush()
@@ -237,13 +241,25 @@ async def create_team(
     return await _my_team_out(db, team)
 
 
-@router.post("/join", response_model=MyTeamOut)
+async def _assert_not_full(db: AsyncSession, competition: Competition, team_id: str) -> None:
+    if competition.max_team_size is None:
+        return
+    members = await db.scalar(
+        select(func.count(TeamMembership.id)).where(TeamMembership.team_id == team_id)
+    )
+    if (members or 0) >= competition.max_team_size:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="This team is full"
+        )
+
+
+@router.post("/join", response_model=TeamJoinResult)
 async def join_team(
     competition_id: str,
     body: TeamJoinRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> MyTeamOut:
+) -> TeamJoinResult:
     await _get_team_competition(db, competition_id)
 
     if await _membership_of(db, competition_id, current_user.id) is not None:
@@ -264,17 +280,26 @@ async def join_team(
         )
 
     competition = await db.get(Competition, competition_id)
-    if competition.max_team_size is not None:
-        members = await db.scalar(
-            select(func.count(TeamMembership.id)).where(
-                TeamMembership.team_id == team.id
+    await _assert_not_full(db, competition, team.id)
+
+    # Approval-required teams: file (or reuse) a pending application instead.
+    if team.approval_required:
+        existing = await db.scalar(
+            select(TeamApplication).where(
+                TeamApplication.team_id == team.id,
+                TeamApplication.user_id == current_user.id,
             )
         )
-        if (members or 0) >= competition.max_team_size:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="This team is full",
+        if existing is None:
+            db.add(
+                TeamApplication(
+                    competition_id=competition_id,
+                    team_id=team.id,
+                    user_id=current_user.id,
+                )
             )
+            await db.commit()
+        return TeamJoinResult(pending=True)
 
     db.add(
         TeamMembership(
@@ -294,7 +319,96 @@ async def join_team(
             "user_id": current_user.id,
         },
     )
-    return await _my_team_out(db, team)
+    return TeamJoinResult(pending=False, team=await _my_team_out(db, team))
+
+
+@router.get("/me/requests", response_model=list[TeamApplicationOut])
+async def list_join_requests(
+    competition_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[TeamApplicationOut]:
+    """Pending applications to the captain's team (Phase 9)."""
+    membership = await _membership_of(db, competition_id, current_user.id)
+    if membership is None or not membership.is_captain:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the captain can review join requests",
+        )
+    rows = (
+        await db.execute(
+            select(TeamApplication, User.display_name)
+            .join(User, User.id == TeamApplication.user_id)
+            .where(TeamApplication.team_id == membership.team_id)
+            .order_by(TeamApplication.created_at)
+        )
+    ).all()
+    return [
+        TeamApplicationOut(
+            id=a.id, user_id=a.user_id, display_name=name, created_at=a.created_at
+        )
+        for a, name in rows
+    ]
+
+
+async def _captain_application(
+    db: AsyncSession, competition_id: str, user_id: str, application_id: str
+) -> TeamApplication:
+    membership = await _membership_of(db, competition_id, user_id)
+    if membership is None or not membership.is_captain:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the captain can review join requests",
+        )
+    app = await db.get(TeamApplication, application_id)
+    if app is None or app.team_id != membership.team_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Request not found"
+        )
+    return app
+
+
+@router.post("/me/requests/{application_id}/approve", response_model=MyTeamOut)
+async def approve_join_request(
+    competition_id: str,
+    application_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MyTeamOut:
+    app = await _captain_application(db, competition_id, current_user.id, application_id)
+    competition = await db.get(Competition, competition_id)
+    await _assert_not_full(db, competition, app.team_id)
+    # The applicant may have joined another team meanwhile — guard the invariant.
+    if await _membership_of(db, competition_id, app.user_id) is None:
+        db.add(
+            TeamMembership(
+                competition_id=competition_id, team_id=app.team_id, user_id=app.user_id
+            )
+        )
+        await ensure_participant_role(db, competition_id, app.user_id)
+    await db.delete(app)
+    await db.commit()
+    await event_bus.emit(
+        "team.member_joined",
+        {
+            "competition_id": competition_id,
+            "team_id": app.team_id,
+            "user_id": app.user_id,
+        },
+    )
+    return await _my_team_out(db, await db.get(Team, app.team_id))
+
+
+@router.post("/me/requests/{application_id}/reject", status_code=status.HTTP_204_NO_CONTENT)
+async def reject_join_request(
+    competition_id: str,
+    application_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    app = await _captain_application(db, competition_id, current_user.id, application_id)
+    await db.delete(app)
+    await db.commit()
 
 
 @router.post("/leave", status_code=status.HTTP_204_NO_CONTENT)

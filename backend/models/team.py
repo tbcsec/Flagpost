@@ -45,6 +45,11 @@ class Team(Base, CompetitionScopedMixin, TimestampMixin):
     affiliation: Mapped[str | None] = mapped_column(String, nullable=True)
     country: Mapped[str | None] = mapped_column(String, nullable=True)
     website: Mapped[str | None] = mapped_column(String, nullable=True)
+    # When true, joining with the invite code files a request the captain must
+    # approve (Phase 9); otherwise the code joins immediately.
+    approval_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
 
 
 class TeamMembership(Base, CompetitionScopedMixin, TimestampMixin):
@@ -69,3 +74,23 @@ class TeamMembership(Base, CompetitionScopedMixin, TimestampMixin):
     # The creator is captain; useful for later team-admin actions (rename,
     # kick) without a redesign.
     is_captain: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class TeamApplication(Base, CompetitionScopedMixin, TimestampMixin):
+    """A pending request to join an approval-required team (Phase 9). The captain
+    approves (→ membership) or rejects (→ deleted)."""
+
+    __tablename__ = "team_join_requests"
+    __table_args__ = (
+        UniqueConstraint("team_id", "user_id", name="uq_team_application"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid4())
+    )
+    team_id: Mapped[str] = mapped_column(
+        ForeignKey("teams.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )

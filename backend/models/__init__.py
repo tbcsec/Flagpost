@@ -29,7 +29,7 @@ from models.role import Role, RoleAssignment
 from models.score_adjustment import ScoreAdjustment
 from models.site_settings import SiteSettings
 from models.submission import Submission
-from models.team import Team, TeamMembership
+from models.team import Team, TeamApplication, TeamMembership
 from models.ticket import Ticket, TicketMessage
 from models.user import RefreshSession, User
 
@@ -62,6 +62,7 @@ __all__ = [
     "Submission",
     "RefreshSession",
     "Team",
+    "TeamApplication",
     "TeamMembership",
     "Ticket",
     "TicketMessage",

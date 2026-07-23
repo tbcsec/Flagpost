@@ -67,6 +67,8 @@ import type {
   SiteSettingsAdmin,
   SubmitResult,
   Team,
+  TeamApplication,
+  TeamJoinResult,
   TeamUpdate,
   Ticket,
   TicketDetail,
@@ -305,7 +307,13 @@ export const teamsApi = {
     apiFetch<MyTeam>(`/api/competitions/${competitionId}/teams/me`),
   create: (
     competitionId: string,
-    input: { name: string; affiliation?: string | null; country?: string | null; website?: string | null },
+    input: {
+      name: string;
+      affiliation?: string | null;
+      country?: string | null;
+      website?: string | null;
+      approval_required?: boolean;
+    },
   ) =>
     apiFetch<MyTeam>(`/api/competitions/${competitionId}/teams`, {
       method: "POST",
@@ -317,10 +325,24 @@ export const teamsApi = {
       body: JSON.stringify(input),
     }),
   join: (competitionId: string, input: { invite_code: string }) =>
-    apiFetch<MyTeam>(`/api/competitions/${competitionId}/teams/join`, {
+    apiFetch<TeamJoinResult>(`/api/competitions/${competitionId}/teams/join`, {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  requests: (competitionId: string) =>
+    apiFetch<TeamApplication[]>(
+      `/api/competitions/${competitionId}/teams/me/requests`,
+    ),
+  approveRequest: (competitionId: string, applicationId: string) =>
+    apiFetch<MyTeam>(
+      `/api/competitions/${competitionId}/teams/me/requests/${applicationId}/approve`,
+      { method: "POST" },
+    ),
+  rejectRequest: (competitionId: string, applicationId: string) =>
+    apiFetch<void>(
+      `/api/competitions/${competitionId}/teams/me/requests/${applicationId}/reject`,
+      { method: "POST" },
+    ),
   leave: (competitionId: string) =>
     apiFetch<void>(`/api/competitions/${competitionId}/teams/leave`, {
       method: "POST",

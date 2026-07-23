@@ -616,6 +616,21 @@ What's built:
       division" **picker** on the scoreboard (`use-brackets`). Clone carries the
       vocab; `bracket_memberships` excluded from backup (per-subject state, like
       scores' finer bits — polymorphic subject_id can't be cleanly remapped).
+    - **Team quality-of-life** (Group C) — three team-mode niceties:
+      - **Max team size** (`Competition.max_team_size`, null = unlimited) enforced
+        at join + on request-approval (409 when full); Settings → General (team
+        mode).
+      - **Team profile** (`Team.affiliation`/`country`/`website`) — captain-editable
+        via `PATCH .../teams/me` (name-clash guarded); shown on the team panel.
+      - **Invite-code + optional approval** (`Team.approval_required` + a
+        `team_join_requests` applications table / `TeamApplication` model). Joining
+        an approval-required team files a **pending request** (`join` now returns
+        `TeamJoinResult {pending, team}`); the captain lists
+        (`GET .../teams/me/requests`) and **approves** (→ membership, size-checked,
+        emits `team.member_joined`) or **rejects**. Migrations `d8e9fab0c1d2`
+        (size+profile) + `e9fab0c1d2e3` (approval). Frontend: create-form + profile
+        approval toggle, a pending-request join toast, and a captain "Join
+        requests" section with Approve/Reject (`use-teams`).
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

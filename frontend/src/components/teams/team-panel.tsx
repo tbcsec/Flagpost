@@ -23,9 +23,11 @@ import {
 } from "@/components/ui/table";
 import {
   useCreateTeam,
+  useJoinRequests,
   useJoinTeam,
   useLeaveTeam,
   useMyTeam,
+  useReviewJoinRequest,
   useTeams,
   useUpdateMyTeam,
 } from "@/lib/hooks/use-teams";
@@ -122,6 +124,8 @@ function MyTeamCard({
           ))}
         </ul>
 
+        <JoinRequests competitionId={competitionId} team={team} />
+
         <TeamProfile competitionId={competitionId} team={team} />
 
         <div className="flex items-center gap-3">
@@ -171,6 +175,7 @@ function TeamProfile({
   const [affiliation, setAffiliation] = useState(team.affiliation ?? "");
   const [country, setCountry] = useState(team.country ?? "");
   const [website, setWebsite] = useState(team.website ?? "");
+  const [approval, setApproval] = useState(team.approval_required);
 
   if (!amCaptain) {
     if (!team.affiliation && !team.country && !team.website) return null;
@@ -186,7 +191,8 @@ function TeamProfile({
   const dirty =
     affiliation !== (team.affiliation ?? "") ||
     country !== (team.country ?? "") ||
-    website !== (team.website ?? "");
+    website !== (team.website ?? "") ||
+    approval !== team.approval_required;
 
   function onSave() {
     update.mutate(
@@ -194,6 +200,7 @@ function TeamProfile({
         affiliation: affiliation.trim() || null,
         country: country.trim() || null,
         website: website.trim() || null,
+        approval_required: approval,
       },
       { onSuccess: () => toast("Team profile saved", { variant: "success" }) },
     );
@@ -221,6 +228,16 @@ function TeamProfile({
           onChange={(e) => setWebsite(e.target.value)}
         />
       </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          className="h-4 w-4 rounded border-border"
+          style={{ accentColor: "hsl(var(--primary))" }}
+          checked={approval}
+          onChange={(e) => setApproval(e.target.checked)}
+        />
+        Require captain approval to join
+      </label>
       <Button
         variant="outline"
         size="sm"
@@ -234,10 +251,61 @@ function TeamProfile({
   );
 }
 
+// Pending join requests — only rendered for the captain of an approval-required
+// team; approve adds the member, reject discards the request.
+function JoinRequests({
+  competitionId,
+  team,
+}: {
+  competitionId: string;
+  team: NonNullable<ReturnType<typeof useMyTeam>["data"]>;
+}) {
+  const userId = useAuthStore((s) => s.user?.id);
+  const amCaptain = team.members.some((m) => m.user_id === userId && m.is_captain);
+  const { data: requests } = useJoinRequests(competitionId, amCaptain);
+  const review = useReviewJoinRequest(competitionId);
+
+  if (!amCaptain || !requests || requests.length === 0) return null;
+
+  return (
+    <div className="grid gap-2">
+      <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+        Join requests ({requests.length})
+      </Label>
+      <ul className="grid gap-1.5">
+        {requests.map((r) => (
+          <li key={r.id} className="flex items-center justify-between gap-2 text-sm">
+            <span>{r.display_name}</span>
+            <span className="flex gap-1.5">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => review.mutate({ id: r.id, approve: true })}
+                disabled={review.isPending}
+              >
+                Approve
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => review.mutate({ id: r.id, approve: false })}
+                disabled={review.isPending}
+              >
+                Reject
+              </Button>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function JoinOrCreate({ competitionId }: { competitionId: string }) {
   const create = useCreateTeam(competitionId);
   const join = useJoinTeam(competitionId);
   const [name, setName] = useState("");
+  const [approvalRequired, setApprovalRequired] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
 
   return (
@@ -253,7 +321,7 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
             onSubmit={(e) => {
               e.preventDefault();
               create.mutate(
-                { name },
+                { name, approval_required: approvalRequired },
                 { onSuccess: () => toast(`Created ${name}`, { variant: "success" }) },
               );
             }}
@@ -267,6 +335,16 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
                 required
               />
             </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-border"
+                style={{ accentColor: "hsl(var(--primary))" }}
+                checked={approvalRequired}
+                onChange={(e) => setApprovalRequired(e.target.checked)}
+              />
+              Require captain approval to join
+            </label>
             {create.isError && (
               <p className="text-sm text-destructive">
                 {(create.error as Error).message}
@@ -291,7 +369,15 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
               e.preventDefault();
               join.mutate(
                 { invite_code: inviteCode },
-                { onSuccess: () => toast("Joined team", { variant: "success" }) },
+                {
+                  onSuccess: (res) =>
+                    toast(
+                      res.pending
+                        ? "Request sent — awaiting captain approval"
+                        : "Joined team",
+                      { variant: "success" },
+                    ),
+                },
               );
             }}
           >

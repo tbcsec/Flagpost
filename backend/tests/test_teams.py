@@ -94,7 +94,8 @@ async def test_join_via_invite_code_and_one_team_per_competition(client):
         headers=_auth(bob),
     )
     assert joined.status_code == 200
-    assert [m["display_name"] for m in joined.json()["members"]] == ["Alice", "Bob"]
+    assert joined.json()["pending"] is False
+    assert [m["display_name"] for m in joined.json()["team"]["members"]] == ["Alice", "Bob"]
     assert len(await _events("team.member_joined")) == 1
 
     # Bob can't create or join a second team in the same competition.
@@ -231,7 +232,7 @@ async def test_joining_a_team_grants_participant_access(client):
         headers=_auth(bob),
     )
     joiner_id = next(
-        m["user_id"] for m in joined.json()["members"] if m["display_name"] == "Bob"
+        m["user_id"] for m in joined.json()["team"]["members"] if m["display_name"] == "Bob"
     )
 
     async with SessionLocal() as session:
@@ -279,3 +280,37 @@ async def test_captain_edits_team_profile(client):
     code = (await client.get(f"/api/competitions/{comp}/teams/me", headers=_auth(cap))).json()["invite_code"]
     await client.post(f"/api/competitions/{comp}/teams/join", json={"invite_code": code}, headers=_auth(member))
     assert (await client.patch(f"/api/competitions/{comp}/teams/me", json={"country": "CA"}, headers=_auth(member))).status_code == 403
+
+
+async def test_approval_required_team_files_request_and_captain_approves(client):
+    comp = await _make_competition(client)
+    cap = await _register(client, "cap@example.com", "Cap")
+    team = (await client.post(f"/api/competitions/{comp}/teams", json={"name": "Gated", "approval_required": True}, headers=_auth(cap))).json()
+    code = team["invite_code"]
+
+    # Joining files a pending request, not an immediate membership.
+    applicant = await _register(client, "app@example.com", "Applicant")
+    joined = await client.post(f"/api/competitions/{comp}/teams/join", json={"invite_code": code}, headers=_auth(applicant))
+    assert joined.status_code == 200
+    assert joined.json() == {"pending": True, "team": None}
+    # Not yet a member.
+    assert (await client.get(f"/api/competitions/{comp}/teams/me", headers=_auth(applicant))).status_code == 404
+
+    # The captain sees the request and approves it.
+    reqs = (await client.get(f"/api/competitions/{comp}/teams/me/requests", headers=_auth(cap))).json()
+    assert len(reqs) == 1 and reqs[0]["display_name"] == "Applicant"
+    approve = await client.post(f"/api/competitions/{comp}/teams/me/requests/{reqs[0]['id']}/approve", headers=_auth(cap))
+    assert approve.status_code == 200
+    assert {m["display_name"] for m in approve.json()["members"]} == {"Cap", "Applicant"}
+
+    # Applicant is now on the team; the request is gone.
+    assert (await client.get(f"/api/competitions/{comp}/teams/me", headers=_auth(applicant))).status_code == 200
+    assert (await client.get(f"/api/competitions/{comp}/teams/me/requests", headers=_auth(cap))).json() == []
+
+
+async def test_only_captain_reviews_requests(client):
+    comp = await _make_competition(client)
+    cap = await _register(client, "cap@example.com")
+    await client.post(f"/api/competitions/{comp}/teams", json={"name": "T", "approval_required": True}, headers=_auth(cap))
+    outsider = await _register(client, "out@example.com")
+    assert (await client.get(f"/api/competitions/{comp}/teams/me/requests", headers=_auth(outsider))).status_code == 403

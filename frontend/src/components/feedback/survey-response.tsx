@@ -78,12 +78,13 @@ export function SurveyResponseDialog({
         <div className="space-y-5">
           {survey.questions.map((q, i) => (
             <div key={q.id} className="space-y-2">
-              <Label className="text-sm">
+              <Label id={`${q.id}-label`} className="text-sm">
                 {i + 1}. {q.prompt}
                 {q.required && <span className="ml-1 text-destructive">*</span>}
               </Label>
               <QuestionControl
                 question={q}
+                labelId={`${q.id}-label`}
                 value={values[q.id] ?? ""}
                 onChange={(v) => set(q.id, v)}
                 textareaClass={TEXTAREA_CLASS}
@@ -113,11 +114,13 @@ export function SurveyResponseDialog({
 
 function QuestionControl({
   question,
+  labelId,
   value,
   onChange,
   textareaClass,
 }: {
   question: SurveyQuestion;
+  labelId: string;
   value: string;
   onChange: (value: string) => void;
   textareaClass: string;
@@ -125,11 +128,19 @@ function QuestionControl({
   if (question.type in RATING_MAX) {
     const max = RATING_MAX[question.type];
     return (
-      <div className="flex flex-wrap gap-1.5">
+      <div
+        role="radiogroup"
+        aria-labelledby={labelId}
+        aria-required={question.required}
+        className="flex flex-wrap gap-1.5"
+      >
         {Array.from({ length: max }, (_, i) => String(i + 1)).map((n) => (
           <button
             key={n}
             type="button"
+            role="radio"
+            aria-checked={value === n}
+            aria-label={n}
             onClick={() => onChange(n)}
             className={cn(
               "h-9 w-9 rounded-md border text-sm transition-colors",
@@ -146,7 +157,12 @@ function QuestionControl({
   }
   if (question.type === "multiple_choice") {
     return (
-      <div className="space-y-1.5">
+      <div
+        role="radiogroup"
+        aria-labelledby={labelId}
+        aria-required={question.required}
+        className="space-y-1.5"
+      >
         {question.options.map((opt) => (
           <label key={opt} className="flex cursor-pointer items-center gap-2 text-sm">
             <input
@@ -165,10 +181,19 @@ function QuestionControl({
     return (
       <textarea
         className={textareaClass}
+        aria-labelledby={labelId}
+        aria-required={question.required}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
     );
   }
-  return <Input value={value} onChange={(e) => onChange(e.target.value)} />;
+  return (
+    <Input
+      aria-labelledby={labelId}
+      aria-required={question.required}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
 }

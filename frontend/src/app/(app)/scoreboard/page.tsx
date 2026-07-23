@@ -211,7 +211,7 @@ export default function ScoreboardPage() {
         </div>
       )}
       {board.isError && (
-        <p className="text-sm text-destructive">{(board.error as Error).message}</p>
+        <p role="alert" className="text-sm text-destructive">{(board.error as Error).message}</p>
       )}
 
       {board.data && entries.length === 0 && (

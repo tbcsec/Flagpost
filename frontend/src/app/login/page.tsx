@@ -85,7 +85,7 @@ export default function LoginPage() {
               />
             </div>
             {login.isError && (
-              <p className="text-sm text-destructive">
+              <p role="alert" className="text-sm text-destructive">
                 {(login.error as Error).message}
               </p>
             )}

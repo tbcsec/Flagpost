@@ -103,7 +103,7 @@ export default function RegisterPage() {
               />
             </div>
             {register.isError && (
-              <p className="text-sm text-destructive">
+              <p role="alert" className="text-sm text-destructive">
                 {(register.error as Error).message}
               </p>
             )}

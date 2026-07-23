@@ -56,7 +56,7 @@ export function ChallengeHints({
         ))}
       </ul>
       {reveal.isError && (
-        <p className="text-sm text-destructive">{(reveal.error as Error).message}</p>
+        <p role="alert" className="text-sm text-destructive">{(reveal.error as Error).message}</p>
       )}
     </div>
   );

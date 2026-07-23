@@ -245,8 +245,11 @@ function QuestionForm({
       </div>
       {type === "multiple_choice" && (
         <div className="space-y-1.5">
-          <Label className="text-xs">Options (one per line, at least two)</Label>
+          <Label htmlFor="survey-q-options" className="text-xs">
+            Options (one per line, at least two)
+          </Label>
           <textarea
+            id="survey-q-options"
             className={TEXTAREA_CLASS}
             value={optionsText}
             onChange={(e) => setOptionsText(e.target.value)}

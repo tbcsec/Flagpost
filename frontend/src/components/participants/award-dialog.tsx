@@ -178,7 +178,7 @@ export function AwardDialog({
             </div>
           </div>
           {create.error && (
-            <p className="text-sm text-destructive">{(create.error as Error).message}</p>
+            <p role="alert" className="text-sm text-destructive">{(create.error as Error).message}</p>
           )}
           <DialogFooter>
             <Button

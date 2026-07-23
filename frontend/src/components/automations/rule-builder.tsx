@@ -316,7 +316,7 @@ export function RuleBuilder({
           </Step>
         </ol>
 
-        {error && <p className="text-[13px] text-destructive">{error}</p>}
+        {error && <p role="alert" className="text-[13px] text-destructive">{error}</p>}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -377,6 +377,7 @@ function FieldInput({
   onChange: (value: string) => void;
 }) {
   const placeholder = field.placeholder ?? undefined;
+  const controlId = `field-${React.useId()}`;
   let control: React.ReactNode;
 
   if (field.kind === "select") {
@@ -385,7 +386,7 @@ function FieldInput({
         ? targetOptionsFor(field.options, personal)
         : (field.options ?? []);
     control = (
-      <Select value={value} onChange={(e) => onChange(e.target.value)} className="h-9">
+      <Select id={controlId} value={value} onChange={(e) => onChange(e.target.value)} className="h-9">
         {options.map((o) => (
           <option key={o} value={o}>
             {o}
@@ -396,6 +397,7 @@ function FieldInput({
   } else if (field.kind === "textarea" || field.kind === "string_list" || field.kind === "keyvalue") {
     control = (
       <textarea
+        id={controlId}
         className={TEXTAREA_CLASS}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -411,6 +413,7 @@ function FieldInput({
   } else {
     control = (
       <Input
+        id={controlId}
         type={field.kind === "number" ? "number" : "text"}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -422,7 +425,7 @@ function FieldInput({
 
   return (
     <div className="space-y-1">
-      <Label className={cn("text-xs", !field.required && "text-muted-foreground")}>
+      <Label htmlFor={controlId} className={cn("text-xs", !field.required && "text-muted-foreground")}>
         {field.label}
         {!field.required && <span className="ml-1 font-normal">(optional)</span>}
       </Label>

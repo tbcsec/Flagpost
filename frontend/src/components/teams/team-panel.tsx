@@ -346,7 +346,7 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
               Require captain approval to join
             </label>
             {create.isError && (
-              <p className="text-sm text-destructive">
+              <p role="alert" className="text-sm text-destructive">
                 {(create.error as Error).message}
               </p>
             )}
@@ -391,7 +391,7 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
               />
             </div>
             {join.isError && (
-              <p className="text-sm text-destructive">
+              <p role="alert" className="text-sm text-destructive">
                 {(join.error as Error).message}
               </p>
             )}

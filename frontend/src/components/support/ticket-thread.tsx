@@ -113,6 +113,7 @@ export function TicketThread({
           onChange={(e) => setBody(e.target.value)}
           required
           rows={3}
+          aria-label="Reply"
           placeholder="Write a reply…"
           className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         />
@@ -156,7 +157,7 @@ export function TicketThread({
           </div>
         </div>
         {reply.isError && (
-          <p className="text-sm text-destructive">{(reply.error as Error).message}</p>
+          <p role="alert" className="text-sm text-destructive">{(reply.error as Error).message}</p>
         )}
       </form>
 

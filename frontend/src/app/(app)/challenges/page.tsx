@@ -107,6 +107,8 @@ export default function ChallengesPage() {
         {chips.map((chip) => (
           <button
             key={chip.id}
+            type="button"
+            aria-pressed={filter === chip.id}
             onClick={() => setFilter(chip.id)}
             className={cn(
               "rounded-full border px-3.5 py-1.5 text-sm font-medium capitalize transition-colors",
@@ -129,6 +131,8 @@ export default function ChallengesPage() {
             {(["all", "available", "locked"] as const).map((a) => (
               <button
                 key={a}
+                type="button"
+                aria-pressed={availability === a}
                 onClick={() => setAvailability(a)}
                 className={cn(
                   "px-3 py-1.5 font-medium capitalize transition-colors",
@@ -146,7 +150,7 @@ export default function ChallengesPage() {
 
       {challenges.isLoading && <SkeletonCards count={6} />}
       {challenges.isError && (
-        <p className="text-sm text-destructive">{(challenges.error as Error).message}</p>
+        <p role="alert" className="text-sm text-destructive">{(challenges.error as Error).message}</p>
       )}
 
       {challenges.data && allData.length === 0 && (
@@ -349,7 +353,7 @@ function ChallengeDialogBody({
           <ChallengeRatingPrompt competitionId={competitionId} challenge={challenge} />
         </div>
       ) : outOfGuesses ? (
-        <p className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-destructive">
           You&apos;ve used all your guesses for this question.
         </p>
       ) : paused ? (
@@ -399,12 +403,12 @@ function ChallengeDialogBody({
             </div>
           )}
           {result && !result.correct && (
-            <span className="text-sm text-destructive">
+            <span role="alert" className="text-sm text-destructive">
               {isMultipleChoice ? "Incorrect answer." : "Incorrect flag."}
             </span>
           )}
           {submit.isError && (
-            <span className="text-sm text-destructive">{(submit.error as Error).message}</span>
+            <span role="alert" className="text-sm text-destructive">{(submit.error as Error).message}</span>
           )}
           <DialogFooter>
             <Button type="submit" disabled={submit.isPending || (isMultipleChoice && !flag)}>
@@ -486,7 +490,7 @@ function ChallengeSolves({
           >
             <span className="flex items-center gap-1.5">
               {s.is_first_blood && (
-                <span title="First blood">
+                <span role="img" aria-label="First blood" title="First blood">
                   <FirstBloodIcon />
                 </span>
               )}

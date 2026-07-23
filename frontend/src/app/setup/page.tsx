@@ -183,7 +183,7 @@ function SetupWizard() {
                 <Label htmlFor="cf">Confirm password</Label>
                 <Input id="cf" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
                 {confirm.length > 0 && password !== confirm && (
-                  <p className="text-xs text-destructive">Passwords don&apos;t match.</p>
+                  <p role="alert" className="text-xs text-destructive">Passwords don&apos;t match.</p>
                 )}
               </div>
             </CardContent>

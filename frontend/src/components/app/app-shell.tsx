@@ -124,6 +124,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setMobileOpen(false);
   }, [pathname]);
 
+  // Escape closes the mobile drawer (keyboard users can't reach the backdrop).
+  React.useEffect(() => {
+    if (!mobileOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setMobileOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
+
   const initials = React.useMemo(() => {
     const n = user?.display_name?.trim() ?? "";
     if (!n) return "?";
@@ -183,6 +193,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen overflow-hidden">
+      {/* Keyboard users can jump past the nav straight to page content. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
+      >
+        Skip to content
+      </a>
       {/* Mobile drawer backdrop. */}
       {mobileOpen && (
         <div
@@ -211,18 +228,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             />
           )}
           <button
+            type="button"
             onClick={() => setCollapsed((c) => !c)}
             title="Toggle sidebar"
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!collapsed}
             className={cn(
               "ml-auto hidden rounded-md px-2.5 py-1 text-xl leading-none text-muted-foreground hover:bg-accent/60 md:block",
               collapsed && "md:ml-0",
             )}
           >
-            {collapsed ? "»" : "«"}
+            <span aria-hidden="true">{collapsed ? "»" : "«"}</span>
           </button>
         </div>
 
-        <nav className="flex flex-1 flex-col gap-1">
+        <nav aria-label="Main" className="flex flex-1 flex-col gap-1">
           {showLobby ? (
             <Link href="/lobby" title="Lobby" className={navItem(isActive("/lobby"))}>
               <span className="flex h-4 w-4 items-center justify-center">{lobbyIcon}</span>
@@ -241,18 +261,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <>
               <div className="my-2 border-t border-border" />
               <button
+                type="button"
                 onClick={() => {
                   if (collapsed) setCollapsed(false);
                   setAdminOpen((o) => !o);
                 }}
                 title="Admin"
+                aria-expanded={adminOpen}
                 className={navItem(isAdminSection)}
               >
                 <span className="flex h-4 w-4 items-center justify-center">{shieldIcon}</span>
                 {navExpanded && (
                   <>
                     <span className="flex-1 text-left">Admin</span>
-                    <span className="text-[11px] text-muted-foreground">{adminOpen ? "▾" : "▸"}</span>
+                    <span aria-hidden="true" className="text-[11px] text-muted-foreground">{adminOpen ? "▾" : "▸"}</span>
                   </>
                 )}
               </button>
@@ -302,7 +324,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Live announcement banner on competition-scoped pages (not Admin,
             which is global, nor the lobby, which has no active competition). */}
         {!isAdminSection && pathname !== "/lobby" && <AnnouncementBanner />}
-        <main className="flex-1 overflow-y-auto p-4 md:p-8">
+        <main id="main-content" className="flex-1 overflow-y-auto p-4 md:p-8">
           {/* A min-height flex column so the footer sits at the bottom on short
               pages (mt-auto) without stretching the content grid's rows. */}
           <div className="mx-auto flex min-h-full max-w-5xl flex-col">
@@ -367,8 +389,15 @@ function Topbar({
         setNotifOpen(false);
       }
     }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setNotifOpen(false);
+    }
     document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [notifOpen]);
 
   const showSwitcher = !isAdminSection && pathname !== "/profile" && pathname !== "/lobby";
@@ -405,13 +434,17 @@ function Topbar({
 
       <div className="relative" ref={notifRef}>
         <button
+          type="button"
           onClick={() => setNotifOpen((o) => !o)}
           title="Notifications"
+          aria-label={hasUnread ? "Notifications (unread)" : "Notifications"}
+          aria-haspopup="menu"
+          aria-expanded={notifOpen}
           className="relative flex items-center text-muted-foreground hover:text-foreground"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22a2.2 2.2 0 0 0 2.2-2.2h-4.4A2.2 2.2 0 0 0 12 22Zm7-6.2V11a7 7 0 0 0-5.5-6.84V3a1.5 1.5 0 0 0-3 0v1.16A7 7 0 0 0 5 11v4.8L3 17.8V19h18v-1.2Z" /></svg>
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22a2.2 2.2 0 0 0 2.2-2.2h-4.4A2.2 2.2 0 0 0 12 22Zm7-6.2V11a7 7 0 0 0-5.5-6.84V3a1.5 1.5 0 0 0-3 0v1.16A7 7 0 0 0 5 11v4.8L3 17.8V19h18v-1.2Z" /></svg>
           {hasUnread && (
-            <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-primary" />
+            <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-primary" />
           )}
         </button>
         {notifOpen && (

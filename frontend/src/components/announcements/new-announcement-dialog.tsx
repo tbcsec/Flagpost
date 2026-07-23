@@ -82,7 +82,7 @@ export function NewAnnouncementDialog({ competitionId }: { competitionId: string
             />
           </div>
           {create.isError && (
-            <p className="text-sm text-destructive">
+            <p role="alert" className="text-sm text-destructive">
               {(create.error as Error).message}
             </p>
           )}

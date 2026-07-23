@@ -94,7 +94,7 @@ export function NewTicketDialog({ competitionId }: { competitionId: string }) {
             />
           </div>
           {create.isError && (
-            <p className="text-sm text-destructive">{(create.error as Error).message}</p>
+            <p role="alert" className="text-sm text-destructive">{(create.error as Error).message}</p>
           )}
           <DialogFooter>
             <Button type="submit" disabled={create.isPending}>

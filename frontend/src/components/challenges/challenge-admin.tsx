@@ -145,7 +145,7 @@ export function ChallengeAdmin({ competitionId }: { competitionId: string }) {
         </CardHeader>
         <CardContent>
           {challenges.isError && (
-            <p className="text-sm text-destructive">
+            <p role="alert" className="text-sm text-destructive">
               {(challenges.error as Error).message}
             </p>
           )}
@@ -711,7 +711,7 @@ function ChallengeForm({
         )}
 
         {mutation.isError && (
-          <p className="text-sm text-destructive">
+          <p role="alert" className="text-sm text-destructive">
             {(mutation.error as Error).message}
           </p>
         )}
@@ -804,7 +804,7 @@ export function CategoryManager({ competitionId }: { competitionId: string }) {
           </Button>
         </form>
         {createCategory.isError && (
-          <p className="text-sm text-destructive">
+          <p role="alert" className="text-sm text-destructive">
             {(createCategory.error as Error).message}
           </p>
         )}

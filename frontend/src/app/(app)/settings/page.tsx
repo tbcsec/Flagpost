@@ -39,7 +39,7 @@ export default function CompetitionSettingsPage() {
     <>
       <SectionHeader title="Settings" subtitle={data?.name} />
       {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
-      {isError && <p className="text-sm text-destructive">{(error as Error).message}</p>}
+      {isError && <p role="alert" className="text-sm text-destructive">{(error as Error).message}</p>}
       {data && (
         <div className="grid gap-6">
           <Tabs tabs={TABS} value={tab} onValueChange={(v) => setTab(v as Tab)} />

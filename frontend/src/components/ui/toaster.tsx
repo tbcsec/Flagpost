@@ -24,11 +24,17 @@ export function Toaster() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-full max-w-sm flex-col gap-2">
+    <div
+      className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-full max-w-sm flex-col gap-2"
+      role="region"
+      aria-label="Notifications"
+    >
       {toasts.map((t) => (
         <div
           key={t.id}
-          role="status"
+          // Errors interrupt (assertive); everything else waits its turn.
+          role={t.variant === "destructive" ? "alert" : "status"}
+          aria-live={t.variant === "destructive" ? "assertive" : "polite"}
           className={cn(
             "pointer-events-auto flex items-start gap-3 overflow-hidden rounded-lg border p-4 shadow-lg",
             VARIANT_CLASS[t.variant],

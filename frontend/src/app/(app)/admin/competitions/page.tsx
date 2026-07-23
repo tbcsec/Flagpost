@@ -84,7 +84,7 @@ export default function AdminCompetitionsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
-          {isError && <p className="text-sm text-destructive">{(error as Error).message}</p>}
+          {isError && <p role="alert" className="text-sm text-destructive">{(error as Error).message}</p>}
           {competitions && competitions.length > 0 && (
             <Table>
               <TableHeader>
@@ -229,7 +229,7 @@ function CloneDialog({ source, onClose }: { source: Competition | null; onClose:
             />
           </div>
           {clone.isError && (
-            <p className="text-sm text-destructive">{(clone.error as Error).message}</p>
+            <p role="alert" className="text-sm text-destructive">{(clone.error as Error).message}</p>
           )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>

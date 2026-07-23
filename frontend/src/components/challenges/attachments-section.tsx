@@ -113,7 +113,7 @@ export function AttachmentsSection({
         )}
       </div>
       {(upload.isError || download.isError || remove.isError) && (
-        <p className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-destructive">
           {
             (
               (upload.error ?? download.error ?? remove.error) as Error

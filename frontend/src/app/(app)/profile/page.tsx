@@ -85,7 +85,7 @@ export default function ProfilePage() {
               />
             </div>
             {changePassword.isError && (
-              <p className="text-sm text-destructive">{(changePassword.error as Error).message}</p>
+              <p role="alert" className="text-sm text-destructive">{(changePassword.error as Error).message}</p>
             )}
             <div className="flex items-center gap-3">
               <Button type="submit" className="w-fit" disabled={changePassword.isPending}>

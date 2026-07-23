@@ -57,7 +57,7 @@ function ResetForm() {
         </CardHeader>
         <CardContent>
           {!token ? (
-            <p className="text-sm text-destructive">
+            <p role="alert" className="text-sm text-destructive">
               This link is missing its reset token. Request a new one from{" "}
               <Link href="/forgot-password" className="underline">
                 forgot password
@@ -79,7 +79,7 @@ function ResetForm() {
                 />
               </div>
               {reset.isError && (
-                <p className="text-sm text-destructive">{(reset.error as Error).message}</p>
+                <p role="alert" className="text-sm text-destructive">{(reset.error as Error).message}</p>
               )}
               <Button type="submit" disabled={reset.isPending}>
                 {reset.isPending ? "Saving…" : "Set new password"}

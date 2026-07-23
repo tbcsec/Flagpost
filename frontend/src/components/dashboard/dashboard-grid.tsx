@@ -128,6 +128,13 @@ export function DashboardGrid({
     setDragIndex(index);
   };
 
+  // Keyboard-accessible reordering — native HTML5 drag-and-drop can't be driven
+  // from the keyboard, so these buttons cover the same ground as a drag.
+  const move = (index: number, dir: -1 | 1) => {
+    const to = index + dir;
+    setDraft((d) => (to < 0 || to >= d.length ? d : moveEntry(d, index, to)));
+  };
+
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -138,7 +145,7 @@ export function DashboardGrid({
         ) : (
           <>
             <span className="mr-1 text-sm text-muted-foreground">
-              Drag to reorder · resize or hide each widget
+              Drag or use ↑↓ to reorder · resize or hide each widget
             </span>
             <Button size="sm" onClick={save} disabled={saveLayout.isPending}>
               {saveLayout.isPending ? "Saving…" : "Save layout"}
@@ -167,11 +174,15 @@ export function DashboardGrid({
               entry={entry}
               competitionId={competitionId}
               isDragging={dragIndex === index}
+              isFirst={index === 0}
+              isLast={index === draft.length - 1}
               onDragStart={() => setDragIndex(index)}
               onDragEnter={() => onDragEnter(index)}
               onDragEnd={() => setDragIndex(null)}
               onCycle={() => cycle(index)}
               onToggleHidden={() => toggleHidden(index)}
+              onMoveUp={() => move(index, -1)}
+              onMoveDown={() => move(index, 1)}
             />
           ))}
         </div>
@@ -204,11 +215,15 @@ interface EditableWidgetProps {
   entry: LayoutEntry;
   competitionId: string;
   isDragging: boolean;
+  isFirst: boolean;
+  isLast: boolean;
   onDragStart: () => void;
   onDragEnter: () => void;
   onDragEnd: () => void;
   onCycle: () => void;
   onToggleHidden: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
 }
 
 /** A widget in edit mode: draggable, with a size-cycle and hide control, and a
@@ -217,11 +232,15 @@ function EditableWidget({
   entry,
   competitionId,
   isDragging,
+  isFirst,
+  isLast,
   onDragStart,
   onDragEnter,
   onDragEnd,
   onCycle,
   onToggleHidden,
+  onMoveUp,
+  onMoveDown,
 }: EditableWidgetProps) {
   const def = WIDGETS[entry.widgetId];
   if (!def) return null;
@@ -257,6 +276,24 @@ function EditableWidget({
           {entry.hidden && <span className="italic">· hidden</span>}
         </span>
         <span className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onMoveUp}
+            disabled={isFirst}
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-30"
+            aria-label={`Move ${def.label} earlier`}
+          >
+            <span aria-hidden="true">↑</span>
+          </button>
+          <button
+            type="button"
+            onClick={onMoveDown}
+            disabled={isLast}
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-30"
+            aria-label={`Move ${def.label} later`}
+          >
+            <span aria-hidden="true">↓</span>
+          </button>
           {canResize && (
             <button
               type="button"

@@ -45,3 +45,29 @@ async def public_scoreboard(
         "start_at": competition.start_at,
         "end_at": competition.end_at,
     }
+
+
+@router.get("/competitions/{competition_id}/ctftime")
+async def ctftime_feed(
+    competition_id: str, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """The [CTFtime scoreboard feed](https://ctftime.org/json-scoreboard-feed):
+    ``{"standings": [{"pos", "team", "score"}, ...]}``. An organiser pastes this
+    URL into CTFtime so a public event can be rated. Public competitions only;
+    respects the freeze like the spectator board."""
+    competition = await db.get(Competition, competition_id)
+    if (
+        competition is None
+        or competition.visibility != "public"
+        or competition.archived_at is not None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Feed not found"
+        )
+    board = await compute_scoreboard(db, competition)
+    return {
+        "standings": [
+            {"pos": e["rank"], "team": e["name"], "score": e["points"]}
+            for e in board["entries"]
+        ]
+    }

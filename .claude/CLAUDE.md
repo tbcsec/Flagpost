@@ -520,6 +520,11 @@ What's built:
       non-staff). Frontend: a standalone `/public/[competitionId]` route **outside
       the (app) shell** (no auth), `usePublicScoreboard` (30s poll, no auth gate),
       branded via public site settings + the mandatory Powered-by footer.
+    - **CTFtime scoreboard feed** — `GET /api/public/competitions/{id}/ctftime`
+      (same public router/gating) returns the [CTFtime format](https://ctftime.org/json-scoreboard-feed)
+      `{"standings":[{"pos","team","score"}]}` so a public event can be rated.
+      Staff see the public-board + CTFtime-feed URLs on the scoreboard page when
+      the competition is public.
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

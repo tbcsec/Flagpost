@@ -26,6 +26,8 @@ import { useAuthStore } from "@/stores/auth";
 import { toast } from "@/stores/toast";
 import { cn } from "@/lib/utils";
 
+const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
 // Live scoreboard (Phase 7): REST initial load + WebSocket room updates. "You"
 // highlighting follows the scoring subject; the top three get a medal rank and
 // rows flash briefly when their points change on a live update.
@@ -142,6 +144,29 @@ export default function ScoreboardPage() {
           ) : undefined
         }
       />
+
+      {canFreeze && competition?.visibility === "public" && (
+        <p className="text-xs text-muted-foreground">
+          Public board:{" "}
+          <a
+            className="text-primary underline"
+            href={`/public/${competitionId}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            /public/{competitionId}
+          </a>{" "}
+          · CTFtime feed:{" "}
+          <a
+            className="font-mono text-primary underline"
+            href={`${API_ORIGIN}/api/public/competitions/${competitionId}/ctftime`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            /api/public/…/ctftime
+          </a>
+        </p>
+      )}
 
       {board.isLoading && (
         <div className="grid gap-4">

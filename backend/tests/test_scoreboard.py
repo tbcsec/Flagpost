@@ -243,3 +243,16 @@ async def test_public_scoreboard_only_for_public_competitions(client):
     # A private competition isn't disclosed.
     hidden = await client.get(f"/api/public/competitions/{priv}/scoreboard")
     assert hidden.status_code == 404
+
+
+async def test_ctftime_feed_format(client):
+    admin = await admin_token(client)
+    comp = (await client.post("/api/competitions", json={"name": "Rated CTF", "participation_mode": "individual", "visibility": "public"}, headers=_auth(admin))).json()["id"]
+    feed = await client.get(f"/api/public/competitions/{comp}/ctftime")
+    assert feed.status_code == 200
+    body = feed.json()
+    assert "standings" in body
+    assert isinstance(body["standings"], list)
+    # Private competitions have no feed.
+    priv = (await client.post("/api/competitions", json={"name": "Priv", "participation_mode": "individual", "visibility": "private"}, headers=_auth(admin))).json()["id"]
+    assert (await client.get(f"/api/public/competitions/{priv}/ctftime")).status_code == 404

@@ -37,6 +37,9 @@ export interface Competition {
   created_at: string;
   /** Set when an organiser has archived (closed out) the competition. */
   archived_at: string | null;
+  /** Competition-wide cap on guesses per subject per multiple-choice challenge
+   *  (null = unlimited). */
+  mc_guess_limit: number | null;
 }
 
 /** Effective permissions for the current user (auth/me/permissions). The set
@@ -335,6 +338,7 @@ export interface CompetitionCreate {
   end_at?: string | null;
   registration_opens_at?: string | null;
   registration_closes_at?: string | null;
+  mc_guess_limit?: number | null;
 }
 
 export type CompetitionUpdate = Partial<CompetitionCreate>;
@@ -429,7 +433,7 @@ export interface Category {
   created_at: string;
 }
 
-export type FlagType = "static" | "regex";
+export type FlagType = "static" | "regex" | "multiple_choice";
 export type ChallengeState = "draft" | "published";
 
 /** TipTap/ProseMirror document. */
@@ -447,6 +451,11 @@ export interface Challenge {
   case_insensitive: boolean;
   /** The only flag-related fact the server ever returns (§13.2). */
   has_flag: boolean;
+  /** Multiple-choice options shown to the competitor (correct one is hidden). */
+  choices: string[] | null;
+  /** Guesses left for the subject on a multiple-choice challenge under the
+   *  competition cap; null = no cap / not multiple-choice / already solved. */
+  attempts_remaining: number | null;
   /** Whether the requesting subject (team or user) has solved this (§13.2). */
   solved: boolean;
   /** Number of distinct subjects that have solved this challenge. */
@@ -462,6 +471,8 @@ export interface ChallengeCreate {
   flag_type?: FlagType;
   case_insensitive?: boolean;
   flag?: string | null;
+  /** Options for a multiple_choice challenge (the correct one is `flag`). */
+  choices?: string[] | null;
 }
 
 export type ChallengeUpdate = Partial<ChallengeCreate>;
@@ -486,6 +497,8 @@ export interface SubmitResult {
   already_solved: boolean;
   points_awarded: number;
   is_first_blood: boolean;
+  /** Guesses left on a multiple-choice challenge after this attempt (null = no cap). */
+  attempts_remaining: number | null;
 }
 
 /** One ranked row on the scoreboard (Phase 7). The subject is the team in

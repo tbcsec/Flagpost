@@ -19,7 +19,7 @@ from datetime import datetime
 from secrets import token_urlsafe
 from uuid import uuid4
 
-from sqlalchemy import DateTime, String
+from sqlalchemy import DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base, TimestampMixin, UtcDateTime
@@ -69,3 +69,8 @@ class Competition(Base, TimestampMixin):
     # it's just hidden from the switcher/lobby and flagged in the admin list.
     # Reversible (unarchive). Null = active.
     archived_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    # Competition-wide cap on guesses per subject per multiple-choice challenge, to
+    # blunt brute-forcing a finite option set. Null = unlimited. Applies only to
+    # multiple_choice challenges (static/regex are covered by the submission rate
+    # limiter). Not scoped per-challenge by design (owner decision).
+    mc_guess_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)

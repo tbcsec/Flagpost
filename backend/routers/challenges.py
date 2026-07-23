@@ -35,6 +35,8 @@ from utils.scoring import (
     resolve_subject,
     solve_counts,
     solved_challenge_ids,
+    subject_attempt_count,
+    subject_attempt_counts,
     subject_has_solved,
 )
 
@@ -44,18 +46,52 @@ router = APIRouter(
 
 
 def _apply_flag(challenge: Challenge, raw_flag: str) -> None:
-    """Store ``raw_flag`` according to the challenge's flag_type (§13.2)."""
+    """Store ``raw_flag`` according to the challenge's flag_type (§13.2). For
+    multiple_choice, ``raw_flag`` is the correct option — hashed like a static flag
+    so the answer never leaves the server; the option list lives in ``choices``."""
     if challenge.flag_type == "regex":
         challenge.flag_regex = raw_flag
         challenge.flag_hash = None
         challenge.flag_salt = None
-    else:
+    else:  # static or multiple_choice — salted hash of the answer
         salt = make_salt()
         challenge.flag_salt = salt
         challenge.flag_hash = hash_static_flag(
             raw_flag, salt, challenge.case_insensitive
         )
         challenge.flag_regex = None
+
+
+def _validate_multiple_choice(challenge: Challenge, raw_flag: str | None) -> None:
+    """Guard the multiple_choice invariants: 2+ distinct options, and the correct
+    answer (``raw_flag``) is one of them. ``raw_flag`` is None when only choices are
+    being edited without re-supplying the answer — allowed, since the stored hash
+    stays valid as long as the correct option remains in the (unchanged) list, but
+    we can't verify a hash against the new list, so re-supplying is required when
+    choices change (enforced by the caller)."""
+    choices = challenge.choices or []
+    cleaned = [c.strip() for c in choices]
+    if len(cleaned) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A multiple-choice challenge needs at least two options",
+        )
+    if any(not c for c in cleaned):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Multiple-choice options can't be blank",
+        )
+    if len(set(cleaned)) != len(cleaned):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Multiple-choice options must be unique",
+        )
+    if raw_flag is not None and raw_flag.strip() not in cleaned:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The correct answer must be one of the options",
+        )
+    challenge.choices = cleaned
 
 
 async def _get_scoped_challenge(
@@ -137,9 +173,22 @@ async def list_challenges(
         if subject is not None
         else set()
     )
+    # Multiple-choice guesses remaining (competition-wide cap), per subject.
+    limit = competition.mc_guess_limit if competition is not None else None
+    attempts = (
+        await subject_attempt_counts(db, competition_id, subject)
+        if subject is not None and limit is not None
+        else {}
+    )
     for challenge in challenges:
         challenge.solve_count = counts.get(challenge.id, 0)
         challenge.solved = challenge.id in solved
+        if challenge.flag_type == "multiple_choice" and limit is not None:
+            challenge.attempts_remaining = (
+                None
+                if challenge.id in solved
+                else max(0, limit - attempts.get(challenge.id, 0))
+            )
     return challenges
 
 
@@ -173,6 +222,15 @@ async def get_challenge(
         if subject is not None
         else False
     )
+    limit = competition.mc_guess_limit if competition is not None else None
+    if (
+        challenge.flag_type == "multiple_choice"
+        and limit is not None
+        and subject is not None
+        and not challenge.solved
+    ):
+        used = await subject_attempt_count(db, challenge_id, subject)
+        challenge.attempts_remaining = max(0, limit - used)
     return challenge
 
 
@@ -194,6 +252,9 @@ async def create_challenge(
         flag_type=body.flag_type,
         case_insensitive=body.case_insensitive,
     )
+    if body.flag_type == "multiple_choice" and body.choices is not None:
+        challenge.choices = body.choices
+        _validate_multiple_choice(challenge, body.flag)
     if body.flag is not None:
         _apply_flag(challenge, body.flag)
     db.add(challenge)
@@ -227,6 +288,23 @@ async def update_challenge(
     raw_flag = changes.pop("flag", None)
     for field, value in changes.items():
         setattr(challenge, field, value)
+
+    # Multiple-choice options can't be verified against the already-hashed answer,
+    # so a change to the option set (or a switch into multiple_choice) requires
+    # re-supplying the correct answer alongside the options.
+    if challenge.flag_type == "multiple_choice":
+        challenge.choices = challenge.choices or None
+        if "choices" in changes and raw_flag is None and challenge.flag_hash is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Re-enter the correct answer when changing the options",
+            )
+        if challenge.choices:
+            _validate_multiple_choice(challenge, raw_flag)
+    else:
+        # Leaving multiple_choice drops the now-meaningless option list.
+        challenge.choices = None
+
     if raw_flag is not None:
         # Applied after flag_type/case_insensitive so a combined update hashes
         # under the *new* settings.

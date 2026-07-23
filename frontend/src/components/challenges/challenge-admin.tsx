@@ -38,6 +38,7 @@ import {
 import type {
   Category,
   Challenge,
+  ChallengeCreate,
   FlagType,
   RichTextDoc,
 } from "@/lib/types";
@@ -202,19 +203,47 @@ function ChallengeForm({
     challenge?.case_insensitive ?? false,
   );
   const [flag, setFlag] = useState("");
+  // Multiple choice: the option list (the correct answer isn't returned by the
+  // API, so on edit the correct radio starts unselected — picking one re-sets it).
+  const [choices, setChoices] = useState<string[]>(
+    challenge?.choices && challenge.choices.length >= 2 ? challenge.choices : ["", ""],
+  );
+  const [correctIndex, setCorrectIndex] = useState<number | null>(null);
+
+  function updateChoice(i: number, value: string) {
+    setChoices((cs) => cs.map((c, idx) => (idx === i ? value : c)));
+  }
+  function removeChoice(i: number) {
+    setChoices((cs) => cs.filter((_, idx) => idx !== i));
+    setCorrectIndex((ci) => (ci === null ? null : ci === i ? null : ci > i ? ci - 1 : ci));
+  }
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const base = {
+    const base: ChallengeCreate = {
       title,
       description,
       category_id: categoryId || null,
       points: Number(points),
       flag_type: flagType,
-      case_insensitive: caseInsensitive,
-      // Only send the flag when the author typed one (empty = keep existing).
-      ...(flag ? { flag } : {}),
     };
+    if (flagType === "multiple_choice") {
+      const trimmed = choices.map((c) => c.trim());
+      const hasCorrect = correctIndex !== null && !!trimmed[correctIndex];
+      if (hasCorrect) {
+        // Setting/replacing the answer: send options + the correct one together.
+        base.choices = trimmed;
+        base.flag = trimmed[correctIndex as number];
+      } else if (!isEdit) {
+        // New draft: options only, answer added later before publishing.
+        base.choices = trimmed;
+      }
+      // Editing without re-picking the correct option keeps the stored answer.
+    } else {
+      base.case_insensitive = caseInsensitive;
+      // Only send the flag when the author typed one (empty = keep existing).
+      if (flag) base.flag = flag;
+    }
     mutation.mutate(base, { onSuccess: onDone });
   }
 
@@ -273,39 +302,95 @@ function ChallengeForm({
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="flag-type">Flag type</Label>
-              <Select
-                id="flag-type"
-                value={flagType}
-                onChange={(e) => setFlagType(e.target.value as FlagType)}
-              >
-                <option value="static">Static</option>
-                <option value="regex">Regex</option>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="flag">
-                {flagType === "regex" ? "Flag pattern" : "Flag"}
-              </Label>
-              <Input
-                id="flag"
-                value={flag}
-                placeholder={isEdit && challenge.has_flag ? "(unchanged)" : ""}
-                onChange={(e) => setFlag(e.target.value)}
-                required={!isEdit}
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="flag-type">Flag type</Label>
+            <Select
+              id="flag-type"
+              value={flagType}
+              onChange={(e) => setFlagType(e.target.value as FlagType)}
+              className="max-w-xs"
+            >
+              <option value="static">Static</option>
+              <option value="regex">Regex</option>
+              <option value="multiple_choice">Multiple choice</option>
+            </Select>
           </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={caseInsensitive}
-              onChange={(e) => setCaseInsensitive(e.target.checked)}
-            />
-            Case-insensitive flag
-          </label>
+
+          {flagType === "multiple_choice" ? (
+            <div className="space-y-2">
+              <Label>Options</Label>
+              <p className="text-xs text-muted-foreground">
+                Add the options a competitor picks from, and mark the correct one.
+                {isEdit && challenge.has_flag
+                  ? " Leave unselected to keep the current answer."
+                  : ""}
+              </p>
+              <div className="space-y-2">
+                {choices.map((opt, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="mc-correct"
+                      checked={correctIndex === i}
+                      onChange={() => setCorrectIndex(i)}
+                      style={{ accentColor: "hsl(var(--primary))" }}
+                      aria-label={`Mark option ${i + 1} correct`}
+                    />
+                    <Input
+                      value={opt}
+                      onChange={(e) => updateChoice(i, e.target.value)}
+                      placeholder={`Option ${i + 1}`}
+                    />
+                    {choices.length > 2 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeChoice(i)}
+                        aria-label={`Remove option ${i + 1}`}
+                      >
+                        ✕
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {choices.length < 10 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setChoices([...choices, ""])}
+                >
+                  + Add option
+                </Button>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="flag">
+                  {flagType === "regex" ? "Flag pattern" : "Flag"}
+                </Label>
+                <Input
+                  id="flag"
+                  value={flag}
+                  placeholder={isEdit && challenge.has_flag ? "(unchanged)" : ""}
+                  onChange={(e) => setFlag(e.target.value)}
+                  required={!isEdit}
+                  className="max-w-md"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={caseInsensitive}
+                  onChange={(e) => setCaseInsensitive(e.target.checked)}
+                />
+                Case-insensitive flag
+              </label>
+            </>
+          )}
         </form>
 
         {/* Attachments and hints have their own sub-forms, so they sit *outside*

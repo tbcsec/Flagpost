@@ -78,6 +78,39 @@ async def subject_has_solved(
     return existing is not None
 
 
+async def subject_attempt_count(
+    db: AsyncSession, challenge_id: str, subject: Subject
+) -> int:
+    """How many times ``subject`` has submitted against ``challenge_id`` (any
+    outcome). Drives the multiple-choice guess cap — every guess counts, so a team
+    can't burn attempts across its members to sidestep the limit."""
+    count = await db.scalar(
+        select(func.count(Submission.id)).where(
+            Submission.challenge_id == challenge_id,
+            _subject_solve_filter(subject),
+        )
+    )
+    return count or 0
+
+
+async def subject_attempt_counts(
+    db: AsyncSession, competition_id: str, subject: Subject
+) -> dict[str, int]:
+    """challenge_id -> ``subject``'s attempt count across the competition, in one
+    grouped query (the browse list's multiple-choice guesses-remaining)."""
+    rows = (
+        await db.execute(
+            select(Submission.challenge_id, func.count(Submission.id))
+            .where(
+                Submission.competition_id == competition_id,
+                _subject_solve_filter(subject),
+            )
+            .group_by(Submission.challenge_id)
+        )
+    ).all()
+    return {challenge_id: count for challenge_id, count in rows}
+
+
 async def solve_counts(
     db: AsyncSession, competition_id: str
 ) -> dict[str, int]:

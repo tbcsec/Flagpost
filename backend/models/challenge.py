@@ -50,8 +50,8 @@ class Challenge(Base, CompetitionScopedMixin, TimestampMixin):
     # "draft" | "published" (Tier 2 adds "review").
     state: Mapped[str] = mapped_column(String, nullable=False, default="draft")
 
-    # --- Flag config (§13.2) — none of this is ever serialized ---
-    # "static" | "regex"
+    # --- Flag config (§13.2) — the secret parts are never serialized ---
+    # "static" | "regex" | "multiple_choice"
     flag_type: Mapped[str] = mapped_column(String, nullable=False, default="static")
     case_insensitive: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
@@ -59,9 +59,15 @@ class Challenge(Base, CompetitionScopedMixin, TimestampMixin):
     flag_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     flag_salt: Mapped[str | None] = mapped_column(String, nullable=True)
     flag_regex: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Multiple-choice options shown to the competitor (public — the correct one is
+    # NOT marked here; it's stored hashed in flag_hash like a static flag, so the
+    # answer never leaves the server). Non-null only for flag_type "multiple_choice".
+    choices: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     @property
     def has_flag(self) -> bool:
         if self.flag_type == "regex":
             return self.flag_regex is not None
+        if self.flag_type == "multiple_choice":
+            return self.flag_hash is not None and bool(self.choices)
         return self.flag_hash is not None

@@ -21,3 +21,6 @@ class SubmitResult(BaseModel):
     points_awarded: int = 0
     # True only on the first correct solve of this challenge in the competition.
     is_first_blood: bool = False
+    # Guesses left for the subject on a multiple-choice challenge under the
+    # competition-wide cap (null = no cap, not multiple-choice, or already solved).
+    attempts_remaining: int | None = None

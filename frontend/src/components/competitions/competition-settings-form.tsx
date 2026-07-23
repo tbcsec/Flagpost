@@ -36,6 +36,7 @@ export function CompetitionSettingsForm({
     end_at: toInput(competition.end_at),
     registration_opens_at: toInput(competition.registration_opens_at),
     registration_closes_at: toInput(competition.registration_closes_at),
+    mc_guess_limit: competition.mc_guess_limit ? String(competition.mc_guess_limit) : "",
   });
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
@@ -54,6 +55,8 @@ export function CompetitionSettingsForm({
         end_at: fromInput(form.end_at),
         registration_opens_at: fromInput(form.registration_opens_at),
         registration_closes_at: fromInput(form.registration_closes_at),
+        // Blank clears the cap (null); a positive number sets it.
+        mc_guess_limit: form.mc_guess_limit ? Number(form.mc_guess_limit) : null,
       },
       { onSuccess: () => toast("Changes saved", { variant: "success" }) },
     );
@@ -141,6 +144,23 @@ export function CompetitionSettingsForm({
             onChange={(e) => set("registration_closes_at", e.target.value)}
           />
         </div>
+      </div>
+
+      <div className="max-w-xs space-y-2">
+        <Label htmlFor="mc_guess_limit">Multiple-choice guess limit</Label>
+        <Input
+          id="mc_guess_limit"
+          type="number"
+          min={1}
+          max={1000}
+          placeholder="Unlimited"
+          value={form.mc_guess_limit}
+          onChange={(e) => set("mc_guess_limit", e.target.value)}
+        />
+        <p className="text-xs text-muted-foreground">
+          Guesses each competitor (or team) gets per multiple-choice question, to
+          curb brute-forcing. Blank = unlimited. Applies competition-wide.
+        </p>
       </div>
 
       <div className="flex items-center gap-3">

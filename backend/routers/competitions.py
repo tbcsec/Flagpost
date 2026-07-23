@@ -157,6 +157,7 @@ async def create_competition(
         registration_closes_at=body.registration_closes_at,
         participation_mode=body.participation_mode,
         visibility=body.visibility,
+        mc_guess_limit=body.mc_guess_limit,
     )
     db.add(competition)
     await db.commit()

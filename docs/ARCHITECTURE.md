@@ -1094,6 +1094,18 @@ submission is the one endpoint they have direct incentive to script.
   challenge-health analytics (Tier 3 fail-rate reporting) and give staff
   something to look at if brute-forcing is suspected, even before any
   automated defense triggers.
+- **Flag types** are `static` (salted-hash exact match), `regex` (pattern,
+  stored as-is), and `multiple_choice` (Tier 3 Phase 9). A multiple-choice
+  challenge stores its **options** in a public `choices` list (shown to the
+  competitor) and the **correct option hashed** in `flag_hash` exactly like a
+  static flag — so the answer never leaves the server; the competitor submits the
+  option they picked and it's graded server-side the same way. Because a finite
+  option set is trivially brute-forced, multiple-choice adds a
+  **competition-wide guess cap** (`Competition.mc_guess_limit`, null = unlimited,
+  set in competition settings — deliberately not per-challenge): once a subject
+  has used its guesses on an unsolved MC challenge, further guesses are refused
+  before grading (so the block can't be probed for correctness), independent of
+  the general submission rate limit above.
 
 ### 13.3 File Storage & Access Control
 

@@ -661,6 +661,32 @@ Items (this list grows as the owner adds them):
     delete (fresh ids, solve re-linked to the still-present user), section
     selection, foreign-document rejection, endpoint auth gate.
 
+- **Multiple-choice challenges + competition-wide guess limit** ✅ (§13.2) — a
+  third `flag_type` where the author gives a set of options and marks one correct.
+  - *Storage/grading.* `challenges.choices` (JSON, **public** — the options shown
+    to competitors) + the correct option **hashed in `flag_hash`** like a static
+    flag (never serialized). The competitor submits the option they picked; it's
+    graded server-side by the same hash path. `has_flag` for MC needs both a hash
+    and choices; publishing still requires it.
+  - *Guess cap.* A finite option set is trivially brute-forced, so
+    `Competition.mc_guess_limit` (null = unlimited, owner call: **competition-wide,
+    not per-challenge**, set in competition settings) caps guesses per subject per
+    MC challenge. `submit_flag` refuses further guesses **before grading** once the
+    cap is hit (so the block can't be probed for correctness) and returns
+    `attempts_remaining`; the challenge list/detail expose it too
+    (`subject_attempt_count[s]`). Migration `d6e7f8a9b0c1`.
+  - *Reach.* Clone (`choices` + `mc_guess_limit`) and the generic backup carry the
+    new columns automatically.
+  - *Frontend.* Challenge editor: a "Multiple choice" flag type + an options editor
+    (add/remove rows, a radio marks the correct one; on edit the correct radio
+    starts blank since the answer isn't returned — re-pick to change it). Challenge
+    dialog: radios + "N guesses remaining" + a "used all your guesses" locked
+    state. Competition settings: the guess-limit input.
+  - *Tests.* `test_multiple_choice.py` — options shown/answer hidden, the cap
+    blocks a 3rd guess (even the correct one), a fresh subject still gets its own
+    allotment, correct-within-limit solves, and validation (≥2 unique options,
+    answer among them).
+
 ## Phase 10 — Accessibility, responsiveness & optimization pass (#28)
 
 Last, over finished surfaces — a polish pass, not a feature. (Was Phase 9;

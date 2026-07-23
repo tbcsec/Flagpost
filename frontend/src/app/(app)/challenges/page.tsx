@@ -206,6 +206,11 @@ function ChallengeDialogBody({
   const result = submit.data;
   const justSolved = result?.correct === true;
   const alreadySolved = challenge.solved || result?.already_solved;
+  const isMultipleChoice = challenge.flag_type === "multiple_choice";
+  // Guesses left: the latest submit result wins, else the value the list carried.
+  const remaining = result?.attempts_remaining ?? challenge.attempts_remaining;
+  const outOfGuesses =
+    isMultipleChoice && remaining === 0 && !justSolved && !alreadySolved;
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -252,29 +257,67 @@ function ChallengeDialogBody({
         </div>
       ) : alreadySolved ? (
         <p className="text-sm text-success">You&apos;ve solved this challenge.</p>
+      ) : outOfGuesses ? (
+        <p className="text-sm text-destructive">
+          You&apos;ve used all your guesses for this question.
+        </p>
       ) : (
         <form className="grid gap-3" onSubmit={onSubmit}>
-          <div className="grid gap-2">
-            <Label htmlFor="flag-submit">Flag</Label>
-            <Input
-              id="flag-submit"
-              value={flag}
-              onChange={(e) => setFlag(e.target.value)}
-              placeholder="flag{...}"
-              className="font-mono"
-              autoComplete="off"
-              required
-            />
-          </div>
+          {isMultipleChoice ? (
+            <div className="grid gap-2">
+              <Label>Choose an answer</Label>
+              <div className="grid gap-1.5">
+                {(challenge.choices ?? []).map((option) => (
+                  <label
+                    key={option}
+                    className="flex items-center gap-2.5 rounded-md border border-border px-3 py-2 text-sm hover:bg-accent/40"
+                  >
+                    <input
+                      type="radio"
+                      name="mc-answer"
+                      checked={flag === option}
+                      onChange={() => setFlag(option)}
+                      style={{ accentColor: "hsl(var(--primary))" }}
+                    />
+                    <span>{option}</span>
+                  </label>
+                ))}
+              </div>
+              {typeof remaining === "number" && (
+                <span className="text-xs text-muted-foreground">
+                  {remaining} guess{remaining === 1 ? "" : "es"} remaining.
+                </span>
+              )}
+            </div>
+          ) : (
+            <div className="grid gap-2">
+              <Label htmlFor="flag-submit">Flag</Label>
+              <Input
+                id="flag-submit"
+                value={flag}
+                onChange={(e) => setFlag(e.target.value)}
+                placeholder="flag{...}"
+                className="font-mono"
+                autoComplete="off"
+                required
+              />
+            </div>
+          )}
           {result && !result.correct && (
-            <span className="text-sm text-destructive">Incorrect flag.</span>
+            <span className="text-sm text-destructive">
+              {isMultipleChoice ? "Incorrect answer." : "Incorrect flag."}
+            </span>
           )}
           {submit.isError && (
             <span className="text-sm text-destructive">{(submit.error as Error).message}</span>
           )}
           <DialogFooter>
-            <Button type="submit" disabled={submit.isPending}>
-              {submit.isPending ? "Submitting…" : "Submit flag"}
+            <Button type="submit" disabled={submit.isPending || (isMultipleChoice && !flag)}>
+              {submit.isPending
+                ? "Submitting…"
+                : isMultipleChoice
+                  ? "Submit answer"
+                  : "Submit flag"}
             </Button>
           </DialogFooter>
         </form>

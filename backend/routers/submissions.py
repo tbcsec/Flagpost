@@ -38,7 +38,11 @@ from routers.challenges import load_visible_challenge
 from schemas.submission import SubmitFlagRequest, SubmitResult
 from utils.event_bus import event_bus
 from utils.flags import verify_regex_flag, verify_static_flag
-from utils.scoring import resolve_subject, subject_has_solved
+from utils.scoring import (
+    resolve_subject,
+    subject_attempt_count,
+    subject_has_solved,
+)
 
 router = APIRouter(
     prefix="/api/competitions/{competition_id}/challenges/{challenge_id}",
@@ -101,6 +105,22 @@ async def submit_flag(
             detail="Too many submissions — slow down and try again shortly",
         )
 
+    # Multiple-choice guess cap (competition-wide, §13.2): a finite option set is
+    # trivially brute-forced, so once a subject has used its allotted guesses on an
+    # unsolved MC challenge, further guesses are refused. Checked before grading so
+    # the block can't be probed for correctness.
+    limit = competition.mc_guess_limit
+    if (
+        challenge.flag_type == "multiple_choice"
+        and limit is not None
+        and not await subject_has_solved(db, challenge_id, subject)
+        and await subject_attempt_count(db, challenge_id, subject) >= limit
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No guesses remaining for this question",
+        )
+
     correct = _flag_matches(challenge, body.flag)
     already_solved = correct and await subject_has_solved(db, challenge_id, subject)
     award = correct and not already_solved
@@ -147,9 +167,16 @@ async def submit_flag(
             },
         )
 
+    attempts_remaining: int | None = None
+    if challenge.flag_type == "multiple_choice" and limit is not None and not correct:
+        # This submission is now logged, so recount reflects it.
+        used = await subject_attempt_count(db, challenge_id, subject)
+        attempts_remaining = max(0, limit - used)
+
     return SubmitResult(
         correct=correct,
         already_solved=already_solved,
         points_awarded=points_awarded,
         is_first_blood=is_first_blood,
+        attempts_remaining=attempts_remaining,
     )

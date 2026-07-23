@@ -368,6 +368,23 @@ What's built:
     Frontend: `BackupPanel` (export section checkboxes → JSON download; import file
     picker → section checkboxes → additive result summary), `use-site-settings`
     hooks.
+  - **Multiple-choice challenges + competition-wide guess cap** (§13.2) — a third
+    `flag_type` (`multiple_choice`) alongside static/regex. The author supplies an
+    option list + marks one correct; `challenges.choices` (JSON, public) holds the
+    options and the **correct one is hashed in `flag_hash` like a static flag**, so
+    the answer never leaves the server — the competitor submits the option they
+    picked and it grades server-side unchanged. `ChallengeOut` exposes `choices` +
+    `attempts_remaining` (per subject). Because a finite option set is trivially
+    brute-forced, a **competition-wide** `Competition.mc_guess_limit` (null =
+    unlimited, set in **competition settings**, *not* per-challenge — owner call)
+    caps guesses per subject per MC challenge; `submit_flag` refuses further
+    guesses **before grading** once the cap is hit (`subject_attempt_count[s]` in
+    `utils/scoring`), returning `attempts_remaining`. Migration `d6e7f8a9b0c1`
+    (adds both columns). Clone + the generic backup carry them. Frontend: the
+    challenge editor gains an options editor (radio = correct), the challenge
+    dialog renders radios + "N guesses remaining" + a locked state, and the
+    competition settings form gains the guess-limit input. Reuses
+    `challenge.created/updated` + `challenge.solved`; no new event.
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

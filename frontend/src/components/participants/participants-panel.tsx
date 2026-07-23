@@ -5,6 +5,10 @@
 // full roster with standing, all via the use-participants hook. Server state
 // only; no client-side ranking (the backend reuses the scoreboard computation).
 
+import { useState } from "react";
+
+import { AwardDialog } from "@/components/participants/award-dialog";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -24,6 +28,7 @@ import {
 } from "@/components/ui/table";
 import { relativeTime } from "@/lib/datetime";
 import { useParticipants } from "@/lib/hooks/use-participants";
+import { useAccess } from "@/lib/hooks/use-permissions";
 import type { Participant } from "@/lib/types";
 import { useAuthStore } from "@/stores/auth";
 import { cn } from "@/lib/utils";
@@ -31,6 +36,9 @@ import { cn } from "@/lib/utils";
 export function ParticipantsPanel({ competitionId }: { competitionId: string }) {
   const participants = useParticipants(competitionId);
   const selfId = useAuthStore((s) => s.user?.id);
+  const access = useAccess();
+  const canAward = access.has("score_override");
+  const [awardOpen, setAwardOpen] = useState(false);
 
   if (participants.isLoading) {
     return (
@@ -59,9 +67,16 @@ export function ParticipantsPanel({ competitionId }: { competitionId: string }) 
       {me && <YouCard participant={me} total={roster.length} />}
 
       <Card>
-        <CardHeader>
-          <CardTitle>Competitors</CardTitle>
-          <CardDescription>{roster.length} registered</CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-2">
+          <div>
+            <CardTitle>Competitors</CardTitle>
+            <CardDescription>{roster.length} registered</CardDescription>
+          </div>
+          {canAward && (
+            <Button size="sm" onClick={() => setAwardOpen(true)}>
+              Create award
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           <Table>
@@ -100,6 +115,15 @@ export function ParticipantsPanel({ competitionId }: { competitionId: string }) 
           </Table>
         </CardContent>
       </Card>
+
+      {canAward && (
+        <AwardDialog
+          competitionId={competitionId}
+          roster={roster}
+          open={awardOpen}
+          onOpenChange={setAwardOpen}
+        />
+      )}
     </div>
   );
 }

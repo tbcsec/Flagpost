@@ -264,7 +264,7 @@ async def test_catalog_generates_the_builder(client):
     by_type = {a["type"]: a for a in catalog["actions"]}
     assert set(by_type) == {
         "notify", "send_email", "webhook", "release_hint", "unlock_challenge",
-        "open_survey", "create_ticket", "update_score", "award_achievement",
+        "open_survey", "create_ticket", "update_score", "create_award",
     }
     assert by_type["notify"]["personal_allowed"] is True
     assert by_type["webhook"]["personal_allowed"] is False
@@ -556,9 +556,9 @@ async def test_update_score_action_moves_the_scoreboard(client):
     assert count == 1
 
 
-async def test_award_achievement_action(client):
+async def test_create_award_action_grants_points_and_a_badge(client):
     comp = await _competition(client)
-    chal = await _challenge(client, comp)
+    chal = await _challenge(client, comp, points=100)
     admin = await admin_token(client)
     ada = await _participant(client, comp, "ada@example.com")
 
@@ -566,7 +566,14 @@ async def test_award_achievement_action(client):
         client,
         admin,
         comp,
-        actions=[{"type": "award_achievement", "name": "First Blood", "description": "On {challenge_id}"}],
+        actions=[
+            {
+                "type": "create_award",
+                "title": "First Blood",
+                "description": "On {challenge_id}",
+                "points": 25,
+            }
+        ],
         conditions=[{"field": "is_first_blood", "operator": "equals", "value": True}],
     )
     await _solve(client, comp, chal, ada)
@@ -574,10 +581,17 @@ async def test_award_achievement_action(client):
     async with SessionLocal() as session:
         achievement = await session.scalar(select(Achievement))
         assert achievement is not None
-        assert achievement.name == "First Blood"
+        assert achievement.title == "First Blood"
+        assert achievement.points == 25
         assert achievement.competition_id == comp
         names = (await session.scalars(select(AuditLogEntry.event_name))).all()
     assert "achievement.awarded" in names
+
+    # The award's points fold into the scoreboard (100 solve + 25 award).
+    board = (
+        await client.get(f"/api/competitions/{comp}/scoreboard", headers=_auth(ada))
+    ).json()
+    assert board["entries"][0]["points"] == 125
 
 
 async def test_release_hint_action_is_free_and_idempotent(client):

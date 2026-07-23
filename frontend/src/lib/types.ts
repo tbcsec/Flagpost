@@ -439,6 +439,23 @@ export interface Participant {
   solve_count: number;
 }
 
+// A manual award (§5.3): title + description + points granted to a competitor.
+export interface AwardInput {
+  user_ids: string[];
+  title: string;
+  description?: string;
+  points: number;
+}
+
+export interface Award {
+  id: string;
+  title: string;
+  description: string | null;
+  points: number;
+  user_id: string | null;
+  created_at: string;
+}
+
 export interface Category {
   id: string;
   competition_id: string;

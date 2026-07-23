@@ -151,8 +151,9 @@ which is correct for a global setting change. The same is true of an
 §5.1).
 
 `score.adjusted` and `achievement.awarded` are the automation engine's
-mutating-action events (§5.3 `update_score` / `award_achievement`) — an
+mutating-action events (§5.3 `update_score` / `create_award`) — an
 automation's side effects are events like any other mutation's.
+`achievement.awarded` also fires for a **manual** judge award (same record).
 `module.enabled` / `module.disabled` record the per-competition optional-module
 toggle (§11.3); the canonical vocabulary above is mirrored in code by
 `backend/utils/event_catalog.py`, which is also what validates an automation
@@ -371,7 +372,7 @@ participants". Global time rules are skipped (they'd need per-competition dedup)
 | `webhook` | outbound HTTP call, see hardening below |
 | `release_hint` | unlocks a hint for a team/competitor |
 | `unlock_challenge` | e.g. unlock a bonus challenge on first blood |
-| `award_achievement` | badge/points outside the normal scoring path |
+| `create_award` | grant a titled award (title/description) that also carries scoreboard points |
 | `create_ticket` | e.g. auto-flag a challenge with high fail rate |
 | `update_score` | bonus/penalty adjustments |
 | `open_survey` | mark a feedback survey open for responses (emits `survey.opened`) |

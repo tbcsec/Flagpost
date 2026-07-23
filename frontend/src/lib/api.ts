@@ -40,6 +40,8 @@ import type {
   Hint,
   HintAuthored,
   AdminOverview,
+  Award,
+  AwardInput,
   ModuleState,
   MyTeam,
   Participant,
@@ -316,6 +318,13 @@ export const participantsApi = {
   // The individual-mode roster: Participant-role holders + their standing.
   list: (competitionId: string) =>
     apiFetch<Participant[]>(`/api/competitions/${competitionId}/participants`),
+  // Manual award over the roster (score_override): grants title/points to
+  // selected competitors, folded into the scoreboard.
+  award: (competitionId: string, input: AwardInput) =>
+    apiFetch<Award[]>(`/api/competitions/${competitionId}/awards`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
 };
 
 export const usersApi = {

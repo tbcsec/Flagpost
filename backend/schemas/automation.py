@@ -109,10 +109,13 @@ class UpdateScoreAction(BaseModel):
     reason: str = Field(min_length=1, max_length=200)
 
 
-class AwardAchievementAction(BaseModel):
-    type: Literal["award_achievement"]
-    name: str = Field(min_length=1, max_length=200)
+class CreateAwardAction(BaseModel):
+    type: Literal["create_award"]
+    title: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=_TEMPLATE_MAX)
+    # Points the award grants; bounded like update_score so a typo can't hand
+    # out a fortune per trigger. 0 = a pure badge.
+    points: int = Field(default=0, ge=-10000, le=10000)
 
 
 Action = Annotated[
@@ -125,7 +128,7 @@ Action = Annotated[
         OpenSurveyAction,
         CreateTicketAction,
         UpdateScoreAction,
-        AwardAchievementAction,
+        CreateAwardAction,
     ],
     Field(discriminator="type"),
 ]

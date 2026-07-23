@@ -131,7 +131,8 @@ What's built:
   (aiosmtplib, no-op unconfigured) / webhook (basic — §5.4 hardening is
   Phase 2) / release_hint (free, emits `hint.released`) / unlock_challenge /
   create_ticket / update_score (`ScoreAdjustment` folded into the scoreboard)
-  / award_achievement (`Achievement`). Reserved `automation_*` perms flipped
+  / create_award (`Achievement` — renamed from `award_achievement` in Phase 9,
+  now carries scoreboard points). Reserved `automation_*` perms flipped
   live; Judge gained them. Frontend: `use-automations.ts` + minimal rules list
   on `/automations` (toggle/delete; builder is Phase 3).
 - **Tier 3 Phase 2** — **webhook hardening** (§5.4, ADR-0013) in
@@ -440,6 +441,26 @@ What's built:
     rule builder's trigger list updates automatically; touched the event +
     automation catalogs, the `feedback` router emit, tests, and docs. No
     migration — pre-release, no stored automation rules to remap.
+  - **Awards carry points + manual judge awards** (§5.3): the automation action
+    `award_achievement` → **`create_award`** (label "Create award") and its
+    backing `Achievement` gained a **`points`** column that now **folds into the
+    scoreboard** (`utils/scoreboard._award_points_by_subject`, alongside
+    `ScoreAdjustment`) — an award is a title + description + point value, not a
+    badge-only record (0 points = pure badge). The action's config gained
+    `points` and its `name` field became `title`; the `achievement.awarded`
+    payload carries `title`/`points`. **Manual awards**: judges (`score_override`)
+    grant awards from the individual-mode participants roster — `POST
+    /api/competitions/{id}/awards` (`routers/awards.py`, mounted by the
+    `competitions` plugin) takes `{user_ids[], title, description?, points}`,
+    validates each recipient is a competition Participant (§7.5), records
+    `awarded_by_user_id` provenance, and emits `achievement.awarded` per grant
+    (so audit + automation rules watching awards behave identically to
+    engine-granted ones). Migration `a9b0c1d2e3f4` (rename `name`→`title`, add
+    `points` + `awarded_by_user_id`); backup remaps the new FK; catalog-driven so
+    the rule builder shows the new action/fields automatically. Frontend:
+    `ParticipantsPanel` "Create award" button + `AwardDialog` (multi-select
+    recipients, title/description/points), `useCreateAward` (invalidates roster +
+    scoreboard). Clone still skips awards (score-state, clean slate).
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

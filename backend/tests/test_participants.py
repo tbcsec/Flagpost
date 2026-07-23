@@ -110,3 +110,76 @@ async def test_missing_competition_is_404(client):
         "/api/competitions/does-not-exist/participants", headers=_auth(admin)
     )
     assert resp.status_code == 404
+
+
+# --- manual awards (§5.3 create-award counterpart) ---------------------------
+
+
+async def test_judge_awards_points_to_participants(client):
+    comp = await _individual_competition(client)
+    chal = await _published_challenge(client, comp, "flag{a}", 100)
+    admin = await admin_token(client)
+    ada = await _join(client, comp, "ada@example.com")
+    await _join(client, comp, "bob@example.com")
+
+    ada_id = (await client.get("/api/auth/me", headers=_auth(ada))).json()["id"]
+    bob_id = next(
+        p["user_id"]
+        for p in (
+            await client.get(f"/api/competitions/{comp}/participants", headers=_auth(admin))
+        ).json()
+        if p["display_name"] == "bob"
+    )
+
+    # Ada solves for 100; then both get a 50-point sportsmanship award.
+    await client.post(
+        f"/api/competitions/{comp}/challenges/{chal}/submit",
+        json={"flag": "flag{a}"},
+        headers=_auth(ada),
+    )
+    resp = await client.post(
+        f"/api/competitions/{comp}/awards",
+        json={
+            "user_ids": [ada_id, bob_id],
+            "title": "Good sport",
+            "description": "Helped a teammate",
+            "points": 50,
+        },
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 201, resp.text
+    assert len(resp.json()) == 2
+
+    roster = {
+        p["display_name"]: p
+        for p in (
+            await client.get(f"/api/competitions/{comp}/participants", headers=_auth(admin))
+        ).json()
+    }
+    assert roster["ada"]["points"] == 150  # 100 solve + 50 award
+    assert roster["bob"]["points"] == 50   # award only
+
+
+async def test_award_requires_score_override(client):
+    comp = await _individual_competition(client)
+    ada = await _join(client, comp, "ada@example.com")
+    ada_id = (await client.get("/api/auth/me", headers=_auth(ada))).json()["id"]
+    resp = await client.post(
+        f"/api/competitions/{comp}/awards",
+        json={"user_ids": [ada_id], "title": "Nope", "points": 10},
+        headers=_auth(ada),  # a participant, no score_override
+    )
+    assert resp.status_code == 403
+
+
+async def test_award_rejects_non_participant(client):
+    comp = await _individual_competition(client)
+    admin = await admin_token(client)
+    outsider = await _register(client, "outsider@example.com")  # never joined
+    outsider_id = (await client.get("/api/auth/me", headers=_auth(outsider))).json()["id"]
+    resp = await client.post(
+        f"/api/competitions/{comp}/awards",
+        json={"user_ids": [outsider_id], "title": "Nope", "points": 10},
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 400

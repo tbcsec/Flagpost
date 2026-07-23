@@ -12,7 +12,7 @@ matched rule. Conventions held by every executor:
   ``create_ticket`` emits ``ticket.created`` (which is what makes the ticket
   reach the staff queue/notifications exactly like a hand-opened one).
 - **Skip, don't raise, on missing context.** A rule on an event whose payload
-  lacks the needed subject (e.g. ``award_achievement`` on an event with no
+  lacks the needed subject (e.g. ``create_award`` on an event with no
   user/team) logs and returns — a misaimed rule is an authoring problem, not
   a runtime error worth failing the batch for.
 - **Never cross the tenant boundary.** Config-referenced entities
@@ -381,24 +381,25 @@ async def _execute_update_score(db, rule, event_name, payload, config) -> None:
     )
 
 
-# --- award_achievement (§5.3): badge outside the scoring path ----------------
+# --- create_award (§5.3): a titled award that also grants points -------------
 
 
-async def _execute_award_achievement(db, rule, event_name, payload, config) -> None:
+async def _execute_create_award(db, rule, event_name, payload, config) -> None:
     competition_id = payload.get("competition_id")
     user_id = payload.get("user_id")
     team_id = payload.get("team_id")
     if not competition_id or not (user_id or team_id):
-        logger.info("award_achievement: no subject on %s; skipping", event_name)
+        logger.info("create_award: no subject on %s; skipping", event_name)
         return
     achievement = Achievement(
         competition_id=competition_id,
-        name=render_template(config.get("name", ""), payload),
+        title=render_template(config.get("title", ""), payload),
         description=(
             render_template(config["description"], payload)
             if config.get("description")
             else None
         ),
+        points=int(config.get("points", 0) or 0),
         user_id=user_id,
         team_id=team_id,
         rule_id=rule.id,
@@ -411,7 +412,8 @@ async def _execute_award_achievement(db, rule, event_name, payload, config) -> N
             "competition_id": competition_id,
             "user_id": user_id,
             "team_id": team_id,
-            "name": achievement.name,
+            "title": achievement.title,
+            "points": achievement.points,
             "rule_id": rule.id,
         },
     )
@@ -437,7 +439,7 @@ ACTIONS: dict[str, ActionSpec] = {
     "open_survey": ActionSpec(_execute_open_survey),
     "create_ticket": ActionSpec(_execute_create_ticket),
     "update_score": ActionSpec(_execute_update_score),
-    "award_achievement": ActionSpec(_execute_award_achievement),
+    "create_award": ActionSpec(_execute_create_award),
 }
 
 

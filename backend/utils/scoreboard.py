@@ -23,6 +23,7 @@ from sqlalchemy import func, select, type_coerce
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db import UtcDateTime
+from models.automation import Achievement
 from models.competition import Competition
 from models.hint import HintReveal
 from models.role import Role, RoleAssignment
@@ -104,6 +105,31 @@ async def _adjustments_by_subject(
     return {subject_id: int(points or 0) for subject_id, points in rows}
 
 
+async def _award_points_by_subject(
+    db: AsyncSession, competition_id: str, team_mode: bool
+) -> dict[str, int]:
+    """Per-subject sum of award (``Achievement``) point values.
+
+    Awards carry a point value (§5.3 ``create_award`` + manual judge awards)
+    that counts toward the score, grouped exactly like score adjustments: by
+    credited team in team-mode, by user (team_id NULL) in individual-mode.
+    """
+    group_col = Achievement.team_id if team_mode else Achievement.user_id
+    scope = (
+        Achievement.team_id.isnot(None)
+        if team_mode
+        else Achievement.team_id.is_(None)
+    )
+    rows = (
+        await db.execute(
+            select(group_col, func.sum(Achievement.points))
+            .where(Achievement.competition_id == competition_id, scope)
+            .group_by(group_col)
+        )
+    ).all()
+    return {subject_id: int(points or 0) for subject_id, points in rows}
+
+
 async def compute_scoreboard(
     db: AsyncSession, competition: Competition
 ) -> dict[str, Any]:
@@ -111,6 +137,7 @@ async def compute_scoreboard(
     team_mode = competition.participation_mode == "team"
     hint_costs = await _hint_costs_by_subject(db, competition.id, team_mode)
     adjustments = await _adjustments_by_subject(db, competition.id, team_mode)
+    award_points = await _award_points_by_subject(db, competition.id, team_mode)
     if competition.participation_mode == "team":
         totals = _awarded_totals(competition.id, Submission.team_id)
         rows = (
@@ -150,15 +177,17 @@ async def compute_scoreboard(
         ).all()
 
     # Net points = awarded solves − hint costs + signed adjustments (§5.3
-    # update_score), clamped at 0 (nothing drags a subject below zero). The
-    # tie-break stays the last *solve* time — hints and adjustments move the
-    # total, but they aren't scoring events.
+    # update_score) + award points (§5.3 create_award / manual awards), clamped
+    # at 0 (nothing drags a subject below zero). The tie-break stays the last
+    # *solve* time — hints, adjustments and awards move the total, but they
+    # aren't scoring events.
     def net_points(subject_id, awarded) -> int:
         return max(
             0,
             int(awarded or 0)
             - hint_costs.get(subject_id, 0)
-            + adjustments.get(subject_id, 0),
+            + adjustments.get(subject_id, 0)
+            + award_points.get(subject_id, 0),
         )
 
     def sort_key(row):

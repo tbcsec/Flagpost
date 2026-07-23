@@ -52,7 +52,7 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "score.adjusted": [
         "competition_id", "user_id", "team_id", "points", "reason",
     ],
-    "achievement.awarded": ["competition_id", "user_id", "team_id", "name"],
+    "achievement.awarded": ["competition_id", "user_id", "team_id", "title", "points"],
     "competition.member_joined": ["competition_id", "user_id"],
     "competition.archived": ["competition_id"],
     "competition.unarchived": ["competition_id"],
@@ -226,9 +226,10 @@ ACTION_FIELDS: dict[str, list[dict]] = {
         _field("points", "Points", "number", placeholder="e.g. 50 or -25"),
         _field("reason", "Reason", templateable=True),
     ],
-    "award_achievement": [
-        _field("name", "Name", templateable=True),
+    "create_award": [
+        _field("title", "Title", templateable=True),
         _field("description", "Description", "textarea", required=False, templateable=True),
+        _field("points", "Points", "number", required=False, placeholder="e.g. 100"),
     ],
 }
 

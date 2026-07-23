@@ -8,9 +8,11 @@ across every competition — the same nullable-tenant pattern as
 SQLite/Postgres parity (ADR-0006); their shapes are validated by
 ``schemas/automation.py`` at write time, never trusted at evaluation time.
 
-``Achievement`` backs the ``award_achievement`` action (§5.3): a badge record
-"outside the normal scoring path" — it never touches the scoreboard (that's
-``ScoreAdjustment``). Competition-scoped; the subject mirrors the §13.2
+``Achievement`` backs the ``create_award`` action (§5.3) and manual judge
+awards — the user-facing **Award**: a titled, described recognition that now
+also carries a **point value** folded into the scoreboard (``utils/scoreboard``
+sums ``points`` per subject alongside ``ScoreAdjustment``). A zero-point award
+is still a pure badge. Competition-scoped; the subject mirrors the §13.2
 submission semantics (team in team-mode, user otherwise).
 """
 
@@ -58,8 +60,13 @@ class Achievement(Base, CompetitionScopedMixin, TimestampMixin):
     id: Mapped[str] = mapped_column(
         String, primary_key=True, default=lambda: str(uuid4())
     )
-    name: Mapped[str] = mapped_column(String, nullable=False)
+    title: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Points this award grants the subject; folded into the scoreboard like a
+    # ScoreAdjustment. 0 = a pure badge with no scoring effect.
+    points: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     # The awarded subject (§13.2 semantics): the user always recorded when
     # known; the credited team in team-mode.
     user_id: Mapped[str | None] = mapped_column(
@@ -72,4 +79,9 @@ class Achievement(Base, CompetitionScopedMixin, TimestampMixin):
     # never erases the award history.
     rule_id: Mapped[str | None] = mapped_column(
         ForeignKey("automation_rules.id", ondelete="SET NULL"), nullable=True
+    )
+    # The judge who granted a *manual* award (null for automation-granted ones).
+    # SET NULL so removing a user never erases the award history.
+    awarded_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

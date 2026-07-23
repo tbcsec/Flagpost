@@ -240,7 +240,8 @@ SPECS: tuple[Spec, ...] = (
          remaps=(_COMP, ("created_by", "user", False)), owned_by_competition=True),
     Spec("achievements", Achievement, "competitions",
          remaps=(_COMP, ("user_id", "user", False), ("team_id", "team", False),
-                 ("rule_id", "automation_rule", False)), owned_by_competition=True),
+                 ("rule_id", "automation_rule", False),
+                 ("awarded_by_user_id", "user", False)), owned_by_competition=True),
     Spec("competition_modules", CompetitionModule, "competitions",
          remaps=(_COMP,), owned_by_competition=True),
     # Cross-cutting collections — additive per row (own natural key), imported

@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { ChallengeAdmin } from "@/components/challenges/challenge-admin";
+import { NoCompetition } from "@/components/app/no-competition";
 import { ChallengeHints } from "@/components/challenges/challenge-hints";
 import { CollabNote } from "@/components/collab/collab-note";
 import { PresenceIndicator } from "@/components/presence/presence-indicator";
@@ -45,7 +46,7 @@ export default function ChallengesPage() {
   const [managing, setManaging] = useState(false);
 
   if (!competitionId) {
-    return <p className="text-sm text-muted-foreground">No competition selected.</p>;
+    return <NoCompetition />;
   }
 
   const categoryName = (id: string | null) =>

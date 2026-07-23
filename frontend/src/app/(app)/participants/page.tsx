@@ -1,6 +1,7 @@
 "use client";
 
 import { SectionHeader } from "@/components/app/section-header";
+import { NoCompetition } from "@/components/app/no-competition";
 import { ParticipantsPanel } from "@/components/participants/participants-panel";
 import { TeamPanel } from "@/components/teams/team-panel";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
@@ -13,7 +14,7 @@ export default function ParticipantsPage() {
   const isTeam = competition?.participation_mode !== "individual";
 
   if (!competitionId) {
-    return <p className="text-sm text-muted-foreground">No competition selected.</p>;
+    return <NoCompetition />;
   }
 
   return (

@@ -1,6 +1,7 @@
 "use client";
 
 import { CompetitionSettingsForm } from "@/components/competitions/competition-settings-form";
+import { NoCompetition } from "@/components/app/no-competition";
 import { ModulesPanel } from "@/components/competitions/modules-panel";
 import { SectionHeader } from "@/components/app/section-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,7 +15,7 @@ export default function CompetitionSettingsPage() {
   const { competitionId, data, isLoading, isError, error } = useActiveCompetition();
 
   if (!competitionId) {
-    return <p className="text-sm text-muted-foreground">No competition selected.</p>;
+    return <NoCompetition />;
   }
 
   return (

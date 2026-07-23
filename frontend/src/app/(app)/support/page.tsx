@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
+import { NoCompetition } from "@/components/app/no-competition";
 import { NewTicketDialog } from "@/components/support/new-ticket-dialog";
 import { TicketThread } from "@/components/support/ticket-thread";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +36,7 @@ export default function SupportPage() {
   const [openId, setOpenId] = useState<string | null>(null);
 
   if (!competitionId) {
-    return <p className="text-sm text-muted-foreground">No competition selected.</p>;
+    return <NoCompetition />;
   }
 
   const all = tickets.data ?? [];

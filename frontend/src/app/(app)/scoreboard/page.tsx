@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
+import { NoCompetition } from "@/components/app/no-competition";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState, TrophyEmptyIcon } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -73,7 +74,7 @@ export default function ScoreboardPage() {
   }, [entries]);
 
   if (!competitionId) {
-    return <p className="text-sm text-muted-foreground">No competition selected.</p>;
+    return <NoCompetition />;
   }
 
   const mySubjectId = isTeam ? myTeam.data?.id : userId;

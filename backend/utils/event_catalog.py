@@ -69,10 +69,15 @@ EVENT_TYPES: tuple[str, ...] = (
     "automation.rule_created",
     "automation.rule_updated",
     "automation.rule_deleted",
+    # Platform administration (Admin → Site settings). Not competition events, so
+    # they're excluded from automation triggers below.
+    "platform.imported",
 )
 
 TRIGGERABLE_EVENTS: tuple[str, ...] = tuple(
-    name for name in EVENT_TYPES if not name.startswith("automation.")
+    name
+    for name in EVENT_TYPES
+    if not name.startswith(("automation.", "platform."))
 )
 
 _TRIGGERABLE_SET = frozenset(TRIGGERABLE_EVENTS)

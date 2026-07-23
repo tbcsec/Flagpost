@@ -563,6 +563,19 @@ export interface OperationalSettings {
   updated_at: string | null;
 }
 
+/** A platform export document (Admin → Site settings → Export). Opaque data — the
+ *  frontend only round-trips it back to the import endpoint. */
+export interface BackupDocument {
+  flagpost_export: boolean;
+  schema_version: number;
+  exported_at: string;
+  sections: string[];
+  data: Record<string, unknown[]>;
+}
+
+/** Per-table create/skip counts returned by an import. */
+export type BackupImportResult = Record<string, { created: number; skipped: number }>;
+
 export interface OperationalSettingsUpdate {
   registration_open: boolean;
   smtp_host: string | null;

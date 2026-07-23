@@ -49,3 +49,4 @@ Status is one of:
 | [0013](0013-webhook-egress-hardening.md) | Webhook action egress policy — SSRF blocklist + value hardening | Accepted |
 | [0014](0014-crdt-transport-and-persistence.md) | CRDT transport as a dumb relay + client-snapshot persistence | Accepted |
 | [0015](0015-username-primary-optional-email.md) | Display name is the primary identifier; email is optional | Accepted |
+| [0016](0016-platform-export-import.md) | Platform export/import — registry-driven, additive backup | Accepted |

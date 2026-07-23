@@ -47,6 +47,8 @@ import type {
   Permissions,
   PermissionEntry,
   Role,
+  BackupDocument,
+  BackupImportResult,
   RoleAssignment,
   Scoreboard,
   SignedUrl,
@@ -525,6 +527,18 @@ export const siteSettingsApi = {
   },
   deleteLogo: () =>
     apiFetch<SiteSettingsAdmin>("/api/site-settings/logo", { method: "DELETE" }),
+  // Platform export / import (full-fidelity, section-selectable backup).
+  backupSections: () => apiFetch<string[]>("/api/site-settings/backup/sections"),
+  exportBackup: (sections: string[]) =>
+    apiFetch<BackupDocument>("/api/site-settings/export", {
+      method: "POST",
+      body: JSON.stringify({ sections }),
+    }),
+  importBackup: (sections: string[], payload: BackupDocument) =>
+    apiFetch<BackupImportResult>("/api/site-settings/import", {
+      method: "POST",
+      body: JSON.stringify({ sections, payload }),
+    }),
 };
 
 export const auditLogApi = {

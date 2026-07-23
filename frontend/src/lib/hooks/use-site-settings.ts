@@ -12,7 +12,11 @@ import {
   DEFAULT_PALETTE,
   DEFAULT_PLATFORM_NAME,
 } from "@/lib/theme";
-import type { OperationalSettingsUpdate, SiteSettings } from "@/lib/types";
+import type {
+  BackupDocument,
+  OperationalSettingsUpdate,
+  SiteSettings,
+} from "@/lib/types";
 import { useAuthStore } from "@/stores/auth";
 
 const SITE_SETTINGS_KEY = ["site-settings"] as const;
@@ -77,6 +81,36 @@ export function useDeleteLogo() {
   return useMutation({
     mutationFn: () => siteSettingsApi.deleteLogo(),
     onSuccess: (data) => queryClient.setQueryData(SITE_SETTINGS_KEY, data),
+  });
+}
+
+// --- Platform export / import (Admin → Site settings) ---
+
+/** The selectable export/import sections offered by the backend. */
+export function useBackupSections() {
+  const authed = useAuthStore((s) => s.status === "authenticated");
+  return useQuery({
+    queryKey: ["backup", "sections"],
+    queryFn: siteSettingsApi.backupSections,
+    enabled: authed,
+    staleTime: Infinity,
+  });
+}
+
+export function useExportBackup() {
+  return useMutation({
+    mutationFn: (sections: string[]) => siteSettingsApi.exportBackup(sections),
+  });
+}
+
+export function useImportBackup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sections, payload }: { sections: string[]; payload: BackupDocument }) =>
+      siteSettingsApi.importBackup(sections, payload),
+    // An import can touch almost anything — drop cached server state so every
+    // view refetches the newly-imported data.
+    onSuccess: () => queryClient.invalidateQueries(),
   });
 }
 

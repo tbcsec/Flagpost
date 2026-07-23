@@ -23,12 +23,17 @@ from db import get_db, utcnow
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 from models.user import User
 from schemas.site_settings import (
+    BackupExportRequest,
+    BackupImportRequest,
     OperationalSettingsOut,
     OperationalSettingsUpdate,
     SiteSettingsAdminOut,
     SiteSettingsOut,
     SiteSettingsUpdate,
 )
+from storage import get_storage
+from storage.base import ObjectStorage
+from utils import backup
 from utils.event_bus import event_bus
 
 router = APIRouter(prefix="/api/site-settings", tags=["site-settings"])
@@ -145,6 +150,76 @@ async def delete_logo(
         {"user_id": current_user.id, "section": "logo"},
     )
     return settings
+
+
+# --- Platform export / import (Admin → Site settings, ADR-0016) --------------
+# Full-fidelity, section-selectable backup. Gated on manage_site_settings — the
+# Administrator-only permission this page already uses; the export carries whole-
+# platform data (users, flag hashes), so it must stay tightly held.
+
+
+@router.get("/backup/sections", response_model=list[str])
+async def backup_sections(
+    _user: User = Depends(require_permission("manage_site_settings")),
+) -> list[str]:
+    """The selectable export/import sections, in display order."""
+    return list(backup.SECTIONS)
+
+
+@router.post("/export")
+async def export_backup(
+    body: BackupExportRequest,
+    _user: User = Depends(require_permission("manage_site_settings")),
+    db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
+) -> Response:
+    if not body.sections:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Select at least one section to export",
+        )
+    document = await backup.export_data(db, storage, body.sections)
+    import json
+
+    stamp = utcnow().strftime("%Y%m%d-%H%M%S")
+    return Response(
+        content=json.dumps(document, separators=(",", ":")),
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="flagpost-export-{stamp}.json"'
+        },
+    )
+
+
+@router.post("/import")
+async def import_backup(
+    body: BackupImportRequest,
+    current_user: User = Depends(require_permission("manage_site_settings")),
+    db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
+) -> dict[str, dict[str, int]]:
+    if not body.sections:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Select at least one section to import",
+        )
+    try:
+        result = await backup.import_data(db, storage, body.payload, body.sections)
+    except backup.ImportError_ as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+    total = sum(counts["created"] for counts in result.values())
+    await event_bus.emit(
+        "platform.imported",
+        {
+            "user_id": current_user.id,
+            "sections": body.sections,
+            "created": total,
+        },
+    )
+    return result
 
 
 @router.get("/logo")

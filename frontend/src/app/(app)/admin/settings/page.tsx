@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
+import { BackupPanel } from "@/components/admin/backup-panel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -176,6 +177,16 @@ export default function AdminSettingsPage() {
           </div>
         </form>
       )}
+
+      <div className="mt-8 grid gap-1">
+        <h2 className="text-lg font-semibold">Backup — export &amp; import</h2>
+        <p className="text-sm text-muted-foreground">
+          Move the platform&apos;s data between installs, or keep an off-site backup.
+        </p>
+      </div>
+      <div className="mt-4">
+        <BackupPanel />
+      </div>
     </>
   );
 }

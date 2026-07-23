@@ -629,6 +629,38 @@ Items (this list grows as the owner adds them):
     case-insensitive uniqueness + login, identifier alias); fixed-literal display
     names in helpers made unique.
 
+- **Platform export / import** ✅ (ADR-0016) — a full-fidelity, section-selectable
+  backup on Admin → Site settings. Owner calls (via questions): **config + live
+  data** (a true backup, not just setup) and **additive "skip existing"** import.
+  - *Engine.* `utils/backup.py` avoids hand-coding ~25 entities with a **generic
+    serialiser** (every column; datetimes→ISO, `LargeBinary`→base64, deferred cols
+    `undefer`-ed on export) + a declared `SPECS` registry per table (FK-remaps,
+    import order, natural key, competition-owned flag). Adding a table to backups
+    is then one line — and completeness is auditable (no silently-forgotten table,
+    which in a backup tool is a data-loss trap).
+  - *Document.* One versioned JSON (`schema_version`), keyed by table under `data`,
+    carrying the selected `sections`: `site_settings`, `users`, `roles`,
+    `competitions`, `automations`, `audit_log`.
+  - *Additive import.* Top-level entities skip by natural key (user by name/email,
+    role/competition by name, assignment by (user,role,competition), rule by
+    (name,trigger,competition,owner), audit by id). A **competition is atomic** —
+    if its name exists the whole owned subtree is skipped (no merged/duplicate
+    challenges); cross-cutting collections (assignments, rules) stay additive
+    per-row. New ids minted, FKs rewritten via id maps (required miss → skip row,
+    optional → null), invite codes regenerated.
+  - *Security.* Full fidelity **incl. secrets** (password/flag hashes, SMTP) so a
+    restore actually works — the file is sensitive (UI says so) and both endpoints
+    are `manage_site_settings`-gated. Excluded: `refresh_sessions` +
+    transient `notifications`/`collab_documents`/`dashboard_layouts`. New
+    non-triggerable `platform.imported` audit event.
+  - *API + UI.* `POST /site-settings/export` (JSON file download) / `import`
+    (per-table created/skipped) / `GET .../backup/sections`. `BackupPanel` +
+    `use-site-settings` hooks; export = section checkboxes → download, import =
+    file picker → section checkboxes → additive result summary.
+  - *Tests.* `test_backup.py` — round-trip fidelity, additive skip, restore after
+    delete (fresh ids, solve re-linked to the still-present user), section
+    selection, foreign-document rejection, endpoint auth gate.
+
 ## Phase 10 — Accessibility, responsiveness & optimization pass (#28)
 
 Last, over finished surfaces — a polish pass, not a feature. (Was Phase 9;

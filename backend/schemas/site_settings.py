@@ -67,6 +67,20 @@ class OperationalSettingsOut(BaseModel):
     updated_at: datetime | None
 
 
+class BackupExportRequest(BaseModel):
+    """Which sections to include in an export (a subset of ``backup.SECTIONS``)."""
+
+    sections: list[str] = Field(default_factory=list)
+
+
+class BackupImportRequest(BaseModel):
+    """A previously-exported document plus the sections to import from it."""
+
+    sections: list[str] = Field(default_factory=list)
+    # The parsed export JSON — opaque here; validated by the backup engine.
+    payload: dict = Field(default_factory=dict)
+
+
 class OperationalSettingsUpdate(BaseModel):
     registration_open: bool
     smtp_host: str | None = Field(default=None, max_length=255)

@@ -347,6 +347,27 @@ What's built:
     "Username", `.email` render sites null-guarded. Two owner calls (via question):
     reuse display name as the username (not a separate handle), case-insensitive.
     No new event (reuses `user.registered`/`user.created`).
+  - **Platform export / import** (ADR-0016) — a **full-fidelity, section-selectable
+    backup** on Admin → Site settings. `utils/backup.py` is a **generic engine**: a
+    column (de)serialiser (datetimes→ISO, `LargeBinary`→base64, deferred cols
+    `undefer`-ed on export) + a declared `SPECS` registry (per-table FK-remaps,
+    import order, natural keys). One versioned JSON document keyed by table.
+    **Sections** (checkboxes): `site_settings`, `users`, `roles`, `competitions`,
+    `automations`, `audit_log`. **Import is additive** (owner call) — creates
+    missing rows, never modifies/deletes: top-level entities skip by natural key
+    (user by name/email, role/competition by name), a **competition is atomic**
+    (whole subtree skipped if its name exists), new ids minted + all FKs rewritten
+    through id maps (required-ref miss skips the row, optional nulls it), invite
+    codes regenerated. Full fidelity **incl. secrets** (password/flag hashes, SMTP)
+    — the file is sensitive; both endpoints gated on `manage_site_settings`.
+    Excluded: `refresh_sessions` + the transient `notifications`/`collab_documents`/
+    `dashboard_layouts`. `POST /site-settings/export` (file download) +
+    `POST /site-settings/import` (returns per-table created/skipped) +
+    `GET /site-settings/backup/sections`. New non-triggerable **`platform.imported`**
+    event (`platform.*` excluded from automation triggers alongside `automation.*`).
+    Frontend: `BackupPanel` (export section checkboxes → JSON download; import file
+    picker → section checkboxes → additive result summary), `use-site-settings`
+    hooks.
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

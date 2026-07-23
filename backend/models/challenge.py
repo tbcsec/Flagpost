@@ -68,6 +68,10 @@ class Challenge(Base, CompetitionScopedMixin, TimestampMixin):
     # solve before this one unlocks. Null/[] = no prerequisites. Shown-locked:
     # a competitor sees a locked challenge but can't open/submit it until met.
     prerequisites: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Metadata (Phase 9), validated against the competition's managed vocab: a
+    # subset of its tag names, and one of its difficulty tiers (or null).
+    tags: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    difficulty: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # --- Flag config (§13.2) — the secret parts are never serialized ---
     # "static" | "regex" | "multiple_choice"

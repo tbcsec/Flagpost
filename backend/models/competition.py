@@ -19,7 +19,7 @@ from datetime import datetime
 from secrets import token_urlsafe
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base, TimestampMixin, UtcDateTime
@@ -82,6 +82,11 @@ class Competition(Base, TimestampMixin):
     challenge_ratings_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"
     )
+    # Per-competition managed vocabularies (Phase 9): the tag names and ordered
+    # difficulty tiers challenges may use. Null/[] = none defined yet. Challenges
+    # validate their tags/difficulty against these (a true managed taxonomy).
+    challenge_tags: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    difficulty_tiers: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Scoreboard freeze (§13, Phase 9): the instant public standings stop moving.
     # Null = live. Reached-and-set → the board is computed as of this time for
     # everyone but staff who explicitly ask for the live view. Can be a future

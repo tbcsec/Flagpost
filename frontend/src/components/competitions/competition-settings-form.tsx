@@ -44,6 +44,8 @@ export function CompetitionSettingsForm({
     registration_closes_at: toInput(competition.registration_closes_at),
     mc_guess_limit: competition.mc_guess_limit ? String(competition.mc_guess_limit) : "",
     challenge_ratings_enabled: competition.challenge_ratings_enabled,
+    challenge_tags: competition.challenge_tags ?? [],
+    difficulty_tiers: competition.difficulty_tiers ?? [],
   });
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
@@ -65,6 +67,8 @@ export function CompetitionSettingsForm({
         // Blank clears the cap (null); a positive number sets it.
         mc_guess_limit: form.mc_guess_limit ? Number(form.mc_guess_limit) : null,
         challenge_ratings_enabled: form.challenge_ratings_enabled,
+        challenge_tags: form.challenge_tags,
+        difficulty_tiers: form.difficulty_tiers,
       },
       { onSuccess: () => toast("Changes saved", { variant: "success" }) },
     );
@@ -162,6 +166,21 @@ export function CompetitionSettingsForm({
       )}
 
       {section === "challenges" && (
+        <div className="space-y-6">
+        <VocabEditor
+          label="Difficulty tiers"
+          hint="Ordered labels (e.g. Easy, Medium, Hard) authors pick from on a challenge."
+          values={form.difficulty_tiers}
+          onChange={(v) => set("difficulty_tiers", v)}
+          placeholder="Add a tier…"
+        />
+        <VocabEditor
+          label="Tags"
+          hint="The tag vocabulary authors may apply to challenges."
+          values={form.challenge_tags}
+          onChange={(v) => set("challenge_tags", v)}
+          placeholder="Add a tag…"
+        />
         <div className="max-w-xs space-y-2">
           <Label htmlFor="mc_guess_limit">Multiple-choice guess limit</Label>
           <Input
@@ -193,6 +212,7 @@ export function CompetitionSettingsForm({
             </span>
           </label>
         </div>
+        </div>
       )}
 
       <div className="flex items-center gap-3">
@@ -209,5 +229,73 @@ export function CompetitionSettingsForm({
         )}
       </div>
     </form>
+  );
+}
+
+// A managed list of short labels (tags / difficulty tiers): add via the input,
+// remove via the chip's ×. Order is preserved (difficulty tiers are ordered).
+function VocabEditor({
+  label,
+  hint,
+  values,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  hint: string;
+  values: string[];
+  onChange: (values: string[]) => void;
+  placeholder: string;
+}) {
+  const [draft, setDraft] = useState("");
+
+  function add() {
+    const v = draft.trim();
+    if (v && !values.includes(v)) onChange([...values, v]);
+    setDraft("");
+  }
+
+  return (
+    <div className="max-w-md space-y-2">
+      <Label>{label}</Label>
+      <p className="text-xs text-muted-foreground">{hint}</p>
+      {values.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {values.map((v) => (
+            <span
+              key={v}
+              className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-0.5 text-xs"
+            >
+              {v}
+              <button
+                type="button"
+                onClick={() => onChange(values.filter((x) => x !== v))}
+                className="text-muted-foreground hover:text-destructive"
+                aria-label={`Remove ${v}`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder={placeholder}
+          maxLength={50}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              add();
+            }
+          }}
+        />
+        <Button type="button" variant="outline" onClick={add} disabled={!draft.trim()}>
+          Add
+        </Button>
+      </div>
+    </div>
   );
 }

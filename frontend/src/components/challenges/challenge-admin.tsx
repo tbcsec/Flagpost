@@ -37,6 +37,7 @@ import {
   useCreateChallenge,
   useUpdateChallenge,
 } from "@/lib/hooks/use-challenges";
+import { useActiveCompetition } from "@/lib/hooks/use-competitions";
 import type {
   Category,
   Challenge,
@@ -45,6 +46,7 @@ import type {
   RichTextDoc,
   ScoringType,
 } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 // An ISO/UTC instant → the local "YYYY-MM-DDTHH:mm" a datetime-local input wants.
 function toLocalInput(iso: string): string {
@@ -239,6 +241,9 @@ function ChallengeForm({
   onDone: () => void;
 }) {
   const isEdit = challenge !== null;
+  const { data: activeCompetition } = useActiveCompetition();
+  const tagVocab = activeCompetition?.challenge_tags ?? [];
+  const tiers = activeCompetition?.difficulty_tiers ?? [];
   // Own id so the submit button can live *outside* the <form> (below the
   // attachments/hints sub-forms) and still submit it — a <form> can't nest
   // another <form>, so those sections must be siblings, not children.
@@ -265,6 +270,8 @@ function ChallengeForm({
   const [prerequisites, setPrerequisites] = useState<string[]>(
     challenge?.prerequisites ?? [],
   );
+  const [tags, setTags] = useState<string[]>(challenge?.tags ?? []);
+  const [difficulty, setDifficulty] = useState(challenge?.difficulty ?? "");
   const [flagType, setFlagType] = useState<FlagType>(
     challenge?.flag_type ?? "static",
   );
@@ -304,6 +311,8 @@ function ChallengeForm({
     // A blank release clears any schedule (null); otherwise send it as ISO/UTC.
     base.release_at = releaseAt ? new Date(releaseAt).toISOString() : null;
     base.prerequisites = prerequisites;
+    base.tags = tags;
+    base.difficulty = difficulty || null;
     if (flagType === "multiple_choice") {
       const trimmed = choices.map((c) => c.trim());
       const hasCorrect = correctIndex !== null && !!trimmed[correctIndex];
@@ -424,6 +433,56 @@ function ChallengeForm({
               </div>
             )}
           </div>
+          {(tiers.length > 0 || tagVocab.length > 0) && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {tiers.length > 0 && (
+                <div className="space-y-2">
+                  <Label htmlFor="difficulty">Difficulty</Label>
+                  <Select
+                    id="difficulty"
+                    value={difficulty}
+                    onChange={(e) => setDifficulty(e.target.value)}
+                  >
+                    <option value="">—</option>
+                    {tiers.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              )}
+              {tagVocab.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Tags</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {tagVocab.map((t) => {
+                      const on = tags.includes(t);
+                      return (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() =>
+                            setTags((prev) =>
+                              on ? prev.filter((x) => x !== t) : [...prev, t],
+                            )
+                          }
+                          className={cn(
+                            "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
+                            on
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border text-muted-foreground hover:border-primary/40",
+                          )}
+                        >
+                          {t}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="release-at">Release at</Label>
             <div className="flex items-center gap-2">

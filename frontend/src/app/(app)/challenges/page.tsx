@@ -158,6 +158,23 @@ export default function ChallengesPage() {
                 </div>
               </div>
               <div className="text-base font-semibold">{ch.title}</div>
+              {(ch.difficulty || ch.tags.length > 0) && (
+                <div className="flex flex-wrap items-center gap-1">
+                  {ch.difficulty && (
+                    <Badge variant="secondary" className="text-[10px]">
+                      {ch.difficulty}
+                    </Badge>
+                  )}
+                  {ch.tags.map((t) => (
+                    <span
+                      key={t}
+                      className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              )}
               <div className="flex items-baseline justify-between">
                 <span className="font-mono text-sm font-semibold text-primary">
                   {ch.value} pts

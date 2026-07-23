@@ -549,6 +549,16 @@ What's built:
       automation-config ids). Frontend: a prerequisite checkbox picker in the
       editor, a "🔒 Locked" card badge, and a locked dialog panel naming the
       unsolved prerequisites by title.
+    - **Tags & difficulty (per-competition managed vocab)** — `Competition`
+      gains `challenge_tags` + ordered `difficulty_tiers` (managed lists);
+      `Challenge` gains `tags` + `difficulty` (migration `a5b6c7d8e9fa`), both
+      **validated against the competition's vocab** on create/update (off-vocab →
+      400). `ChallengeOut` exposes `tags`/`difficulty`; `CompetitionOut` exposes
+      the vocab. Clone carries the vocab + per-challenge metadata; backup carries
+      the columns. Frontend: `VocabEditor` (add/remove chips) on Competition
+      Settings → Challenges; a tag-chip + difficulty-select picker in the
+      challenge editor (only shown once vocab exists); difficulty badge + tag
+      chips on the browse cards.
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

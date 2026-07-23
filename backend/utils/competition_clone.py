@@ -49,6 +49,8 @@ async def clone_competition(
         visibility=source.visibility,
         mc_guess_limit=source.mc_guess_limit,
         challenge_ratings_enabled=source.challenge_ratings_enabled,
+        challenge_tags=source.challenge_tags,
+        difficulty_tiers=source.difficulty_tiers,
         invite_code=generate_invite_code(),
         # Schedule is intentionally left unset — the admin sets fresh dates so
         # two competitions don't accidentally run on the same window.
@@ -97,6 +99,8 @@ async def clone_competition(
             flag_salt=chal.flag_salt,
             flag_regex=chal.flag_regex,
             choices=chal.choices,
+            tags=chal.tags,
+            difficulty=chal.difficulty,
         )
         db.add(new_chal)
         await db.flush()

@@ -159,6 +159,23 @@ def _is_locked(challenge: Challenge, solved_ids: set[str]) -> bool:
     return any(pid not in solved_ids for pid in _prereq_ids(challenge))
 
 
+def _validate_metadata(competition: Competition, challenge: Challenge) -> None:
+    """Tags/difficulty must come from the competition's managed vocab (Phase 9)."""
+    vocab = set(competition.challenge_tags or [])
+    unknown = [t for t in (challenge.tags or []) if t not in vocab]
+    if unknown:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown tag(s) for this competition: {', '.join(unknown)}",
+        )
+    tiers = set(competition.difficulty_tiers or [])
+    if challenge.difficulty is not None and challenge.difficulty not in tiers:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unknown difficulty tier for this competition",
+        )
+
+
 def _validate_scoring(challenge: Challenge) -> None:
     """Dynamic scoring needs a floor and a decay, and the floor can't exceed the
     initial value (§13.2). Static challenges ignore both fields."""
@@ -457,6 +474,8 @@ async def create_challenge(
         decay=body.decay,
         release_at=body.release_at,
         prerequisites=body.prerequisites or None,
+        tags=body.tags or None,
+        difficulty=body.difficulty,
         flag_type=body.flag_type,
         case_insensitive=body.case_insensitive,
     )
@@ -464,6 +483,9 @@ async def create_challenge(
     await _validate_prerequisites(
         db, competition_id, None, _prereq_ids(challenge)
     )
+    competition = await db.get(Competition, competition_id)
+    if competition is not None:
+        _validate_metadata(competition, challenge)
     if body.flag_type == "multiple_choice" and body.choices is not None:
         challenge.choices = body.choices
         _validate_multiple_choice(challenge, body.flag)
@@ -507,6 +529,11 @@ async def update_challenge(
         await _validate_prerequisites(
             db, competition_id, challenge.id, _prereq_ids(challenge)
         )
+    if "tags" in changes or "difficulty" in changes:
+        challenge.tags = challenge.tags or None
+        competition = await db.get(Competition, competition_id)
+        if competition is not None:
+            _validate_metadata(competition, challenge)
 
     # Multiple-choice options can't be verified against the already-hashed answer,
     # so a change to the option set (or a switch into multiple_choice) requires

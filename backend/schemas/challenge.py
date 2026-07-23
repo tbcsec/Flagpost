@@ -33,6 +33,9 @@ class ChallengeCreate(BaseModel):
     release_at: datetime | None = None
     # Unlock chain: challenge ids that must be solved first (Phase 9).
     prerequisites: list[str] = Field(default_factory=list, max_length=50)
+    # Metadata from the competition's managed vocab (Phase 9).
+    tags: list[str] = Field(default_factory=list, max_length=50)
+    difficulty: str | None = Field(default=None, max_length=50)
     flag_type: FlagType = "static"
     case_insensitive: bool = False
     # Plaintext flag (static), pattern (regex), or the **correct option**
@@ -75,6 +78,8 @@ class ChallengeUpdate(BaseModel):
     decay: int | None = Field(default=None, ge=1, le=100_000)
     release_at: datetime | None = None
     prerequisites: list[str] | None = Field(default=None, max_length=50)
+    tags: list[str] | None = Field(default=None, max_length=50)
+    difficulty: str | None = Field(default=None, max_length=50)
     flag_type: FlagType | None = None
     case_insensitive: bool | None = None
     flag: str | None = Field(default=None, min_length=1, max_length=500)
@@ -105,13 +110,15 @@ class ChallengeOut(BaseModel):
     # Staff always see locked=False. Defaulted for create/update/publish responses.
     prerequisites: list[str] = []
     locked: bool = False
+    tags: list[str] = []
+    difficulty: str | None = None
     state: ChallengeState
     flag_type: FlagType
 
-    @field_validator("prerequisites", mode="before")
+    @field_validator("prerequisites", "tags", mode="before")
     @classmethod
-    def _prereqs_default(cls, v: object) -> list:
-        # The column is nullable (None = no prerequisites) → normalize to [].
+    def _list_default(cls, v: object) -> list:
+        # These columns are nullable (None = empty) → normalize to [].
         return v or []
     case_insensitive: bool
     has_flag: bool  # the only flag-related fact that ever leaves the server

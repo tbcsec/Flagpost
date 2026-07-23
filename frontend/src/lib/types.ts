@@ -42,6 +42,9 @@ export interface Competition {
   mc_guess_limit: number | null;
   /** Whether solving a challenge prompts the competitor for a 1–5 rating. */
   challenge_ratings_enabled: boolean;
+  /** Per-competition managed vocab: tag names + ordered difficulty tiers. */
+  challenge_tags: string[];
+  difficulty_tiers: string[];
 }
 
 /** Aggregate ratings for one challenge (staff — Feedback page). */
@@ -362,6 +365,8 @@ export interface CompetitionCreate {
   registration_closes_at?: string | null;
   mc_guess_limit?: number | null;
   challenge_ratings_enabled?: boolean;
+  challenge_tags?: string[];
+  difficulty_tiers?: string[];
 }
 
 export type CompetitionUpdate = Partial<CompetitionCreate>;
@@ -501,6 +506,9 @@ export interface Challenge {
    *  currently locked for the requesting subject. Staff always see locked=false. */
   prerequisites: string[];
   locked: boolean;
+  /** Metadata from the competition's managed vocab. */
+  tags: string[];
+  difficulty: string | null;
   state: ChallengeState;
   flag_type: FlagType;
   case_insensitive: boolean;
@@ -530,6 +538,8 @@ export interface ChallengeCreate {
   decay?: number | null;
   release_at?: string | null;
   prerequisites?: string[];
+  tags?: string[];
+  difficulty?: string | null;
   flag_type?: FlagType;
   case_insensitive?: boolean;
   flag?: string | null;

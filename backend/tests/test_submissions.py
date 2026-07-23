@@ -96,6 +96,49 @@ async def _submissions(challenge_id: str):
         ).scalars().all()
 
 
+# --- Tags & difficulty (managed vocab) ---------------------------------------
+
+
+async def test_tags_and_difficulty_validated_against_competition_vocab(client):
+    admin = await admin_token(client)
+    # Define the managed vocab on the competition.
+    comp = (
+        await client.post(
+            "/api/competitions",
+            json={
+                "name": "Tagged CTF",
+                "participation_mode": "individual",
+                "challenge_tags": ["web", "crypto"],
+                "difficulty_tiers": ["Easy", "Hard"],
+            },
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+
+    # A challenge using vocab values is accepted.
+    ok = await client.post(
+        f"/api/competitions/{comp}/challenges",
+        json={"title": "Good", "points": 100, "tags": ["web"], "difficulty": "Hard"},
+        headers=_auth(admin),
+    )
+    assert ok.status_code == 201
+    assert ok.json()["tags"] == ["web"] and ok.json()["difficulty"] == "Hard"
+
+    # An off-vocab tag or difficulty is rejected.
+    bad_tag = await client.post(
+        f"/api/competitions/{comp}/challenges",
+        json={"title": "BadTag", "points": 100, "tags": ["pwn"]},
+        headers=_auth(admin),
+    )
+    assert bad_tag.status_code == 400
+    bad_diff = await client.post(
+        f"/api/competitions/{comp}/challenges",
+        json={"title": "BadDiff", "points": 100, "difficulty": "Insane"},
+        headers=_auth(admin),
+    )
+    assert bad_diff.status_code == 400
+
+
 # --- Prerequisites / unlock chains -------------------------------------------
 
 

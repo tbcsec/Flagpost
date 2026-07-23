@@ -241,3 +241,41 @@ async def test_joining_a_team_grants_participant_access(client):
         assert not await user_has_permission(
             session, creator_id, "challenge_view", None
         )
+
+
+# --- team QoL: size cap + profile (Phase 9, Group C) -------------------------
+
+
+async def test_max_team_size_blocks_join_when_full(client):
+    admin = await admin_token(client)
+    comp = (await client.post("/api/competitions", json={"name": "Capped", "participation_mode": "team", "max_team_size": 2}, headers=_auth(admin))).json()["id"]
+    cap = await _register(client, "cap@example.com", "Cap")
+    team = (await client.post(f"/api/competitions/{comp}/teams", json={"name": "Duo"}, headers=_auth(cap))).json()
+    code = team["invite_code"]
+
+    m2 = await _register(client, "m2@example.com")
+    assert (await client.post(f"/api/competitions/{comp}/teams/join", json={"invite_code": code}, headers=_auth(m2))).status_code == 200
+    # Third member is refused — team is full at 2.
+    m3 = await _register(client, "m3@example.com")
+    resp = await client.post(f"/api/competitions/{comp}/teams/join", json={"invite_code": code}, headers=_auth(m3))
+    assert resp.status_code == 409
+
+
+async def test_captain_edits_team_profile(client):
+    comp = await _make_competition(client)
+    cap = await _register(client, "cap@example.com", "Cap")
+    await client.post(f"/api/competitions/{comp}/teams", json={"name": "Profs", "affiliation": "MIT"}, headers=_auth(cap))
+    resp = await client.patch(
+        f"/api/competitions/{comp}/teams/me",
+        json={"country": "US", "website": "https://x.example"},
+        headers=_auth(cap),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["affiliation"] == "MIT" and body["country"] == "US" and body["website"] == "https://x.example"
+
+    # A non-captain member can't edit.
+    member = await _register(client, "member@example.com")
+    code = (await client.get(f"/api/competitions/{comp}/teams/me", headers=_auth(cap))).json()["invite_code"]
+    await client.post(f"/api/competitions/{comp}/teams/join", json={"invite_code": code}, headers=_auth(member))
+    assert (await client.patch(f"/api/competitions/{comp}/teams/me", json={"country": "CA"}, headers=_auth(member))).status_code == 403

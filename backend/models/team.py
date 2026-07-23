@@ -41,6 +41,10 @@ class Team(Base, CompetitionScopedMixin, TimestampMixin):
         String, unique=True, index=True, nullable=False,
         default=generate_invite_code,
     )
+    # Team profile (Phase 9, Group C): optional, captain-editable.
+    affiliation: Mapped[str | None] = mapped_column(String, nullable=True)
+    country: Mapped[str | None] = mapped_column(String, nullable=True)
+    website: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class TeamMembership(Base, CompetitionScopedMixin, TimestampMixin):

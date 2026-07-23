@@ -30,6 +30,8 @@ class CompetitionCreate(BaseModel):
     ctftime_enabled: bool = False
     # Brackets/divisions competitors self-select at join (Phase 9).
     brackets: list[str] = Field(default_factory=list, max_length=20)
+    # Max members per team (team-mode); null = unlimited.
+    max_team_size: int | None = Field(default=None, ge=1, le=1000)
 
 
 class CompetitionUpdate(BaseModel):
@@ -52,6 +54,7 @@ class CompetitionUpdate(BaseModel):
     public_scoreboard: bool | None = None
     ctftime_enabled: bool | None = None
     brackets: list[str] | None = Field(default=None, max_length=20)
+    max_team_size: int | None = Field(default=None, ge=1, le=1000)
 
 
 class CompetitionOut(BaseModel):
@@ -79,6 +82,7 @@ class CompetitionOut(BaseModel):
     public_scoreboard: bool = False
     ctftime_enabled: bool = False
     brackets: list[str] = Field(default_factory=list)
+    max_team_size: int | None = None
 
     @field_validator("challenge_tags", "difficulty_tiers", "brackets", mode="before")
     @classmethod

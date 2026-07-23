@@ -5,7 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError, teamsApi } from "@/lib/api";
-import type { MyTeam } from "@/lib/types";
+import type { MyTeam, TeamUpdate } from "@/lib/types";
 import { useAuthStore } from "@/stores/auth";
 
 // Keys carry the competition id so cache invalidation stays scoped (§8) and
@@ -53,6 +53,14 @@ export function useCreateTeam(competitionId: string) {
   return useMutation({
     mutationFn: (input: { name: string }) =>
       teamsApi.create(competitionId, input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUpdateMyTeam(competitionId: string) {
+  const invalidate = useInvalidateTeams(competitionId);
+  return useMutation({
+    mutationFn: (input: TeamUpdate) => teamsApi.updateMine(competitionId, input),
     onSuccess: invalidate,
   });
 }

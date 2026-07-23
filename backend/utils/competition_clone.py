@@ -54,6 +54,7 @@ async def clone_competition(
         public_scoreboard=source.public_scoreboard,
         ctftime_enabled=source.ctftime_enabled,
         brackets=source.brackets,
+        max_team_size=source.max_team_size,
         invite_code=generate_invite_code(),
         # Schedule is intentionally left unset — the admin sets fresh dates so
         # two competitions don't accidentally run on the same window.

@@ -12,6 +12,18 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class TeamCreate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
+    affiliation: str | None = Field(default=None, max_length=120)
+    country: str | None = Field(default=None, max_length=80)
+    website: str | None = Field(default=None, max_length=200)
+
+
+class TeamUpdate(BaseModel):
+    """Captain-editable team profile (PATCH — only provided fields apply)."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    affiliation: str | None = Field(default=None, max_length=120)
+    country: str | None = Field(default=None, max_length=80)
+    website: str | None = Field(default=None, max_length=200)
 
 
 class TeamJoinRequest(BaseModel):
@@ -33,6 +45,9 @@ class TeamOut(BaseModel):
     competition_id: str
     name: str
     member_count: int
+    affiliation: str | None = None
+    country: str | None = None
+    website: str | None = None
     created_at: datetime
 
 
@@ -44,4 +59,7 @@ class MyTeamOut(BaseModel):
     name: str
     invite_code: str
     members: list[TeamMemberOut]
+    affiliation: str | None = None
+    country: str | None = None
+    website: str | None = None
     created_at: datetime

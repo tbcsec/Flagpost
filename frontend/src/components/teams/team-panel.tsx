@@ -27,7 +27,9 @@ import {
   useLeaveTeam,
   useMyTeam,
   useTeams,
+  useUpdateMyTeam,
 } from "@/lib/hooks/use-teams";
+import { useAuthStore } from "@/stores/auth";
 import { toast } from "@/stores/toast";
 
 // Feature component (§14 components/<domain>). All server state via the
@@ -119,6 +121,9 @@ function MyTeamCard({
             </li>
           ))}
         </ul>
+
+        <TeamProfile competitionId={competitionId} team={team} />
+
         <div className="flex items-center gap-3">
           <Button
             variant="destructive"
@@ -148,6 +153,84 @@ function MyTeamCard({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// Team profile (affiliation/country/website) — editable by the captain, shown
+// read-only to everyone else.
+function TeamProfile({
+  competitionId,
+  team,
+}: {
+  competitionId: string;
+  team: NonNullable<ReturnType<typeof useMyTeam>["data"]>;
+}) {
+  const userId = useAuthStore((s) => s.user?.id);
+  const amCaptain = team.members.some((m) => m.user_id === userId && m.is_captain);
+  const update = useUpdateMyTeam(competitionId);
+  const [affiliation, setAffiliation] = useState(team.affiliation ?? "");
+  const [country, setCountry] = useState(team.country ?? "");
+  const [website, setWebsite] = useState(team.website ?? "");
+
+  if (!amCaptain) {
+    if (!team.affiliation && !team.country && !team.website) return null;
+    return (
+      <div className="grid gap-0.5 text-sm text-muted-foreground">
+        {team.affiliation && <div>Affiliation: {team.affiliation}</div>}
+        {team.country && <div>Country: {team.country}</div>}
+        {team.website && <div>Website: {team.website}</div>}
+      </div>
+    );
+  }
+
+  const dirty =
+    affiliation !== (team.affiliation ?? "") ||
+    country !== (team.country ?? "") ||
+    website !== (team.website ?? "");
+
+  function onSave() {
+    update.mutate(
+      {
+        affiliation: affiliation.trim() || null,
+        country: country.trim() || null,
+        website: website.trim() || null,
+      },
+      { onSuccess: () => toast("Team profile saved", { variant: "success" }) },
+    );
+  }
+
+  return (
+    <div className="grid gap-2">
+      <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+        Team profile
+      </Label>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <Input
+          placeholder="Affiliation"
+          value={affiliation}
+          onChange={(e) => setAffiliation(e.target.value)}
+        />
+        <Input
+          placeholder="Country"
+          value={country}
+          onChange={(e) => setCountry(e.target.value)}
+        />
+        <Input
+          placeholder="Website"
+          value={website}
+          onChange={(e) => setWebsite(e.target.value)}
+        />
+      </div>
+      <Button
+        variant="outline"
+        size="sm"
+        className="w-fit"
+        onClick={onSave}
+        disabled={!dirty || update.isPending}
+      >
+        {update.isPending ? "Saving…" : "Save profile"}
+      </Button>
+    </div>
   );
 }
 

@@ -50,6 +50,8 @@ export interface Competition {
   ctftime_enabled: boolean;
   /** Brackets/divisions competitors self-select at join. */
   brackets: string[];
+  /** Max members per team (team-mode); null = unlimited. */
+  max_team_size: number | null;
 }
 
 /** Aggregate ratings for one challenge (staff — Feedback page). */
@@ -375,6 +377,7 @@ export interface CompetitionCreate {
   public_scoreboard?: boolean;
   ctftime_enabled?: boolean;
   brackets?: string[];
+  max_team_size?: number | null;
 }
 
 export type CompetitionUpdate = Partial<CompetitionCreate>;
@@ -391,6 +394,9 @@ export interface Team {
   competition_id: string;
   name: string;
   member_count: number;
+  affiliation: string | null;
+  country: string | null;
+  website: string | null;
   created_at: string;
 }
 
@@ -401,7 +407,18 @@ export interface MyTeam {
   name: string;
   invite_code: string;
   members: TeamMember[];
+  affiliation: string | null;
+  country: string | null;
+  website: string | null;
   created_at: string;
+}
+
+/** Captain-editable team profile (PATCH). */
+export interface TeamUpdate {
+  name?: string;
+  affiliation?: string | null;
+  country?: string | null;
+  website?: string | null;
 }
 
 /** Per-competition health row on the site-admin dashboard (§6.3). */

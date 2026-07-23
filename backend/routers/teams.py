@@ -34,6 +34,7 @@ from schemas.team import (
     TeamJoinRequest,
     TeamMemberOut,
     TeamOut,
+    TeamUpdate,
 )
 from utils.event_bus import event_bus
 
@@ -89,6 +90,9 @@ async def _my_team_out(db: AsyncSession, team: Team) -> MyTeamOut:
             )
             for m, name in rows
         ],
+        affiliation=team.affiliation,
+        country=team.country,
+        website=team.website,
         created_at=team.created_at,
     )
 
@@ -116,6 +120,9 @@ async def list_teams(
             competition_id=t.competition_id,
             name=t.name,
             member_count=count,
+            affiliation=t.affiliation,
+            country=t.country,
+            website=t.website,
             created_at=t.created_at,
         )
         for t, count in rows
@@ -135,6 +142,41 @@ async def my_team(
             detail="You are not in a team for this competition",
         )
     team = await db.get(Team, membership.team_id)
+    return await _my_team_out(db, team)
+
+
+@router.patch("/me", response_model=MyTeamOut)
+async def update_my_team(
+    competition_id: str,
+    body: TeamUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MyTeamOut:
+    """Edit your team's name/profile — captain only (Phase 9)."""
+    membership = await _membership_of(db, competition_id, current_user.id)
+    if membership is None or not membership.is_captain:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the team captain can edit the team",
+        )
+    team = await db.get(Team, membership.team_id)
+    changes = body.model_dump(exclude_unset=True)
+    if "name" in changes and changes["name"] != team.name:
+        clash = await db.scalar(
+            select(Team).where(
+                Team.competition_id == competition_id,
+                Team.name == changes["name"],
+                Team.id != team.id,
+            )
+        )
+        if clash is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A team with that name already exists in this competition",
+            )
+    for field, value in changes.items():
+        setattr(team, field, value)
+    await db.commit()
     return await _my_team_out(db, team)
 
 
@@ -163,7 +205,13 @@ async def create_team(
             detail="A team with that name already exists in this competition",
         )
 
-    team = Team(competition_id=competition_id, name=body.name)
+    team = Team(
+        competition_id=competition_id,
+        name=body.name,
+        affiliation=body.affiliation,
+        country=body.country,
+        website=body.website,
+    )
     db.add(team)
     await db.flush()
     db.add(
@@ -214,6 +262,19 @@ async def join_team(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Invalid invite code"
         )
+
+    competition = await db.get(Competition, competition_id)
+    if competition.max_team_size is not None:
+        members = await db.scalar(
+            select(func.count(TeamMembership.id)).where(
+                TeamMembership.team_id == team.id
+            )
+        )
+        if (members or 0) >= competition.max_team_size:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This team is full",
+            )
 
     db.add(
         TeamMembership(

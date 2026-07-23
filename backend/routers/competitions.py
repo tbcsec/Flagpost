@@ -164,6 +164,7 @@ async def create_competition(
         public_scoreboard=body.public_scoreboard,
         ctftime_enabled=body.ctftime_enabled,
         brackets=body.brackets or None,
+        max_team_size=body.max_team_size,
     )
     db.add(competition)
     await db.commit()

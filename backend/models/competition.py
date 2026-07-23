@@ -90,6 +90,8 @@ class Competition(Base, TimestampMixin):
     # Brackets/divisions a competitor self-selects at join (e.g. Students, Open).
     # Null/[] = no brackets. Scoreboard can filter by one.
     brackets: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Max members per team (team-mode). Null = unlimited. Enforced at join.
+    max_team_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Scoreboard freeze (§13, Phase 9): the instant public standings stop moving.
     # Null = live. Reached-and-set → the board is computed as of this time for
     # everyone but staff who explicitly ask for the live view. Can be a future

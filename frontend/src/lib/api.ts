@@ -67,6 +67,7 @@ import type {
   SiteSettingsAdmin,
   SubmitResult,
   Team,
+  TeamUpdate,
   Ticket,
   TicketDetail,
   TokenResponse,
@@ -302,9 +303,17 @@ export const teamsApi = {
   // 404 means "not in a team" — callers treat that as null, not an error.
   me: (competitionId: string) =>
     apiFetch<MyTeam>(`/api/competitions/${competitionId}/teams/me`),
-  create: (competitionId: string, input: { name: string }) =>
+  create: (
+    competitionId: string,
+    input: { name: string; affiliation?: string | null; country?: string | null; website?: string | null },
+  ) =>
     apiFetch<MyTeam>(`/api/competitions/${competitionId}/teams`, {
       method: "POST",
+      body: JSON.stringify(input),
+    }),
+  updateMine: (competitionId: string, input: TeamUpdate) =>
+    apiFetch<MyTeam>(`/api/competitions/${competitionId}/teams/me`, {
+      method: "PATCH",
       body: JSON.stringify(input),
     }),
   join: (competitionId: string, input: { invite_code: string }) =>

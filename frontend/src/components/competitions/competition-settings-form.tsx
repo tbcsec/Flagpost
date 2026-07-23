@@ -51,6 +51,7 @@ export function CompetitionSettingsForm({
     public_scoreboard: competition.public_scoreboard,
     ctftime_enabled: competition.ctftime_enabled,
     brackets: competition.brackets ?? [],
+    max_team_size: competition.max_team_size ? String(competition.max_team_size) : "",
   });
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
@@ -77,6 +78,7 @@ export function CompetitionSettingsForm({
         public_scoreboard: form.public_scoreboard,
         ctftime_enabled: form.ctftime_enabled,
         brackets: form.brackets,
+        max_team_size: form.max_team_size ? Number(form.max_team_size) : null,
       },
       { onSuccess: () => toast("Changes saved", { variant: "success" }) },
     );
@@ -192,6 +194,23 @@ export function CompetitionSettingsForm({
               placeholder="Add a bracket…"
             />
           </div>
+
+          {form.participation_mode === "team" && (
+            <div className="max-w-xs space-y-2">
+              <Label htmlFor="max_team_size">Max team size</Label>
+              <Input
+                id="max_team_size"
+                type="number"
+                min={1}
+                placeholder="Unlimited"
+                value={form.max_team_size}
+                onChange={(e) => set("max_team_size", e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Members allowed per team. Blank = unlimited.
+              </p>
+            </div>
+          )}
         </>
       )}
 

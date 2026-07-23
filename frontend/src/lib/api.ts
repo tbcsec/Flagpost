@@ -404,6 +404,16 @@ export const challengesApi = {
       `/api/competitions/${competitionId}/challenges/${challengeId}`,
       { method: "DELETE" },
     ),
+  // Reset multiple-choice guesses (challenge_edit). Empty target = everyone.
+  resetGuesses: (
+    competitionId: string,
+    challengeId: string,
+    target: { user_id?: string; team_id?: string },
+  ) =>
+    apiFetch<void>(
+      `/api/competitions/${competitionId}/challenges/${challengeId}/reset-guesses`,
+      { method: "POST", body: JSON.stringify(target) },
+    ),
 };
 
 export const submissionsApi = {

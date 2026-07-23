@@ -34,6 +34,14 @@ class ChallengeCreate(BaseModel):
     choices: Choices | None = Field(default=None, min_length=2, max_length=10)
 
 
+class ResetGuessesRequest(BaseModel):
+    """Reset multiple-choice guesses. Both null = a challenge-wide (bulk) reset;
+    exactly one = a targeted reset for that team (team-mode) or user (individual)."""
+
+    user_id: str | None = None
+    team_id: str | None = None
+
+
 class ChallengeUpdate(BaseModel):
     """PATCH body — only provided fields are applied. Sending ``flag`` (with
     ``flag_type``/``case_insensitive``/``choices`` as needed) replaces the stored flag."""

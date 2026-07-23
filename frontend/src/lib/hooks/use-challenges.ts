@@ -66,6 +66,16 @@ export function useUpdateChallenge(competitionId: string, challengeId: string) {
   });
 }
 
+/** Reset multiple-choice guesses (staff). Empty target = everyone. */
+export function useResetGuesses(competitionId: string, challengeId: string) {
+  const invalidate = useInvalidate(competitionId);
+  return useMutation({
+    mutationFn: (target: { user_id?: string; team_id?: string }) =>
+      challengesApi.resetGuesses(competitionId, challengeId, target),
+    onSuccess: invalidate,
+  });
+}
+
 export function useChallengeStateMutation(competitionId: string) {
   const invalidate = useInvalidate(competitionId);
   const queryClient = useQueryClient();

@@ -24,9 +24,16 @@ from db import get_db
 from models.attachment import Attachment
 from models.challenge import Category, Challenge
 from models.competition import Competition
+from models.mc_guess_reset import MCGuessReset
 from models.submission import Submission
+from models.team import Team
 from models.user import User
-from schemas.challenge import ChallengeCreate, ChallengeOut, ChallengeUpdate
+from schemas.challenge import (
+    ChallengeCreate,
+    ChallengeOut,
+    ChallengeUpdate,
+    ResetGuessesRequest,
+)
 from storage import get_storage
 from storage.base import ObjectStorage
 from utils.event_bus import event_bus
@@ -415,5 +422,64 @@ async def delete_challenge(
             "competition_id": competition_id,
             "challenge_id": challenge_id,
             "user_id": current_user.id,
+        },
+    )
+
+
+@router.post("/{challenge_id}/reset-guesses", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_guesses(
+    competition_id: str,
+    challenge_id: str,
+    body: ResetGuessesRequest,
+    current_user: User = Depends(require_permission("challenge_edit")),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Give a subject (or everyone) a fresh set of multiple-choice guesses,
+    non-destructively (§13.2) — records a cutoff, keeps submission history."""
+    challenge = await _get_scoped_challenge(db, competition_id, challenge_id)
+    if challenge.flag_type != "multiple_choice":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Guess resets only apply to multiple-choice challenges",
+        )
+    if body.user_id and body.team_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reset a team or a user, not both",
+        )
+    if body.team_id is not None:
+        team = await db.scalar(
+            select(Team).where(
+                Team.id == body.team_id, Team.competition_id == competition_id
+            )
+        )
+        if team is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Team not found"
+            )
+    if body.user_id is not None and await db.get(User, body.user_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+
+    db.add(
+        MCGuessReset(
+            competition_id=competition_id,
+            challenge_id=challenge_id,
+            user_id=body.user_id,
+            team_id=body.team_id,
+            reset_by=current_user.id,
+        )
+    )
+    await db.commit()
+
+    await event_bus.emit(
+        "challenge.guesses_reset",
+        {
+            "competition_id": competition_id,
+            "challenge_id": challenge_id,
+            "user_id": body.user_id,
+            "team_id": body.team_id,
+            "actor_user_id": current_user.id,
         },
     )

@@ -15,11 +15,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.competition import Competition
 from models.hint import HintReveal
+from models.mc_guess_reset import MCGuessReset
 from models.submission import Submission
 from models.team import TeamMembership
 from models.user import User
@@ -78,26 +79,53 @@ async def subject_has_solved(
     return existing is not None
 
 
+def _subject_reset_filter(subject: Subject):
+    """WHERE clause matching resets targeted at a subject (mirrors solves)."""
+    if subject.kind == "team":
+        return MCGuessReset.team_id == subject.id
+    return (MCGuessReset.user_id == subject.id) & (MCGuessReset.team_id.is_(None))
+
+
+async def _reset_cutoff(
+    db: AsyncSession, challenge_id: str, subject: Subject
+):
+    """The latest guess-reset that applies to ``subject`` on a challenge — a
+    challenge-wide reset (both ids null) or one targeted at the subject. Guesses
+    made at or before this instant don't count (Phase 9)."""
+    return await db.scalar(
+        select(func.max(MCGuessReset.created_at)).where(
+            MCGuessReset.challenge_id == challenge_id,
+            or_(
+                and_(MCGuessReset.user_id.is_(None), MCGuessReset.team_id.is_(None)),
+                _subject_reset_filter(subject),
+            ),
+        )
+    )
+
+
 async def subject_attempt_count(
     db: AsyncSession, challenge_id: str, subject: Subject
 ) -> int:
     """How many times ``subject`` has submitted against ``challenge_id`` (any
-    outcome). Drives the multiple-choice guess cap — every guess counts, so a team
-    can't burn attempts across its members to sidestep the limit."""
-    count = await db.scalar(
-        select(func.count(Submission.id)).where(
-            Submission.challenge_id == challenge_id,
-            _subject_solve_filter(subject),
-        )
+    outcome) since its last guess-reset. Drives the multiple-choice guess cap —
+    every guess counts, so a team can't burn attempts across its members to
+    sidestep the limit."""
+    stmt = select(func.count(Submission.id)).where(
+        Submission.challenge_id == challenge_id,
+        _subject_solve_filter(subject),
     )
-    return count or 0
+    cutoff = await _reset_cutoff(db, challenge_id, subject)
+    if cutoff is not None:
+        stmt = stmt.where(Submission.created_at > cutoff)
+    return (await db.scalar(stmt)) or 0
 
 
 async def subject_attempt_counts(
     db: AsyncSession, competition_id: str, subject: Subject
 ) -> dict[str, int]:
-    """challenge_id -> ``subject``'s attempt count across the competition, in one
-    grouped query (the browse list's multiple-choice guesses-remaining)."""
+    """challenge_id -> ``subject``'s attempt count across the competition (the
+    browse list's multiple-choice guesses-remaining). One grouped query, then a
+    per-challenge recount only for the (rare) challenges that have a guess-reset."""
     rows = (
         await db.execute(
             select(Submission.challenge_id, func.count(Submission.id))
@@ -108,7 +136,38 @@ async def subject_attempt_counts(
             .group_by(Submission.challenge_id)
         )
     ).all()
-    return {challenge_id: count for challenge_id, count in rows}
+    counts = {challenge_id: count for challenge_id, count in rows}
+
+    # Apply reset cutoffs: for each reset challenge, recount from the cutoff.
+    cutoff_rows = (
+        await db.execute(
+            select(MCGuessReset.challenge_id, func.max(MCGuessReset.created_at))
+            .where(
+                MCGuessReset.competition_id == competition_id,
+                or_(
+                    and_(
+                        MCGuessReset.user_id.is_(None),
+                        MCGuessReset.team_id.is_(None),
+                    ),
+                    _subject_reset_filter(subject),
+                ),
+            )
+            .group_by(MCGuessReset.challenge_id)
+        )
+    ).all()
+    for challenge_id, cutoff in cutoff_rows:
+        if cutoff is None:
+            continue
+        counts[challenge_id] = (
+            await db.scalar(
+                select(func.count(Submission.id)).where(
+                    Submission.challenge_id == challenge_id,
+                    _subject_solve_filter(subject),
+                    Submission.created_at > cutoff,
+                )
+            )
+        ) or 0
+    return counts
 
 
 async def solve_counts(

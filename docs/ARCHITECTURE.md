@@ -1105,7 +1105,11 @@ submission is the one endpoint they have direct incentive to script.
   set in competition settings — deliberately not per-challenge): once a subject
   has used its guesses on an unsolved MC challenge, further guesses are refused
   before grading (so the block can't be probed for correctness), independent of
-  the general submission rate limit above.
+  the general submission rate limit above. Staff can **reset** guesses
+  non-destructively (a competitor locked out by a misclick shouldn't be stuck):
+  a `mc_guess_resets` row records a **cutoff** so the count only tallies
+  submissions made after it — targeted at one subject or challenge-wide (bulk) —
+  keeping the submission history intact for analytics/audit.
 
 ### 13.3 File Storage & Access Control
 

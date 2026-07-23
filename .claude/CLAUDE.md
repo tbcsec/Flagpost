@@ -389,6 +389,17 @@ What's built:
     Settings is tabbed** (General / Schedule / Scoring / Modules) via a new
     dependency-free `Tabs` primitive; the settings form stays mounted across the
     non-module tabs (hidden, not unmounted) so switching never drops an unsaved edit.
+  - **Multiple-choice guess resets** — staff can hand back guesses non-destructively
+    (a misclick-locked competitor shouldn't be stuck). `mc_guess_resets` (new model
+    + migration `e7f8a9b0c1d2`) records a **cutoff** (`created_at`); the guess count
+    only tallies submissions *after* the latest applicable reset — targeted at a
+    subject (`user_id`/`team_id`) or challenge-wide (both null = bulk). `subject_attempt_count[s]`
+    apply the cutoff; submission history is untouched. `POST .../challenges/{id}/reset-guesses`
+    (`challenge_edit`, MC-only) with `{user_id?|team_id?}` (empty = everyone), emits
+    new §3.2 **`challenge.guesses_reset`** (a `challenge_edit`-governed trigger).
+    Carried by the generic backup. Frontend: `ChallengeGuessesSection` in the MC
+    challenge editor (team/competitor picker + "Reset for selected" / "Reset for
+    everyone"), `useResetGuesses`.
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

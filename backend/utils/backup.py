@@ -41,6 +41,7 @@ from models.competition import Competition, generate_invite_code
 from models.competition_module import CompetitionModule
 from models.feedback import Survey, SurveyAnswer, SurveyQuestion, SurveyResponse
 from models.hint import Hint, HintReveal
+from models.mc_guess_reset import MCGuessReset
 from models.role import Role, RoleAssignment
 from models.score_adjustment import ScoreAdjustment
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
@@ -221,6 +222,10 @@ SPECS: tuple[Spec, ...] = (
     Spec("hint_reveals", HintReveal, "competitions",
          remaps=(_COMP, ("hint_id", "hint", True), ("challenge_id", "challenge", True),
                  ("user_id", "user", True), ("team_id", "team", False)),
+         owned_by_competition=True),
+    Spec("mc_guess_resets", MCGuessReset, "competitions",
+         remaps=(_COMP, ("challenge_id", "challenge", True), ("user_id", "user", False),
+                 ("team_id", "team", False), ("reset_by", "user", False)),
          owned_by_competition=True),
     Spec("announcements", Announcement, "competitions",
          remaps=(_COMP, ("created_by", "user", False)), owned_by_competition=True),

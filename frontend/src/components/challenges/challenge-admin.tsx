@@ -3,6 +3,7 @@
 import { useId, useState } from "react";
 
 import { AttachmentsSection } from "@/components/challenges/attachments-section";
+import { ChallengeGuessesSection } from "@/components/challenges/challenge-guesses-section";
 import { HintsSection } from "@/components/challenges/hints-section";
 import { Button } from "@/components/ui/button";
 import {
@@ -406,6 +407,12 @@ function ChallengeForm({
               competitionId={competitionId}
               challengeId={challenge.id}
             />
+            {challenge.flag_type === "multiple_choice" && (
+              <ChallengeGuessesSection
+                competitionId={competitionId}
+                challengeId={challenge.id}
+              />
+            )}
           </>
         )}
 

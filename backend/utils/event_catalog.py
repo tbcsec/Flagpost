@@ -37,6 +37,7 @@ EVENT_TYPES: tuple[str, ...] = (
     "challenge.published",
     "challenge.deleted",
     "challenge.solved",
+    "challenge.guesses_reset",
     "challenge.hint_requested",
     "hint.released",
     "category.created",

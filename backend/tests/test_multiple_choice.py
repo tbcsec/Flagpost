@@ -127,6 +127,88 @@ async def test_correct_guess_within_limit_solves(client):
     assert win.json()["correct"] is True and win.json()["points_awarded"] == 100
 
 
+async def test_targeted_guess_reset(client):
+    admin = await admin_token(client)
+    comp = await _mc_competition(client, admin, limit=2)
+    cid = await _mc_challenge(client, admin, comp)
+    ptoken, puid = await _register(client, "p@example.com")
+    await _assign_participant(puid, comp)
+    auth = _auth(ptoken)
+    submit = f"/api/competitions/{comp}/challenges/{cid}/submit"
+    reset = f"/api/competitions/{comp}/challenges/{cid}/reset-guesses"
+
+    await client.post(submit, json={"flag": "London"}, headers=auth)
+    await client.post(submit, json={"flag": "Berlin"}, headers=auth)
+    assert (await client.post(submit, json={"flag": "Paris"}, headers=auth)).status_code == 403
+
+    # Admin resets this user's guesses non-destructively.
+    r = await client.post(reset, json={"user_id": puid}, headers=_auth(admin))
+    assert r.status_code == 204
+
+    # Fresh allotment, and they can guess (and solve) again.
+    ch = (await client.get(f"/api/competitions/{comp}/challenges", headers=auth)).json()[0]
+    assert ch["attempts_remaining"] == 2
+    win = await client.post(submit, json={"flag": "Paris"}, headers=auth)
+    assert win.status_code == 200 and win.json()["correct"] is True
+
+    # History is intact — the failed attempts are still logged (non-destructive).
+    from models.submission import Submission
+    async with SessionLocal() as db:
+        total = await db.scalar(
+            select(Submission.id).where(Submission.challenge_id == cid, Submission.user_id == puid)
+        )
+    assert total is not None
+
+
+async def test_bulk_guess_reset(client):
+    admin = await admin_token(client)
+    comp = await _mc_competition(client, admin, limit=1)
+    cid = await _mc_challenge(client, admin, comp)
+    submit = f"/api/competitions/{comp}/challenges/{cid}/submit"
+
+    tokens = []
+    for email in ("a@example.com", "b@example.com"):
+        t, uid = await _register(client, email)
+        await _assign_participant(uid, comp)
+        tokens.append(t)
+        await client.post(submit, json={"flag": "London"}, headers=_auth(t))  # burn the 1 guess
+        assert (await client.post(submit, json={"flag": "Paris"}, headers=_auth(t))).status_code == 403
+
+    # Bulk reset (no target) refreshes everyone.
+    r = await client.post(
+        f"/api/competitions/{comp}/challenges/{cid}/reset-guesses", json={}, headers=_auth(admin)
+    )
+    assert r.status_code == 204
+    for t in tokens:
+        win = await client.post(submit, json={"flag": "Paris"}, headers=_auth(t))
+        assert win.status_code == 200 and win.json()["correct"] is True
+
+
+async def test_reset_guards(client):
+    admin = await admin_token(client)
+    comp = await _mc_competition(client, admin, limit=2)
+
+    # Non-MC challenge → 400.
+    static = await client.post(
+        f"/api/competitions/{comp}/challenges",
+        json={"title": "S", "flag": "flag{x}"},
+        headers=_auth(admin),
+    )
+    scid = static.json()["id"]
+    r = await client.post(
+        f"/api/competitions/{comp}/challenges/{scid}/reset-guesses", json={}, headers=_auth(admin)
+    )
+    assert r.status_code == 400
+
+    # Requires challenge_edit.
+    cid = await _mc_challenge(client, admin, comp)
+    ptoken, _ = await _register(client, "nobody@example.com")
+    r = await client.post(
+        f"/api/competitions/{comp}/challenges/{cid}/reset-guesses", json={}, headers=_auth(ptoken)
+    )
+    assert r.status_code == 403
+
+
 async def test_validation(client):
     admin = await admin_token(client)
     comp = await _mc_competition(client, admin, limit=None)

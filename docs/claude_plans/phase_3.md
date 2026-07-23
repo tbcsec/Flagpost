@@ -687,6 +687,19 @@ Items (this list grows as the owner adds them):
     blocks a 3rd guess (even the correct one), a fresh subject still gets its own
     allotment, correct-within-limit solves, and validation (≥2 unique options,
     answer among them).
+- **Multiple-choice guess resets** ✅ — staff can give a subject (or everyone) a
+  fresh set of guesses non-destructively (a competitor locked out by a misclick
+  shouldn't be permanently stuck, and there was no override). `mc_guess_resets`
+  (migration `e7f8a9b0c1d2`) records a **cutoff** (its `created_at`); the guess
+  count only tallies submissions *after* the latest reset that applies —
+  challenge-wide (both ids null = bulk) or targeted at a team/user. `subject_attempt_count`
+  and the batch `subject_attempt_counts` apply the cutoff (the batch recounts only
+  the rare reset challenges). `POST .../challenges/{id}/reset-guesses` (`challenge_edit`,
+  MC-only, `{user_id?|team_id?}`, empty = everyone) emits `challenge.guesses_reset`.
+  Submission history is untouched — analytics/audit/first-blood stay honest. Backup
+  carries the table. Frontend: `ChallengeGuessesSection` in the MC challenge editor
+  (a team/competitor `EntityCombobox` + "Reset for selected" / "Reset for everyone").
+  Tests: targeted + bulk reset restore the allotment, non-MC → 400, RBAC.
 - **Competition Settings → tabs** ✅ — the growing settings page is organised into
   **General / Schedule / Scoring / Modules** tabs (new dependency-free `Tabs`
   primitive). One form + one Save across the non-module tabs; the form stays

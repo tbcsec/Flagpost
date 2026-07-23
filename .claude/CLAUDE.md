@@ -537,6 +537,18 @@ What's built:
       challenge-list path — which always queries `mc_guess_resets` — 404'd "no
       such table" in isolation); both are now imported so `Base.metadata` is
       complete.
+    - **Challenge prerequisites / unlock chains** — `Challenge.prerequisites`
+      (JSON challenge-id list; migration `f4a5b6c7d8e9`). **Shown-locked**: a
+      competitor sees a challenge with an unsolved prerequisite but can't
+      open/submit it. `ChallengeOut` gains `prerequisites` + a per-subject
+      `locked` (staff/subjectless always unlocked; `_is_locked` off the subject's
+      solved set). Enforced server-side in `submit_flag` (403 while locked);
+      validated on create/update (prereqs must be same-competition challenges, no
+      self-reference). Clone **remaps** prereq ids to the new challenges (2nd
+      pass); backup carries the JSON (ids not remapped — a known limit shared with
+      automation-config ids). Frontend: a prerequisite checkbox picker in the
+      editor, a "🔒 Locked" card badge, and a locked dialog panel naming the
+      unsolved prerequisites by title.
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

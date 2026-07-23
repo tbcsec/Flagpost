@@ -118,6 +118,47 @@ async def _set_value(db: AsyncSession, challenge: Challenge) -> None:
     challenge.value = challenge_value(challenge, count)
 
 
+def _prereq_ids(challenge: Challenge) -> list[str]:
+    return list(challenge.prerequisites or [])
+
+
+async def _validate_prerequisites(
+    db: AsyncSession, competition_id: str, challenge_id: str | None, prereqs: list[str]
+) -> None:
+    """Prerequisites must be other challenges in the same competition (§6.2); a
+    challenge can't require itself."""
+    ids = [p for p in dict.fromkeys(prereqs)]  # dedupe
+    if challenge_id is not None and challenge_id in ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A challenge can't be its own prerequisite",
+        )
+    if not ids:
+        return
+    found = set(
+        (
+            await db.execute(
+                select(Challenge.id).where(
+                    Challenge.competition_id == competition_id,
+                    Challenge.id.in_(ids),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if set(ids) - found:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A prerequisite is not a challenge in this competition",
+        )
+
+
+def _is_locked(challenge: Challenge, solved_ids: set[str]) -> bool:
+    """Whether a challenge is locked for a subject: any prerequisite unsolved."""
+    return any(pid not in solved_ids for pid in _prereq_ids(challenge))
+
+
 def _validate_scoring(challenge: Challenge) -> None:
     """Dynamic scoring needs a floor and a decay, and the floor can't exceed the
     initial value (§13.2). Static challenges ignore both fields."""
@@ -263,6 +304,11 @@ async def list_challenges(
         challenge.solve_count = counts.get(challenge.id, 0)
         challenge.value = challenge_value(challenge, challenge.solve_count)
         challenge.solved = challenge.id in solved
+        # Locked = a prerequisite the subject hasn't solved. Staff see everything
+        # unlocked; a subjectless viewer (manager not on a team) also isn't gated.
+        challenge.locked = (
+            not can_edit and subject is not None and _is_locked(challenge, solved)
+        )
         challenge.my_rating = ratings.get(challenge.id)
         if challenge.flag_type == "multiple_choice" and limit is not None:
             challenge.attempts_remaining = (
@@ -304,6 +350,14 @@ async def get_challenge(
         if subject is not None
         else False
     )
+    # Locked = an unsolved prerequisite (per subject; staff/subjectless unlocked).
+    if _prereq_ids(challenge) and subject is not None:
+        can_edit = await user_has_permission(
+            db, current_user.id, "challenge_edit", competition_id
+        )
+        if not can_edit:
+            solved_ids = await solved_challenge_ids(db, competition_id, subject)
+            challenge.locked = _is_locked(challenge, solved_ids)
     limit = competition.mc_guess_limit if competition is not None else None
     if (
         challenge.flag_type == "multiple_choice"
@@ -402,10 +456,14 @@ async def create_challenge(
         min_points=body.min_points,
         decay=body.decay,
         release_at=body.release_at,
+        prerequisites=body.prerequisites or None,
         flag_type=body.flag_type,
         case_insensitive=body.case_insensitive,
     )
     _validate_scoring(challenge)
+    await _validate_prerequisites(
+        db, competition_id, None, _prereq_ids(challenge)
+    )
     if body.flag_type == "multiple_choice" and body.choices is not None:
         challenge.choices = body.choices
         _validate_multiple_choice(challenge, body.flag)
@@ -444,6 +502,11 @@ async def update_challenge(
     for field, value in changes.items():
         setattr(challenge, field, value)
     _validate_scoring(challenge)
+    if "prerequisites" in changes:
+        challenge.prerequisites = challenge.prerequisites or None
+        await _validate_prerequisites(
+            db, competition_id, challenge.id, _prereq_ids(challenge)
+        )
 
     # Multiple-choice options can't be verified against the already-hashed answer,
     # so a change to the option set (or a switch into multiple_choice) requires

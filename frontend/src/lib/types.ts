@@ -497,6 +497,10 @@ export interface Challenge {
   /** Scheduled release time; null = released on publish. Competitors never see
    *  a challenge before this (staff do, badged "Scheduled"). */
   release_at: string | null;
+  /** Prerequisite challenge ids (unlock chain) + whether this challenge is
+   *  currently locked for the requesting subject. Staff always see locked=false. */
+  prerequisites: string[];
+  locked: boolean;
   state: ChallengeState;
   flag_type: FlagType;
   case_insensitive: boolean;
@@ -525,6 +529,7 @@ export interface ChallengeCreate {
   min_points?: number | null;
   decay?: number | null;
   release_at?: string | null;
+  prerequisites?: string[];
   flag_type?: FlagType;
   case_insensitive?: boolean;
   flag?: string | null;

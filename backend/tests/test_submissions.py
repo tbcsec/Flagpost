@@ -96,6 +96,64 @@ async def _submissions(challenge_id: str):
         ).scalars().all()
 
 
+# --- Prerequisites / unlock chains -------------------------------------------
+
+
+async def test_prerequisite_locks_a_challenge_until_solved(client):
+    comp = await _make_competition(client, mode="individual")
+    admin = await admin_token(client)
+    base = await _make_published_challenge(client, comp, flag="flag{base}", points=100)
+    # A second challenge that requires solving the first.
+    gated = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges",
+            json={"title": "Gated", "points": 200, "flag": "flag{gate}", "prerequisites": [base]},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    await client.post(f"/api/competitions/{comp}/challenges/{gated}/publish", headers=_auth(admin))
+
+    player, pid = await _register(client, "ada@example.com")
+    await _assign_participant(pid, comp)
+
+    # Locked in the list, and submits are refused.
+    listing = {c["title"]: c for c in (await client.get(f"/api/competitions/{comp}/challenges", headers=_auth(player))).json()}
+    assert listing["Gated"]["locked"] is True
+    blocked = await client.post(
+        f"/api/competitions/{comp}/challenges/{gated}/submit",
+        json={"flag": "flag{gate}"},
+        headers=_auth(player),
+    )
+    assert blocked.status_code == 403
+
+    # Solve the prerequisite → the gate unlocks and accepts the flag.
+    await client.post(
+        f"/api/competitions/{comp}/challenges/{base}/submit",
+        json={"flag": "flag{base}"},
+        headers=_auth(player),
+    )
+    detail = (await client.get(f"/api/competitions/{comp}/challenges/{gated}", headers=_auth(player))).json()
+    assert detail["locked"] is False
+    ok = await client.post(
+        f"/api/competitions/{comp}/challenges/{gated}/submit",
+        json={"flag": "flag{gate}"},
+        headers=_auth(player),
+    )
+    assert ok.status_code == 200 and ok.json()["correct"] is True
+
+
+async def test_prerequisite_must_be_a_real_challenge_and_not_self(client):
+    comp = await _make_competition(client, mode="individual")
+    admin = await admin_token(client)
+    # An unknown prerequisite id is rejected.
+    bad = await client.post(
+        f"/api/competitions/{comp}/challenges",
+        json={"title": "Bad", "points": 100, "prerequisites": ["nope"]},
+        headers=_auth(admin),
+    )
+    assert bad.status_code == 400
+
+
 # --- Scheduled release -------------------------------------------------------
 
 

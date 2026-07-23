@@ -78,6 +78,7 @@ async def clone_competition(
             select(Challenge).where(Challenge.competition_id == source.id)
         )
     ).all()
+    prereq_sources: dict[str, list] = {}
     for chal in challenges:
         new_chal = Challenge(
             competition_id=clone.id,
@@ -89,6 +90,7 @@ async def clone_competition(
             min_points=chal.min_points,
             decay=chal.decay,
             state=chal.state,
+            # release_at intentionally dropped — the clone's schedule is cleared.
             flag_type=chal.flag_type,
             case_insensitive=chal.case_insensitive,
             flag_hash=chal.flag_hash,
@@ -99,6 +101,15 @@ async def clone_competition(
         db.add(new_chal)
         await db.flush()
         challenge_map[chal.id] = new_chal.id
+        if chal.prerequisites:
+            prereq_sources[new_chal.id] = list(chal.prerequisites)
+
+    # Second pass: remap each cloned challenge's prerequisites to the new ids now
+    # that every challenge exists (they can reference each other).
+    for new_id, old_prereqs in prereq_sources.items():
+        remapped = [challenge_map[p] for p in old_prereqs if p in challenge_map]
+        if remapped:
+            (await db.get(Challenge, new_id)).prerequisites = remapped
 
     # Hints (per challenge).
     hints = (

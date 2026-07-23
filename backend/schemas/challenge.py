@@ -9,7 +9,7 @@ salt, or regex outward.
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 FlagType = Literal["static", "regex", "multiple_choice"]
 ChallengeState = Literal["draft", "published"]
@@ -31,6 +31,8 @@ class ChallengeCreate(BaseModel):
     decay: int | None = Field(default=None, ge=1, le=100_000)
     # Scheduled release: hidden from competitors until this time (Phase 9).
     release_at: datetime | None = None
+    # Unlock chain: challenge ids that must be solved first (Phase 9).
+    prerequisites: list[str] = Field(default_factory=list, max_length=50)
     flag_type: FlagType = "static"
     case_insensitive: bool = False
     # Plaintext flag (static), pattern (regex), or the **correct option**
@@ -72,6 +74,7 @@ class ChallengeUpdate(BaseModel):
     min_points: int | None = Field(default=None, ge=0, le=100_000)
     decay: int | None = Field(default=None, ge=1, le=100_000)
     release_at: datetime | None = None
+    prerequisites: list[str] | None = Field(default=None, max_length=50)
     flag_type: FlagType | None = None
     case_insensitive: bool | None = None
     flag: str | None = Field(default=None, min_length=1, max_length=500)
@@ -97,8 +100,19 @@ class ChallengeOut(BaseModel):
     # Scheduled release time; null = released on publish. Competitors never see a
     # challenge before this, so when they can read one it's always released.
     release_at: datetime | None = None
+    # Unlock chain: the prerequisite challenge ids, and whether this challenge is
+    # currently locked for the requesting subject (any prerequisite unsolved).
+    # Staff always see locked=False. Defaulted for create/update/publish responses.
+    prerequisites: list[str] = []
+    locked: bool = False
     state: ChallengeState
     flag_type: FlagType
+
+    @field_validator("prerequisites", mode="before")
+    @classmethod
+    def _prereqs_default(cls, v: object) -> list:
+        # The column is nullable (None = no prerequisites) → normalize to [].
+        return v or []
     case_insensitive: bool
     has_flag: bool  # the only flag-related fact that ever leaves the server
     # The multiple-choice options a competitor picks from (the correct one is NOT

@@ -119,6 +119,7 @@ export function ChallengeAdmin({ competitionId }: { competitionId: string }) {
           competitionId={competitionId}
           challenge={editing === "new" ? null : editing}
           categories={categories.data ?? []}
+          allChallenges={challenges.data ?? []}
           onDone={() => setEditing(null)}
         />
       )}
@@ -228,11 +229,13 @@ function ChallengeForm({
   competitionId,
   challenge,
   categories,
+  allChallenges,
   onDone,
 }: {
   competitionId: string;
   challenge: Challenge | null;
   categories: Category[];
+  allChallenges: Challenge[];
   onDone: () => void;
 }) {
   const isEdit = challenge !== null;
@@ -258,6 +261,9 @@ function ChallengeForm({
   // `datetime-local` wants "YYYY-MM-DDTHH:mm" in local time; store "" for none.
   const [releaseAt, setReleaseAt] = useState(
     challenge?.release_at ? toLocalInput(challenge.release_at) : "",
+  );
+  const [prerequisites, setPrerequisites] = useState<string[]>(
+    challenge?.prerequisites ?? [],
   );
   const [flagType, setFlagType] = useState<FlagType>(
     challenge?.flag_type ?? "static",
@@ -297,6 +303,7 @@ function ChallengeForm({
     }
     // A blank release clears any schedule (null); otherwise send it as ISO/UTC.
     base.release_at = releaseAt ? new Date(releaseAt).toISOString() : null;
+    base.prerequisites = prerequisites;
     if (flagType === "multiple_choice") {
       const trimmed = choices.map((c) => c.trim());
       const hasCorrect = correctIndex !== null && !!trimmed[correctIndex];
@@ -437,6 +444,39 @@ function ChallengeForm({
               Optional. A published challenge stays hidden from competitors until
               this time — leave blank to release as soon as it&apos;s published.
             </p>
+          </div>
+          <div className="space-y-2">
+            <Label>Prerequisites</Label>
+            <p className="text-xs text-muted-foreground">
+              Competitors must solve these before this challenge unlocks (an
+              unlock chain). Optional.
+            </p>
+            {allChallenges.filter((c) => c.id !== challenge?.id).length === 0 ? (
+              <p className="text-xs text-muted-foreground">No other challenges yet.</p>
+            ) : (
+              <div className="grid max-h-40 gap-1 overflow-y-auto rounded-md border border-border p-2">
+                {allChallenges
+                  .filter((c) => c.id !== challenge?.id)
+                  .map((c) => (
+                    <label key={c.id} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-border"
+                        style={{ accentColor: "hsl(var(--primary))" }}
+                        checked={prerequisites.includes(c.id)}
+                        onChange={(e) =>
+                          setPrerequisites((prev) =>
+                            e.target.checked
+                              ? [...prev, c.id]
+                              : prev.filter((id) => id !== c.id),
+                          )
+                        }
+                      />
+                      <span>{c.title}</span>
+                    </label>
+                  ))}
+              </div>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="flag-type">Flag type</Label>

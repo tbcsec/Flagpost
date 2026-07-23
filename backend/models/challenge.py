@@ -64,6 +64,10 @@ class Challenge(Base, CompetitionScopedMixin, TimestampMixin):
     # release_at stays hidden from competitors until then (staff always see it).
     # Null = released as soon as it's published.
     release_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    # Unlock chains (Phase 9): challenge ids (same competition) a subject must
+    # solve before this one unlocks. Null/[] = no prerequisites. Shown-locked:
+    # a competitor sees a locked challenge but can't open/submit it until met.
+    prerequisites: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     # --- Flag config (§13.2) — the secret parts are never serialized ---
     # "static" | "regex" | "multiple_choice"

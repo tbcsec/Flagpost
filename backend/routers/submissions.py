@@ -41,6 +41,7 @@ from utils.flags import verify_regex_flag, verify_static_flag
 from utils.scoring import (
     challenge_value,
     resolve_subject,
+    solved_challenge_ids,
     subject_attempt_count,
     subject_has_solved,
 )
@@ -92,6 +93,17 @@ async def submit_flag(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Join a team before submitting flags",
         )
+
+    # Unlock chains (§13.2): a locked challenge (unsolved prerequisite) can't be
+    # submitted against until its prerequisites are met, for this subject.
+    prereqs = list(challenge.prerequisites or [])
+    if prereqs:
+        solved_ids = await solved_challenge_ids(db, competition_id, subject)
+        if any(pid not in solved_ids for pid in prereqs):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Solve this challenge's prerequisites first",
+            )
 
     # Rate limit the *subject* across the competition, before grading, so
     # rotating challenges doesn't sidestep the throttle (§13.2).

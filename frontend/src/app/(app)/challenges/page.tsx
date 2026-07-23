@@ -148,9 +148,13 @@ export default function ChallengesPage() {
                 </span>
                 <div className="flex gap-1.5">
                   {ch.state === "draft" && <Badge variant="outline">Draft</Badge>}
-                  <Badge variant={ch.solved ? "success" : "muted"}>
-                    {ch.solved ? "Solved" : "Open"}
-                  </Badge>
+                  {ch.locked ? (
+                    <Badge variant="outline">🔒 Locked</Badge>
+                  ) : (
+                    <Badge variant={ch.solved ? "success" : "muted"}>
+                      {ch.solved ? "Solved" : "Open"}
+                    </Badge>
+                  )}
                 </div>
               </div>
               <div className="text-base font-semibold">{ch.title}</div>
@@ -186,6 +190,7 @@ export default function ChallengesPage() {
               competitionId={competitionId}
               challenge={open}
               categoryName={categoryName(open.category_id)}
+              allChallenges={challenges.data ?? []}
             />
           )}
         </DialogContent>
@@ -198,13 +203,22 @@ function ChallengeDialogBody({
   competitionId,
   challenge,
   categoryName,
+  allChallenges,
 }: {
   competitionId: string;
   challenge: Challenge;
   categoryName: string;
+  allChallenges: Challenge[];
 }) {
   const [flag, setFlag] = useState("");
   const submit = useSubmitFlag(competitionId, challenge.id);
+  // Titles of the prerequisites still blocking this challenge (unlock chain).
+  const lockedBy = challenge.locked
+    ? challenge.prerequisites
+        .map((id) => allChallenges.find((c) => c.id === id))
+        .filter((c): c is Challenge => Boolean(c) && !c!.solved)
+        .map((c) => c.title)
+    : [];
   // Live "who else is on this challenge" while the detail dialog is open (§4.1).
   const presence = usePresence("challenge", challenge.id);
   // The team's private scratchpad for this challenge (§4.2) — only when the
@@ -253,7 +267,17 @@ function ChallengeDialogBody({
         {richTextToPlain(challenge.description) || "No description."}
       </p>
 
-      {justSolved ? (
+      {challenge.locked ? (
+        <div className="grid gap-2 rounded-lg border border-border bg-muted/40 p-6 text-center">
+          <div className="text-2xl">🔒</div>
+          <div className="text-sm font-medium">Locked</div>
+          <p className="text-xs text-muted-foreground">
+            {lockedBy.length > 0
+              ? `Solve ${lockedBy.join(", ")} to unlock this challenge.`
+              : "Solve this challenge's prerequisites to unlock it."}
+          </p>
+        </div>
+      ) : justSolved ? (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-success/40 bg-success/10 p-6 text-center">
           <FlagpostMark size={40} theme="dark" />
           <div className="text-base font-semibold text-success">

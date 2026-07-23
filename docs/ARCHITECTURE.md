@@ -1123,6 +1123,13 @@ submission is the one endpoint they have direct incentive to script.
   recomputed and all prior solvers' `points_awarded` are re-valued to match, so
   the scoreboard read path (sum of `points_awarded`) stays unchanged and the
   card's displayed `value` is exactly what each solve is worth right now.
+- **Scoreboard freeze** (`Competition.scoreboard_frozen_at`, Tier 3 Phase 9): a
+  `scoreboard_freeze` holder freezes public standings at a chosen instant
+  (default now; a future time schedules it). `compute_scoreboard` then computes
+  the board **as of** that time for everyone — dynamic values by solve count at
+  freeze, later solves/adjustments/awards/hint-costs excluded — and the WS room
+  serves that same frozen snapshot so it visibly stops moving. Staff read the
+  live board with `?live=true`. Emits `scoreboard.frozen` / `scoreboard.unfrozen`.
 
 ### 13.3 File Storage & Access Control
 

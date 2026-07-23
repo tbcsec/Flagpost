@@ -65,6 +65,8 @@ EVENT_TYPES: tuple[str, ...] = (
     "site.settings_updated",
     "score.adjusted",
     "achievement.awarded",
+    "scoreboard.frozen",
+    "scoreboard.unfrozen",
     "module.enabled",
     "module.disabled",
     "automation.rule_triggered",

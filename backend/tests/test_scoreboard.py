@@ -169,3 +169,55 @@ async def test_scoreboard_404_for_missing_competition(client):
         "/api/competitions/nope/scoreboard", headers=_auth(admin)
     )
     assert resp.status_code == 404
+
+
+# --- scoreboard freeze (Phase 9) ---------------------------------------------
+
+
+async def test_freeze_hides_later_solves_from_players_but_not_live_staff(client):
+    comp = await _make_competition(client, mode="individual")
+    c1 = await _published_challenge(client, comp, "flag{a}", 100)
+    c2 = await _published_challenge(client, comp, "flag{b}", 250)
+    admin = await admin_token(client)
+    player, pid = await _register(client, "ada@example.com")
+    async with __import__("db").SessionLocal() as s:
+        from sqlalchemy import select
+        from models.role import Role, RoleAssignment
+        role = await s.scalar(select(Role).where(Role.name == "Participant"))
+        s.add(RoleAssignment(user_id=pid, competition_id=comp, role_id=role.id))
+        await s.commit()
+
+    # Solve the first challenge, then freeze, then solve the second.
+    await _submit(client, comp, c1, player, "flag{a}")
+    fr = await client.post(f"/api/competitions/{comp}/scoreboard/freeze", json={}, headers=_auth(admin))
+    assert fr.status_code == 200
+    await _submit(client, comp, c2, player, "flag{b}")
+
+    # The player sees the frozen board: only the pre-freeze 100 points.
+    board = (await client.get(f"/api/competitions/{comp}/scoreboard", headers=_auth(player))).json()
+    assert board["frozen"] is True
+    assert board["entries"][0]["points"] == 100
+
+    # Staff can still read the live standings (both solves = 350).
+    live = (await client.get(f"/api/competitions/{comp}/scoreboard?live=true", headers=_auth(admin))).json()
+    assert live["frozen"] is False
+    assert live["entries"][0]["points"] == 350
+
+    # A player asking for ?live=true is ignored (no permission) — stays frozen.
+    still = (await client.get(f"/api/competitions/{comp}/scoreboard?live=true", headers=_auth(player))).json()
+    assert still["entries"][0]["points"] == 100
+
+    # Unfreeze → the board is live for everyone again.
+    await client.post(f"/api/competitions/{comp}/scoreboard/unfreeze", headers=_auth(admin))
+    after = (await client.get(f"/api/competitions/{comp}/scoreboard", headers=_auth(player))).json()
+    assert after["frozen"] is False
+    assert after["entries"][0]["points"] == 350
+
+
+async def test_freeze_requires_permission(client):
+    comp = await _make_competition(client, mode="individual")
+    player, _ = await _register(client, "nobody@example.com")
+    resp = await client.post(
+        f"/api/competitions/{comp}/scoreboard/freeze", json={}, headers=_auth(player)
+    )
+    assert resp.status_code == 403

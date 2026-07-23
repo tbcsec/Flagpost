@@ -82,3 +82,10 @@ class Competition(Base, TimestampMixin):
     challenge_ratings_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"
     )
+    # Scoreboard freeze (§13, Phase 9): the instant public standings stop moving.
+    # Null = live. Reached-and-set → the board is computed as of this time for
+    # everyone but staff who explicitly ask for the live view. Can be a future
+    # time (freeze scheduled for the final stretch).
+    scoreboard_frozen_at: Mapped[datetime | None] = mapped_column(
+        UtcDateTime, nullable=True
+    )

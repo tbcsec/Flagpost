@@ -58,11 +58,17 @@ def setup(app, event_bus, db_factory) -> None:
             "scoreboard", competition_id, {"type": "scoreboard", **board}
         )
 
-    # A solve changes totals; a hint reveal deducts its cost; an automation
-    # score adjustment (§5.3 update_score) adds/removes points — all three move
-    # the board, so all three trigger a recompute + live broadcast.
-    event_bus.subscribe("challenge.solved", broadcast_scoreboard, owner="scoring")
-    event_bus.subscribe(
-        "challenge.hint_requested", broadcast_scoreboard, owner="scoring"
-    )
-    event_bus.subscribe("score.adjusted", broadcast_scoreboard, owner="scoring")
+    # A solve changes totals; a hint reveal deducts its cost; a score adjustment
+    # (§5.3 update_score) or an award (create_award / manual awards) adds/removes
+    # points; and a freeze/unfreeze switches between the live and frozen board —
+    # all of these move what the board shows, so each triggers a recompute +
+    # live broadcast (which serves the frozen snapshot while a freeze is on).
+    for _event in (
+        "challenge.solved",
+        "challenge.hint_requested",
+        "score.adjusted",
+        "achievement.awarded",
+        "scoreboard.frozen",
+        "scoreboard.unfrozen",
+    ):
+        event_bus.subscribe(_event, broadcast_scoreboard, owner="scoring")

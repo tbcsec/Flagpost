@@ -493,6 +493,19 @@ What's built:
       min+decay, min ≤ points). Clone + backup carry the columns. Frontend:
       challenge editor scoring selector + min/decay fields, cards/dialog show
       `value` with a "dynamic" marker.
+    - **Scoreboard freeze** (§13) — `Competition.scoreboard_frozen_at` (migration
+      `d2e3f4a5b6c7`). `compute_scoreboard` gained an as-of path (`live=` /
+      `freeze_cutoff`): frozen → the board is computed as of the freeze instant
+      (dynamic values by solve count then; later solves/adjustments/awards/hints
+      excluded) for everyone; the WS room serves the frozen snapshot. Staff read
+      live with `?live=true`. `POST .../scoreboard/freeze`(+`/unfreeze`) gated on
+      `scoreboard_freeze`, emitting new §3.2 `scoreboard.frozen`/`unfrozen`
+      (triggers, governed by `scoreboard_freeze`). Refactor removed the SQL
+      `_awarded_totals` subquery for a unified per-subject awarded dict; also
+      subscribed the scoreboard broadcast to `achievement.awarded` (manual awards
+      now move the board live). `ScoreboardOut` gains `frozen`/`frozen_at`.
+      Frontend: `useFreezeScoreboard`, a "Frozen" badge + staff Freeze/Unfreeze
+      button on the scoreboard page.
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

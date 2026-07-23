@@ -454,6 +454,16 @@ export const scoreboardApi = {
   // Initial load only — live updates arrive over the scoreboard WS room (§4.1).
   get: (competitionId: string) =>
     apiFetch<Scoreboard>(`/api/competitions/${competitionId}/scoreboard`),
+  // Staff freeze/unfreeze the public board (scoreboard_freeze).
+  freeze: (competitionId: string) =>
+    apiFetch<Scoreboard>(`/api/competitions/${competitionId}/scoreboard/freeze`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+  unfreeze: (competitionId: string) =>
+    apiFetch<Scoreboard>(`/api/competitions/${competitionId}/scoreboard/unfreeze`, {
+      method: "POST",
+    }),
 };
 
 export const ticketsApi = {

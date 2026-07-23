@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
 import { NoCompetition } from "@/components/app/no-competition";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState, TrophyEmptyIcon } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,9 +19,11 @@ import {
 } from "@/components/ui/table";
 import { parseServerDate } from "@/lib/datetime";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
+import { useAccess } from "@/lib/hooks/use-permissions";
 import { useMyTeam } from "@/lib/hooks/use-teams";
-import { useScoreboard } from "@/lib/hooks/use-scoreboard";
+import { useFreezeScoreboard, useScoreboard } from "@/lib/hooks/use-scoreboard";
 import { useAuthStore } from "@/stores/auth";
+import { toast } from "@/stores/toast";
 import { cn } from "@/lib/utils";
 
 // Live scoreboard (Phase 7): REST initial load + WebSocket room updates. "You"
@@ -50,6 +54,24 @@ export default function ScoreboardPage() {
   const isTeam = competition?.participation_mode !== "individual";
   const myTeam = useMyTeam(isTeam ? (competitionId ?? "") : "");
   const userId = useAuthStore((s) => s.user?.id);
+  const access = useAccess();
+  const canFreeze = access.has("scoreboard_freeze");
+  const freeze = useFreezeScoreboard(competitionId ?? "");
+  const frozen = board.data?.frozen ?? false;
+
+  function toggleFreeze() {
+    freeze.mutate(!frozen, {
+      onSuccess: () =>
+        toast(frozen ? "Scoreboard unfrozen" : "Scoreboard frozen", {
+          variant: "success",
+        }),
+      onError: (e) =>
+        toast("Couldn't update the board", {
+          description: (e as Error).message,
+          variant: "destructive",
+        }),
+    });
+  }
 
   // Memoised so the flash-detection effect below only re-runs when the board
   // data actually changes, not on every render (the `?? []` would otherwise be
@@ -89,13 +111,35 @@ export default function ScoreboardPage() {
         subtitle={
           <>
             {competition?.name ?? ""} · {isTeam ? "team" : "individual"} mode
-            {live && (
-              <span className="ml-2 inline-flex items-center gap-1.5 text-primary">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
-                live
-              </span>
+            {frozen ? (
+              <Badge variant="secondary" className="ml-2 align-middle">
+                Frozen
+              </Badge>
+            ) : (
+              live && (
+                <span className="ml-2 inline-flex items-center gap-1.5 text-primary">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+                  live
+                </span>
+              )
             )}
           </>
+        }
+        actions={
+          canFreeze ? (
+            <Button
+              size="sm"
+              variant={frozen ? "default" : "outline"}
+              onClick={toggleFreeze}
+              disabled={freeze.isPending}
+            >
+              {freeze.isPending
+                ? "Saving…"
+                : frozen
+                  ? "Unfreeze board"
+                  : "Freeze board"}
+            </Button>
+          ) : undefined
         }
       />
 

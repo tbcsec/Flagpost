@@ -2,7 +2,7 @@
 
 // One hook module per domain (ARCHITECTURE.md §8). Scoreboard (Phase 7).
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { scoreboardApi } from "@/lib/api";
@@ -42,6 +42,8 @@ export function useScoreboard(competitionId: string) {
             competition_id: frame.competition_id,
             mode: frame.mode,
             entries: frame.entries,
+            frozen: frame.frozen,
+            frozen_at: frame.frozen_at,
           },
         );
       },
@@ -50,4 +52,18 @@ export function useScoreboard(competitionId: string) {
   }, [isAuthenticated, competitionId, queryClient]);
 
   return { ...query, socketStatus };
+}
+
+/** Freeze/unfreeze the public scoreboard (scoreboard_freeze). The response is
+ *  the fresh board, written straight into the cache. */
+export function useFreezeScoreboard(competitionId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (freeze: boolean) =>
+      freeze
+        ? scoreboardApi.freeze(competitionId)
+        : scoreboardApi.unfreeze(competitionId),
+    onSuccess: (board) =>
+      queryClient.setQueryData(scoreboardKeys.detail(competitionId), board),
+  });
 }

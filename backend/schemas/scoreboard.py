@@ -24,3 +24,13 @@ class ScoreboardOut(BaseModel):
     competition_id: str
     mode: str  # "team" | "individual"
     entries: list[ScoreboardEntry]
+    # Scoreboard freeze (§13): true when these standings are a frozen snapshot;
+    # frozen_at is the instant they stopped moving.
+    frozen: bool = False
+    frozen_at: datetime | None = None
+
+
+class FreezeRequest(BaseModel):
+    # When to freeze the board at. Omitted = now. A future time schedules the
+    # freeze (the board keeps moving until it's reached).
+    frozen_at: datetime | None = None

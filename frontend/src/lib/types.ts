@@ -569,6 +569,9 @@ export interface Scoreboard {
   competition_id: string;
   mode: ParticipationMode;
   entries: ScoreboardEntry[];
+  /** True when these standings are a frozen snapshot (§13 scoreboard freeze). */
+  frozen: boolean;
+  frozen_at: string | null;
 }
 
 /** A broadcast announcement (Phase 8). */

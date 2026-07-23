@@ -211,7 +211,8 @@ now that the automation engine exists to consume its trigger.
   `multiple_choice` with options) + `SurveyResponse` / `SurveyAnswer`. Full
   admin **editor** (build/reorder questions), competitor submission (one
   response per user/team per survey).
-- **Event + trigger.** Emit **`feedback.submitted`** (already in §3.2) — which,
+- **Event + trigger.** Emit **`survey.submitted`** (in §3.2; emitted as
+  `feedback.submitted` at Phase 4, renamed in Phase 9) — which,
   because Phase 1 landed, is now a live **automation trigger**, satisfying
   #22's "as well as a trigger" without extra wiring.
 - **CSV export** endpoint for responses (competition-scoped, permission-gated).
@@ -227,14 +228,15 @@ per-competition toggle surface with `automations`, and its routes 404 when
 disabled). Responses are **per-user** (feedback is an individual opinion — even
 in team mode), and a competition may hold **multiple** surveys. Three §7.1
 Feedback perms (`feedback_manage`/`feedback_view_responses`/`feedback_submit`);
-Judge gets all three, Participant gets `feedback_submit`. The `feedback.submitted`
-payload carries `survey_id`/`response_id` (added to the catalog's trigger
-fields). Frontend: a new gated **Feedback** nav item → `/feedback` with the
+Judge gets all three, Participant gets `feedback_submit`. The `survey.submitted`
+event (renamed from `feedback.submitted` in Phase 9 to join the `survey.*`
+namespace beside `survey.opened`) carries `survey_id`/`response_id` (added to the
+catalog's trigger fields). Frontend: a new gated **Feedback** nav item → `/feedback` with the
 staff survey builder (question CRUD + reorder + open/close), the competitor
 response form (rating chips / radio / text controls per type), a results dialog
 (rating histograms, choice tallies, text lists) and CSV download; `use-feedback.ts`.
 Verified live: built a 3-question survey, three competitors answered, the
-`feedback.submitted` rule notified a submitter, and results + CSV matched.
+`survey.submitted` rule notified a submitter, and results + CSV matched.
 
 **Post-Phase-4 automation glue (owner ask):** three additions wire feedback to
 automations end to end. (1) Marking a survey open now emits **`survey.opened`**

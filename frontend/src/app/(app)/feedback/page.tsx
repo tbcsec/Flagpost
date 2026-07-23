@@ -26,7 +26,7 @@ import { toast } from "@/stores/toast";
 
 // Feedback / surveys (ROADMAP #22). Staff (feedback_manage) build surveys and
 // read results; competitors (feedback_submit) answer open ones. The engine's
-// feedback.submitted trigger fires on submission (Phase 1).
+// survey.submitted trigger fires on submission (Phase 1).
 export default function FeedbackPage() {
   const { data: competition } = useActiveCompetition();
   const access = useAccess();

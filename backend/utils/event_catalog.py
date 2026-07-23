@@ -59,7 +59,7 @@ EVENT_TYPES: tuple[str, ...] = (
     "ticket.assigned",
     "ticket.resolved",
     "ticket.message_posted",
-    "feedback.submitted",
+    "survey.submitted",
     "survey.opened",
     "announcement.published",
     "site.settings_updated",

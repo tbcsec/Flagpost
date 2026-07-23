@@ -61,7 +61,7 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "team.created": ["competition_id", "team_id"],
     "team.member_joined": ["competition_id", "team_id", "user_id"],
     "announcement.published": ["competition_id"],
-    "feedback.submitted": ["competition_id", "user_id", "survey_id", "response_id"],
+    "survey.submitted": ["competition_id", "user_id", "survey_id", "response_id"],
     "survey.opened": ["competition_id", "survey_id", "title"],
     "user.registered": ["user_id"],
     "user.created": ["user_id", "email", "actor_user_id"],
@@ -108,7 +108,7 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     "ticket.assigned": "ticket_view",
     "ticket.resolved": "ticket_view",
     "ticket.message_posted": "ticket_view",
-    "feedback.submitted": "feedback_view_responses",
+    "survey.submitted": "feedback_view_responses",
     # Challenge authoring (draft/edit) is staff; play events are member-visible.
     "challenge.created": "challenge_edit",
     "challenge.updated": "challenge_edit",

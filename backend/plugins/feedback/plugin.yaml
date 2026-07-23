@@ -4,7 +4,7 @@ version: 1.0.0
 # The second optional module (§11.3, ROADMAP #22): not required-core, so it
 # carries the per-competition enable/disable toggle (competition_modules —
 # default ON). Every route 404s when disabled for the competition. Post-
-# competition surveys with a full editor; a submission emits feedback.submitted,
+# competition surveys with a full editor; a submission emits survey.submitted,
 # which the automation engine can trigger on.
 required_core: false
 provides:

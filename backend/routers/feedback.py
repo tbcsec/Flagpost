@@ -8,7 +8,7 @@ the competition. Three audiences, three permission gates:
   reorder, open/close.
 - **Staff read results** (``feedback_view_responses``): aggregates + CSV export.
 - **Competitors answer** (``feedback_submit``): list/read *open* surveys, submit
-  one response per user, emitting ``feedback.submitted`` — which, since the
+  one response per user, emitting ``survey.submitted`` — which, since the
   automation engine shipped (Phase 1), is a live trigger.
 
 Reads (list/detail) allow any of the three, so a view-only observer role works.
@@ -445,7 +445,7 @@ async def submit_response(
     await db.commit()
 
     await event_bus.emit(
-        "feedback.submitted",
+        "survey.submitted",
         {
             "competition_id": competition_id,
             "user_id": current_user.id,

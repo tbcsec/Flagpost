@@ -164,8 +164,9 @@ What's built:
   `SurveyResponse`/`SurveyAnswer` (+ migration). Staff build/reorder/open
   surveys and read results + **CSV export** (`feedback_manage` /
   `feedback_view_responses`); competitors answer open ones once
-  (`feedback_submit`), emitting **`feedback.submitted`** (a live automation
-  trigger). Marking a survey open emits **`survey.opened`** (another trigger).
+  (`feedback_submit`), emitting **`survey.submitted`** (a live automation
+  trigger; renamed from `feedback.submitted` in Phase 9 to sit in the
+  `survey.*` namespace). Marking a survey open emits **`survey.opened`** (another trigger).
   New §7.1 Feedback perms (Judge gets all, Participant gets submit).
   Frontend: gated **Feedback** nav → `/feedback` (survey editor, response form,
   results dialog), `use-feedback.ts`.
@@ -432,6 +433,13 @@ What's built:
     clone, module toggle) intentionally skip it.
   - **Competition Settings "Scoring" tab → "Challenges"** (owner rename; better fits
     future settings).
+  - **Event rename `feedback.submitted` → `survey.submitted`** (§3.2): the
+    survey-submission event now sits in the `survey.*` namespace beside the
+    existing `survey.opened`, rather than the odd `feedback.*` outlier (challenge
+    ratings keep their own separate `challenge.rated`). Catalog-driven, so the
+    rule builder's trigger list updates automatically; touched the event +
+    automation catalogs, the `feedback` router emit, tests, and docs. No
+    migration — pre-release, no stored automation rules to remap.
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

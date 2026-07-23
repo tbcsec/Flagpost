@@ -135,7 +135,7 @@ role.created                 role.updated               role.deleted
 role.assigned                role.unassigned
 ticket.created               ticket.assigned            ticket.resolved
 ticket.message_posted
-feedback.submitted           survey.opened
+survey.submitted             survey.opened
 announcement.published
 site.settings_updated
 score.adjusted               achievement.awarded

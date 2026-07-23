@@ -1,6 +1,6 @@
 """Feedback / surveys (Tier 3 Phase 4, ROADMAP #22): survey + question CRUD
 RBAC, question types, the one-response-per-user invariant, module gating, the
-feedback.submitted event (and that it triggers an automation rule), results
+survey.submitted event (and that it triggers an automation rule), results
 aggregation, and CSV export."""
 
 from sqlalchemy import select
@@ -258,7 +258,7 @@ async def test_cannot_submit_to_closed_survey(client):
 # --- event + automation trigger ----------------------------------------------
 
 
-async def test_submit_emits_feedback_submitted_and_triggers_a_rule(client):
+async def test_submit_emits_survey_submitted_and_triggers_a_rule(client):
     from utils.event_bus import event_bus
 
     comp = await _competition(client)
@@ -273,7 +273,7 @@ async def test_submit_emits_feedback_submitted_and_triggers_a_rule(client):
         f"/api/automations?competition_id={comp}",
         json={
             "name": "Thanks for the feedback",
-            "trigger_type": "feedback.submitted",
+            "trigger_type": "survey.submitted",
             "conditions": [],
             "actions": [{"type": "notify", "target": "event_user", "title": "Thanks for your feedback!"}],
         },
@@ -290,10 +290,10 @@ async def test_submit_emits_feedback_submitted_and_triggers_a_rule(client):
 
     async with SessionLocal() as session:
         events = (await session.scalars(select(AuditLogEntry.event_name))).all()
-    assert "feedback.submitted" in events
+    assert "survey.submitted" in events
 
     notifs = (await client.get("/api/notifications", headers=_auth(ada))).json()
-    assert [n["type"] for n in notifs] == ["feedback.submitted"]
+    assert [n["type"] for n in notifs] == ["survey.submitted"]
     assert notifs[0]["title"] == "Thanks for your feedback!"
 
 

@@ -1,8 +1,16 @@
 # ADR-0010: Seed a default administrator with default credentials
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-0017](0017-first-run-setup-wizard.md)
 **Date:** 2026-07-18
 **Architecture reference:** `ARCHITECTURE.md` §7.3 (supersedes ADR-0007)
+
+> **Superseded (2026-07-23).** The seeded default admin
+> (`admin@example.com` / `changeme`) is replaced by a **first-run setup wizard**
+> (ADR-0017): a fresh install ships with **no** admin and is unconfigured until an
+> operator creates the owner account through the wizard — no well-known
+> credentials ever exist. The role-seeding half of this ADR (system roles on
+> startup) still stands; only the user-seeding half is superseded. The test
+> suite still seeds `admin@example.com` directly in its fixtures.
 
 ## Context
 

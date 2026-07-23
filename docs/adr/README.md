@@ -50,3 +50,4 @@ Status is one of:
 | [0014](0014-crdt-transport-and-persistence.md) | CRDT transport as a dumb relay + client-snapshot persistence | Accepted |
 | [0015](0015-username-primary-optional-email.md) | Display name is the primary identifier; email is optional | Accepted |
 | [0016](0016-platform-export-import.md) | Platform export/import — registry-driven, additive backup | Accepted |
+| [0017](0017-first-run-setup-wizard.md) | First-run setup wizard (no seeded default admin) | Accepted |

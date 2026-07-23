@@ -49,6 +49,8 @@ import type {
   Role,
   BackupDocument,
   BackupImportResult,
+  SetupRequest,
+  SetupStatus,
   RoleAssignment,
   Scoreboard,
   SignedUrl,
@@ -212,6 +214,17 @@ async function extractError(res: Response): Promise<string> {
 }
 
 // --- Typed endpoint helpers (consumed only by hooks) ------------------------
+
+export const setupApi = {
+  // Public: drives the first-run wizard redirect.
+  status: () => apiFetch<SetupStatus>("/api/setup/status", {}, { auth: false }),
+  complete: (input: SetupRequest) =>
+    apiFetch<TokenResponse>(
+      "/api/setup",
+      { method: "POST", body: JSON.stringify(input) },
+      { auth: false },
+    ),
+};
 
 export const authApi = {
   register: (input: { display_name: string; password: string; email?: string }) =>

@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import get_current_user
 from auth.identity import display_name_taken, email_taken, find_by_identifier
+from auth.setup import instance_needs_setup
 from auth.security import (
     create_access_token,
     generate_refresh_token,
@@ -76,6 +77,14 @@ async def _issue_session(db: AsyncSession, user: User, response: Response) -> st
 async def register(
     body: RegisterRequest, response: Response, db: AsyncSession = Depends(get_db)
 ) -> TokenResponse:
+    # Before the first-run wizard completes there's no owner — no self-serve
+    # accounts until one exists (ADR-0017).
+    if await instance_needs_setup(db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This instance hasn't been set up yet.",
+        )
+
     # Site-wide registration policy (Admin → Site settings): when closed, only an
     # administrator can mint accounts (Admin → Users).
     site = await db.get(SiteSettings, SITE_SETTINGS_ID)

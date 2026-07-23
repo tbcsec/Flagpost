@@ -375,12 +375,19 @@ What's built:
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0012 (event-dispatch sync-critical vs background, supersedes
 ADR-0009), ADR-0013 (webhook egress hardening), ADR-0014 (CRDT transport —
-dumb relay + client snapshot), ADR-0010 (seeded default admin
-creds), ADR-0011 (site-wide theming only — per-competition deferred).
-The admin is a **seeded default account** (`admin@example.com` / `changeme`,
-ADR-0010, superseding the first-user bootstrap of ADR-0007); public
-registration never grants above Participant, and a loud startup warning
-fires while the default password is unchanged.
+dumb relay + client snapshot), ADR-0011 (site-wide theming only —
+per-competition deferred), ADR-0015 (username-primary identity, optional
+email), ADR-0016 (export/import backup), ADR-0017 (first-run setup wizard,
+supersedes the seeded admin of ADR-0010).
+There is **no seeded default admin** in production: a fresh install ships with
+**no** administrator and is *unconfigured* until an operator completes the
+**first-run setup wizard** (`/setup`, ADR-0017), which creates the owner account
+(no hard-coded creds) + initial branding. `auth.setup.instance_needs_setup`
+(no active Administrator ⇒ true) gates the wizard and blocks public registration
+until an owner exists; the frontend `SetupGuard` redirects to `/setup` while
+unconfigured. Public registration never grants above Participant. **The test
+suite still seeds `admin@example.com` / `changeme` in its fixtures** (conftest),
+so `admin_token` and existing tests are unaffected.
 
 **Tier 2 scope notes** (owner decisions, reflected in the plan): the
 challenge lifecycle (ROADMAP #17) is **deferred to a future tier**, and

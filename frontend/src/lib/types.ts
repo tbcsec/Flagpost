@@ -563,6 +563,19 @@ export interface OperationalSettings {
   updated_at: string | null;
 }
 
+/** First-run setup wizard (ADR-0017). */
+export interface SetupStatus {
+  needs_setup: boolean;
+}
+
+export interface SetupRequest {
+  admin: { display_name: string; password: string; email?: string };
+  platform_name: string;
+  default_palette: string;
+  accent: string;
+  registration_open: boolean;
+}
+
 /** A platform export document (Admin → Site settings → Export). Opaque data — the
  *  frontend only round-trips it back to the import endpoint. */
 export interface BackupDocument {

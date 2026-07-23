@@ -1,0 +1,10 @@
+id: setup
+name: First-run Setup
+version: 1.0.0
+# Required-core (§11.3): the first-run configuration wizard (ADR-0017). Public,
+# global (not competition-scoped), single-use — provisions the owner account +
+# initial branding on a fresh install.
+required_core: true
+provides:
+  routes: true
+  event_listeners: false

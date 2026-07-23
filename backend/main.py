@@ -11,12 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from auth.seed import (
-    DEFAULT_ADMIN_EMAIL,
-    admin_has_default_password,
-    seed_admin_user,
-    seed_system_roles,
-)
+from auth.seed import seed_system_roles
 from config import settings
 from db import SessionLocal
 from plugins.loader import load_modules
@@ -36,21 +31,14 @@ register_audit_log()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Install-time provisioning that needs the DB (tables come from the
-    migration the container runs before this): seed the default administrator
-    and warn loudly while it still has its default password (ADR-0010)."""
+    """Install-time provisioning that needs the DB (tables come from the migration
+    the container runs before this): re-sync the built-in roles to the current
+    permission catalog, so an install migrated before a permission was added still
+    grants it (§7.3). No admin is seeded — a fresh install is *unconfigured* until
+    an operator completes the first-run setup wizard, which creates the owner
+    account (ADR-0017, supersedes the seeded default admin of ADR-0010)."""
     async with SessionLocal() as session:
-        # Re-sync the built-in roles to the current permission catalog first, so
-        # an install migrated before a permission was added still grants it
-        # (§7.3). Then the admin user (its Administrator role now current).
         await seed_system_roles(session)
-        await seed_admin_user(session)
-        if await admin_has_default_password(session):
-            logger.warning(
-                "SECURITY: administrator '%s' is still using the DEFAULT "
-                "password. Change it now via POST /api/auth/change-password.",
-                DEFAULT_ADMIN_EMAIL,
-            )
     # Start the automation time-trigger scheduler (§5.2) — kernel wiring like the
     # audit-log consumer; the tick no-ops until a competition.time_remaining rule
     # exists. Not started under the test transport (no lifespan), so tests drive

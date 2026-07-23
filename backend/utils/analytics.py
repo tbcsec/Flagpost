@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from db import ensure_aware_utc
 from models.challenge import Category, Challenge
+from models.feedback import ChallengeRating
 from models.competition import Competition
 from models.hint import HintReveal
 from models.role import Role, RoleAssignment
@@ -120,6 +121,20 @@ async def challenge_analytics(
     ).all()
     tickets = {cid: count for cid, count in ticket_rows}
 
+    # Post-solve ratings (avg + count) per challenge — which challenges landed well.
+    rating_rows = (
+        await db.execute(
+            select(
+                ChallengeRating.challenge_id,
+                func.avg(ChallengeRating.rating),
+                func.count(ChallengeRating.id),
+            )
+            .where(ChallengeRating.competition_id == competition_id)
+            .group_by(ChallengeRating.challenge_id)
+        )
+    ).all()
+    ratings = {cid: (avg, count) for cid, avg, count in rating_rows}
+
     challenges = (
         await db.execute(
             select(
@@ -156,6 +171,10 @@ async def challenge_analytics(
                 ),
                 "hints_used": hints_used.get(cid, 0),
                 "ticket_count": tickets.get(cid, 0),
+                "avg_rating": (
+                    round(float(ratings[cid][0]), 2) if cid in ratings else None
+                ),
+                "rating_count": ratings.get(cid, (None, 0))[1],
             }
         )
     return result

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { SetupGuard } from "@/components/setup/setup-guard";
 import { ThemeApplier } from "@/components/theme/theme-applier";
+import { ConfirmProvider } from "@/components/ui/confirm";
 import { Toaster } from "@/components/ui/toaster";
 import { authApi } from "@/lib/api";
 
@@ -40,7 +41,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <SessionRestorer />
       <ThemeApplier />
       <SetupGuard />
-      {children}
+      <ConfirmProvider>{children}</ConfirmProvider>
       <Toaster />
     </QueryClientProvider>
   );

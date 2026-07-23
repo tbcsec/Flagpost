@@ -18,7 +18,7 @@ type Tab = SettingsSection | "modules";
 const TABS: { value: Tab; label: string }[] = [
   { value: "general", label: "General" },
   { value: "schedule", label: "Schedule" },
-  { value: "scoring", label: "Scoring" },
+  { value: "challenges", label: "Challenges" },
   { value: "modules", label: "Modules" },
 ];
 

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   useBackupSections,
@@ -60,6 +61,7 @@ export function BackupPanel() {
   const sections = useBackupSections();
   const exportBackup = useExportBackup();
   const importBackup = useImportBackup();
+  const confirm = useConfirm();
 
   const allSections = useMemo(() => sections.data ?? [], [sections.data]);
 
@@ -126,8 +128,18 @@ export function BackupPanel() {
     setImportSel(next);
   }
 
-  function onImport() {
+  async function onImport() {
     if (!file) return;
+    if (
+      !(await confirm({
+        title: "Import this backup?",
+        description: "New records from the selected sections are added to this platform. Existing data is never overwritten or deleted, but this can't be undone selectively.",
+        confirmLabel: "Import",
+        destructive: false,
+      }))
+    ) {
+      return;
+    }
     importBackup.mutate(
       { sections: [...importSel], payload: file },
       {

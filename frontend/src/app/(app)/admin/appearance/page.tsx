@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +36,7 @@ export default function AdminAppearancePage() {
   const { data, isLoading } = useSiteSettings();
   const update = useUpdateSiteSettings();
   const uploadLogo = useUploadLogo();
+  const confirm = useConfirm();
   const deleteLogo = useDeleteLogo();
   const paletteOverride = useAuthStore((s) => s.paletteOverride);
 
@@ -112,7 +114,16 @@ export default function AdminAppearancePage() {
     });
   }
 
-  function onRemoveLogo() {
+  async function onRemoveLogo() {
+    if (
+      !(await confirm({
+        title: "Remove the custom logo?",
+        description: "The built-in Flagpost mark will be shown instead.",
+        confirmLabel: "Remove logo",
+      }))
+    ) {
+      return;
+    }
     deleteLogo.mutate(undefined, {
       onSuccess: () => toast("Logo removed", { variant: "success" }),
       onError: (err) =>

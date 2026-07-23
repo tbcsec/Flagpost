@@ -273,6 +273,8 @@ export interface ChallengeAnalytics {
   avg_solve_time_seconds: number | null;
   hints_used: number;
   ticket_count: number;
+  avg_rating: number | null;
+  rating_count: number;
 }
 
 export interface ChallengeAnalyticsReport {

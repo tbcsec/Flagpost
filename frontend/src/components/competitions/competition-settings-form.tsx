@@ -19,7 +19,7 @@ import { toast } from "@/stores/toast";
 const toInput = (iso: string | null) => (iso ? iso.slice(0, 16) : "");
 const fromInput = (v: string) => (v ? new Date(`${v}Z`).toISOString() : null);
 
-export type SettingsSection = "general" | "schedule" | "scoring";
+export type SettingsSection = "general" | "schedule" | "challenges";
 
 // Feature component. Edits go through the domain hook; RBAC is enforced
 // server-side (a non-organiser's PATCH 403s, surfaced inline). One form + one
@@ -161,7 +161,7 @@ export function CompetitionSettingsForm({
         </div>
       )}
 
-      {section === "scoring" && (
+      {section === "challenges" && (
         <div className="max-w-xs space-y-2">
           <Label htmlFor="mc_guess_limit">Multiple-choice guess limit</Label>
           <Input

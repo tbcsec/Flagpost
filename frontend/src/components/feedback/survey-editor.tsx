@@ -9,6 +9,7 @@ import * as React from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm";
 import {
   Dialog,
   DialogContent,
@@ -70,6 +71,7 @@ export function SurveyEditorDialog({
   const addQuestion = useAddQuestion(competitionId, survey.id);
   const updateQuestion = useUpdateQuestion(competitionId, survey.id);
   const deleteQuestion = useDeleteQuestion(competitionId, survey.id);
+  const confirm = useConfirm();
   const reorder = useReorderQuestions(competitionId, survey.id);
 
   function saveDetails() {
@@ -163,7 +165,17 @@ export function SurveyEditorDialog({
                   <Button
                     size="sm"
                     variant="destructive"
-                    onClick={() => deleteQuestion.mutate(q.id)}
+                    onClick={async () => {
+                      if (
+                        await confirm({
+                          title: "Delete this question?",
+                          description: "The question and any answers to it are removed.",
+                          confirmLabel: "Delete",
+                        })
+                      ) {
+                        deleteQuestion.mutate(q.id);
+                      }
+                    }}
                   >
                     Delete
                   </Button>

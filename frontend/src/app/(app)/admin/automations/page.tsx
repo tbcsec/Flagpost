@@ -6,6 +6,7 @@ import { RuleBuilder } from "@/components/automations/rule-builder";
 import { SectionHeader } from "@/components/app/section-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { relativeTime } from "@/lib/datetime";
@@ -32,6 +33,19 @@ export default function AdminAutomationsPage() {
   const { data: rules, isLoading } = useAutomations(); // no competition → global
   const { toggle } = useToggleAutomation();
   const del = useDeleteAutomation();
+  const confirm = useConfirm();
+
+  async function onDelete(rule: { id: string; name: string }) {
+    if (
+      await confirm({
+        title: `Delete "${rule.name}"?`,
+        description: "This global automation rule will be removed and stop firing.",
+        confirmLabel: "Delete rule",
+      })
+    ) {
+      del.mutate(rule.id);
+    }
+  }
   const create = useCreateAutomation(); // undefined competition → global rule
   const update = useUpdateAutomation();
 
@@ -111,7 +125,7 @@ export default function AdminAutomationsPage() {
                   <Button size="sm" variant="outline" onClick={() => toggle(rule)}>
                     {rule.is_enabled ? "Disable" : "Enable"}
                   </Button>
-                  <Button size="sm" variant="destructive" onClick={() => del.mutate(rule.id)}>
+                  <Button size="sm" variant="destructive" onClick={() => onDelete(rule)}>
                     Delete
                   </Button>
                 </div>

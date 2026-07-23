@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm";
 import {
   Card,
   CardContent,
@@ -88,6 +89,7 @@ function MyTeamCard({
   team: NonNullable<ReturnType<typeof useMyTeam>["data"]>;
 }) {
   const leave = useLeaveTeam(competitionId);
+  const confirm = useConfirm();
 
   return (
     <Card>
@@ -120,11 +122,20 @@ function MyTeamCard({
         <div className="flex items-center gap-3">
           <Button
             variant="destructive"
-            onClick={() =>
+            onClick={async () => {
+              if (
+                !(await confirm({
+                  title: "Leave this team?",
+                  description: "You'll lose access to the team's shared progress. You can join or create another team while registration is open.",
+                  confirmLabel: "Leave team",
+                }))
+              ) {
+                return;
+              }
               leave.mutate(undefined, {
                 onSuccess: () => toast("Left team", { variant: "success" }),
-              })
-            }
+              });
+            }}
             disabled={leave.isPending}
           >
             {leave.isPending ? "Leaving…" : "Leave team"}

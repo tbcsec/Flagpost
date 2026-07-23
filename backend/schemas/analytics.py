@@ -18,6 +18,8 @@ class ChallengeAnalytics(BaseModel):
     avg_solve_time_seconds: float | None  # null when unsolved
     hints_used: int
     ticket_count: int
+    avg_rating: float | None  # null when the challenge has no ratings yet
+    rating_count: int
 
 
 class ChallengeAnalyticsOut(BaseModel):

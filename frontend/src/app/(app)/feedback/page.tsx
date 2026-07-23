@@ -9,6 +9,7 @@ import { SurveyResponseDialog } from "@/components/feedback/survey-response";
 import { SurveyResultsDialog } from "@/components/feedback/survey-results";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState, SurveyEmptyIcon } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -39,6 +40,7 @@ export default function FeedbackPage() {
   );
   const create = useCreateSurvey(competitionId ?? "");
   const del = useDeleteSurvey(competitionId ?? "");
+  const confirm = useConfirm();
 
   // Which survey (id) is open in each dialog, and the mode.
   const [editId, setEditId] = React.useState<string | null>(null);
@@ -107,7 +109,17 @@ export default function FeedbackPage() {
               onEdit={() => setEditId(s.id)}
               onRespond={() => setRespondId(s.id)}
               onResults={() => setResultsId(s.id)}
-              onDelete={() => del.mutate(s.id)}
+              onDelete={async () => {
+                if (
+                  await confirm({
+                    title: `Delete "${s.title}"?`,
+                    description: "The survey and all of its responses are permanently removed.",
+                    confirmLabel: "Delete survey",
+                  })
+                ) {
+                  del.mutate(s.id);
+                }
+              }}
             />
           ))}
         </div>

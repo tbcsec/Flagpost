@@ -71,6 +71,7 @@ export default function AnalyticsPage() {
                     <TableHead className="text-right">Attempts</TableHead>
                     <TableHead className="text-right">Hints</TableHead>
                     <TableHead className="text-right">Tickets</TableHead>
+                    <TableHead className="text-right">Rating</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -103,6 +104,16 @@ export default function AnalyticsPage() {
                       </TableCell>
                       <TableCell className="text-right font-mono">{c.hints_used}</TableCell>
                       <TableCell className="text-right font-mono">{c.ticket_count}</TableCell>
+                      <TableCell className="text-right font-mono">
+                        {c.avg_rating != null ? (
+                          <>
+                            <span className="text-primary">★</span> {c.avg_rating.toFixed(1)}
+                            <span className="text-muted-foreground"> ({c.rating_count})</span>
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                   {challenges.data.challenges.length === 0 && (

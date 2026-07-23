@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm";
 import { EntityCombobox } from "@/components/ui/entity-combobox";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
 import { useResetGuesses } from "@/lib/hooks/use-challenges";
@@ -23,6 +24,7 @@ export function ChallengeGuessesSection({
   const { data: competition } = useActiveCompetition();
   const teamMode = competition?.participation_mode === "team";
   const reset = useResetGuesses(competitionId, challengeId);
+  const confirm = useConfirm();
 
   const teams = useTeams(competitionId);
   const participants = useParticipants(competitionId, !teamMode);
@@ -43,7 +45,18 @@ export function ChallengeGuessesSection({
     });
   }
 
-  function resetEveryone() {
+  async function resetEveryone() {
+    if (
+      !(await confirm({
+        title: "Reset guesses for everyone?",
+        description:
+          "Every competitor gets a fresh set of guesses on this challenge. Their submission history is kept.",
+        confirmLabel: "Reset for everyone",
+        destructive: false,
+      }))
+    ) {
+      return;
+    }
     reset.mutate({}, {
       onSuccess: () => toast("Guesses reset for everyone", { variant: "success" }),
       onError: (e) => toast("Couldn't reset", { description: (e as Error).message, variant: "destructive" }),

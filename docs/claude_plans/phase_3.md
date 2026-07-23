@@ -722,6 +722,23 @@ Items (this list grows as the owner adds them):
     table.
   - *Tests.* Only solvers rate, out-of-range rejected, the toggle-off path 403s,
     re-rating updates (not duplicates), staff aggregate.
+- **Confirmation dialogs across the platform** ✅ — a reusable imperative
+  `useConfirm()` + `ConfirmProvider` (`components/ui/confirm.tsx`, mounted in
+  providers): `if (!(await confirm({...}))) return;` before a consequential action,
+  one consistent modal, no per-site boilerplate. Wired into everything with a
+  competition/platform consequence: **delete** challenge / category / attachment /
+  hint / role / automation rule / survey / survey-question / competition / user;
+  **ban** user; **unassign** role; **archive** competition; **unpublish** challenge;
+  **reset guesses for everyone**; **leave team**; **import** a backup. Restorative
+  actions (unban, unarchive, publish, targeted guess-reset) and personal/creative
+  ones (dashboard reset, clone, module toggle) intentionally skip the confirm.
+  Existing bespoke confirm dialogs (user delete) folded into `useConfirm`;
+  competition delete keeps its detailed dialog.
+- **Challenge ratings on Analytics** ✅ — the analytics challenges table gains
+  **avg-rating + count** columns (`challenge_analytics` joins `ChallengeRating`), so
+  "which challenges worked well" lives alongside solve/fail/hint/ticket stats.
+- **Settings "Scoring" tab renamed "Challenges"** ✅ (owner call — better umbrella for
+  future challenge settings).
 - **Competition Settings → tabs** ✅ — the growing settings page is organised into
   **General / Schedule / Scoring / Modules** tabs (new dependency-free `Tabs`
   primitive). One form + one Save across the non-module tabs; the form stays

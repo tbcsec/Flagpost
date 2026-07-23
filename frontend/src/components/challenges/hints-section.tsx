@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCreateHint, useDeleteHint, useHints } from "@/lib/hooks/use-hints";
@@ -20,7 +21,20 @@ export function HintsSection({
   const hints = useHints(competitionId, challengeId);
   const create = useCreateHint(competitionId, challengeId);
   const remove = useDeleteHint(competitionId, challengeId);
+  const confirm = useConfirm();
   const [body, setBody] = useState("");
+
+  async function onRemove(id: string) {
+    if (
+      await confirm({
+        title: "Delete hint?",
+        description: "This hint will be removed from the challenge.",
+        confirmLabel: "Delete",
+      })
+    ) {
+      remove.mutate(id);
+    }
+  }
   const [cost, setCost] = useState("0");
 
   function onAdd(e: React.FormEvent) {
@@ -56,7 +70,7 @@ export function HintsSection({
                 size="sm"
                 className="text-destructive"
                 disabled={remove.isPending}
-                onClick={() => remove.mutate(hint.id)}
+                onClick={() => onRemove(hint.id)}
               >
                 Remove
               </Button>

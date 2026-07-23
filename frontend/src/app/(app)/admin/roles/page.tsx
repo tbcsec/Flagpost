@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { SectionHeader } from "@/components/app/section-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -139,6 +140,7 @@ function RoleEditor({
   const catalog = useRoleCatalog();
   const update = useUpdateRole();
   const del = useDeleteRole();
+  const confirm = useConfirm();
 
   const [description, setDescription] = useState(role.description);
   const [perms, setPerms] = useState<Set<string>>(new Set(role.permissions));
@@ -173,7 +175,16 @@ function RoleEditor({
     );
   }
 
-  function onDelete() {
+  async function onDelete() {
+    if (
+      !(await confirm({
+        title: `Delete the ${role.name} role?`,
+        description: "The role and its permission set are removed. Users currently holding it lose those permissions.",
+        confirmLabel: "Delete role",
+      }))
+    ) {
+      return;
+    }
     del.mutate(role.id, {
       onSuccess: () => {
         toast("Role deleted");
@@ -326,6 +337,7 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
   const competitions = useCompetitions();
   const assign = useAssignRole();
   const unassign = useUnassignRole();
+  const confirm = useConfirm();
 
   const [email, setEmail] = useState("");
   const [roleId, setRoleId] = useState("");
@@ -408,12 +420,21 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
                 variant="ghost"
                 size="sm"
                 className="text-destructive"
-                onClick={() =>
+                onClick={async () => {
+                  if (
+                    !(await confirm({
+                      title: "Remove this role assignment?",
+                      description: `${a.user_display_name} will lose the ${a.role_name} role${a.competition_name ? ` on ${a.competition_name}` : " (site-wide)"}.`,
+                      confirmLabel: "Unassign",
+                    }))
+                  ) {
+                    return;
+                  }
                   unassign.mutate(a.id, {
                     onSuccess: () => toast("Unassigned"),
                     onError: (err) => toast("Couldn't unassign", { description: (err as Error).message, variant: "destructive" }),
-                  })
-                }
+                  });
+                }}
               >
                 Remove
               </Button>

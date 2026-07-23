@@ -7,14 +7,7 @@ import { UserFormDialog } from "@/components/admin/user-form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { useConfirm } from "@/components/ui/confirm";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -55,7 +48,7 @@ export default function AdminUsersPage() {
   const del = useDeleteUser();
 
   const [dialog, setDialog] = useState<{ mode: "create" } | { mode: "edit"; user: UserAccount } | null>(null);
-  const [deleting, setDeleting] = useState<UserAccount | null>(null);
+  const confirm = useConfirm();
 
   if (!access.ready) return <Skeleton className="h-64 w-full" />;
   if (!canView) {
@@ -67,7 +60,18 @@ export default function AdminUsersPage() {
     );
   }
 
-  function onBan(u: UserAccount) {
+  async function onBan(u: UserAccount) {
+    // Unbanning is restorative — only the ban needs a confirm.
+    if (
+      u.is_active &&
+      !(await confirm({
+        title: `Ban ${u.display_name}?`,
+        description: "They'll be signed out immediately and blocked from signing in until unbanned.",
+        confirmLabel: "Ban",
+      }))
+    ) {
+      return;
+    }
     ban.mutate(
       { id: u.id, banned: u.is_active },
       {
@@ -77,13 +81,18 @@ export default function AdminUsersPage() {
     );
   }
 
-  function confirmDelete() {
-    if (!deleting) return;
-    del.mutate(deleting.id, {
-      onSuccess: () => {
-        toast(`Deleted ${deleting.display_name}`, { variant: "success" });
-        setDeleting(null);
-      },
+  async function onDelete(u: UserAccount) {
+    if (
+      !(await confirm({
+        title: "Delete account?",
+        description: `This permanently removes ${u.display_name} and all of their data (submissions, tickets, team memberships…). This can't be undone — consider banning instead.`,
+        confirmLabel: "Delete account",
+      }))
+    ) {
+      return;
+    }
+    del.mutate(u.id, {
+      onSuccess: () => toast(`Deleted ${u.display_name}`, { variant: "success" }),
       onError: (e) => toast("Couldn't delete", { description: (e as Error).message, variant: "destructive" }),
     });
   }
@@ -169,8 +178,8 @@ export default function AdminUsersPage() {
                               variant="ghost"
                               size="sm"
                               className="text-destructive"
-                              disabled={isSelf}
-                              onClick={() => setDeleting(u)}
+                              disabled={isSelf || del.isPending}
+                              onClick={() => onDelete(u)}
                             >
                               Delete
                             </Button>
@@ -195,26 +204,6 @@ export default function AdminUsersPage() {
         />
       )}
 
-      <Dialog open={Boolean(deleting)} onOpenChange={(o) => !o && setDeleting(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete account?</DialogTitle>
-            <DialogDescription>
-              This permanently removes <span className="font-medium">{deleting?.display_name}</span> and all
-              of their data (submissions, tickets, team memberships…). This can&apos;t be undone —
-              consider banning instead.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleting(null)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={confirmDelete} disabled={del.isPending}>
-              {del.isPending ? "Deleting…" : "Delete account"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }

@@ -6,6 +6,7 @@ import { CreateCompetitionDialog } from "@/components/competitions/create-compet
 import { SectionHeader } from "@/components/app/section-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -40,11 +41,26 @@ import { toast } from "@/stores/toast";
 export default function AdminCompetitionsPage() {
   const { data: competitions, isLoading, isError, error } = useCompetitions();
   const archive = useArchiveCompetition();
+  const confirm = useConfirm();
   const [cloning, setCloning] = useState<Competition | null>(null);
   const [deleting, setDeleting] = useState<Competition | null>(null);
 
-  function onArchive(c: Competition) {
+  async function onArchive(c: Competition) {
     const archived = !c.archived_at;
+    // Archiving closes a competition out (hidden from the switcher/lobby);
+    // unarchiving is restorative, so only the archive needs a confirm.
+    if (
+      archived &&
+      !(await confirm({
+        title: `Archive ${c.name}?`,
+        description:
+          "It'll be hidden from the competition switcher and lobby. Its data is kept and you can unarchive it later.",
+        confirmLabel: "Archive",
+        destructive: false,
+      }))
+    ) {
+      return;
+    }
     archive.mutate(
       { id: c.id, archived },
       {

@@ -3,6 +3,7 @@
 import { useRef } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm";
 import { Label } from "@/components/ui/label";
 import {
   useAttachments,
@@ -31,6 +32,7 @@ export function AttachmentsSection({
   const upload = useUploadAttachment(competitionId, challengeId);
   const remove = useDeleteAttachment(competitionId, challengeId);
   const download = useDownloadAttachment(competitionId, challengeId);
+  const confirm = useConfirm();
   const fileInput = useRef<HTMLInputElement>(null);
 
   function onFileChosen(e: React.ChangeEvent<HTMLInputElement>) {
@@ -76,7 +78,17 @@ export function AttachmentsSection({
                   size="sm"
                   className="text-destructive"
                   disabled={remove.isPending}
-                  onClick={() => remove.mutate(attachment.id)}
+                  onClick={async () => {
+                    if (
+                      await confirm({
+                        title: "Remove attachment?",
+                        description: `"${attachment.filename}" will be deleted from this challenge.`,
+                        confirmLabel: "Remove",
+                      })
+                    ) {
+                      remove.mutate(attachment.id);
+                    }
+                  }}
                 >
                   Remove
                 </Button>

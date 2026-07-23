@@ -5,6 +5,7 @@ import { useId, useState } from "react";
 import { AttachmentsSection } from "@/components/challenges/attachments-section";
 import { ChallengeGuessesSection } from "@/components/challenges/challenge-guesses-section";
 import { HintsSection } from "@/components/challenges/hints-section";
+import { useConfirm } from "@/components/ui/confirm";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -127,7 +128,38 @@ function ChallengeRow({
   onEdit: () => void;
 }) {
   const stateMutation = useChallengeStateMutation(competitionId);
+  const confirm = useConfirm();
   const isPublished = challenge.state === "published";
+
+  async function onTogglePublish() {
+    if (
+      isPublished &&
+      !(await confirm({
+        title: "Unpublish challenge?",
+        description: `"${challenge.title}" will be hidden from competitors until you publish it again.`,
+        confirmLabel: "Unpublish",
+        destructive: false,
+      }))
+    ) {
+      return;
+    }
+    stateMutation.mutate({
+      challengeId: challenge.id,
+      action: isPublished ? "unpublish" : "publish",
+    });
+  }
+
+  async function onDelete() {
+    if (
+      await confirm({
+        title: "Delete challenge?",
+        description: `"${challenge.title}" and its attachments, hints, and solve history will be permanently removed. This can't be undone.`,
+        confirmLabel: "Delete",
+      })
+    ) {
+      stateMutation.mutate({ challengeId: challenge.id, action: "delete" });
+    }
+  }
 
   return (
     <TableRow>
@@ -143,12 +175,7 @@ function ChallengeRow({
           variant="ghost"
           size="sm"
           disabled={stateMutation.isPending || (!isPublished && !challenge.has_flag)}
-          onClick={() =>
-            stateMutation.mutate({
-              challengeId: challenge.id,
-              action: isPublished ? "unpublish" : "publish",
-            })
-          }
+          onClick={onTogglePublish}
         >
           {isPublished ? "Unpublish" : "Publish"}
         </Button>
@@ -157,12 +184,7 @@ function ChallengeRow({
           size="sm"
           className="text-destructive"
           disabled={stateMutation.isPending}
-          onClick={() =>
-            stateMutation.mutate({
-              challengeId: challenge.id,
-              action: "delete",
-            })
-          }
+          onClick={onDelete}
         >
           Delete
         </Button>
@@ -444,7 +466,20 @@ function CategoryManager({ competitionId }: { competitionId: string }) {
   const categories = useCategories(competitionId);
   const createCategory = useCreateCategory(competitionId);
   const deleteCategory = useDeleteCategory(competitionId);
+  const confirm = useConfirm();
   const [name, setName] = useState("");
+
+  async function onDeleteCategory(id: string, catName: string) {
+    if (
+      await confirm({
+        title: "Delete category?",
+        description: `"${catName}" will be removed. Its challenges aren't deleted — they become uncategorised.`,
+        confirmLabel: "Delete",
+      })
+    ) {
+      deleteCategory.mutate(id);
+    }
+  }
 
   return (
     <Card>
@@ -464,7 +499,7 @@ function CategoryManager({ competitionId }: { competitionId: string }) {
                 type="button"
                 aria-label={`Delete ${category.name}`}
                 className="text-muted-foreground hover:text-destructive"
-                onClick={() => deleteCategory.mutate(category.id)}
+                onClick={() => onDeleteCategory(category.id, category.name)}
               >
                 ×
               </button>

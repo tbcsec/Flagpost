@@ -415,7 +415,23 @@ What's built:
     carries the table; clone carries the flag. Frontend: `ChallengeRatingPrompt`
     (post-solve stars in the challenge dialog, gated on the flag + feedback module
     enabled), the settings toggle, and a **Challenge ratings** table on the Feedback
-    page (`ChallengeRatingsPanel`); `useSubmitRating`/`useChallengeRatings`.
+    page (`ChallengeRatingsPanel`); `useSubmitRating`/`useChallengeRatings`. Ratings
+    also surface on the **analytics** challenges table (avg + count columns, added to
+    `utils/analytics.challenge_analytics` + `ChallengeAnalytics`).
+  - **Reusable confirmation dialog + platform-wide wiring** — a `ConfirmProvider` +
+    imperative **`useConfirm()`** (`components/ui/confirm.tsx`, mounted in
+    `providers`): `if (!(await confirm({title, description?, confirmLabel?,
+    destructive?}))) return;` before a consequential action, one consistent modal, no
+    per-site boilerplate. Wired into every destructive/consequential action: delete
+    challenge / category / attachment / hint / role / automation rule / survey /
+    survey-question / competition (kept its bespoke dialog) / user; ban user;
+    unassign role; archive competition; unpublish challenge; reset guesses for
+    everyone; leave team; import backup. The two existing bespoke confirm dialogs
+    (user delete) migrated to `useConfirm`; restorative actions (unban, unarchive,
+    publish, targeted guess reset) and personal-pref/creative ones (dashboard reset,
+    clone, module toggle) intentionally skip it.
+  - **Competition Settings "Scoring" tab → "Challenges"** (owner rename; better fits
+    future settings).
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

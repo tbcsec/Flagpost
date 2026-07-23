@@ -6,6 +6,7 @@ import { RuleBuilder } from "@/components/automations/rule-builder";
 import { SectionHeader } from "@/components/app/section-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { relativeTime } from "@/lib/datetime";
@@ -298,6 +299,18 @@ function RuleCard({
   onToggle?: () => void;
   onDelete: () => void;
 }) {
+  const confirm = useConfirm();
+  async function onDeleteClick() {
+    if (
+      await confirm({
+        title: `Delete "${rule.name}"?`,
+        description: "This automation rule will be removed and stop firing.",
+        confirmLabel: "Delete rule",
+      })
+    ) {
+      onDelete();
+    }
+  }
   return (
     <Card>
       <CardContent className="flex flex-wrap items-center gap-3 p-4">
@@ -335,7 +348,7 @@ function RuleCard({
                 {rule.is_enabled ? "Disable" : "Enable"}
               </Button>
             )}
-            <Button size="sm" variant="destructive" onClick={onDelete}>
+            <Button size="sm" variant="destructive" onClick={onDeleteClick}>
               Delete
             </Button>
           </div>

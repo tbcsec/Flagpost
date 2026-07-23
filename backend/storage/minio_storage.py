@@ -49,6 +49,14 @@ class MinioStorage:
             content_type=content_type,
         )
 
+    def get(self, key: str) -> bytes:
+        response = self._client.get_object(self._bucket, key)
+        try:
+            return response.read()
+        finally:
+            response.close()
+            response.release_conn()
+
     def delete(self, key: str) -> None:
         self._client.remove_object(self._bucket, key)
 

@@ -490,6 +490,33 @@ Items (this list grows as the owner adds them):
   load with a non-default cached theme). Fixed with `suppressHydrationWarning` on
   the root `<html>` (`app/layout.tsx`) — the standard pattern for a pre-hydration
   theme script.
+- **Clone a competition** ✅ — an admin turns a configured "baseline" competition
+  into fresh near-identical ones. `POST /api/competitions/{id}/clone` (body
+  `{name}`, gated on `create_competition`) → `utils/competition_clone.py` deep-
+  copies the **config** into a new competition (regenerated ids, remapped
+  cross-references, new invite code, **schedule cleared**): settings
+  (description/mode/visibility), categories, challenges (incl. the stored flag,
+  so it still solves), hints, **file attachments** (the stored objects are
+  duplicated — added `ObjectStorage.get`), **feedback surveys + questions** (as a
+  closed template), and the per-competition **module on/off** state. Deliberately
+  **not** copied (clean slate): participants/teams/roles, submissions/scores/
+  adjustments/achievements, hint reveals, tickets, announcements, notifications,
+  survey *responses*, automation rules, audit log. Emits `competition.created`
+  (with `cloned_from`). Frontend: `competitionsApi.clone` + `useCloneCompetition`
+  + a **Clone** action per row on Admin → Competitions opening a **name-prompt**
+  dialog (pre-fills "`<name>` (copy)", editable — so no "Test / Test-1 / Test-2"
+  pile-up). Owner scope: attachments + surveys included, automation rules
+  excluded. Tests: backend +6 (`test_clone.py` — config+clean-slate, cloned flag
+  still solves, attachment object duplicated, surveys cloned closed, no
+  participants/solves carried, RBAC/404).
+- **Cleanup: flaky-suite hardening** ✅ — surfaced while adding clone tests (more
+  `competition.created` events). Fire-and-forget background handlers (ADR-0012 —
+  the automation engine) could outlive their test and run against the *next*
+  test's freshly-recreated schema, flaking unrelated automation/feedback tests
+  non-deterministically (identical code passed 293 one run, failed 21 another).
+  Fixed in the test harness: `conftest._create_schema` now drains
+  `event_bus.wait_for_background()` before `drop_all`, so no background task
+  leaks across the per-test schema boundary. Suite is deterministic again.
 - **Cleanup: nested `<form>` on the challenge editor** ✅ — `ChallengeForm`
   rendered `AttachmentsSection` + `HintsSection` (each with its own `<form>`)
   *inside* the challenge `<form>`, which is invalid HTML (a hydration warning).

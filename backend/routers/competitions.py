@@ -28,11 +28,15 @@ from db import get_db
 from models.competition import Competition
 from models.user import User
 from schemas.competition import (
+    CompetitionCloneRequest,
     CompetitionCreate,
     CompetitionJoinRequest,
     CompetitionOut,
     CompetitionUpdate,
 )
+from storage import get_storage
+from storage.base import ObjectStorage
+from utils.competition_clone import clone_competition
 from utils.event_bus import event_bus
 
 router = APIRouter(prefix="/api/competitions", tags=["competitions"])
@@ -167,6 +171,41 @@ async def create_competition(
         },
     )
     return competition
+
+
+@router.post(
+    "/{competition_id}/clone",
+    response_model=CompetitionOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def clone_competition_route(
+    competition_id: str,
+    body: CompetitionCloneRequest,
+    current_user: User = Depends(require_permission("create_competition")),
+    db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
+) -> Competition:
+    """Clone a competition's config into a fresh one (§`utils.competition_clone`).
+    Copies settings/categories/challenges/hints/attachments/surveys/module state;
+    never the run's live data. Same permission as creating one from scratch."""
+    source = await db.get(Competition, competition_id)
+    if source is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"
+        )
+    clone = await clone_competition(db, source, body.name, storage)
+    await db.commit()
+    await db.refresh(clone)
+    await event_bus.emit(
+        "competition.created",
+        {
+            "competition_id": clone.id,
+            "user_id": current_user.id,
+            "name": clone.name,
+            "cloned_from": source.id,
+        },
+    )
+    return clone
 
 
 @router.patch("/{competition_id}", response_model=CompetitionOut)

@@ -278,6 +278,15 @@ What's built:
     (`useUsers`/`useTeams`) and the automation rule-builder condition values for
     `team_id`/`*user_id` fields (`useTeams`/`useParticipants`, via a new optional
     `competitionId` prop on `RuleBuilder`; global rules keep the plain input).
+  - **Clone a competition**: `POST /api/competitions/{id}/clone` (`create_competition`)
+    → `utils/competition_clone.py` deep-copies config into a fresh competition
+    (new ids/invite code, schedule cleared): settings, categories, challenges
+    (incl. stored flag), hints, **attachments** (objects duplicated — added
+    `ObjectStorage.get`), **surveys+questions** (closed), module on/off state.
+    Clean slate: no participants/scores/tickets/automations/audit. Emits
+    `competition.created` (+`cloned_from`). Frontend: `useCloneCompetition` + a
+    Clone action + name-prompt dialog on Admin → Competitions. Owner scope:
+    attachments + surveys in, automation rules out.
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0012 (event-dispatch sync-critical vs background, supersedes

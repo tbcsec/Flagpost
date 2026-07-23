@@ -17,6 +17,10 @@ class ObjectStorage(Protocol):
         """Store ``data`` at ``key``, overwriting any existing object."""
         ...
 
+    def get(self, key: str) -> bytes:
+        """Read the object at ``key`` back as bytes (used to clone files)."""
+        ...
+
     def delete(self, key: str) -> None:
         """Remove the object at ``key`` (a no-op if it doesn't exist)."""
         ...

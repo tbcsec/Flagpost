@@ -82,6 +82,18 @@ export function useCreateCompetition() {
   });
 }
 
+export function useCloneCompetition() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      competitionsApi.clone(id, name),
+    onSuccess: (created: Competition) => {
+      queryClient.invalidateQueries({ queryKey: competitionKeys.all });
+      queryClient.setQueryData(competitionKeys.detail(created.id), created);
+    },
+  });
+}
+
 export function useUpdateCompetition(id: string) {
   const queryClient = useQueryClient();
   return useMutation({

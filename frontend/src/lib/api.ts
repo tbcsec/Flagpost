@@ -241,6 +241,12 @@ export const competitionsApi = {
       method: "PATCH",
       body: JSON.stringify(input),
     }),
+  // Clone a competition's config into a fresh one under a new name.
+  clone: (id: string, name: string) =>
+    apiFetch<Competition>(`/api/competitions/${id}/clone`, {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
   // Self-serve join for a public competition (from the lobby list).
   join: (id: string) =>
     apiFetch<Competition>(`/api/competitions/${id}/join`, { method: "POST" }),

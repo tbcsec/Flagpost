@@ -24,6 +24,7 @@ from auth.seed import (  # noqa: E402
 )
 from db import Base, SessionLocal, engine  # noqa: E402
 import models  # noqa: E402,F401  (populates Base.metadata)
+from utils.event_bus import event_bus  # noqa: E402
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -40,6 +41,10 @@ async def _create_schema():
         await seed_system_roles(session)
         await seed_admin_user(session)
     yield
+    # Drain any fire-and-forget background handlers (ADR-0012 — e.g. the
+    # automation engine on competition.created) *before* dropping the schema, so
+    # a leaked task never runs against the next test's fresh DB and flakes it.
+    await event_bus.wait_for_background()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
 

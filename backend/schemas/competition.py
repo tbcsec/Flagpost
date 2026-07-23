@@ -56,3 +56,9 @@ class CompetitionJoinRequest(BaseModel):
     """Join a competition by its invite code (any visibility)."""
 
     invite_code: str = Field(min_length=1, max_length=100)
+
+
+class CompetitionCloneRequest(BaseModel):
+    """Clone an existing competition's config under a new name."""
+
+    name: str = Field(min_length=1, max_length=200)

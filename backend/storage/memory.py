@@ -17,6 +17,9 @@ class InMemoryStorage:
     def put(self, key: str, data: bytes, content_type: str) -> None:
         self._objects[key] = (data, content_type)
 
+    def get(self, key: str) -> bytes:
+        return self._objects[key][0]
+
     def delete(self, key: str) -> None:
         self._objects.pop(key, None)
 

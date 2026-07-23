@@ -56,7 +56,7 @@ class AssignmentCreate(BaseModel):
 class AssignmentOut(BaseModel):
     id: str
     user_id: str
-    user_email: str
+    user_email: str | None
     user_display_name: str
     role_id: str
     role_name: str

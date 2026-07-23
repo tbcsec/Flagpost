@@ -25,13 +25,13 @@ export default function LoginPage() {
   const { data: settings } = useSiteSettings();
   const brand = settings ?? FALLBACK_SETTINGS;
   const platformName = brand.platform_name;
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     login.mutate(
-      { email, password },
+      { identifier, password },
       { onSuccess: () => router.push("/") },
     );
   }
@@ -55,13 +55,13 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="identifier">Username or email</Label>
               <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="identifier"
+                type="text"
+                autoComplete="username"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 required
               />
             </div>

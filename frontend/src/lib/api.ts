@@ -212,13 +212,14 @@ async function extractError(res: Response): Promise<string> {
 // --- Typed endpoint helpers (consumed only by hooks) ------------------------
 
 export const authApi = {
-  register: (input: { email: string; password: string; display_name: string }) =>
+  register: (input: { display_name: string; password: string; email?: string }) =>
     apiFetch<TokenResponse>(
       "/api/auth/register",
       { method: "POST", body: JSON.stringify(input) },
       { auth: false },
     ),
-  login: (input: { email: string; password: string }) =>
+  // `identifier` is the display name (username) or the email address.
+  login: (input: { identifier: string; password: string }) =>
     apiFetch<TokenResponse>(
       "/api/auth/login",
       { method: "POST", body: JSON.stringify(input) },
@@ -306,7 +307,7 @@ export const usersApi = {
   // manage_users — both Administrator-only among the built-ins.
   list: (q?: string) =>
     apiFetch<UserAccount[]>(`/api/users${q ? `?q=${encodeURIComponent(q)}` : ""}`),
-  create: (input: { email: string; display_name: string; password: string }) =>
+  create: (input: { display_name: string; password: string; email?: string }) =>
     apiFetch<UserAccount>("/api/users", { method: "POST", body: JSON.stringify(input) }),
   update: (
     id: string,

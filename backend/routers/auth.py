@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import get_current_user
+from auth.identity import display_name_taken, email_taken, find_by_identifier
 from auth.security import (
     create_access_token,
     generate_refresh_token,
@@ -84,8 +85,13 @@ async def register(
             detail="Registration is closed. Contact an administrator for an account.",
         )
 
-    existing = await db.scalar(select(User).where(User.email == body.email))
-    if existing is not None:
+    # Display name is the login identifier — must be unique (case-insensitively).
+    if await display_name_taken(db, body.display_name):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="That display name is already taken",
+        )
+    if body.email is not None and await email_taken(db, body.email):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Email already registered",
@@ -115,13 +121,15 @@ async def register(
 async def login(
     body: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)
 ) -> TokenResponse:
-    user = await db.scalar(select(User).where(User.email == body.email))
-    # Verify even when the user is missing to avoid leaking which emails exist
+    # The identifier is the display name (username) or the email, matched
+    # case-insensitively (§7.7).
+    user = await find_by_identifier(db, body.identifier)
+    # Verify even when the user is missing to avoid leaking which accounts exist
     # via timing; use a throwaway hash comparison shape.
     if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
+            detail="Invalid username or password",
         )
     if not user.is_active:
         # Same status as bad credentials would be friendlier for enumeration, but

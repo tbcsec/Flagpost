@@ -59,7 +59,7 @@ code.
 
 | Section | Status |
 | --- | --- |
-| Sign in / Register / brand lockup | **Wired** (existing auth hooks) |
+| Sign in / Register / brand lockup | **Wired** (existing auth hooks). Identity is **username-primary** (Tier 3 Phase 9, ADR-0015): the display name is the case-insensitive-unique login identifier and **email is optional**. Login field is "Username or email" (`identifier`); register/admin-create relabel the name field "Username" and make email optional. |
 | Topbar competition switcher | **Wired** (`useCompetitions`, active id in the auth store) |
 | Challenges — browse grid + category chips | **Wired** (`useChallenges`, `useCategories`) |
 | Challenges — detail dialog (title/points/category/description) | **Wired** (description rendered read-only via `richTextToPlain`) |

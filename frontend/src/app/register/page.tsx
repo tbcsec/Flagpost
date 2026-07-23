@@ -33,7 +33,8 @@ export default function RegisterPage() {
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     register.mutate(
-      { email, password, display_name: displayName },
+      // Email is optional — omit it when blank rather than sending "".
+      { display_name: displayName, password, email: email.trim() || undefined },
       { onSuccess: () => router.push("/") },
     );
   }
@@ -64,24 +65,30 @@ export default function RegisterPage() {
           ) : (
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="display_name">Display name</Label>
+              <Label htmlFor="display_name">Username</Label>
               <Input
                 id="display_name"
+                autoComplete="username"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 required
               />
+              <p className="text-xs text-muted-foreground">
+                How you&apos;ll sign in and appear to others. Must be unique.
+              </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">Email (optional)</Label>
               <Input
                 id="email"
                 type="email"
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                required
               />
+              <p className="text-xs text-muted-foreground">
+                Optional — you can also sign in with it.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>

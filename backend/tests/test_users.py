@@ -65,6 +65,33 @@ async def test_create_user_then_login(client):
     assert dup.status_code == 409
 
 
+async def test_admin_create_without_email_and_display_name_unique(client):
+    admin = await admin_token(client)
+    # Email is optional — an admin can mint an account with just a username.
+    resp = await client.post(
+        "/api/users",
+        json={"display_name": "Handle", "password": "s3cretpw!"},
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["email"] is None
+
+    # That user can sign in by username, and the display name is now taken
+    # (case-insensitively).
+    assert (
+        await client.post(
+            "/api/auth/login", json={"identifier": "handle", "password": "s3cretpw!"}
+        )
+    ).status_code == 200
+    clash = await client.post(
+        "/api/users",
+        json={"display_name": "HANDLE", "password": "s3cretpw!"},
+        headers=_auth(admin),
+    )
+    assert clash.status_code == 409
+    assert "display name" in clash.json()["detail"].lower()
+
+
 async def test_edit_user_including_password(client):
     admin = await admin_token(client)
     token = await _register(client, "edit@example.com", "password123")

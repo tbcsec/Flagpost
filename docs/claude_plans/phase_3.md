@@ -605,6 +605,30 @@ Items (this list grows as the owner adds them):
     page (app shell + the public auth screens). This is the controlled part of the
     rebrand: the logo/name/palette are the org's, but Flagpost stays credited.
 
+- **Username-primary identity, optional email** ✅ (ADR-0015) — email was a
+  required, sole login identifier; that's awkward for a CTF (competitors without
+  an email, organisers bulk-creating handles). Owner calls (via question): reuse
+  the **display name as the username** (not a separate field), **case-insensitive**.
+  - *Model / migration `c5d6e7f8a9b0`.* `User.email` → nullable (unique when
+    present; multiple NULLs OK on SQLite + Postgres). Display name gains a
+    **case-insensitive unique** functional index `lower(display_name)`.
+  - *Auth.* `auth/identity.py` centralises the case-insensitive lookups
+    (`find_by_identifier` — email then display name, deterministic;
+    `display_name_taken`/`email_taken`), shared by register + admin create/edit.
+    `LoginRequest.identifier` accepts the display name **or** email (with an `email`
+    JSON alias for back-compat). Register/admin-create enforce display-name
+    uniqueness (409) and only check email when supplied. Admin → Roles assign
+    resolves by **email or username** so email-less accounts stay assignable.
+    `UserOut`/`UserAccountOut`/`AssignmentOut.user_email` nullable.
+  - *Frontend.* Login field "Username or email" (`identifier`); register + admin
+    user dialog make email optional and relabel the name field "Username" with a
+    "must be unique" hint; `.email` render sites null-guarded (users table shows
+    "—", toasts/roles/actor-combobox use the display name). Edit can set/replace an
+    email but not clear one yet (blank = unchanged).
+  - *Tests.* New auth-flow + users tests (no-email register, login by username,
+    case-insensitive uniqueness + login, identifier alias); fixed-literal display
+    names in helpers made unique.
+
 ## Phase 10 — Accessibility, responsiveness & optimization pass (#28)
 
 Last, over finished surfaces — a polish pass, not a feature. (Was Phase 9;

@@ -6,7 +6,9 @@ export interface HelloResponse {
 
 export interface User {
   id: string;
-  email: string;
+  // Optional — the display name is the primary identifier; email is a secondary
+  // login handle a user may not have set.
+  email: string | null;
   display_name: string;
   created_at: string;
 }
@@ -394,7 +396,7 @@ export interface AdminOverview {
 /** An account in the admin user directory (Admin → Users, §7). */
 export interface UserAccount {
   id: string;
-  email: string;
+  email: string | null;
   display_name: string;
   is_active: boolean;
   is_administrator: boolean;
@@ -595,7 +597,7 @@ export interface PermissionEntry {
 export interface RoleAssignment {
   id: string;
   user_id: string;
-  user_email: string;
+  user_email: string | null;
   user_display_name: string;
   role_id: string;
   role_name: string;

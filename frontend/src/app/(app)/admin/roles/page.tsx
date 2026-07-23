@@ -361,8 +361,8 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
       <CardContent className="grid gap-5">
         <form className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end" onSubmit={onAssign}>
           <div className="grid gap-1.5">
-            <Label htmlFor="assign-email">User email</Label>
-            <Input id="assign-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <Label htmlFor="assign-email">User email or username</Label>
+            <Input id="assign-email" type="text" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="assign-role">Role</Label>
@@ -399,7 +399,7 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
           {assignments.data?.map((a) => (
             <div key={a.id} className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm">
               <div className="min-w-0">
-                <span className="font-medium">{a.user_email}</span>
+                <span className="font-medium">{a.user_display_name}</span>
                 <span className="text-muted-foreground">
                   {" "}· {a.role_name} · {a.competition_name ?? "site-wide"}
                 </span>

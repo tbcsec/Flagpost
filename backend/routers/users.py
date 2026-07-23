@@ -22,6 +22,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import require_permission
+from auth.identity import display_name_taken, email_taken
 from auth.security import hash_password
 from db import get_db, utcnow
 from models.role import Role, RoleAssignment
@@ -127,7 +128,11 @@ async def create_user(
     current_user: User = Depends(require_permission("manage_users")),
     db: AsyncSession = Depends(get_db),
 ) -> UserAccountOut:
-    if await db.scalar(select(User).where(User.email == body.email)):
+    if await display_name_taken(db, body.display_name):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="That display name is already taken"
+        )
+    if body.email is not None and await email_taken(db, body.email):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
         )
@@ -154,15 +159,17 @@ async def update_user(
 ) -> UserAccountOut:
     user = await _get_user_or_404(db, user_id)
     if body.email is not None and body.email != user.email:
-        clash = await db.scalar(
-            select(User).where(User.email == body.email, User.id != user.id)
-        )
-        if clash is not None:
+        if await email_taken(db, body.email, exclude_id=user.id):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
             )
         user.email = body.email
-    if body.display_name is not None:
+    if body.display_name is not None and body.display_name != user.display_name:
+        if await display_name_taken(db, body.display_name, exclude_id=user.id):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="That display name is already taken",
+            )
         user.display_name = body.display_name
     if body.password is not None:
         user.password_hash = hash_password(body.password)

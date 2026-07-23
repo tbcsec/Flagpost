@@ -81,7 +81,7 @@ export default function AdminUsersPage() {
     if (!deleting) return;
     del.mutate(deleting.id, {
       onSuccess: () => {
-        toast(`Deleted ${deleting.email}`, { variant: "success" });
+        toast(`Deleted ${deleting.display_name}`, { variant: "success" });
         setDeleting(null);
       },
       onError: (e) => toast("Couldn't delete", { description: (e as Error).message, variant: "destructive" }),
@@ -137,7 +137,7 @@ export default function AdminUsersPage() {
                         {u.display_name}
                         {isSelf && <span className="ml-2 text-xs text-primary">You</span>}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{u.email}</TableCell>
+                      <TableCell className="text-muted-foreground">{u.email ?? "—"}</TableCell>
                       <TableCell>
                         <Badge variant={u.is_administrator ? "success" : "outline"}>
                           {u.is_administrator ? "Administrator" : "User"}
@@ -200,7 +200,7 @@ export default function AdminUsersPage() {
           <DialogHeader>
             <DialogTitle>Delete account?</DialogTitle>
             <DialogDescription>
-              This permanently removes <span className="font-medium">{deleting?.email}</span> and all
+              This permanently removes <span className="font-medium">{deleting?.display_name}</span> and all
               of their data (submissions, tickets, team memberships…). This can&apos;t be undone —
               consider banning instead.
             </DialogDescription>

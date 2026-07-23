@@ -15,7 +15,7 @@ class UserAccountOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    email: EmailStr
+    email: EmailStr | None
     display_name: str
     is_active: bool
     # Holds the global Administrator role — the meaningful platform-wide role
@@ -25,9 +25,10 @@ class UserAccountOut(BaseModel):
 
 
 class UserCreate(BaseModel):
-    email: EmailStr
+    # Display name is the login identifier (username); email is optional.
     display_name: str = Field(min_length=1, max_length=120)
     password: str = Field(min_length=8, max_length=256)
+    email: EmailStr | None = None
 
 
 class UserUpdate(BaseModel):

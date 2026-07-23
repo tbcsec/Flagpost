@@ -14,7 +14,7 @@ hash is stored — the raw token lives solely in the client's httpOnly cookie.
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base, TimestampMixin
@@ -26,8 +26,13 @@ class User(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(
         String, primary_key=True, default=lambda: str(uuid4())
     )
-    email: Mapped[str] = mapped_column(
-        String, unique=True, index=True, nullable=False
+    # The **display name is the primary login identifier** (a username): required
+    # and case-insensitively unique (see the functional index below). Email is
+    # **optional** — a user may sign in with their display name *or* their email,
+    # so email is only a secondary handle. Unique-when-present (a UNIQUE column
+    # permits multiple NULLs on both SQLite and Postgres).
+    email: Mapped[str | None] = mapped_column(
+        String, unique=True, index=True, nullable=True
     )
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     display_name: Mapped[str] = mapped_column(String, nullable=False)
@@ -36,6 +41,13 @@ class User(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="1"
     )
+
+
+# Case-insensitive uniqueness for the login identifier: "Alice" and "alice" can't
+# both exist, and login can match either casing. A functional index (portable
+# across SQLite ≥3.9 and Postgres) rather than a plain UNIQUE, which would miss
+# case variants. Declared at module level so it binds to the ORM column element.
+Index("uq_users_display_name_lower", func.lower(User.display_name), unique=True)
 
 
 class RefreshSession(Base, TimestampMixin):

@@ -53,10 +53,10 @@ export function UserFormDialog({
     e.preventDefault();
     if (mode === "create") {
       create.mutate(
-        { email, display_name: displayName, password },
+        { display_name: displayName, password, email: email.trim() || undefined },
         {
           onSuccess: () => {
-            toast(`Created ${email}`, { variant: "success" });
+            toast(`Created ${displayName}`, { variant: "success" });
             onOpenChange(false);
           },
         },
@@ -66,7 +66,8 @@ export function UserFormDialog({
         {
           id: user.id,
           display_name: displayName,
-          email,
+          // Blank leaves the existing email unchanged (omitted, not cleared).
+          ...(email.trim() ? { email: email.trim() } : {}),
           ...(password ? { password } : {}),
         },
         {
@@ -92,22 +93,25 @@ export function UserFormDialog({
         </DialogHeader>
         <form className="grid gap-4" onSubmit={onSubmit}>
           <div className="grid gap-2">
-            <Label htmlFor="user-name">Display name</Label>
+            <Label htmlFor="user-name">Username</Label>
             <Input
               id="user-name"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               required
             />
+            <p className="text-xs text-muted-foreground">
+              The login identifier and display name — must be unique.
+            </p>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="user-email">Email</Label>
+            <Label htmlFor="user-email">Email (optional)</Label>
             <Input
               id="user-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              required
+              placeholder={mode === "edit" ? "Leave blank to keep unchanged" : ""}
             />
           </div>
           <div className="grid gap-2">

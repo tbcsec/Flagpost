@@ -11,7 +11,7 @@ from models.user import User
 
 
 async def _make_user(session, email="judge@example.com") -> str:
-    user = User(email=email, password_hash=hash_password("x" * 8), display_name="J")
+    user = User(email=email, password_hash=hash_password("x" * 8), display_name=email.split("@")[0])
     session.add(user)
     await session.flush()
     return user.id

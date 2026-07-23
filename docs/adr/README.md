@@ -48,3 +48,4 @@ Status is one of:
 | [0012](0012-event-dispatch-sync-critical-vs-background.md) | Event dispatch splits into sync-critical vs async-background handlers | Accepted |
 | [0013](0013-webhook-egress-hardening.md) | Webhook action egress policy — SSRF blocklist + value hardening | Accepted |
 | [0014](0014-crdt-transport-and-persistence.md) | CRDT transport as a dumb relay + client-snapshot persistence | Accepted |
+| [0015](0015-username-primary-optional-email.md) | Display name is the primary identifier; email is optional | Accepted |

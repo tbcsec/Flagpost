@@ -651,6 +651,16 @@ short-lived (e.g. 15 minutes) and paired with a longer-lived refresh
 token issued at login and stored as an httpOnly cookie, not
 `localStorage`, so it isn't readable by injected or third-party JS.
 
+**Identity: the display name is the primary login identifier** (a username),
+required and **case-insensitively unique** (a functional index on
+`lower(display_name)`). **Email is optional** — a secondary handle, unique when
+present. Local login accepts the **display name *or* the email** (matched
+case-insensitively; email first, then display name, so the match is
+deterministic). This keeps sign-up frictionless (no email required) and lets an
+account exist without one; assigning roles still works for email-less accounts
+because Admin → Roles resolves by display name or email (ADR-0015). SSO, when it
+ships, still plugs into the same session contract below.
+
 The same access token is reused for both transports rather than
 maintaining two auth schemes:
 

@@ -28,6 +28,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import require_permission
+from auth.identity import find_by_identifier
 from auth.permissions import PERMISSIONS, is_known
 from db import get_db
 from models.competition import Competition
@@ -264,10 +265,13 @@ async def assign_role(
     current_user: User = Depends(require_permission("manage_roles")),
     db: AsyncSession = Depends(get_db),
 ) -> AssignmentOut:
-    user = await db.scalar(select(User).where(User.email == body.email))
+    # Resolve by email *or* display name (username) so email-less accounts stay
+    # assignable now that email is optional.
+    user = await find_by_identifier(db, body.email)
     if user is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="No user with that email"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No user with that email or username",
         )
     role = await db.get(Role, body.role_id)
     if role is None:

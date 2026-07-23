@@ -2,17 +2,24 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, EmailStr, Field
 
 
 class RegisterRequest(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=8, max_length=256)
+    # Display name is the primary identifier (a username); email is optional.
     display_name: str = Field(min_length=1, max_length=120)
+    password: str = Field(min_length=8, max_length=256)
+    email: EmailStr | None = None
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    # Accepts the display name (username) *or* the email address. The ``email``
+    # JSON alias is kept for back-compat with older clients.
+    identifier: str = Field(
+        validation_alias=AliasChoices("identifier", "email"),
+        min_length=1,
+        max_length=320,
+    )
     password: str = Field(min_length=1, max_length=256)
 
 
@@ -25,7 +32,7 @@ class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    email: EmailStr
+    email: EmailStr | None
     display_name: str
     created_at: datetime
 

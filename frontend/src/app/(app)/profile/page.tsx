@@ -59,8 +59,14 @@ export default function ProfilePage() {
               <Input id="pdn" defaultValue={user?.display_name ?? ""} disabled />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="pem">Email</Label>
-              <Input id="pem" type="email" defaultValue={user?.email ?? ""} disabled />
+              <Label htmlFor="pem">Email (optional)</Label>
+              <Input
+                id="pem"
+                type="email"
+                defaultValue={user?.email ?? ""}
+                placeholder="No email set"
+                disabled
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="pcur">Current password</Label>

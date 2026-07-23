@@ -64,7 +64,7 @@ export default function AdminEventLogPage() {
   const userOptions = (users.data ?? []).map((u) => ({
     value: u.id,
     label: u.display_name,
-    hint: u.email,
+    hint: u.email ?? undefined,
   }));
 
   const competitionName = (id: string | null) =>

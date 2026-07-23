@@ -331,6 +331,22 @@ What's built:
     `PoweredByFooter`** ("Powered by Flagpost" → the GitHub repo, built-in mark) on
     every page (app shell + auth screens) keeps attribution even under a full
     rebrand. Reuses `site.settings_updated`; no new event.
+  - **Username-primary identity, optional email** (ADR-0015, extends §7.7): the
+    **display name is now the primary login identifier** (a username) — required and
+    **case-insensitively unique** (functional index `uq_users_display_name_lower` on
+    `lower(display_name)` + app-level check; migration `c5d6e7f8a9b0`) — and **email
+    is optional** (`User.email` nullable, unique-when-present; multiple NULLs OK on
+    both engines). Local login accepts the **display name *or* email**
+    (`LoginRequest.identifier`, with an `email` JSON alias for back-compat; matched
+    case-insensitively, email-then-name via `auth/identity.py`
+    `find_by_identifier`/`display_name_taken`/`email_taken`, shared by register +
+    admin create/edit). `UserOut`/`UserAccountOut`/`AssignmentOut.user_email` all
+    nullable; Admin → Roles assign resolves by **email or username** so email-less
+    accounts stay assignable. Frontend: login field "Username or email"
+    (`identifier`), register/admin-create email optional + display-name relabelled
+    "Username", `.email` render sites null-guarded. Two owner calls (via question):
+    reuse display name as the username (not a separate handle), case-insensitive.
+    No new event (reuses `user.registered`/`user.created`).
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

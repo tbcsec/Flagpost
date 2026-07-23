@@ -53,9 +53,47 @@ async def test_me_requires_authentication(client):
 
 
 async def test_duplicate_email_rejected(client):
-    await _register(client, "dup@example.com")
-    again = await _register(client, "dup@example.com")
+    await _register(client, "dup@example.com", name="First")
+    # Distinct display name, same email → the *email* uniqueness fires.
+    again = await _register(client, "dup@example.com", name="Second")
     assert again.status_code == 409
+    assert "email" in again.json()["detail"].lower()
+
+
+async def test_duplicate_display_name_rejected_case_insensitive(client):
+    assert (await _register(client, "a@example.com", name="Alice")).status_code == 201
+    # Different email, same display name in different case → rejected (the display
+    # name is the login identifier, unique case-insensitively).
+    clash = await _register(client, "b@example.com", name="alice")
+    assert clash.status_code == 409
+    assert "display name" in clash.json()["detail"].lower()
+
+
+async def test_register_without_email_then_login_by_username(client):
+    # Email is optional now — register with only a username + password.
+    resp = await client.post(
+        "/api/auth/register",
+        json={"display_name": "NoEmailNed", "password": "password123"},
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["user"]["email"] is None
+
+    # Log in by the display name (username).
+    login = await client.post(
+        "/api/auth/login",
+        json={"identifier": "NoEmailNed", "password": "password123"},
+    )
+    assert login.status_code == 200
+
+
+async def test_login_accepts_username_or_email_case_insensitively(client):
+    await _register(client, "casey@example.com", name="CaseY")
+    for identifier in ("CaseY", "casey", "CASEY@EXAMPLE.COM", "casey@example.com"):
+        resp = await client.post(
+            "/api/auth/login",
+            json={"identifier": identifier, "password": "password123"},
+        )
+        assert resp.status_code == 200, (identifier, resp.text)
 
 
 async def test_login_wrong_password_rejected(client):

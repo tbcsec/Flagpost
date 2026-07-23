@@ -10,7 +10,7 @@ def _auth(token: str) -> dict:
 async def _register(client, email) -> str:
     resp = await client.post(
         "/api/auth/register",
-        json={"email": email, "password": "password123", "display_name": "U"},
+        json={"email": email, "password": "password123", "display_name": email.split("@")[0]},
     )
     return resp.json()["access_token"]
 

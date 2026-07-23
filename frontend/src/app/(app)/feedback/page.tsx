@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
+import { ChallengeRatingsPanel } from "@/components/feedback/challenge-ratings-panel";
 import { SurveyEditorDialog } from "@/components/feedback/survey-editor";
 import { SurveyResponseDialog } from "@/components/feedback/survey-response";
 import { SurveyResultsDialog } from "@/components/feedback/survey-results";
@@ -109,6 +110,12 @@ export default function FeedbackPage() {
               onDelete={() => del.mutate(s.id)}
             />
           ))}
+        </div>
+      )}
+
+      {canViewResults && competitionId && !isError && (
+        <div className="mt-8">
+          <ChallengeRatingsPanel competitionId={competitionId} />
         </div>
       )}
 

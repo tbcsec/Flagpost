@@ -98,3 +98,19 @@ class SurveyResults(BaseModel):
     title: str
     response_count: int
     questions: list[QuestionResults]
+
+
+# --- Challenge ratings (Phase 9, feedback module extension) -------------------
+
+
+class ChallengeRatingRequest(BaseModel):
+    rating: int = Field(ge=1, le=5)
+
+
+class ChallengeRatingSummary(BaseModel):
+    """Aggregate ratings for one challenge (staff view)."""
+
+    challenge_id: str
+    title: str
+    average: float
+    count: int

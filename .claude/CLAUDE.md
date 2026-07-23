@@ -400,6 +400,22 @@ What's built:
     Carried by the generic backup. Frontend: `ChallengeGuessesSection` in the MC
     challenge editor (team/competitor picker + "Reset for selected" / "Reset for
     everyone"), `useResetGuesses`.
+  - **Challenge ratings** (§4.4 feedback extension) — solving a challenge prompts a
+    competitor for a **1–5 rating** so staff/challenge-devs see which challenges
+    landed well. Per-competition toggle `Competition.challenge_ratings_enabled`
+    (default off, in competition settings → Scoring) + migration `f8a9b0c1d2e3`;
+    `ChallengeRating` model (one per user per challenge, re-rating updates).
+    Owner call: an **extension of the feedback module** — routes
+    (`routers/challenge_ratings.py`, mounted by the feedback plugin) honour the
+    feedback module's per-competition toggle *and* the ratings flag. `POST
+    .../challenge-ratings/{chid}` (`feedback_submit`; must have **solved** it) +
+    `GET .../challenge-ratings` (`feedback_view_responses`; per-challenge avg+count).
+    `ChallengeOut.my_rating` drives the prompt (shows only when unrated). New §3.2
+    **`challenge.rated`** (a `feedback_view_responses`-governed trigger). Backup
+    carries the table; clone carries the flag. Frontend: `ChallengeRatingPrompt`
+    (post-solve stars in the challenge dialog, gated on the flag + feedback module
+    enabled), the settings toggle, and a **Challenge ratings** table on the Feedback
+    page (`ChallengeRatingsPanel`); `useSubmitRating`/`useChallengeRatings`.
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

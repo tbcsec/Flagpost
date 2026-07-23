@@ -40,6 +40,16 @@ export interface Competition {
   /** Competition-wide cap on guesses per subject per multiple-choice challenge
    *  (null = unlimited). */
   mc_guess_limit: number | null;
+  /** Whether solving a challenge prompts the competitor for a 1–5 rating. */
+  challenge_ratings_enabled: boolean;
+}
+
+/** Aggregate ratings for one challenge (staff — Feedback page). */
+export interface ChallengeRatingSummary {
+  challenge_id: string;
+  title: string;
+  average: number;
+  count: number;
 }
 
 /** Effective permissions for the current user (auth/me/permissions). The set
@@ -339,6 +349,7 @@ export interface CompetitionCreate {
   registration_opens_at?: string | null;
   registration_closes_at?: string | null;
   mc_guess_limit?: number | null;
+  challenge_ratings_enabled?: boolean;
 }
 
 export type CompetitionUpdate = Partial<CompetitionCreate>;
@@ -456,6 +467,8 @@ export interface Challenge {
   /** Guesses left for the subject on a multiple-choice challenge under the
    *  competition cap; null = no cap / not multiple-choice / already solved. */
   attempts_remaining: number | null;
+  /** The requesting user's own 1–5 rating, or null if unrated (post-solve prompt). */
+  my_rating: number | null;
   /** Whether the requesting subject (team or user) has solved this (§13.2). */
   solved: boolean;
   /** Number of distinct subjects that have solved this challenge. */

@@ -5,9 +5,32 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { feedbackApi } from "@/lib/api";
+import { feedbackApi, ratingsApi } from "@/lib/api";
 import type { QuestionInput } from "@/lib/types";
 import { useAuthStore } from "@/stores/auth";
+
+// --- Challenge ratings (Phase 9, feedback-module extension) ---
+
+/** Submit the current user's 1–5 rating of a solved challenge. Refreshes the
+ *  challenge list so `my_rating` updates (and the prompt won't reappear). */
+export function useSubmitRating(competitionId: string, challengeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (rating: number) => ratingsApi.rate(competitionId, challengeId, rating),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["challenges", competitionId] }),
+  });
+}
+
+/** Per-challenge rating aggregates (staff, Feedback page). */
+export function useChallengeRatings(competitionId: string, enabled = true) {
+  const authed = useAuthStore((s) => s.status === "authenticated");
+  return useQuery({
+    queryKey: ["challenge-ratings", competitionId],
+    queryFn: () => ratingsApi.summary(competitionId),
+    enabled: authed && enabled && Boolean(competitionId),
+  });
+}
 
 const feedbackKeys = {
   all: (competitionId: string) => ["surveys", competitionId] as const,

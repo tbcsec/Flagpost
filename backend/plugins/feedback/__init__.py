@@ -10,6 +10,8 @@ from __future__ import annotations
 
 
 def setup(app, event_bus, db_factory) -> None:
+    from routers.challenge_ratings import router as ratings_router
     from routers.feedback import router as feedback_router
 
     app.include_router(feedback_router)
+    app.include_router(ratings_router)

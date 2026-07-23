@@ -21,6 +21,7 @@ class CompetitionCreate(BaseModel):
     # Competition-wide cap on guesses per subject per multiple-choice challenge.
     # Defaults to 2; send an explicit null for unlimited.
     mc_guess_limit: int | None = Field(default=2, ge=1, le=1000)
+    challenge_ratings_enabled: bool = False
 
 
 class CompetitionUpdate(BaseModel):
@@ -37,6 +38,7 @@ class CompetitionUpdate(BaseModel):
     # Set to null to remove the cap. (exclude_unset means an omitted field is
     # left unchanged; an explicit null clears it.)
     mc_guess_limit: int | None = Field(default=None, ge=1, le=1000)
+    challenge_ratings_enabled: bool | None = None
 
 
 class CompetitionOut(BaseModel):
@@ -58,6 +60,7 @@ class CompetitionOut(BaseModel):
     created_at: datetime
     archived_at: datetime | None = None
     mc_guess_limit: int | None = None
+    challenge_ratings_enabled: bool = False
 
 
 class CompetitionJoinRequest(BaseModel):

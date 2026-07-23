@@ -39,7 +39,13 @@ from models.automation import Achievement, AutomationRule
 from models.challenge import Category, Challenge
 from models.competition import Competition, generate_invite_code
 from models.competition_module import CompetitionModule
-from models.feedback import Survey, SurveyAnswer, SurveyQuestion, SurveyResponse
+from models.feedback import (
+    ChallengeRating,
+    Survey,
+    SurveyAnswer,
+    SurveyQuestion,
+    SurveyResponse,
+)
 from models.hint import Hint, HintReveal
 from models.mc_guess_reset import MCGuessReset
 from models.role import Role, RoleAssignment
@@ -226,6 +232,9 @@ SPECS: tuple[Spec, ...] = (
     Spec("mc_guess_resets", MCGuessReset, "competitions",
          remaps=(_COMP, ("challenge_id", "challenge", True), ("user_id", "user", False),
                  ("team_id", "team", False), ("reset_by", "user", False)),
+         owned_by_competition=True),
+    Spec("challenge_ratings", ChallengeRating, "competitions",
+         remaps=(_COMP, ("challenge_id", "challenge", True), ("user_id", "user", True)),
          owned_by_competition=True),
     Spec("announcements", Announcement, "competitions",
          remaps=(_COMP, ("created_by", "user", False)), owned_by_competition=True),

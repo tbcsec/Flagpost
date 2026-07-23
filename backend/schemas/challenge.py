@@ -76,6 +76,9 @@ class ChallengeOut(BaseModel):
     # the competition-wide cap. Null = no limit (or not multiple-choice). Computed
     # on the detail read; left None on create/update/publish responses.
     attempts_remaining: int | None = None
+    # The requesting user's own 1–5 rating of this challenge, or null if they
+    # haven't rated it (drives the post-solve rating prompt). Only competitors rate.
+    my_rating: int | None = None
     # Solve state (Phase 6). ``solved`` is relative to the requesting subject —
     # the team (team-mode) or user (individual-mode); false for a viewer with no
     # subject (e.g. a manager not on a team). ``solve_count`` is the number of

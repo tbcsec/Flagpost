@@ -103,3 +103,26 @@ class SurveyAnswer(Base, CompetitionScopedMixin, TimestampMixin):
     )
     # The answer as text; interpreted per the question's type.
     value: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+
+class ChallengeRating(Base, CompetitionScopedMixin, TimestampMixin):
+    """A competitor's 1–5 rating of a challenge they solved (Phase 9). Part of the
+    feedback module; helps staff see which challenges landed well. One per user per
+    challenge (re-rating updates it). Gated by the competition's
+    ``challenge_ratings_enabled`` flag."""
+
+    __tablename__ = "challenge_ratings"
+    __table_args__ = (
+        UniqueConstraint("challenge_id", "user_id", name="uq_challenge_rating_user"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid4())
+    )
+    challenge_id: Mapped[str] = mapped_column(
+        ForeignKey("challenges.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)  # 1..5

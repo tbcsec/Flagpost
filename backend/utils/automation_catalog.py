@@ -36,6 +36,7 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "challenge.created": ["competition_id", "challenge_id", "user_id", "title"],
     "challenge.updated": ["competition_id", "challenge_id"],
     "challenge.guesses_reset": ["competition_id", "challenge_id", "user_id", "team_id"],
+    "challenge.rated": ["competition_id", "challenge_id", "user_id", "rating"],
     "challenge.hint_requested": [
         "competition_id", "challenge_id", "hint_id", "user_id", "team_id", "cost",
     ],
@@ -118,6 +119,7 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     # Member-visible events (published challenges, solves, scoreboard-facing).
     "challenge.published": "challenge_view",
     "challenge.solved": "challenge_view",
+    "challenge.rated": "feedback_view_responses",
     "challenge.hint_requested": "challenge_view",
     "hint.released": "challenge_view",
     "score.adjusted": "challenge_view",

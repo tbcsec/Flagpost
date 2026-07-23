@@ -43,6 +43,7 @@ export function CompetitionSettingsForm({
     registration_opens_at: toInput(competition.registration_opens_at),
     registration_closes_at: toInput(competition.registration_closes_at),
     mc_guess_limit: competition.mc_guess_limit ? String(competition.mc_guess_limit) : "",
+    challenge_ratings_enabled: competition.challenge_ratings_enabled,
   });
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
@@ -63,6 +64,7 @@ export function CompetitionSettingsForm({
         registration_closes_at: fromInput(form.registration_closes_at),
         // Blank clears the cap (null); a positive number sets it.
         mc_guess_limit: form.mc_guess_limit ? Number(form.mc_guess_limit) : null,
+        challenge_ratings_enabled: form.challenge_ratings_enabled,
       },
       { onSuccess: () => toast("Changes saved", { variant: "success" }) },
     );
@@ -175,6 +177,21 @@ export function CompetitionSettingsForm({
             Guesses each competitor (or team) gets per multiple-choice question, to
             curb brute-forcing. Blank = unlimited. Applies competition-wide.
           </p>
+          <label className="mt-2 flex items-center gap-2.5 text-sm">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-border"
+              style={{ accentColor: "hsl(var(--primary))" }}
+              checked={form.challenge_ratings_enabled}
+              onChange={(e) => set("challenge_ratings_enabled", e.target.checked)}
+            />
+            <span>
+              Ask competitors to rate a challenge (1–5) after solving it
+              <span className="ml-1 text-xs text-muted-foreground">
+                (needs the Feedback module; results on the Feedback page)
+              </span>
+            </span>
+          </label>
         </div>
       )}
 

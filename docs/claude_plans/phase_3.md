@@ -700,6 +700,28 @@ Items (this list grows as the owner adds them):
   carries the table. Frontend: `ChallengeGuessesSection` in the MC challenge editor
   (a team/competitor `EntityCombobox` + "Reset for selected" / "Reset for everyone").
   Tests: targeted + bulk reset restore the allotment, non-MC → 400, RBAC.
+- **Challenge ratings** ✅ (feedback-module extension) — solving a challenge prompts
+  the competitor for a **1–5 rating**, so admins/judges/challenge-devs can see which
+  challenges landed well. Owner call: build it **into the feedback module** (no
+  major reason not to).
+  - *Model / migration `f8a9b0c1d2e3`.* `ChallengeRating` (one per user per
+    challenge; re-rating updates). Per-competition toggle
+    `Competition.challenge_ratings_enabled` (default off, competition settings →
+    Scoring tab) so it can differ between events.
+  - *Routes* (`routers/challenge_ratings.py`, mounted by the feedback plugin) honour
+    the feedback module's per-competition toggle *and* the ratings flag. `POST
+    .../challenge-ratings/{chid}` (`feedback_submit`, must have **solved** the
+    challenge). `GET .../challenge-ratings` (`feedback_view_responses`) →
+    per-challenge avg + count, highest first. `ChallengeOut.my_rating` (the user's
+    own rating, computed) drives the prompt so it only shows when unrated. New
+    `challenge.rated` event.
+  - *Frontend.* `ChallengeRatingPrompt` — post-solve stars in the challenge dialog,
+    shown only when the flag is on *and* the feedback module is enabled (so a rating
+    won't 404). Settings toggle. `ChallengeRatingsPanel` — a "Challenge ratings"
+    table on the Feedback page (staff). Clone carries the flag; backup carries the
+    table.
+  - *Tests.* Only solvers rate, out-of-range rejected, the toggle-off path 403s,
+    re-rating updates (not duplicates), staff aggregate.
 - **Competition Settings → tabs** ✅ — the growing settings page is organised into
   **General / Schedule / Scoring / Modules** tabs (new dependency-free `Tabs`
   primitive). One form + one Save across the non-module tabs; the form stays

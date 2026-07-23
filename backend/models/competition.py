@@ -19,7 +19,7 @@ from datetime import datetime
 from secrets import token_urlsafe
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base, TimestampMixin, UtcDateTime
@@ -77,3 +77,8 @@ class Competition(Base, TimestampMixin):
     # challenges (static/regex are covered by the submission rate limiter). Not
     # scoped per-challenge by design (owner decision).
     mc_guess_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Whether solving a challenge prompts the competitor for a 1–5 rating (Phase 9,
+    # feedback module). Per-competition so it can be toggled between events.
+    challenge_ratings_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )

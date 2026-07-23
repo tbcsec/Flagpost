@@ -28,6 +28,7 @@ import { useMyTeam } from "@/lib/hooks/use-teams";
 import { usePresence } from "@/lib/hooks/use-presence";
 import { useAccess } from "@/lib/hooks/use-permissions";
 import { useCategories } from "@/lib/hooks/use-categories";
+import { ChallengeRatingPrompt } from "@/components/challenges/challenge-rating-prompt";
 import { useChallenges } from "@/lib/hooks/use-challenges";
 import { useSubmitFlag } from "@/lib/hooks/use-submissions";
 import { richTextToPlain } from "@/lib/rich-text";
@@ -254,9 +255,13 @@ function ChallengeDialogBody({
           <div className="font-mono text-sm text-muted-foreground">
             +{result.points_awarded} pts
           </div>
+          <ChallengeRatingPrompt competitionId={competitionId} challenge={challenge} />
         </div>
       ) : alreadySolved ? (
-        <p className="text-sm text-success">You&apos;ve solved this challenge.</p>
+        <div className="grid gap-3">
+          <p className="text-sm text-success">You&apos;ve solved this challenge.</p>
+          <ChallengeRatingPrompt competitionId={competitionId} challenge={challenge} />
+        </div>
       ) : outOfGuesses ? (
         <p className="text-sm text-destructive">
           You&apos;ve used all your guesses for this question.

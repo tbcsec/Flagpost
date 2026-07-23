@@ -24,6 +24,7 @@ from db import get_db
 from models.attachment import Attachment
 from models.challenge import Category, Challenge
 from models.competition import Competition
+from models.feedback import ChallengeRating
 from models.mc_guess_reset import MCGuessReset
 from models.submission import Submission
 from models.team import Team
@@ -187,9 +188,24 @@ async def list_challenges(
         if subject is not None and limit is not None
         else {}
     )
+    # The requesting user's own ratings (for the post-solve prompt), when enabled.
+    ratings: dict[str, int] = {}
+    if competition is not None and competition.challenge_ratings_enabled:
+        ratings = {
+            cid: r
+            for cid, r in (
+                await db.execute(
+                    select(ChallengeRating.challenge_id, ChallengeRating.rating).where(
+                        ChallengeRating.competition_id == competition_id,
+                        ChallengeRating.user_id == current_user.id,
+                    )
+                )
+            ).all()
+        }
     for challenge in challenges:
         challenge.solve_count = counts.get(challenge.id, 0)
         challenge.solved = challenge.id in solved
+        challenge.my_rating = ratings.get(challenge.id)
         if challenge.flag_type == "multiple_choice" and limit is not None:
             challenge.attempts_remaining = (
                 None
@@ -238,6 +254,13 @@ async def get_challenge(
     ):
         used = await subject_attempt_count(db, challenge_id, subject)
         challenge.attempts_remaining = max(0, limit - used)
+    if competition is not None and competition.challenge_ratings_enabled:
+        challenge.my_rating = await db.scalar(
+            select(ChallengeRating.rating).where(
+                ChallengeRating.challenge_id == challenge_id,
+                ChallengeRating.user_id == current_user.id,
+            )
+        )
     return challenge
 
 

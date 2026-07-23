@@ -49,6 +49,7 @@ import type {
   Role,
   BackupDocument,
   BackupImportResult,
+  ChallengeRatingSummary,
   SetupRequest,
   SetupStatus,
   RoleAssignment,
@@ -413,6 +414,21 @@ export const challengesApi = {
     apiFetch<void>(
       `/api/competitions/${competitionId}/challenges/${challengeId}/reset-guesses`,
       { method: "POST", body: JSON.stringify(target) },
+    ),
+};
+
+export const ratingsApi = {
+  // Rate a solved challenge 1–5 (competitor). Feedback module + the competition's
+  // challenge_ratings_enabled flag gate it server-side.
+  rate: (competitionId: string, challengeId: string, rating: number) =>
+    apiFetch<void>(
+      `/api/competitions/${competitionId}/challenge-ratings/${challengeId}`,
+      { method: "POST", body: JSON.stringify({ rating }) },
+    ),
+  // Per-challenge aggregates (staff).
+  summary: (competitionId: string) =>
+    apiFetch<ChallengeRatingSummary[]>(
+      `/api/competitions/${competitionId}/challenge-ratings`,
     ),
 };
 

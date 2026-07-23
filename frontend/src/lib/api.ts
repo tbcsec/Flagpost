@@ -39,6 +39,7 @@ import type {
   HelloResponse,
   Hint,
   HintAuthored,
+  AdminOverview,
   ModuleState,
   MyTeam,
   Participant,
@@ -311,6 +312,11 @@ export const usersApi = {
   unban: (id: string) =>
     apiFetch<UserAccount>(`/api/users/${id}/unban`, { method: "POST" }),
   remove: (id: string) => apiFetch<void>(`/api/users/${id}`, { method: "DELETE" }),
+};
+
+export const adminApi = {
+  // Site-admin overview: cross-competition totals + health (view_global_analytics).
+  overview: () => apiFetch<AdminOverview>("/api/admin/overview"),
 };
 
 export const modulesApi = {

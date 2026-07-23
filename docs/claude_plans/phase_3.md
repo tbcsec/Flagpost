@@ -531,6 +531,21 @@ Items (this list grows as the owner adds them):
   `useDeleteCompetition`, the wired admin page (archive toggle, delete confirm,
   Archived badge) + switcher/lobby filtering. Tests: backend +5
   (`test_competitions.py` — archive/unarchive+events, RBAC, delete+event, RBAC, 404).
+- **Admin → Dashboard (site overview)** ✅ — was a placeholder; now the real
+  cross-competition oversight view for a global admin. `GET /api/admin/overview`
+  (`routers/admin_overview.py`, mounted by the `dashboard` module) gated on
+  **`view_global_analytics`** — the §6.3 cross-competition permission that had no
+  consumer until now. Returns platform totals (accounts active/total, competitions
+  active/archived, teams, challenges published/total, submissions, solves) plus a
+  **per-competition health** row for every competition: derived status
+  (draft/scheduled/running/ended/archived — Python date math for SQLite/Postgres
+  parity), participants (teams or Participant-role users by mode), published
+  challenges, solves, open tickets. Pure read model, no migration. Frontend:
+  `use-admin-overview.ts` + the wired page (six total tiles + a health table with
+  status badges, open-ticket counts highlighted). The whole
+  `lib/placeholder-data.ts` file is **deleted** — its last consumers
+  (`MODULE_STATUS`, `DIRECTORY_USERS`, …) are all wired now. Tests: backend +3
+  (`test_admin_overview.py` — totals+health, status derivation incl. archived, RBAC).
 - **Branded favicon** ✅ — there was no favicon. Added `app/icon.svg` (Next.js
   auto-serves it as `<link rel="icon">`): the Flagpost mark — green flag on a
   light post — on a dark brand tile, matching the sidebar lockup.

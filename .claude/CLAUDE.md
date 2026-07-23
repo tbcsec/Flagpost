@@ -293,6 +293,12 @@ What's built:
     `DELETE /competitions/{id}` (`delete_competition`) hard-deletes the tenant tree
     behind a confirm. New §3.2 `competition.archived/unarchived/deleted` events.
     Frontend: `useArchiveCompetition`/`useDeleteCompetition` + wired Admin page.
+  - **Admin → Dashboard wired** (was placeholder): `GET /api/admin/overview`
+    (`routers/admin_overview.py`, dashboard module) gated on **`view_global_analytics`**
+    (§6.3 cross-competition read, first consumer) — platform totals + per-competition
+    health (derived status / participants / challenges / solves / open tickets).
+    Frontend `use-admin-overview.ts` + tiles & health table. `lib/placeholder-data.ts`
+    **deleted** (all consumers wired).
   - **Branded favicon**: `app/icon.svg` (Next.js auto-serves it) — the Flagpost
     mark on a dark brand tile.
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`

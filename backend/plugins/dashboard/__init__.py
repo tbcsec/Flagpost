@@ -10,6 +10,10 @@ from __future__ import annotations
 
 
 def setup(app, event_bus, db_factory) -> None:
+    from routers.admin_overview import router as admin_overview_router
     from routers.dashboard import router as dashboard_router
 
     app.include_router(dashboard_router)
+    # The site-wide admin overview (cross-competition, §6.3) — a global dashboard
+    # alongside the per-competition one.
+    app.include_router(admin_overview_router)

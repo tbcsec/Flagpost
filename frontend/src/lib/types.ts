@@ -362,6 +362,35 @@ export interface MyTeam {
   created_at: string;
 }
 
+/** Per-competition health row on the site-admin dashboard (§6.3). */
+export interface CompetitionHealth {
+  id: string;
+  name: string;
+  status: "draft" | "scheduled" | "running" | "ended" | "archived";
+  visibility: Visibility;
+  participation_mode: ParticipationMode;
+  participants: number;
+  published_challenges: number;
+  solves: number;
+  open_tickets: number;
+  created_at: string;
+}
+
+/** The site-admin overview: platform totals + per-competition health. */
+export interface AdminOverview {
+  total_users: number;
+  active_users: number;
+  total_competitions: number;
+  active_competitions: number;
+  archived_competitions: number;
+  total_teams: number;
+  total_challenges: number;
+  published_challenges: number;
+  total_submissions: number;
+  total_solves: number;
+  competitions: CompetitionHealth[];
+}
+
 /** An account in the admin user directory (Admin → Users, §7). */
 export interface UserAccount {
   id: string;

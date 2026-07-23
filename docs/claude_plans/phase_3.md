@@ -473,6 +473,17 @@ Items (this list grows as the owner adds them):
   a `UserFormDialog`; the `DIRECTORY_USERS` placeholder is removed. Tests: backend
   +7 (`test_users.py` — directory+search, RBAC, create+login, edit+password,
   ban-blocks-login-and-token+unban, self/last-admin guards, delete+guards).
+- **Name references instead of raw IDs** ✅ — admins/judges no longer paste long
+  team/user ids. A reusable `EntityCombobox` (`components/ui/entity-combobox.tsx`,
+  dependency-free filter-as-you-type dropdown that **displays a name but stores
+  the id**) replaces the raw-id inputs: the **event-log** filters (Admin → Event
+  log) — "Actor" from the global user directory (`useUsers`), "Team" from the
+  selected competition's teams (`useTeams`, enabled once a competition is picked);
+  and the **automation rule-builder condition values** — a `team_id` field →
+  team picker, a `*user_id` field → participant picker, scoped to the rule's
+  competition (a new optional `competitionId` prop threaded into `RuleBuilder`;
+  global rules keep the plain input). No backend change. `subject_id` (mode-
+  dependent) stays a plain input for now.
 - **Cleanup: React hydration warning** ✅ — the no-flash theme script rewrites
   `<html>`'s palette/mode/accent before hydration, so the SSR defaults never
   matched the client's first paint (a `data-palette` mismatch warning on every

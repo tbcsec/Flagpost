@@ -160,6 +160,7 @@ function OrgRules({
           open={creating}
           onOpenChange={setCreating}
           catalog={catalog}
+          competitionId={competitionId}
           personal={false}
           onSubmit={submitNew}
           saving={create.isPending}
@@ -170,6 +171,7 @@ function OrgRules({
           open={Boolean(editing)}
           onOpenChange={(o) => !o && setEditing(null)}
           catalog={catalog}
+          competitionId={competitionId}
           personal={false}
           initial={editing}
           onSubmit={submitEdit}
@@ -261,6 +263,7 @@ function PersonalRules({
           open={creating}
           onOpenChange={setCreating}
           catalog={catalog}
+          competitionId={competitionId}
           personal
           onSubmit={submitNew}
           saving={create.isPending}
@@ -271,6 +274,7 @@ function PersonalRules({
           open={Boolean(editing)}
           onOpenChange={(o) => !o && setEditing(null)}
           catalog={catalog}
+          competitionId={competitionId}
           personal
           initial={editing}
           onSubmit={submitEdit}

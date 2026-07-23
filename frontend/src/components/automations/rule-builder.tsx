@@ -15,9 +15,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { EntityCombobox } from "@/components/ui/entity-combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { useParticipants } from "@/lib/hooks/use-participants";
+import { useTeams } from "@/lib/hooks/use-teams";
 import {
   actionsFor,
   blankAction,
@@ -39,11 +42,20 @@ import { cn } from "@/lib/utils";
 const TEXTAREA_CLASS =
   "flex min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
+/** Which team/user picker (if any) a condition field maps to, so the value is
+ *  chosen by name rather than typed as an id. */
+function entityKind(field: string): "team" | "user" | null {
+  if (field === "team_id") return "team";
+  if (field.endsWith("user_id")) return "user"; // user_id, opener_user_id, …
+  return null;
+}
+
 export function RuleBuilder({
   open,
   onOpenChange,
   catalog,
   personal,
+  competitionId,
   initial,
   onSubmit,
   saving,
@@ -53,6 +65,9 @@ export function RuleBuilder({
   onOpenChange: (open: boolean) => void;
   catalog: AutomationCatalog;
   personal: boolean;
+  // When set, condition values for team_id/user_id fields become name pickers
+  // scoped to this competition. Absent (global rules) keeps the plain input.
+  competitionId?: string;
   initial?: AutomationRule;
   onSubmit: (input: AutomationRuleInput) => void;
   saving?: boolean;
@@ -69,6 +84,16 @@ export function RuleBuilder({
       setState(initial ? fromRule(initial, catalog) : blankRule(catalog, personal));
     }
   }, [open, initial, catalog, personal]);
+
+  // Name pickers for team_id/user_id condition values (only when scoped to a
+  // competition). Teams + the participant roster of that competition.
+  const teams = useTeams(competitionId ?? "");
+  const participants = useParticipants(competitionId ?? "", Boolean(competitionId));
+  const teamOptions = (teams.data ?? []).map((t) => ({ value: t.id, label: t.name }));
+  const userOptions = (participants.data ?? []).map((p) => ({
+    value: p.user_id,
+    label: p.display_name,
+  }));
 
   const availableActions = actionsFor(catalog, personal);
   const trigger = catalog.triggers.find((t) => t.event === state.trigger_type);
@@ -171,14 +196,31 @@ export function RuleBuilder({
                           </option>
                         ))}
                       </Select>
-                      {!op?.unary && (
-                        <Input
-                          value={c.value == null ? "" : String(c.value)}
-                          onChange={(e) => updateCondition(i, { value: e.target.value })}
-                          placeholder="value"
-                          className="h-9 w-36"
-                        />
-                      )}
+                      {!op?.unary &&
+                        (() => {
+                          const kind = competitionId ? entityKind(c.field) : null;
+                          if (kind) {
+                            return (
+                              <div className="w-44">
+                                <EntityCombobox
+                                  options={kind === "team" ? teamOptions : userOptions}
+                                  value={c.value == null ? "" : String(c.value)}
+                                  onChange={(v) => updateCondition(i, { value: v })}
+                                  placeholder={kind === "team" ? "Pick a team" : "Pick a user"}
+                                  emptyText={kind === "team" ? "No teams" : "No participants"}
+                                />
+                              </div>
+                            );
+                          }
+                          return (
+                            <Input
+                              value={c.value == null ? "" : String(c.value)}
+                              onChange={(e) => updateCondition(i, { value: e.target.value })}
+                              placeholder="value"
+                              className="h-9 w-36"
+                            />
+                          );
+                        })()}
                       <IconButton
                         label="Remove condition"
                         onClick={() =>

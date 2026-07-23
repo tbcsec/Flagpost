@@ -272,6 +272,12 @@ What's built:
     catalogs, `manage_users`-governed triggers). Frontend `usersApi` + `use-users`
     admin hooks + wired page (`UserFormDialog`, ban, delete-confirm, self-protected);
     `DIRECTORY_USERS` placeholder removed. Role *assignment* stays on Admin → Roles.
+  - **Name references over raw IDs**: reusable `EntityCombobox`
+    (`components/ui/entity-combobox.tsx`, dependency-free; shows a name, stores the
+    id) replaces raw team/user-id inputs — the event-log Actor/Team filters
+    (`useUsers`/`useTeams`) and the automation rule-builder condition values for
+    `team_id`/`*user_id` fields (`useTeams`/`useParticipants`, via a new optional
+    `competitionId` prop on `RuleBuilder`; global rules keep the plain input).
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0012 (event-dispatch sync-critical vs background, supersedes

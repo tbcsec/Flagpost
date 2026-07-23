@@ -6,6 +6,7 @@ import { SectionHeader } from "@/components/app/section-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { EntityCombobox } from "@/components/ui/entity-combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -20,6 +21,8 @@ import {
 import { parseServerDate } from "@/lib/datetime";
 import { useAuditEventNames, useAuditLog } from "@/lib/hooks/use-audit-log";
 import { useCompetitions } from "@/lib/hooks/use-competitions";
+import { useTeams } from "@/lib/hooks/use-teams";
+import { useUsers } from "@/lib/hooks/use-users";
 import type { AuditLogQuery } from "@/lib/types";
 
 const PAGE_SIZE = 25;
@@ -53,6 +56,16 @@ export default function AdminEventLogPage() {
   const eventNames = useAuditEventNames();
   const competitions = useCompetitions();
   const log = useAuditLog(applied);
+  // Name pickers for the id filters: teams are competition-scoped (only load
+  // once a competition is chosen); actors come from the global user directory.
+  const teams = useTeams(draft.competition_id);
+  const users = useUsers("");
+  const teamOptions = (teams.data ?? []).map((t) => ({ value: t.id, label: t.name }));
+  const userOptions = (users.data ?? []).map((u) => ({
+    value: u.id,
+    label: u.display_name,
+    hint: u.email,
+  }));
 
   const competitionName = (id: string | null) =>
     id ? (competitions.data?.find((c) => c.id === id)?.name ?? id) : "—";
@@ -136,12 +149,26 @@ export default function AdminEventLogPage() {
                 </Select>
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="f-team">Team ID</Label>
-                <Input id="f-team" value={draft.team_id} onChange={(e) => set("team_id", e.target.value)} />
+                <Label htmlFor="f-team">Team</Label>
+                <EntityCombobox
+                  id="f-team"
+                  options={teamOptions}
+                  value={draft.team_id}
+                  onChange={(v) => set("team_id", v)}
+                  disabled={!draft.competition_id}
+                  placeholder={draft.competition_id ? "Any team" : "Pick a competition first"}
+                  emptyText="No teams in this competition"
+                />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="f-user">Actor (user ID)</Label>
-                <Input id="f-user" value={draft.user_id} onChange={(e) => set("user_id", e.target.value)} />
+                <Label htmlFor="f-user">Actor</Label>
+                <EntityCombobox
+                  id="f-user"
+                  options={userOptions}
+                  value={draft.user_id}
+                  onChange={(v) => set("user_id", v)}
+                  placeholder="Any user"
+                />
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="f-since">From</Label>

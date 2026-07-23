@@ -42,6 +42,7 @@ import type {
   ModuleState,
   MyTeam,
   Participant,
+  UserAccount,
   Permissions,
   PermissionEntry,
   Role,
@@ -277,6 +278,27 @@ export const participantsApi = {
   // The individual-mode roster: Participant-role holders + their standing.
   list: (competitionId: string) =>
     apiFetch<Participant[]>(`/api/competitions/${competitionId}/participants`),
+};
+
+export const usersApi = {
+  // Admin user management (§7). Directory read is view_all_users; writes are
+  // manage_users — both Administrator-only among the built-ins.
+  list: (q?: string) =>
+    apiFetch<UserAccount[]>(`/api/users${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  create: (input: { email: string; display_name: string; password: string }) =>
+    apiFetch<UserAccount>("/api/users", { method: "POST", body: JSON.stringify(input) }),
+  update: (
+    id: string,
+    input: { display_name?: string; email?: string; password?: string },
+  ) =>
+    apiFetch<UserAccount>(`/api/users/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
+  ban: (id: string) => apiFetch<UserAccount>(`/api/users/${id}/ban`, { method: "POST" }),
+  unban: (id: string) =>
+    apiFetch<UserAccount>(`/api/users/${id}/unban`, { method: "POST" }),
+  remove: (id: string) => apiFetch<void>(`/api/users/${id}`, { method: "DELETE" }),
 };
 
 export const modulesApi = {

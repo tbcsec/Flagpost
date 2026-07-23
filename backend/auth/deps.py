@@ -48,6 +48,13 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User no longer exists",
         )
+    # A banned account's still-valid access token is rejected immediately, not
+    # just at next login (admin user management).
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="This account has been disabled",
+        )
     return user
 
 

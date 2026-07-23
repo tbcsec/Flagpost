@@ -59,6 +59,11 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "feedback.submitted": ["competition_id", "user_id", "survey_id", "response_id"],
     "survey.opened": ["competition_id", "survey_id", "title"],
     "user.registered": ["user_id"],
+    "user.created": ["user_id", "email", "actor_user_id"],
+    "user.updated": ["user_id", "actor_user_id"],
+    "user.banned": ["user_id", "actor_user_id"],
+    "user.unbanned": ["user_id", "actor_user_id"],
+    "user.deleted": ["user_id", "actor_user_id"],
 }
 
 # The permission that governs *observing* each trigger event (§5.1 trigger
@@ -77,6 +82,11 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     "role.unassigned": "manage_roles",
     "user.registered": "manage_users",
     "user.password_changed": "manage_users",
+    "user.created": "manage_users",
+    "user.updated": "manage_users",
+    "user.banned": "manage_users",
+    "user.unbanned": "manage_users",
+    "user.deleted": "manage_users",
     "site.settings_updated": "manage_site_settings",
     # Competition-lifecycle / staff events.
     "competition.created": "edit_competition",

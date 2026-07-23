@@ -1,0 +1,13 @@
+id: users
+name: Users Admin
+version: 1.0.0
+# Required-core (§11.3): auth/RBAC is kernel (§7), but the admin surface that
+# lists accounts and drives their lifecycle (create/edit/ban/delete) mounts
+# through the loader — the same split as the roles + audit-log modules (the
+# enforcement is kernel; the management router is a module).
+required_core: true
+provides:
+  routes: true
+  event_listeners: false
+dependencies:
+  - competitions

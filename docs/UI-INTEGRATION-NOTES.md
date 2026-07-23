@@ -82,6 +82,7 @@ code.
 | Presence indicators | **Wired** (Tier 2 Phase 3, §4.1) — WS presence with debounced clear: "N others viewing" on the challenge dialog (new presence-only `challenge` room) and "a judge is looking at this ticket" on the ticket thread (`usePresence` + `PresenceIndicator`) |
 | Admin → Appearance (site-wide theming) | **Wired** (Tier 2 Phase 4, §9) — platform name + palette + accent (preset or custom hex) with live preview, `manage_site_settings`-gated `site_settings` module; login/register/sidebar/tab-title brand from the public read (`use-site-settings`, `lib/theme.ts`) |
 | Admin → Roles (custom role editor) | **Wired** (Tier 2 Phase 5, §7.4) — `roles` module gated on `manage_roles`: list + permission catalog, create/clone/edit/delete custom roles, assign(by-email)/unassign; system roles read-only, last-admin guard (`use-roles`) |
+| Admin → Users (account directory + lifecycle) | **Wired** (Tier 3 Phase 9, §7) — `users` module: directory + search (`view_all_users`), create / edit(+password) / soft-ban / unban / hard-delete (`manage_users`). Ban = `User.is_active`, enforced at the auth dependency + login + refresh, revokes sessions; can't ban/delete yourself or the last admin. Role *assignment* stays on Admin → Roles (`use-users`, `UserFormDialog`) |
 | Notifications (topbar bell) | **Wired** (Tier 3 Phase 0, §4.4) — real per-user inbox: `notifications` required-core module, `/ws/user/<id>` live push, list/mark-read/read-all; ticket events routed like the audio cue (`use-notifications`). Per-user *preferences*/mute still unbuilt |
 | Automations (competition + admin) | **Wired** (Tier 3 Phases 1–3, §5) — the `automations` optional module + engine (nine §5.3 actions incl. `open_survey`, per-competition toggle, plus the time-based `competition.time_remaining` trigger via a scheduler) and the §5.5 **visual rule builder**: catalog-driven When→If→Then editor for competition + global rules, plus a personal notify-self section (`use-automations`, `rule-builder`) |
 | Feedback / surveys | **Wired** (Tier 3 Phase 4, #22) — the `feedback` optional module: staff survey builder (5 question types, reorder, open/close), competitor response form, results dialog (histograms/tallies/text) + CSV export; a submission emits `feedback.submitted`, a live automation trigger (`use-feedback`) |
@@ -98,9 +99,6 @@ a retrofit later; **none of the data is real**.
   shipped as a fixed layout made the drag-and-drop customization layer additive,
   exactly as intended (§10.2) — it's now built for the manager dashboard.
 - **Admin → Dashboard** (global stats / module health) — no aggregate endpoint.
-- **Admin → Users** — no user-directory / create / ban API. (Note: role
-  *assignment* is handled on Admin → Roles by email, so no directory is needed
-  for that.)
 - **Admin → Site settings** (SMTP / AI / integrations) — deferred; the theming
   half of this page is now real on Admin → Appearance (see the wired table).
   (Note: the automation `send_email` action does use SMTP config, but there's no

@@ -113,6 +113,13 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
+    if not user.is_active:
+        # Same status as bad credentials would be friendlier for enumeration, but
+        # a disabled user needs to know *why* they can't get in.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account has been disabled. Contact an administrator.",
+        )
     access_token = await _issue_session(db, user, response)
     return TokenResponse(access_token=access_token, user=UserOut.model_validate(user))
 
@@ -147,6 +154,14 @@ async def refresh(
     session.revoked_at = utcnow()
     user = await db.get(User, session.user_id)
     await db.commit()
+
+    if user is None or not user.is_active:
+        # A banned user's sessions are revoked at ban time; this is the belt to
+        # that suspenders in case a session survived.
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="This account has been disabled",
+        )
 
     access_token = await _issue_session(db, user, response)
     return TokenResponse(access_token=access_token, user=UserOut.model_validate(user))

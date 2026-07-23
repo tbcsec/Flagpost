@@ -262,6 +262,16 @@ What's built:
   - **Cleanup**: `suppressHydrationWarning` on the root `<html>` (`app/layout.tsx`)
     silences the no-flash theme script's expected SSR-vs-client `data-palette`
     mismatch.
+  - **Admin → Users wired** (was placeholder): new `users` required-core module +
+    `routers/users.py` (`/api/users`) — directory/search (`view_all_users`),
+    create/edit(+password)/ban/unban/delete (`manage_users`). Soft-ban = new
+    `User.is_active` (+ migration) enforced at `get_current_user` (live token
+    rejected), login (403), refresh; ban + password-reset revoke refresh sessions.
+    Guards: can't ban/delete yourself or the last active Administrator. New §3.2
+    `user.created/updated/banned/unbanned/deleted` events (in the event + automation
+    catalogs, `manage_users`-governed triggers). Frontend `usersApi` + `use-users`
+    admin hooks + wired page (`UserFormDialog`, ban, delete-confirm, self-protected);
+    `DIRECTORY_USERS` placeholder removed. Role *assignment* stays on Admin → Roles.
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0012 (event-dispatch sync-critical vs background, supersedes

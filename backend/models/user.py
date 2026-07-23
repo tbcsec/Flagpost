@@ -14,7 +14,7 @@ hash is stored — the raw token lives solely in the client's httpOnly cookie.
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base, TimestampMixin
@@ -31,6 +31,11 @@ class User(Base, TimestampMixin):
     )
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     display_name: Mapped[str] = mapped_column(String, nullable=False)
+    # Soft-ban (admin user management): a banned account can't log in and its
+    # access is rejected at the auth dependency. Defaults active.
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="1"
+    )
 
 
 class RefreshSession(Base, TimestampMixin):

@@ -360,6 +360,16 @@ export interface MyTeam {
   created_at: string;
 }
 
+/** An account in the admin user directory (Admin → Users, §7). */
+export interface UserAccount {
+  id: string;
+  email: string;
+  display_name: string;
+  is_active: boolean;
+  is_administrator: boolean;
+  created_at: string;
+}
+
 /** A loaded module's per-competition state (Admin → Plugins, §11.3). */
 export interface ModuleState {
   id: string;

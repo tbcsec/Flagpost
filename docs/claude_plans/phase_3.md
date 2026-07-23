@@ -455,6 +455,24 @@ Items (this list grows as the owner adds them):
   toggle shares the `["modules", competitionId]` query key, so disabling a module
   removes its nav entry live. Tests: module-toggle test updated for the new shape
   + a core-module inventory assertion + `test_enabled_modules_endpoint_is_member_readable`.
+- **Admin → Users page** ✅ — was a placeholder; now the full account directory +
+  lifecycle. New `users` required-core module + `routers/users.py` (`/api/users`):
+  list/search (`view_all_users`), create, edit (incl. password reset), soft-ban/
+  unban, hard-delete (all `manage_users`). Soft-ban = new `User.is_active`
+  (+ migration) enforced at `auth/deps.get_current_user` (a banned user's live
+  access token is rejected), at login (403), and at refresh; a ban + a password
+  reset both **revoke the user's refresh sessions**. Two lockout guards (mirroring
+  the roles router): can't ban/delete **yourself** or the **last active
+  Administrator**. New §3.2 events `user.created/updated/banned/unbanned/deleted`
+  (added to the event catalog *and* the automation catalog — they're admin-only
+  automation triggers governed by `manage_users`, keeping the drift test green).
+  The directory shows the platform-wide distinction only (holds the global
+  Administrator role or not); per-competition role assignment stays on Admin →
+  Roles. Frontend: `usersApi` + admin hooks in `use-users.ts`, a wired page
+  (search / create+edit dialogs / ban / delete-confirm, self-row protected), and
+  a `UserFormDialog`; the `DIRECTORY_USERS` placeholder is removed. Tests: backend
+  +7 (`test_users.py` — directory+search, RBAC, create+login, edit+password,
+  ban-blocks-login-and-token+unban, self/last-admin guards, delete+guards).
 - **Cleanup: React hydration warning** ✅ — the no-flash theme script rewrites
   `<html>`'s palette/mode/accent before hydration, so the SSR defaults never
   matched the client's first paint (a `data-palette` mismatch warning on every

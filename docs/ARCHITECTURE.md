@@ -128,6 +128,8 @@ challenge.deleted           challenge.solved           challenge.hint_requested
 hint.released
 category.created            category.deleted
 user.registered              user.password_changed
+user.created                 user.updated               user.banned
+user.unbanned                user.deleted
 role.created                 role.updated               role.deleted
 role.assigned                role.unassigned
 ticket.created               ticket.assigned            ticket.resolved

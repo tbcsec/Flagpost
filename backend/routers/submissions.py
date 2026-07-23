@@ -25,7 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth.deps import require_permission
+from auth.deps import require_permission, user_has_permission
 from config import settings
 from db import get_db
 from models.challenge import Challenge
@@ -86,6 +86,17 @@ async def submit_flag(
         )
 
     competition = await db.get(Competition, competition_id)
+
+    # Paused competition (§13.2): gameplay is halted — competitors can't submit.
+    # Staff (challenge_edit) bypass so they can still test while paused.
+    if competition.paused and not await user_has_permission(
+        db, current_user.id, "challenge_edit", competition_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The competition is paused — submissions are closed",
+        )
+
     subject = await resolve_subject(db, competition, current_user)
     if subject is None:
         # Team-mode competitor who hasn't joined a team — nothing to credit.

@@ -32,6 +32,8 @@ class CompetitionCreate(BaseModel):
     brackets: list[str] = Field(default_factory=list, max_length=20)
     # Max members per team (team-mode); null = unlimited.
     max_team_size: int | None = Field(default=None, ge=1, le=1000)
+    # Halt gameplay (competitors can't submit flags); staff still can.
+    paused: bool = False
 
 
 class CompetitionUpdate(BaseModel):
@@ -55,6 +57,7 @@ class CompetitionUpdate(BaseModel):
     ctftime_enabled: bool | None = None
     brackets: list[str] | None = Field(default=None, max_length=20)
     max_team_size: int | None = Field(default=None, ge=1, le=1000)
+    paused: bool | None = None
 
 
 class CompetitionOut(BaseModel):
@@ -83,6 +86,7 @@ class CompetitionOut(BaseModel):
     ctftime_enabled: bool = False
     brackets: list[str] = Field(default_factory=list)
     max_team_size: int | None = None
+    paused: bool = False
 
     @field_validator("challenge_tags", "difficulty_tiers", "brackets", mode="before")
     @classmethod

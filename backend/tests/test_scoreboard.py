@@ -266,7 +266,7 @@ async def test_ctftime_feed_opt_in(client):
 # --- brackets / divisions (Phase 9, Group C) ---------------------------------
 
 
-async def test_bracket_self_select_and_scoreboard_filter(client):
+async def test_staff_assign_brackets_and_scoreboard_filter(client):
     admin = await admin_token(client)
     comp = (await client.post("/api/competitions", json={"name": "Div CTF", "participation_mode": "individual", "brackets": ["Students", "Open"]}, headers=_auth(admin))).json()["id"]
     c1 = await _published_challenge(client, comp, "flag{a}", 100)
@@ -281,10 +281,13 @@ async def test_bracket_self_select_and_scoreboard_filter(client):
             s.add(RoleAssignment(user_id=uid, competition_id=comp, role_id=role.id))
             await s.commit()
 
-    # Each picks a bracket; an off-vocab one is rejected.
-    assert (await client.put(f"/api/competitions/{comp}/bracket", json={"bracket": "Students"}, headers=_auth(ada))).status_code == 200
-    assert (await client.put(f"/api/competitions/{comp}/bracket", json={"bracket": "Open"}, headers=_auth(bob))).status_code == 200
-    assert (await client.put(f"/api/competitions/{comp}/bracket", json={"bracket": "Nope"}, headers=_auth(ada))).status_code == 400
+    # Staff assign each subject's division; an off-vocab one is rejected.
+    assert (await client.put(f"/api/competitions/{comp}/bracket/{ada_id}", json={"bracket": "Students"}, headers=_auth(admin))).status_code == 200
+    assert (await client.put(f"/api/competitions/{comp}/bracket/{bob_id}", json={"bracket": "Open"}, headers=_auth(admin))).status_code == 200
+    assert (await client.put(f"/api/competitions/{comp}/bracket/{ada_id}", json={"bracket": "Nope"}, headers=_auth(admin))).status_code == 400
+
+    # A competitor can't assign their own bracket (no self-select anymore).
+    assert (await client.put(f"/api/competitions/{comp}/bracket/{ada_id}", json={"bracket": "Open"}, headers=_auth(ada))).status_code == 403
 
     await _submit(client, comp, c1, ada, "flag{a}")
     await _submit(client, comp, c1, bob, "flag{a}")

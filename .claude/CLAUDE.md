@@ -642,6 +642,19 @@ What's built:
       `user.password_changed`. Frontend: a "Forgot password?" link on login →
       standalone `/forgot-password` (request) + `/reset-password` (set) pages
       (`useForgotPassword`/`useResetPassword`), both outside the app shell.
+    - **Pause competition + brackets are staff-assigned** (owner follow-ups):
+      - **Pause** (`Competition.paused`, migration `0b1c2d3e4f5a`) — a General-tab
+        toggle that halts gameplay: `submit_flag` 403s for competitors while paused
+        (staff with `challenge_edit` bypass, to test). Distinct from a scoreboard
+        freeze (which only stops the board updating). No new event (set via the
+        existing competition `PATCH` → `competition.updated`). Frontend: a paused
+        banner on the challenges page + a paused note replacing the submit form.
+      - **Brackets are now staff-assigned, not self-select** — removed the
+        competitor `GET/PUT .../bracket` self endpoints; `PUT .../bracket/{subject_id}`
+        is regated `team_view_all` → **`edit_competition`** (admin/judge,
+        competition-scoped). Frontend: dropped the "Your division" competitor picker
+        for an **inline per-row division `<select>`** on the scoreboard (staff only,
+        `useSetSubjectBracket`); the Division filter stays for everyone.
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

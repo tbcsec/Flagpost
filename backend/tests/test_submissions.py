@@ -584,3 +584,42 @@ async def test_solve_state_appears_in_challenge_list(client):
     assert by_id[solved_chal]["solve_count"] == 1
     assert by_id[other_chal]["solved"] is False
     assert by_id[other_chal]["solve_count"] == 0
+
+
+# --- pause competition (Phase 9) ---------------------------------------------
+
+
+async def test_paused_competition_blocks_competitor_submissions(client):
+    comp = await _make_competition(client, mode="individual")
+    chal = await _make_published_challenge(client, comp, flag="flag{p}", points=100)
+    admin = await admin_token(client)
+    player, pid = await _register(client, "ada@example.com")
+    await _assign_participant(pid, comp)
+
+    # Pause the competition.
+    await client.patch(f"/api/competitions/{comp}", json={"paused": True}, headers=_auth(admin))
+
+    # A competitor's submission is refused while paused.
+    blocked = await client.post(
+        f"/api/competitions/{comp}/challenges/{chal}/submit",
+        json={"flag": "flag{p}"},
+        headers=_auth(player),
+    )
+    assert blocked.status_code == 403
+
+    # Staff (challenge_edit) can still submit to test.
+    ok = await client.post(
+        f"/api/competitions/{comp}/challenges/{chal}/submit",
+        json={"flag": "flag{p}"},
+        headers=_auth(admin),
+    )
+    assert ok.status_code == 200
+
+    # Resuming re-opens submissions.
+    await client.patch(f"/api/competitions/{comp}", json={"paused": False}, headers=_auth(admin))
+    resumed = await client.post(
+        f"/api/competitions/{comp}/challenges/{chal}/submit",
+        json={"flag": "flag{p}"},
+        headers=_auth(player),
+    )
+    assert resumed.status_code == 200

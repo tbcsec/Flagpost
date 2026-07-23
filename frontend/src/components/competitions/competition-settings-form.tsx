@@ -52,6 +52,7 @@ export function CompetitionSettingsForm({
     ctftime_enabled: competition.ctftime_enabled,
     brackets: competition.brackets ?? [],
     max_team_size: competition.max_team_size ? String(competition.max_team_size) : "",
+    paused: competition.paused,
   });
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
@@ -79,6 +80,7 @@ export function CompetitionSettingsForm({
         ctftime_enabled: form.ctftime_enabled,
         brackets: form.brackets,
         max_team_size: form.max_team_size ? Number(form.max_team_size) : null,
+        paused: form.paused,
       },
       { onSuccess: () => toast("Changes saved", { variant: "success" }) },
     );
@@ -131,6 +133,24 @@ export function CompetitionSettingsForm({
               </Select>
             </div>
           </div>
+
+          <label className="flex items-start gap-2.5 rounded-md border border-border bg-muted/30 p-3 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-border"
+              style={{ accentColor: "hsl(var(--warning))" }}
+              checked={form.paused}
+              onChange={(e) => set("paused", e.target.checked)}
+            />
+            <span>
+              <span className="font-medium">Pause competition</span>
+              <span className="ml-1 text-xs text-muted-foreground">
+                — halts gameplay: competitors can&apos;t submit flags (staff still
+                can, to test). Different from freezing the scoreboard, which only
+                stops the board from updating.
+              </span>
+            </span>
+          </label>
 
           <div className="space-y-3 border-t border-border pt-4">
             <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">

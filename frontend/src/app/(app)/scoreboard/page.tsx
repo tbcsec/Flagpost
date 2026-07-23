@@ -23,7 +23,7 @@ import { parseServerDate } from "@/lib/datetime";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
 import { useAccess } from "@/lib/hooks/use-permissions";
 import { useMyTeam } from "@/lib/hooks/use-teams";
-import { useMyBracket, useSetBracket } from "@/lib/hooks/use-brackets";
+import { useSetSubjectBracket } from "@/lib/hooks/use-brackets";
 import { useFreezeScoreboard, useScoreboard } from "@/lib/hooks/use-scoreboard";
 import { useAuthStore } from "@/stores/auth";
 import { toast } from "@/stores/toast";
@@ -64,8 +64,8 @@ export default function ScoreboardPage() {
   const frozen = board.data?.frozen ?? false;
   const brackets = board.data?.brackets ?? [];
   const [bracketFilter, setBracketFilter] = useState<string>("all");
-  const myBracket = useMyBracket(competitionId ?? "", brackets.length > 0);
-  const setBracket = useSetBracket(competitionId ?? "");
+  const canAssignBrackets = access.has("edit_competition");
+  const setSubjectBracket = useSetSubjectBracket(competitionId ?? "");
 
   async function toggleFreeze() {
     // Clarify the semantics: a freeze stops the *board* from moving publicly;
@@ -182,39 +182,24 @@ export default function ScoreboardPage() {
       )}
 
       {brackets.length > 0 && (
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Division</span>
-            <Select
-              value={bracketFilter}
-              onChange={(e) => setBracketFilter(e.target.value)}
-              className="h-8 w-auto"
-            >
-              <option value="all">All</option>
-              {brackets.map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
-              ))}
-            </Select>
-          </div>
-          {mySubjectId && (
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-muted-foreground">Your division</span>
-              <Select
-                value={myBracket.data?.bracket ?? ""}
-                onChange={(e) => setBracket.mutate(e.target.value || null)}
-                disabled={setBracket.isPending}
-                className="h-8 w-auto"
-              >
-                <option value="">—</option>
-                {brackets.map((b) => (
-                  <option key={b} value={b}>
-                    {b}
-                  </option>
-                ))}
-              </Select>
-            </div>
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground">Division</span>
+          <Select
+            value={bracketFilter}
+            onChange={(e) => setBracketFilter(e.target.value)}
+            className="h-8 w-auto"
+          >
+            <option value="all">All</option>
+            {brackets.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+          </Select>
+          {canAssignBrackets && (
+            <span className="text-xs text-muted-foreground">
+              — set each competitor&apos;s division in the table below
+            </span>
           )}
         </div>
       )}
@@ -301,7 +286,27 @@ export default function ScoreboardPage() {
                     </TableCell>
                     {brackets.length > 0 && bracketFilter === "all" && (
                       <TableCell className="text-xs text-muted-foreground">
-                        {e.bracket ?? "—"}
+                        {canAssignBrackets ? (
+                          <Select
+                            value={e.bracket ?? ""}
+                            onChange={(ev) =>
+                              setSubjectBracket.mutate({
+                                subjectId: e.subject_id,
+                                bracket: ev.target.value || null,
+                              })
+                            }
+                            className="h-7 w-auto py-0 text-xs"
+                          >
+                            <option value="">—</option>
+                            {brackets.map((b) => (
+                              <option key={b} value={b}>
+                                {b}
+                              </option>
+                            ))}
+                          </Select>
+                        ) : (
+                          (e.bracket ?? "—")
+                        )}
                       </TableCell>
                     )}
                     <TableCell className="font-mono">{e.points}</TableCell>

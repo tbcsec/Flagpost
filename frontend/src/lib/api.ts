@@ -533,14 +533,10 @@ export const scoreboardApi = {
 };
 
 export const bracketsApi = {
-  // The acting subject's chosen bracket (self-select).
-  mine: (competitionId: string) =>
+  // Staff assign a subject's (team or user) division (edit_competition).
+  setForSubject: (competitionId: string, subjectId: string, bracket: string | null) =>
     apiFetch<{ bracket: string | null }>(
-      `/api/competitions/${competitionId}/bracket`,
-    ),
-  set: (competitionId: string, bracket: string | null) =>
-    apiFetch<{ bracket: string | null }>(
-      `/api/competitions/${competitionId}/bracket`,
+      `/api/competitions/${competitionId}/bracket/${subjectId}`,
       { method: "PUT", body: JSON.stringify({ bracket }) },
     ),
 };

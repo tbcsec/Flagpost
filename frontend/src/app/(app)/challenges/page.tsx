@@ -94,6 +94,15 @@ export default function ChallengesPage() {
         }
       />
 
+      {competition?.paused && (
+        <div className="rounded-md border border-warning/40 bg-warning/10 px-4 py-2.5 text-sm">
+          <span className="font-medium">⏸ The competition is paused.</span>{" "}
+          {access.canManageActiveCompetition
+            ? "Submissions are closed for competitors — you can still submit to test."
+            : "Flag submissions are closed until the organisers resume it."}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
         {chips.map((chip) => (
           <button
@@ -234,6 +243,7 @@ export default function ChallengesPage() {
               challenge={open}
               categoryName={categoryName(open.category_id)}
               allChallenges={challenges.data ?? []}
+              paused={Boolean(competition?.paused) && !access.canManageActiveCompetition}
             />
           )}
         </DialogContent>
@@ -247,11 +257,13 @@ function ChallengeDialogBody({
   challenge,
   categoryName,
   allChallenges,
+  paused,
 }: {
   competitionId: string;
   challenge: Challenge;
   categoryName: string;
   allChallenges: Challenge[];
+  paused: boolean;
 }) {
   const [flag, setFlag] = useState("");
   const submit = useSubmitFlag(competitionId, challenge.id);
@@ -339,6 +351,10 @@ function ChallengeDialogBody({
       ) : outOfGuesses ? (
         <p className="text-sm text-destructive">
           You&apos;ve used all your guesses for this question.
+        </p>
+      ) : paused ? (
+        <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm">
+          ⏸ The competition is paused — submissions are closed.
         </p>
       ) : (
         <form className="grid gap-3" onSubmit={onSubmit}>

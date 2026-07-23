@@ -52,6 +52,8 @@ export interface Competition {
   brackets: string[];
   /** Max members per team (team-mode); null = unlimited. */
   max_team_size: number | null;
+  /** Paused = gameplay halted; competitors can't submit flags. */
+  paused: boolean;
 }
 
 /** Aggregate ratings for one challenge (staff — Feedback page). */
@@ -378,6 +380,7 @@ export interface CompetitionCreate {
   ctftime_enabled?: boolean;
   brackets?: string[];
   max_team_size?: number | null;
+  paused?: boolean;
 }
 
 export type CompetitionUpdate = Partial<CompetitionCreate>;

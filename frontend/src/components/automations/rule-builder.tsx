@@ -105,7 +105,7 @@ export function RuleBuilder({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] max-w-2xl overflow-y-auto">
+      <DialogContent className="max-h-[88vh] max-w-[52rem] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{initial ? "Edit rule" : personal ? "New personal rule" : "New rule"}</DialogTitle>
         </DialogHeader>

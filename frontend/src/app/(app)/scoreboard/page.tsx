@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState, TrophyEmptyIcon } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -108,14 +109,13 @@ export default function ScoreboardPage() {
       )}
 
       {board.data && entries.length === 0 && (
-        <Card>
-          <CardContent className="p-10 text-center">
-            <p className="text-sm text-muted-foreground">
-              No {isTeam ? "teams" : "participants"} yet — the board fills in as
-              people join.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={<TrophyEmptyIcon />}
+          title="No scores yet"
+          description={`The board fills in the moment ${
+            isTeam ? "a team" : "someone"
+          } lands a solve. First flag takes the top spot.`}
+        />
       )}
 
       {top.length > 0 && (

@@ -8,6 +8,7 @@ import { TicketThread } from "@/components/support/ticket-thread";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { EmptyState, TicketEmptyIcon } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
 import { useAccess } from "@/lib/hooks/use-permissions";
@@ -88,6 +89,18 @@ export default function SupportPage() {
 
       {tickets.isLoading && <Skeleton className="h-40 w-full" />}
 
+      {!tickets.isLoading && all.length === 0 ? (
+        <EmptyState
+          icon={<TicketEmptyIcon />}
+          title={isStaff ? "No tickets yet" : "Need a hand?"}
+          description={
+            isStaff
+              ? "When competitors open support tickets they'll appear here — you'll get a cue the moment one lands."
+              : "Stuck on a challenge or hit a snag? Open a ticket and staff will pick it up live."
+          }
+          action={!isStaff ? <NewTicketDialog competitionId={competitionId} /> : undefined}
+        />
+      ) : (
       <Card>
         <CardContent className="pt-5">
           <ul className="grid">
@@ -111,12 +124,13 @@ export default function SupportPage() {
             ))}
             {!tickets.isLoading && visible.length === 0 && (
               <li className="py-8 text-center text-sm text-muted-foreground">
-                {isStaff ? "No tickets match this filter." : "No tickets yet — open one if you're stuck."}
+                No {filter === "all" ? "" : `${filter} `}tickets match this filter.
               </li>
             )}
           </ul>
         </CardContent>
       </Card>
+      )}
 
       <Dialog open={!!openId} onOpenChange={(o) => !o && setOpenId(null)}>
         <DialogContent>

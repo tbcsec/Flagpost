@@ -3,6 +3,7 @@
 import { NewAnnouncementDialog } from "@/components/announcements/new-announcement-dialog";
 import { SectionHeader } from "@/components/app/section-header";
 import { DashboardGrid } from "@/components/dashboard/dashboard-grid";
+import { FirstRunGuide } from "@/components/dashboard/first-run-guide";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
 import { useAccess } from "@/lib/hooks/use-permissions";
@@ -38,6 +39,8 @@ export default function DashboardPage() {
         subtitle={`${competition?.name ?? ""} · ${isManager ? "operational overview" : "your dashboard"}`}
         actions={isManager ? <NewAnnouncementDialog competitionId={competitionId} /> : undefined}
       />
+
+      {isManager && <FirstRunGuide competitionId={competitionId} />}
 
       <DashboardGrid
         competitionId={competitionId}

@@ -46,7 +46,7 @@ export function CollabNote({ docKey }: { docKey: string }) {
       editorProps: {
         attributes: {
           class:
-            "min-h-24 rounded-b-md border border-t-0 border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none prose-sm max-w-none",
+            "min-h-32 rounded-b-md border border-t-0 border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none prose-sm max-w-none",
         },
       },
     },

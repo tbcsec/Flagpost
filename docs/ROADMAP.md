@@ -173,9 +173,10 @@ ADR-0013), and the §5.5 visual rule builder (Phase 3); **feedback/survey (#22)*
 (Phase 4, the second optional module + automation glue); **challenge & team
 analytics (#23)** (Phase 5, the third optional module); **dashboard
 drag-and-drop (#26)** (Phase 6, per-user layout customization on the Tier-2
-widget registry); and **collaborative rich-text / CRDT editing (#27)** (Phase 7,
-Y.js team scratchpad + staff ticket notes, ADR-0014). Remaining: onboarding
-(#24) and the a11y/optimization pass (#28).
+widget registry); **collaborative rich-text / CRDT editing (#27)** (Phase 7,
+Y.js team scratchpad + staff ticket notes, ADR-0014); and **onboarding / empty
+states (#24)** (Phase 8, guided first-run states + a manager getting-started
+guide). Remaining: the a11y/optimization pass (#28).
 
 Worth doing before a public/1.0 release, not worth doing before Tiers 1–2
 are solid.
@@ -189,7 +190,10 @@ are solid.
     surfacing it.
 24. **Onboarding / empty states** — first-run experience for a brand-new
     competition with no challenges yet, empty scoreboard states, etc. Easy
-    to skip, very noticeable when skipped.
+    to skip, very noticeable when skipped. *(Shipped — Tier 3 Phase 8:
+    reusable `EmptyState` + role-aware guided states across challenges /
+    scoreboard / support / feedback, and a manager "Getting started"
+    dashboard guide.)*
 25. **Full automation engine** (Architecture §5) — conditions/actions UI,
     webhook actions and their hardening, personal automation rules. The
     event bus built in Tier 0 is what makes this addable later without a

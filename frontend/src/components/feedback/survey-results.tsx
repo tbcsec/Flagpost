@@ -42,7 +42,7 @@ export function SurveyResultsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] max-w-2xl overflow-y-auto">
+      <DialogContent className="max-h-[88vh] max-w-[52rem] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             Results{data ? ` — ${data.title}` : ""}

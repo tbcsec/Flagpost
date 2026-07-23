@@ -31,8 +31,8 @@ file, don't ignore it.
 **Tier 0, Tier 1, and Tier 2 ("Makes It Good") are all complete — Tier 2 was
 built phase-by-phase per `docs/claude_plans/phase_2.md` (Phases 0–5 all
 shipped). Tier 3 is the current tier and is now scoped/planned in
-`docs/claude_plans/phase_3.md` (Phases 0–9; **Phases 0–7 shipped**, Phase 8 —
-onboarding / empty states — next).
+`docs/claude_plans/phase_3.md` (Phases 0–9; **Phases 0–8 shipped**, Phase 9 —
+accessibility / responsiveness / optimization pass — next, the final phase).
 An owner revision pulled three previously-deferred subsystems up into Tier 3 —
 the **full automation engine** (§5), **dashboard drag-and-drop** (§10), and
 **collaborative rich-text/CRDT editing** (§4.2) — alongside the polish items
@@ -226,6 +226,16 @@ What's built:
   Y.js to a single instance** (`next.config.mjs`) — its hard singleton
   requirement. No per-cursor awareness; the soft-lock cue reuses the existing
   challenge/ticket presence indicators.
+- **Tier 3 Phase 8** — **onboarding / empty states** (ROADMAP #24): a reusable
+  **`EmptyState`** primitive (`components/ui/empty-state.tsx`) applied role-aware
+  across the first-run surfaces — challenges (staff "Create a challenge" CTA vs
+  competitor "check back"), scoreboard, support (competitor New-ticket CTA vs
+  staff), feedback (staff "Create a survey" CTA) — plus a manager **`FirstRunGuide`**
+  on the dashboard (3-step getting-started card, gone once a challenge is
+  published). Frontend-only, no backend. Same commit carried a design tweak:
+  **dialog widths +25%** (`components/ui/dialog.tsx` base `max-w-lg`→`max-w-[40rem]`,
+  512→640px; override tiers scaled to match) so the collaborative notes get more
+  room, and the `CollabNote` editor min-height `min-h-24`→`min-h-32`.
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0012 (event-dispatch sync-critical vs background, supersedes

@@ -9,6 +9,7 @@ import { SurveyResultsDialog } from "@/components/feedback/survey-results";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState, SurveyEmptyIcon } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   useCreateSurvey,
@@ -78,11 +79,22 @@ export default function FeedbackPage() {
       ) : isError ? (
         <Empty>The feedback module is disabled for this competition.</Empty>
       ) : !surveys || surveys.length === 0 ? (
-        <Empty>
-          {isStaff
-            ? "No surveys yet. Create one to gather post-competition feedback."
-            : "No surveys are open right now."}
-        </Empty>
+        <EmptyState
+          icon={<SurveyEmptyIcon />}
+          title={isStaff ? "No surveys yet" : "No surveys open right now"}
+          description={
+            isStaff
+              ? "Build a survey to gather feedback — rating scales, multiple choice, and free text, with CSV export when responses come in."
+              : "When the organisers open a survey, you'll be able to answer it here."
+          }
+          action={
+            isStaff ? (
+              <Button onClick={newSurvey} disabled={!competitionId || create.isPending}>
+                Create a survey
+              </Button>
+            ) : undefined
+          }
+        />
       ) : (
         <div className="grid gap-3">
           {surveys.map((s) => (

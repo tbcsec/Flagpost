@@ -383,7 +383,7 @@ backend +7 (`test_collab.py`: team isolation, ticket staff-only/opener-rejected,
 null→persisted snapshot, live relay w/o self-echo, per-doc isolation, unknown
 scope), frontend +4 (base64 round-trip, two-doc convergence, snapshot rebuild).
 
-## Phase 8 — Onboarding / empty states (#24)
+## Phase 8 — Onboarding / empty states (#24) — ✅ DONE
 
 Cross-cutting UI, best done once the surfaces it decorates are finished.
 
@@ -391,6 +391,23 @@ Cross-cutting UI, best done once the surfaces it decorates are finished.
   scoreboard, empty dashboard, no tickets/surveys yet — guided next-step empty
   states instead of blank panels. No backend beyond what exists.
 - Tests: empty-state rendering per surface (vitest).
+
+**As built:** a reusable **`EmptyState`** primitive (`components/ui/empty-state.tsx`
+— token-styled framed panel: icon bubble + title + next-step copy + optional
+action, with a few shared inline-SVG glyphs) applied **role-aware** across the
+first-run surfaces: **challenges** (staff → "Create a challenge" CTA into manage
+mode; competitor → "check back when the organisers publish"), **scoreboard**
+("No scores yet — first flag takes the top spot"), **support** (competitor → a
+"Need a hand?" panel with the New-ticket CTA; staff → "you'll get a cue when one
+lands"), **feedback** (staff → "Create a survey" CTA; competitor → "when the
+organisers open one"). Plus a **manager `FirstRunGuide`** on the dashboard — a
+3-step "Getting started" card (create challenges / invite teams / brand the
+event) that fetches the same dashboard stats the widgets do and **disappears once
+the first challenge is published**. No backend. Tests: `EmptyState` rendering
+(vitest, +2). *(Bundled in the same commit: a design tweak — dialog widths +25%
+across the board, base `max-w-lg`→`max-w-[40rem]` (512→640px) and the two
+override tiers scaled to match, so the collaborative notes sections get more
+room; the `<CollabNote>` editor min-height also bumped `min-h-24`→`min-h-32`.)*
 
 ## Phase 9 — Accessibility, responsiveness & optimization pass (#28)
 

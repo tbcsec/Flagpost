@@ -11,14 +11,16 @@ widgets. The shell and every section were built, but only the sections with a
 real backend are wired; the rest render as faithful UI seeded with placeholder
 data and flagged in-app with a **"Preview — …"** banner (`NotWiredNote`).
 
-**Status: Tier 2 complete; Tier 3 in progress (Phases 0–7 shipped).** Since the
+**Status: Tier 2 complete; Tier 3 in progress (Phases 0–8 shipped).** Since the
 original handoff the backend has caught up through all of Tier 1 and Tier 2 and
 into Tier 3 (per `claude_plans/phase_3.md`): the notification bell (Phase 0), the
 whole automation surface — rules + the visual builder (Phases 1–3), feedback /
 surveys (Phase 4), challenge & team analytics (Phase 5), **dashboard
-customization** — drag-reorder / resize / show-hide edit mode (Phase 6), and
+customization** — drag-reorder / resize / show-hide edit mode (Phase 6),
 **collaborative CRDT notes** — a team challenge scratchpad + staff ticket notes
-(Phase 7) — are all real too. The tables below are kept current; the remaining placeholder surfaces
+(Phase 7), and **guided first-run empty states** — a reusable `EmptyState` across
+challenges/scoreboard/support/feedback + a manager dashboard getting-started
+guide (Phase 8) — are all real too. The tables below are kept current; the remaining placeholder surfaces
 are the Admin → Users directory, the Admin → Plugins toggle UI (its
 per-competition module-toggle *backend* now exists), Admin → Dashboard global
 stats, and per-user notification *preferences* (the inbox itself is wired).

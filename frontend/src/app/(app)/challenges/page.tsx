@@ -10,6 +10,7 @@ import { SectionHeader } from "@/components/app/section-header";
 import { FlagpostMark } from "@/components/brand/flagpost-mark";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState, FlagEmptyIcon } from "@/components/ui/empty-state";
 import { SkeletonCards } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -110,7 +111,24 @@ export default function ChallengesPage() {
         <p className="text-sm text-destructive">{(challenges.error as Error).message}</p>
       )}
 
-      {challenges.data && (
+      {challenges.data && allData.length === 0 && (
+        <EmptyState
+          icon={<FlagEmptyIcon />}
+          title="No challenges yet"
+          description={
+            access.canManageActiveCompetition
+              ? "Add your first challenge to open the competition — save it as a draft and publish when it's ready."
+              : "The organisers haven't published any challenges yet. Check back once the competition opens."
+          }
+          action={
+            access.canManageActiveCompetition && !managing ? (
+              <Button onClick={() => setManaging(true)}>Create a challenge</Button>
+            ) : undefined
+          }
+        />
+      )}
+
+      {challenges.data && allData.length > 0 && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {visible.map((ch) => (
             <button

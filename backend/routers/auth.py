@@ -27,13 +27,17 @@ from auth.security import (
 from config import settings
 from auth.membership import effective_permissions
 from db import ensure_aware_utc, get_db, utcnow
+from models.password_reset import PasswordResetToken
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 from models.user import RefreshSession, User
+from utils import mailer
 from schemas.auth import (
     ChangePasswordRequest,
+    ForgotPasswordRequest,
     LoginRequest,
     PermissionsOut,
     RegisterRequest,
+    ResetPasswordRequest,
     TokenResponse,
     UserOut,
 )
@@ -263,4 +267,91 @@ async def change_password(
     await event_bus.emit(
         "user.password_changed", {"user_id": current_user.id}
     )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- self-service password reset (Phase 9, ADR-0003) -------------------------
+
+
+def _hash_token(raw: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+@router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT)
+async def forgot_password(
+    body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)
+) -> Response:
+    """Email a password-reset link. Always 204 — never reveals whether an
+    account exists for the address. No-ops silently if SMTP is unconfigured."""
+    import secrets
+    from datetime import timedelta
+
+    user = await db.scalar(select(User).where(User.email == str(body.email)))
+    if user is not None and user.is_active:
+        raw = secrets.token_urlsafe(32)
+        db.add(
+            PasswordResetToken(
+                user_id=user.id,
+                token_hash=_hash_token(raw),
+                expires_at=utcnow() + timedelta(hours=1),
+            )
+        )
+        await db.commit()
+        origins = settings.cors_origin_list
+        base = origins[0] if origins else ""
+        link = f"{base}/reset-password?token={raw}"
+        await mailer.send_email(
+            [str(body.email)],
+            "Reset your password",
+            f"Someone requested a password reset for your account.\n\n"
+            f"Use this link within the next hour to choose a new password:\n{link}\n\n"
+            f"If you didn't request this, you can ignore this email.",
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_password(
+    body: ResetPasswordRequest, db: AsyncSession = Depends(get_db)
+) -> Response:
+    """Set a new password from a valid, unexpired reset token, then revoke every
+    refresh session (a reset logs the user out everywhere)."""
+    token = await db.scalar(
+        select(PasswordResetToken).where(
+            PasswordResetToken.token_hash == _hash_token(body.token)
+        )
+    )
+    if token is None or ensure_aware_utc(token.expires_at) < utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This reset link is invalid or has expired",
+        )
+    user = await db.get(User, token.user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Account not found"
+        )
+    user.password_hash = hash_password(body.new_password)
+    # Invalidate the token(s) + every session.
+    for t in (
+        await db.execute(
+            select(PasswordResetToken).where(
+                PasswordResetToken.user_id == user.id
+            )
+        )
+    ).scalars().all():
+        await db.delete(t)
+    for session in (
+        await db.execute(
+            select(RefreshSession).where(
+                RefreshSession.user_id == user.id,
+                RefreshSession.revoked_at.is_(None),
+            )
+        )
+    ).scalars().all():
+        session.revoked_at = utcnow()
+    await db.commit()
+    await event_bus.emit("user.password_changed", {"user_id": user.id})
     return Response(status_code=status.HTTP_204_NO_CONTENT)

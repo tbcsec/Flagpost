@@ -28,6 +28,14 @@ export function useChangePassword() {
   return useMutation({ mutationFn: authApi.changePassword });
 }
 
+export function useForgotPassword() {
+  return useMutation({ mutationFn: authApi.forgotPassword });
+}
+
+export function useResetPassword() {
+  return useMutation({ mutationFn: authApi.resetPassword });
+}
+
 export function useLogout() {
   const clearSession = useAuthStore((s) => s.clearSession);
   const queryClient = useQueryClient();

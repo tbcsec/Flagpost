@@ -187,3 +187,42 @@ async def test_registration_emits_user_registered_event(client):
         ).scalars().all()
     assert len(rows) == 1
     assert rows[0].payload["email"] == "evented@example.com"
+
+
+# --- self-service password reset (Phase 9, Group D) --------------------------
+
+
+async def test_forgot_and_reset_password_flow(client, monkeypatch):
+    import re
+
+    from utils import mailer
+
+    sent: list[tuple] = []
+
+    async def _capture(to, subject, body):
+        sent.append((to, subject, body))
+        return True
+
+    monkeypatch.setattr(mailer, "send_email", _capture)
+
+    await _register(client, "forgetful@example.com", password="oldpassword1", name="Fp")
+
+    # Requesting a reset always 202s (even for an unknown address).
+    assert (await client.post("/api/auth/forgot-password", json={"email": "forgetful@example.com"})).status_code == 204
+    assert (await client.post("/api/auth/forgot-password", json={"email": "nobody@example.com"})).status_code == 204
+    # Only the real account got an email; extract its token from the link.
+    assert len(sent) == 1
+    token = re.search(r"token=([\w\-]+)", sent[0][2]).group(1)
+
+    # Reset with the token, then the new password works and the old one doesn't.
+    assert (await client.post("/api/auth/reset-password", json={"token": token, "new_password": "brandnew1"})).status_code == 204
+    assert (await client.post("/api/auth/login", json={"identifier": "forgetful@example.com", "password": "brandnew1"})).status_code == 200
+    assert (await client.post("/api/auth/login", json={"identifier": "forgetful@example.com", "password": "oldpassword1"})).status_code == 401
+
+    # The token is single-use — a replay is rejected.
+    assert (await client.post("/api/auth/reset-password", json={"token": token, "new_password": "another1"})).status_code == 400
+
+
+async def test_reset_password_rejects_bad_token(client):
+    resp = await client.post("/api/auth/reset-password", json={"token": "garbage", "new_password": "whatever1"})
+    assert resp.status_code == 400

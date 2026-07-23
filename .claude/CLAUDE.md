@@ -631,6 +631,17 @@ What's built:
         (size+profile) + `e9fab0c1d2e3` (approval). Frontend: create-form + profile
         approval toggle, a pending-request join toast, and a captain "Join
         requests" section with Approve/Reject (`use-teams`).
+    - **Self-service password reset** (Group D, ADR-0003) — a `password_reset_tokens`
+      table (`PasswordResetToken`; only the SHA-256 is stored, like refresh
+      sessions; migration `fab0c1d2e3f4`). `POST /api/auth/forgot-password` {email}
+      always **204** (never discloses whether an account exists), mints a 1-hour
+      token and emails `{cors_origin[0]}/reset-password?token=…` via the existing
+      `mailer` (no-ops if SMTP unconfigured). `POST /api/auth/reset-password`
+      {token, new_password} validates the unexpired token, sets the password,
+      deletes the token(s) + revokes every refresh session, emits
+      `user.password_changed`. Frontend: a "Forgot password?" link on login →
+      standalone `/forgot-password` (request) + `/reset-password` (set) pages
+      (`useForgotPassword`/`useResetPassword`), both outside the app shell.
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

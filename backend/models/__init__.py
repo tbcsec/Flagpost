@@ -25,6 +25,7 @@ from models.feedback import (
 from models.hint import Hint, HintReveal
 from models.mc_guess_reset import MCGuessReset
 from models.notification import Notification
+from models.password_reset import PasswordResetToken
 from models.role import Role, RoleAssignment
 from models.score_adjustment import ScoreAdjustment
 from models.site_settings import SiteSettings
@@ -51,6 +52,7 @@ __all__ = [
     "HintReveal",
     "MCGuessReset",
     "Notification",
+    "PasswordResetToken",
     "Role",
     "RoleAssignment",
     "ScoreAdjustment",

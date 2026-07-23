@@ -259,6 +259,18 @@ export const authApi = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  forgotPassword: (input: { email: string }) =>
+    apiFetch<void>(
+      "/api/auth/forgot-password",
+      { method: "POST", body: JSON.stringify(input) },
+      { auth: false },
+    ),
+  resetPassword: (input: { token: string; new_password: string }) =>
+    apiFetch<void>(
+      "/api/auth/reset-password",
+      { method: "POST", body: JSON.stringify(input) },
+      { auth: false },
+    ),
   /** Restore a session from the refresh cookie on app load. */
   restore: () => refreshOnce(),
 };

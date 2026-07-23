@@ -301,19 +301,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Live announcement banner on competition-scoped pages (not Admin,
             which is global, nor the lobby, which has no active competition). */}
         {!isAdminSection && pathname !== "/lobby" && <AnnouncementBanner />}
-        <main className="flex flex-1 flex-col overflow-y-auto p-4 md:p-8">
-          <div className="mx-auto grid w-full max-w-5xl flex-1 gap-6">
-            {adminDenied ? (
-              <div className="rounded-lg border border-border bg-card p-10 text-center">
-                <p className="text-sm text-muted-foreground">
-                  You don&apos;t have access to the admin area.
-                </p>
-              </div>
-            ) : (
-              children
-            )}
+        <main className="flex-1 overflow-y-auto p-4 md:p-8">
+          {/* A min-height flex column so the footer sits at the bottom on short
+              pages (mt-auto) without stretching the content grid's rows. */}
+          <div className="mx-auto flex min-h-full max-w-5xl flex-col">
+            <div className="grid gap-6">
+              {adminDenied ? (
+                <div className="rounded-lg border border-border bg-card p-10 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    You don&apos;t have access to the admin area.
+                  </p>
+                </div>
+              ) : (
+                children
+              )}
+            </div>
+            <PoweredByFooter className="mt-auto" />
           </div>
-          <PoweredByFooter />
         </main>
       </div>
     </div>

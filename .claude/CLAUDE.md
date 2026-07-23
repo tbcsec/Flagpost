@@ -248,17 +248,17 @@ What's built:
     reused from `compute_scoreboard`); `challenge_view`-gated, competition-scoped,
     no migration/event. Frontend `use-participants.ts` + `ParticipantsPanel`
     replaces the old individual-mode placeholder on `/participants`.
-  - **Admin → Plugins page wired**: `GET /api/competitions/{id}/modules` now
-    returns the full inventory (added `required_core` to `ModuleStateOut` +
-    `all_manifests()` loader accessor) — core modules locked, optional toggleable
-    via `PUT`, gated on `edit_competition`. The page (`use-modules.ts`) operates on
-    the **active** competition (module state is per-competition, §11.3 — owner
-    reaffirmed per-competition over site-wide); dead `PLUGINS` placeholder removed.
-    **Disabled modules drop from the nav**: a member-readable `GET
-    /modules/enabled` (`challenge_view`) gives the enabled optional-module ids so
-    the shell filters `COMP_NAV` items tagged with a `module` (Feedback/Analytics/
-    Automations); shares the `["modules", id]` query key so a toggle updates the
-    nav live.
+  - **Module management wired**: `GET /api/competitions/{id}/modules` returns the
+    full inventory (added `required_core` to `ModuleStateOut` + `all_manifests()`
+    loader accessor) — core locked, optional toggleable via `PUT`, gated on
+    `edit_competition` (`use-modules.ts` + `ModulesPanel`). Module state is
+    **per-competition** (§11.3 — owner reaffirmed over site-wide), so the UI lives
+    on **Competition Settings** (`/settings`), not the global Admin section — the
+    old `/admin/plugins` page + Admin-nav entry were removed. **Disabled modules
+    drop from the nav**: a member-readable `GET /modules/enabled` (`challenge_view`)
+    gives the enabled optional-module ids so the shell filters `COMP_NAV` items
+    tagged with a `module` (Feedback/Analytics/Automations); shares the
+    `["modules", id]` query key so a toggle updates the nav live.
   - **Cleanup**: `suppressHydrationWarning` on the root `<html>` (`app/layout.tsx`)
     silences the no-flash theme script's expected SSR-vs-client `data-palette`
     mismatch.

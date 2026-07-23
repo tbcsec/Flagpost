@@ -70,7 +70,7 @@ code.
 | Hints — reveal (competitor) + authoring (editor) | **Wired** (Phase 9 — `useHints`: reveal-on-request with cost, hidden body until revealed; scoreboard deducts cost live) |
 | Participants — team mode (create/join/leave, browse teams) | **Wired** (reuses `TeamPanel`) |
 | Participants — individual mode (competitor roster + standing) | **Wired** (Tier 3 Phase 9) — `GET /participants` lists Participant-role holders with join time / solves / rank / points (reusing the scoreboard computation); `ParticipantsPanel` shows a "your standing" summary + the roster (`use-participants`) |
-| Admin → Plugins (module enable/disable) | **Wired** (Tier 3 Phase 9, §11.3) — the full module inventory for the **active** competition (module state is per-competition): required-core modules locked "always on", optional ones toggleable via `GET`/`PUT /api/competitions/{id}/modules`, gated on `edit_competition` (`use-modules`) |
+| Settings → Modules (module enable/disable) | **Wired** (Tier 3 Phase 9, §11.3) — on **Competition Settings** (module state is per-competition, so it lives with the competition's config, not the global Admin section): the full inventory — required-core locked "always on", optional toggleable via `GET`/`PUT /api/competitions/{id}/modules`, gated on `edit_competition` (`use-modules`, `ModulesPanel`). Disabling a module also drops its nav entry (see role-aware navigation) |
 | Competition Settings | **Wired** (`CompetitionSettingsForm` on the active competition) |
 | Admin → Competitions (list + New competition) | **Wired** (`useCompetitions`, `CreateCompetitionDialog`) |
 | Profile — change password | **Wired** (new `authApi.changePassword` + `useChangePassword`) |

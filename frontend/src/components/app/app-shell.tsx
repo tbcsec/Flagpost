@@ -90,7 +90,6 @@ const ADMIN_SUBNAV: { href: string; label: string }[] = [
   { href: "/admin/automations", label: "Automations" },
   { href: "/admin/appearance", label: "Appearance" },
   { href: "/admin/settings", label: "Site settings" },
-  { href: "/admin/plugins", label: "Plugins" },
 ];
 
 function useActivePath() {

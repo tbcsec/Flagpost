@@ -434,26 +434,27 @@ Items (this list grows as the owner adds them):
   self-row highlighted) wired into the page. No migration; no new event (pure
   read). Tests: backend +4 (`test_participants.py` — roster+standing, RBAC,
   competition scoping, 404).
-- **Admin → Plugins page** ✅ — the page rendered a static placeholder list. The
-  per-competition module toggle *backend* already existed (Tier 3 Phase 1); this
-  wires the UI. `GET /api/competitions/{id}/modules` now returns the **full
-  inventory** (added `required_core` to `ModuleStateOut` + a `all_manifests()`
-  loader accessor) — required-core modules locked "always on", optional ones with
-  their per-competition enabled state. The page operates on the **active
-  competition** (module state is per-competition, §11.3), gated on
-  `edit_competition`, with a "Core" (locked) and "Optional" (toggleable) split.
-  Frontend: `use-modules.ts` + `modulesApi`; the dead `PLUGINS` placeholder is
-  removed. Tests: the existing module-toggle test updated for the new shape (+ a
-  core-module inventory assertion). **Follow-up (owner):** confirmed module
-  scoping stays **per-competition** (§11.3 — multi-tenant, one install runs
-  competitions with different feature sets), *not* site-wide. And **disabled
-  modules now drop from the nav**: a member-readable `GET
-  /modules/enabled` (`challenge_view`, returns enabled optional-module ids —
-  unlike the `edit_competition` management list, so it gates *competitors'* nav
-  too) drives a `module` tag on the `COMP_NAV` items (Feedback/Analytics/
-  Automations); a disabled module's item is filtered out. The toggle shares the
-  `["modules", competitionId]` query key, so disabling a module removes its nav
-  entry live. Test: `test_enabled_modules_endpoint_is_member_readable` (+1).
+- **Module management (per-competition)** ✅ — the admin surface for the
+  per-competition module toggle *backend* (which already existed, Tier 3 Phase 1).
+  `GET /api/competitions/{id}/modules` now returns the **full inventory** (added
+  `required_core` to `ModuleStateOut` + a `all_manifests()` loader accessor) —
+  required-core modules locked "always on", optional ones with their
+  per-competition enabled state; gated on `edit_competition`, "Core" (locked) /
+  "Optional" (toggleable) split. Frontend: `use-modules.ts` + `modulesApi` + a
+  `ModulesPanel`; the dead `PLUGINS` placeholder is removed. **Owner decisions:**
+  (1) module scoping stays **per-competition** (§11.3 — multi-tenant, one install
+  runs competitions with different feature sets), *not* site-wide; (2) because
+  it's competition-scoped, the UI **lives on Competition Settings**, not the
+  global Admin section — the standalone `/admin/plugins` page + its Admin-nav
+  entry were removed and `ModulesPanel` mounts under Settings with the
+  competition's other config. And **disabled modules now drop from the nav**: a
+  member-readable `GET /modules/enabled` (`challenge_view`, returns enabled
+  optional-module ids — unlike the `edit_competition` management list, so it gates
+  *competitors'* nav too) drives a `module` tag on the `COMP_NAV` items
+  (Feedback/Analytics/Automations); a disabled module's item is filtered out. The
+  toggle shares the `["modules", competitionId]` query key, so disabling a module
+  removes its nav entry live. Tests: module-toggle test updated for the new shape
+  + a core-module inventory assertion + `test_enabled_modules_endpoint_is_member_readable`.
 - **Cleanup: React hydration warning** ✅ — the no-flash theme script rewrites
   `<html>`'s palette/mode/accent before hydration, so the SSR defaults never
   matched the client's first paint (a `data-palette` mismatch warning on every

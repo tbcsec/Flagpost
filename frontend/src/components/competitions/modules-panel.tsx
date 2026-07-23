@@ -1,27 +1,29 @@
 "use client";
 
-import { SectionHeader } from "@/components/app/section-header";
+// Per-competition module management (§11.3). Lives on Competition Settings —
+// module state is competition-scoped, so it belongs with the competition's other
+// configuration rather than the global Admin section. Lists the full inventory
+// (required-core locked, optional toggleable) off GET/PUT
+// /api/competitions/{id}/modules, gated on edit_competition.
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useActiveCompetition } from "@/lib/hooks/use-competitions";
 import { useModules, useToggleModule } from "@/lib/hooks/use-modules";
 import { useAccess } from "@/lib/hooks/use-permissions";
 import type { ModuleState } from "@/lib/types";
 import { toast } from "@/stores/toast";
 
-// Admin → Plugins. Module enable/disable is **per-competition** (§11.3), so this
-// operates on the active competition (chosen in the topbar switcher). Lists the
-// full inventory — required-core modules locked on, optional ones toggleable —
-// off GET/PUT /api/competitions/{id}/modules, gated on edit_competition.
-export default function AdminPluginsPage() {
-  const { competitionId, data: competition } = useActiveCompetition();
+export function ModulesPanel({ competitionId }: { competitionId: string }) {
   const access = useAccess();
   const canManage = access.has("edit_competition");
-  const modules = useModules(competitionId ?? "", Boolean(competitionId) && canManage);
-  const toggle = useToggleModule(competitionId ?? "");
+  const modules = useModules(competitionId, canManage);
+  const toggle = useToggleModule(competitionId);
+
+  // Managing modules needs edit_competition specifically; hide the section for a
+  // narrower manager (e.g. a challenge-author) who can see settings but not this.
+  if (!canManage) return null;
 
   function onToggle(m: ModuleState) {
     const next = !m.enabled;
@@ -39,54 +41,29 @@ export default function AdminPluginsPage() {
     );
   }
 
+  if (modules.isLoading) return <Skeleton className="h-64 w-full" />;
+
   const data = modules.data ?? [];
   const optional = data.filter((m) => !m.required_core);
   const core = data.filter((m) => m.required_core);
 
   return (
-    <>
-      <SectionHeader
-        title="Admin — Plugins"
-        subtitle={
-          competition
-            ? `Module availability for ${competition.name} · set per competition`
-            : "Module availability — set per competition"
-        }
+    <div className="grid gap-6">
+      <ModuleSection
+        title="Optional modules"
+        description="Disable a module to switch its features off for this competition — its routes stop responding, its nav entry disappears, and nothing fires for its events."
+        modules={optional}
+        onToggle={onToggle}
+        pending={toggle.isPending}
       />
-
-      {!competitionId ? (
-        <EmptyState
-          title="Select a competition"
-          description="Module availability is configured per competition — pick one from the switcher above to manage its modules."
-        />
-      ) : !access.ready ? (
-        <Skeleton className="h-64 w-full" />
-      ) : !canManage ? (
-        <EmptyState
-          title="No access"
-          description="You need edit access to this competition to manage its modules."
-        />
-      ) : modules.isLoading ? (
-        <Skeleton className="h-64 w-full" />
-      ) : (
-        <div className="grid gap-6">
-          <ModuleSection
-            title="Optional modules"
-            description="Disable a module to switch its features off for this competition — its routes stop responding and nothing fires for its events."
-            modules={optional}
-            onToggle={onToggle}
-            pending={toggle.isPending}
-          />
-          <ModuleSection
-            title="Core modules"
-            description="Part of the platform floor — always on and can't be disabled."
-            modules={core}
-            onToggle={onToggle}
-            pending={toggle.isPending}
-          />
-        </div>
-      )}
-    </>
+      <ModuleSection
+        title="Core modules"
+        description="Part of the platform floor — always on and can't be disabled."
+        modules={core}
+        onToggle={onToggle}
+        pending={toggle.isPending}
+      />
+    </div>
   );
 }
 

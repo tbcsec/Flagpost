@@ -45,6 +45,9 @@ export interface Competition {
   /** Per-competition managed vocab: tag names + ordered difficulty tiers. */
   challenge_tags: string[];
   difficulty_tiers: string[];
+  /** Public spectator board + CTFtime feed opt-ins. */
+  public_scoreboard: boolean;
+  ctftime_enabled: boolean;
 }
 
 /** Aggregate ratings for one challenge (staff — Feedback page). */
@@ -367,6 +370,8 @@ export interface CompetitionCreate {
   challenge_ratings_enabled?: boolean;
   challenge_tags?: string[];
   difficulty_tiers?: string[];
+  public_scoreboard?: boolean;
+  ctftime_enabled?: boolean;
 }
 
 export type CompetitionUpdate = Partial<CompetitionCreate>;
@@ -604,6 +609,15 @@ export interface Scoreboard {
 /** The spectator (no-login) board for a public competition. */
 export interface PublicScoreboard extends Scoreboard {
   name: string;
+  start_at: string | null;
+  end_at: string | null;
+}
+
+/** A competition listed in the public /public directory. */
+export interface PublicCompetition {
+  id: string;
+  name: string;
+  participation_mode: ParticipationMode;
   start_at: string | null;
   end_at: string | null;
 }

@@ -44,6 +44,7 @@ export default function ChallengesPage() {
   const categories = useCategories(competitionId ?? "");
 
   const [filter, setFilter] = useState<string>("all");
+  const [availability, setAvailability] = useState<"all" | "available" | "locked">("all");
   const [open, setOpen] = useState<Challenge | null>(null);
   const [managing, setManaging] = useState(false);
 
@@ -55,8 +56,12 @@ export default function ChallengesPage() {
     categories.data?.find((c) => c.id === id)?.name ?? "uncategorized";
 
   const allData = challenges.data ?? [];
+  const hasLocked = allData.some((c) => c.locked);
   const visible = allData.filter(
-    (c) => filter === "all" || c.category_id === filter,
+    (c) =>
+      (filter === "all" || c.category_id === filter) &&
+      (availability === "all" ||
+        (availability === "locked" ? c.locked : !c.locked)),
   );
   const solvedCount = allData.filter((c) => c.solved).length;
 
@@ -89,7 +94,7 @@ export default function ChallengesPage() {
         }
       />
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {chips.map((chip) => (
           <button
             key={chip.id}
@@ -107,6 +112,27 @@ export default function ChallengesPage() {
             </span>
           </button>
         ))}
+
+        {/* Availability filter — only when prerequisites actually lock some,
+            so it doesn't clutter a competition without unlock chains. */}
+        {hasLocked && (
+          <div className="ml-auto inline-flex overflow-hidden rounded-full border border-border text-xs">
+            {(["all", "available", "locked"] as const).map((a) => (
+              <button
+                key={a}
+                onClick={() => setAvailability(a)}
+                className={cn(
+                  "px-3 py-1.5 font-medium capitalize transition-colors",
+                  availability === a
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-accent/60",
+                )}
+              >
+                {a}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {challenges.isLoading && <SkeletonCards count={6} />}
@@ -395,7 +421,24 @@ function ChallengeDialogBody({
   );
 }
 
-// "Who solved this" — earliest first, the first tagged as first blood (🩸).
+// A lightning bolt marks the first solver (first blood) — same stroke/currentColor
+// idiom as the app's other inline SVG icons, and friendlier than a blood drop.
+function FirstBloodIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className="text-warning"
+      aria-hidden="true"
+    >
+      <path d="M13 2 4 13h6l-1 9 10-12h-7l1-8z" />
+    </svg>
+  );
+}
+
+// "Who solved this" — earliest first, the first tagged as first blood.
 function ChallengeSolves({
   competitionId,
   challengeId,
@@ -409,7 +452,7 @@ function ChallengeSolves({
       <section className="grid gap-1">
         <h3 className="text-sm font-medium">Solves</h3>
         <p className="text-xs text-muted-foreground">
-          No solves yet — be the first to draw blood.
+          No solves yet — be the first to solve it.
         </p>
       </section>
     );
@@ -426,7 +469,11 @@ function ChallengeSolves({
             className="flex items-center justify-between gap-2 text-sm"
           >
             <span className="flex items-center gap-1.5">
-              {s.is_first_blood && <span title="First blood">🩸</span>}
+              {s.is_first_blood && (
+                <span title="First blood">
+                  <FirstBloodIcon />
+                </span>
+              )}
               <span className={cn(s.is_first_blood && "font-medium")}>{s.name}</span>
             </span>
             <span className="text-xs text-muted-foreground">

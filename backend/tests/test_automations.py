@@ -265,6 +265,7 @@ async def test_catalog_generates_the_builder(client):
     assert set(by_type) == {
         "notify", "send_email", "webhook", "release_hint", "unlock_challenge",
         "open_survey", "create_ticket", "update_score", "create_award",
+        "freeze_scoreboard", "unfreeze_scoreboard", "create_announcement",
     }
     assert by_type["notify"]["personal_allowed"] is True
     assert by_type["webhook"]["personal_allowed"] is False
@@ -1159,3 +1160,77 @@ async def test_time_remaining_to_open_survey_to_notify_participants(client):
     notifs = await _notifications(client, ada)
     assert [n["type"] for n in notifs] == ["survey.opened"]
     assert notifs[0]["title"] == "The survey is open: Post-event feedback"
+
+
+# --- freeze action + lifecycle triggers (Phase 9 adjustments) ----------------
+
+
+async def test_freeze_scoreboard_action_and_lifecycle_events(client):
+    from datetime import timedelta
+
+    from db import SessionLocal, utcnow
+    from models.competition import Competition
+    from utils.automation_scheduler import emit_lifecycle_events
+
+    comp = await _competition(client)
+    admin = await admin_token(client)
+
+    # A rule: when the competition ends, freeze the scoreboard.
+    await _create_rule(
+        client, admin, comp,
+        name="Freeze on end",
+        trigger="competition.ended",
+        conditions=[],
+        actions=[{"type": "freeze_scoreboard"}],
+    )
+
+    # Put the competition's end in the past so the lifecycle tick fires ended.
+    async with SessionLocal() as s:
+        c = await s.get(Competition, comp)
+        c.end_at = utcnow() - timedelta(minutes=1)
+        c.ended_event_fired = False
+        await s.commit()
+
+    await emit_lifecycle_events(SessionLocal)
+    await event_bus.wait_for_background()
+
+    # competition.ended fired, and the freeze action ran → board is frozen.
+    async with SessionLocal() as s:
+        c = await s.get(Competition, comp)
+        assert c.ended_event_fired is True
+        assert c.scoreboard_frozen_at is not None
+        names = (await s.scalars(select(AuditLogEntry.event_name))).all()
+    assert "competition.ended" in names
+    assert "scoreboard.frozen" in names
+
+    # Idempotent: a second tick doesn't re-fire ended.
+    async with SessionLocal() as s:
+        before = len([n for n in (await s.scalars(select(AuditLogEntry.event_name))).all() if n == "competition.ended"])
+    await emit_lifecycle_events(SessionLocal)
+    await event_bus.wait_for_background()
+    async with SessionLocal() as s:
+        after = len([n for n in (await s.scalars(select(AuditLogEntry.event_name))).all() if n == "competition.ended"])
+    assert after == before
+
+
+async def test_create_announcement_action(client):
+    from db import SessionLocal
+    from models.announcement import Announcement
+
+    comp = await _competition(client)
+    chal = await _challenge(client, comp)
+    admin = await admin_token(client)
+    ada = await _participant(client, comp, "ada@example.com")
+
+    await _create_rule(
+        client, admin, comp,
+        name="Announce a solve",
+        trigger="challenge.solved",
+        conditions=[],
+        actions=[{"type": "create_announcement", "title": "Solved!", "body": "Someone solved {challenge_id}"}],
+    )
+    await _solve(client, comp, chal, ada)
+
+    async with SessionLocal() as s:
+        anns = (await s.scalars(select(Announcement).where(Announcement.competition_id == comp))).all()
+    assert len(anns) == 1 and anns[0].title == "Solved!"

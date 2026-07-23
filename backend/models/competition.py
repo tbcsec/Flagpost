@@ -94,3 +94,21 @@ class Competition(Base, TimestampMixin):
     scoreboard_frozen_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, nullable=True
     )
+    # Public spectator scoreboard (Phase 9): opt-in per competition. When on, the
+    # board is listed on /public and readable without an account.
+    public_scoreboard: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    # CTFtime scoreboard feed (Phase 9): opt-in per competition; when on, the
+    # ctftime feed URL serves this competition's standings for rating.
+    ctftime_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    # Internal dedup for the scheduler's competition.started/ended events — fired
+    # once each when the schedule boundary is crossed.
+    started_event_fired: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    ended_event_fired: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )

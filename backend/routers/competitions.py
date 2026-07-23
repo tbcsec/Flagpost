@@ -161,6 +161,8 @@ async def create_competition(
         challenge_ratings_enabled=body.challenge_ratings_enabled,
         challenge_tags=body.challenge_tags or None,
         difficulty_tiers=body.difficulty_tiers or None,
+        public_scoreboard=body.public_scoreboard,
+        ctftime_enabled=body.ctftime_enabled,
     )
     db.add(competition)
     await db.commit()

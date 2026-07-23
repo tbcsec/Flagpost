@@ -573,6 +573,34 @@ What's built:
       import emits no per-row event (atomic authoring op). Frontend: Export/Import
       buttons on the Manage-challenges header (`useExportChallenges`/`useImportChallenges`,
       reusing the `downloadFile` helper).
+    - **Pre-Group-C adjustments** (owner batch, migration `b6c7d8e9fab0` adds
+      four `Competition` cols):
+      - **Public scoreboard is now an explicit per-competition opt-in**
+        (`public_scoreboard`, default off) decoupled from `visibility`; the
+        spectator board gate + the new `GET /api/public/competitions` **directory**
+        use it. Frontend: a **`/public` landing page** (lists opted-in
+        competitions → `/public/[id]`), toggle on **Settings → General**.
+      - **CTFtime feed is a separate per-competition opt-in** (`ctftime_enabled`,
+        default off); the feed URL is shown on Settings → General when enabled and
+        **removed from the scoreboard page**.
+      - **First-blood marker** changed from the 🩸 emoji to an inline
+        lightning-bolt SVG (`FirstBloodIcon`, warning-coloured), matching the app's
+        icon idiom.
+      - **Scoreboard-freeze semantics clarified**: a `useConfirm` on Freeze
+        explains competitors keep solving + points still count (the board just
+        stops moving publicly), plus a persistent frozen note on the board.
+      - **New automation actions** `freeze_scoreboard` / `unfreeze_scoreboard`
+        (set `scoreboard_frozen_at`, emit `scoreboard.frozen`/`unfrozen`) +
+        `create_announcement` (posts an announcement, emits `announcement.published`).
+        **New lifecycle triggers wired**: `competition.started` / `competition.ended`
+        (already in the catalogs but dead) now **emitted by the scheduler**
+        (`emit_lifecycle_events`, dedup via `started_event_fired`/`ended_event_fired`)
+        when start_at/end_at is crossed — enables "on end → freeze + open survey".
+      - **Challenges page**: an availability filter (**All / Available / Locked**),
+        shown only when prerequisites lock something.
+      - **Categories moved to Settings → Challenges** (alongside the tag/difficulty
+        vocab, for uniformity); `CategoryManager` exported + removed from the
+        Manage-challenges area.
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

@@ -226,11 +226,11 @@ async def test_freeze_requires_permission(client):
 # --- public (spectator) scoreboard (Phase 9) ---------------------------------
 
 
-async def test_public_scoreboard_only_for_public_competitions(client):
+async def test_public_scoreboard_only_when_opted_in(client):
     admin = await admin_token(client)
-    # A public competition + a private one.
-    pub = (await client.post("/api/competitions", json={"name": "Open CTF", "participation_mode": "individual", "visibility": "public"}, headers=_auth(admin))).json()["id"]
-    priv = (await client.post("/api/competitions", json={"name": "Closed CTF", "participation_mode": "individual", "visibility": "private"}, headers=_auth(admin))).json()["id"]
+    # One opts into a public board; one doesn't.
+    pub = (await client.post("/api/competitions", json={"name": "Open CTF", "participation_mode": "individual", "public_scoreboard": True}, headers=_auth(admin))).json()["id"]
+    priv = (await client.post("/api/competitions", json={"name": "Closed CTF", "participation_mode": "individual"}, headers=_auth(admin))).json()["id"]
 
     # No Authorization header at all — the whole point of the spectator board.
     ok = await client.get(f"/api/public/competitions/{pub}/scoreboard")
@@ -240,19 +240,24 @@ async def test_public_scoreboard_only_for_public_competitions(client):
     assert body["frozen"] is False
     assert "entries" in body
 
-    # A private competition isn't disclosed.
+    # An opted-out competition isn't disclosed.
     hidden = await client.get(f"/api/public/competitions/{priv}/scoreboard")
     assert hidden.status_code == 404
 
+    # The /public directory lists only opted-in competitions.
+    directory = (await client.get("/api/public/competitions")).json()
+    names = {c["name"] for c in directory}
+    assert "Open CTF" in names and "Closed CTF" not in names
 
-async def test_ctftime_feed_format(client):
+
+async def test_ctftime_feed_opt_in(client):
     admin = await admin_token(client)
-    comp = (await client.post("/api/competitions", json={"name": "Rated CTF", "participation_mode": "individual", "visibility": "public"}, headers=_auth(admin))).json()["id"]
+    comp = (await client.post("/api/competitions", json={"name": "Rated CTF", "participation_mode": "individual", "ctftime_enabled": True}, headers=_auth(admin))).json()["id"]
     feed = await client.get(f"/api/public/competitions/{comp}/ctftime")
     assert feed.status_code == 200
     body = feed.json()
     assert "standings" in body
     assert isinstance(body["standings"], list)
-    # Private competitions have no feed.
-    priv = (await client.post("/api/competitions", json={"name": "Priv", "participation_mode": "individual", "visibility": "private"}, headers=_auth(admin))).json()["id"]
-    assert (await client.get(f"/api/public/competitions/{priv}/ctftime")).status_code == 404
+    # A competition without the feed enabled has none.
+    off = (await client.post("/api/competitions", json={"name": "NoFeed", "participation_mode": "individual"}, headers=_auth(admin))).json()["id"]
+    assert (await client.get(f"/api/public/competitions/{off}/ctftime")).status_code == 404

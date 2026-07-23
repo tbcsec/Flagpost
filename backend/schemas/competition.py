@@ -25,6 +25,9 @@ class CompetitionCreate(BaseModel):
     # Managed vocab challenges may use (Phase 9).
     challenge_tags: list[str] = Field(default_factory=list, max_length=100)
     difficulty_tiers: list[str] = Field(default_factory=list, max_length=20)
+    # Public spectator board + CTFtime feed opt-ins (Phase 9).
+    public_scoreboard: bool = False
+    ctftime_enabled: bool = False
 
 
 class CompetitionUpdate(BaseModel):
@@ -44,6 +47,8 @@ class CompetitionUpdate(BaseModel):
     challenge_ratings_enabled: bool | None = None
     challenge_tags: list[str] | None = Field(default=None, max_length=100)
     difficulty_tiers: list[str] | None = Field(default=None, max_length=20)
+    public_scoreboard: bool | None = None
+    ctftime_enabled: bool | None = None
 
 
 class CompetitionOut(BaseModel):
@@ -68,6 +73,8 @@ class CompetitionOut(BaseModel):
     challenge_ratings_enabled: bool = False
     challenge_tags: list[str] = Field(default_factory=list)
     difficulty_tiers: list[str] = Field(default_factory=list)
+    public_scoreboard: bool = False
+    ctftime_enabled: bool = False
 
     @field_validator("challenge_tags", "difficulty_tiers", mode="before")
     @classmethod

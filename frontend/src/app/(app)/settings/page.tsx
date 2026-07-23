@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { NoCompetition } from "@/components/app/no-competition";
 import { SectionHeader } from "@/components/app/section-header";
+import { CategoryManager } from "@/components/challenges/challenge-admin";
 import {
   CompetitionSettingsForm,
   type SettingsSection,
@@ -52,6 +53,12 @@ export default function CompetitionSettingsPage() {
                 />
               </CardContent>
             </Card>
+          </div>
+
+          {/* Categories live in their own card (own CRUD endpoints) under the
+              Challenges tab, alongside the tag/difficulty vocab for uniformity. */}
+          <div className={tab === "challenges" ? "" : "hidden"}>
+            <CategoryManager competitionId={competitionId} />
           </div>
 
           <div className={tab === "modules" ? "grid gap-3" : "hidden"}>

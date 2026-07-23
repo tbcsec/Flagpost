@@ -60,6 +60,8 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "competition.unarchived": ["competition_id"],
     "competition.deleted": ["competition_id"],
     "competition.time_remaining": ["competition_id", "minutes_remaining"],
+    "competition.started": ["competition_id", "name"],
+    "competition.ended": ["competition_id", "name"],
     "team.created": ["competition_id", "team_id"],
     "team.member_joined": ["competition_id", "team_id", "user_id"],
     "announcement.published": ["competition_id"],
@@ -234,6 +236,12 @@ ACTION_FIELDS: dict[str, list[dict]] = {
         _field("title", "Title", templateable=True),
         _field("description", "Description", "textarea", required=False, templateable=True),
         _field("points", "Points", "number", required=False, placeholder="e.g. 100"),
+    ],
+    "freeze_scoreboard": [],
+    "unfreeze_scoreboard": [],
+    "create_announcement": [
+        _field("title", "Title", templateable=True),
+        _field("body", "Body", "textarea", templateable=True),
     ],
 }
 

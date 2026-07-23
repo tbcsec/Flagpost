@@ -6,6 +6,7 @@ import { SectionHeader } from "@/components/app/section-header";
 import { NoCompetition } from "@/components/app/no-competition";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState, TrophyEmptyIcon } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,8 +26,6 @@ import { useFreezeScoreboard, useScoreboard } from "@/lib/hooks/use-scoreboard";
 import { useAuthStore } from "@/stores/auth";
 import { toast } from "@/stores/toast";
 import { cn } from "@/lib/utils";
-
-const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 // Live scoreboard (Phase 7): REST initial load + WebSocket room updates. "You"
 // highlighting follows the scoring subject; the top three get a medal rank and
@@ -59,9 +58,24 @@ export default function ScoreboardPage() {
   const access = useAccess();
   const canFreeze = access.has("scoreboard_freeze");
   const freeze = useFreezeScoreboard(competitionId ?? "");
+  const confirm = useConfirm();
   const frozen = board.data?.frozen ?? false;
 
-  function toggleFreeze() {
+  async function toggleFreeze() {
+    // Clarify the semantics: a freeze stops the *board* from moving publicly;
+    // competitors keep solving and their points still count.
+    if (
+      !frozen &&
+      !(await confirm({
+        title: "Freeze the scoreboard?",
+        description:
+          "Competitors keep solving and their points still count — the public board just stops showing movement until you unfreeze it. Staff can still view live standings.",
+        confirmLabel: "Freeze",
+        destructive: false,
+      }))
+    ) {
+      return;
+    }
     freeze.mutate(!frozen, {
       onSuccess: () =>
         toast(frozen ? "Scoreboard unfrozen" : "Scoreboard frozen", {
@@ -145,27 +159,12 @@ export default function ScoreboardPage() {
         }
       />
 
-      {canFreeze && competition?.visibility === "public" && (
-        <p className="text-xs text-muted-foreground">
-          Public board:{" "}
-          <a
-            className="text-primary underline"
-            href={`/public/${competitionId}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            /public/{competitionId}
-          </a>{" "}
-          · CTFtime feed:{" "}
-          <a
-            className="font-mono text-primary underline"
-            href={`${API_ORIGIN}/api/public/competitions/${competitionId}/ctftime`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            /api/public/…/ctftime
-          </a>
-        </p>
+      {frozen && (
+        <div className="rounded-md border border-border bg-muted/40 px-4 py-2.5 text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">The scoreboard is frozen.</span>{" "}
+          Competitors keep solving and their points still count — new solves are
+          hidden here until the organisers unfreeze the board.
+        </div>
       )}
 
       {board.isLoading && (

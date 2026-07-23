@@ -51,6 +51,8 @@ async def clone_competition(
         challenge_ratings_enabled=source.challenge_ratings_enabled,
         challenge_tags=source.challenge_tags,
         difficulty_tiers=source.difficulty_tiers,
+        public_scoreboard=source.public_scoreboard,
+        ctftime_enabled=source.ctftime_enabled,
         invite_code=generate_invite_code(),
         # Schedule is intentionally left unset — the admin sets fresh dates so
         # two competitions don't accidentally run on the same window.

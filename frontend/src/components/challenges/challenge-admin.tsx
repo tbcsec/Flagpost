@@ -98,8 +98,6 @@ export function ChallengeAdmin({ competitionId }: { competitionId: string }) {
 
   return (
     <div className="space-y-6">
-      <CategoryManager competitionId={competitionId} />
-
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <div>
@@ -736,7 +734,7 @@ function ChallengeForm({
   );
 }
 
-function CategoryManager({ competitionId }: { competitionId: string }) {
+export function CategoryManager({ competitionId }: { competitionId: string }) {
   const categories = useCategories(competitionId);
   const createCategory = useCreateCategory(competitionId);
   const deleteCategory = useDeleteCategory(competitionId);

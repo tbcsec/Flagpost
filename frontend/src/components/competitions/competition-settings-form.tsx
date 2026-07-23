@@ -19,6 +19,8 @@ import { toast } from "@/stores/toast";
 const toInput = (iso: string | null) => (iso ? iso.slice(0, 16) : "");
 const fromInput = (v: string) => (v ? new Date(`${v}Z`).toISOString() : null);
 
+const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
 export type SettingsSection = "general" | "schedule" | "challenges";
 
 // Feature component. Edits go through the domain hook; RBAC is enforced
@@ -46,6 +48,8 @@ export function CompetitionSettingsForm({
     challenge_ratings_enabled: competition.challenge_ratings_enabled,
     challenge_tags: competition.challenge_tags ?? [],
     difficulty_tiers: competition.difficulty_tiers ?? [],
+    public_scoreboard: competition.public_scoreboard,
+    ctftime_enabled: competition.ctftime_enabled,
   });
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
@@ -69,6 +73,8 @@ export function CompetitionSettingsForm({
         challenge_ratings_enabled: form.challenge_ratings_enabled,
         challenge_tags: form.challenge_tags,
         difficulty_tiers: form.difficulty_tiers,
+        public_scoreboard: form.public_scoreboard,
+        ctftime_enabled: form.ctftime_enabled,
       },
       { onSuccess: () => toast("Changes saved", { variant: "success" }) },
     );
@@ -120,6 +126,59 @@ export function CompetitionSettingsForm({
                 <option value="public">Public</option>
               </Select>
             </div>
+          </div>
+
+          <div className="space-y-3 border-t border-border pt-4">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Public standings
+            </h3>
+            <label className="flex items-start gap-2.5 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded border-border"
+                style={{ accentColor: "hsl(var(--primary))" }}
+                checked={form.public_scoreboard}
+                onChange={(e) => set("public_scoreboard", e.target.checked)}
+              />
+              <span>
+                Public scoreboard
+                <span className="ml-1 text-xs text-muted-foreground">
+                  (lists this competition on{" "}
+                  <a className="underline" href="/public" target="_blank" rel="noreferrer">
+                    /public
+                  </a>{" "}
+                  and lets anyone view the board without an account)
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2.5 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded border-border"
+                style={{ accentColor: "hsl(var(--primary))" }}
+                checked={form.ctftime_enabled}
+                onChange={(e) => set("ctftime_enabled", e.target.checked)}
+              />
+              <span>
+                CTFtime scoreboard feed
+                <span className="ml-1 text-xs text-muted-foreground">
+                  (exposes a CTFtime-format feed so the event can be rated on ctftime.org)
+                </span>
+              </span>
+            </label>
+            {form.ctftime_enabled && (
+              <p className="text-xs text-muted-foreground">
+                Feed URL:{" "}
+                <a
+                  className="font-mono text-primary underline"
+                  href={`${API_ORIGIN}/api/public/competitions/${competition.id}/ctftime`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {API_ORIGIN}/api/public/competitions/{competition.id}/ctftime
+                </a>
+              </p>
+            )}
           </div>
         </>
       )}

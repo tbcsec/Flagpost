@@ -37,8 +37,11 @@ from typing import Any, Awaitable, Callable
 
 from sqlalchemy import select
 
+from db import utcnow
+from models.announcement import Announcement
 from models.automation import Achievement, AutomationRule
 from models.challenge import Challenge
+from models.competition import Competition
 from models.hint import Hint, HintReveal
 from models.role import Role, RoleAssignment
 from models.score_adjustment import ScoreAdjustment
@@ -430,6 +433,66 @@ class ActionSpec:
     personal_allowed: bool = False
 
 
+# --- freeze_scoreboard / unfreeze_scoreboard (§5.3): control the freeze --------
+
+
+async def _set_freeze(db, competition_id, frozen, rule):
+    competition = await db.get(Competition, competition_id) if competition_id else None
+    if competition is None:
+        logger.info("freeze action: no competition on rule %s", rule.id)
+        return
+    competition.scoreboard_frozen_at = utcnow() if frozen else None
+    await db.commit()
+    await event_bus.emit(
+        "scoreboard.frozen" if frozen else "scoreboard.unfrozen",
+        {
+            "competition_id": competition_id,
+            **({"frozen_at": competition.scoreboard_frozen_at.isoformat()} if frozen else {}),
+            "rule_id": rule.id,
+        },
+    )
+
+
+async def _execute_freeze_scoreboard(db, rule, event_name, payload, config) -> None:
+    await _set_freeze(db, payload.get("competition_id"), True, rule)
+
+
+async def _execute_unfreeze_scoreboard(db, rule, event_name, payload, config) -> None:
+    await _set_freeze(db, payload.get("competition_id"), False, rule)
+
+
+# --- create_announcement (§5.3): post an announcement to the competition ------
+
+
+async def _execute_create_announcement(db, rule, event_name, payload, config) -> None:
+    competition_id = payload.get("competition_id")
+    if not competition_id:
+        logger.info("create_announcement: no competition on %s", event_name)
+        return
+    announcement = Announcement(
+        competition_id=competition_id,
+        title=render_template(config.get("title", ""), payload),
+        body=render_template(config.get("body", ""), payload),
+        created_by=None,  # system-posted
+    )
+    db.add(announcement)
+    await db.commit()
+    await db.refresh(announcement)
+    # Same event the announcements router emits, so it reaches the WS feed the
+    # same way a hand-posted one does.
+    await event_bus.emit(
+        "announcement.published",
+        {
+            "competition_id": competition_id,
+            "announcement_id": announcement.id,
+            "title": announcement.title,
+            "body": announcement.body,
+            "created_at": announcement.created_at.isoformat(),
+            "rule_id": rule.id,
+        },
+    )
+
+
 ACTIONS: dict[str, ActionSpec] = {
     "notify": ActionSpec(_execute_notify, personal_allowed=True),
     "send_email": ActionSpec(_execute_send_email),
@@ -440,6 +503,9 @@ ACTIONS: dict[str, ActionSpec] = {
     "create_ticket": ActionSpec(_execute_create_ticket),
     "update_score": ActionSpec(_execute_update_score),
     "create_award": ActionSpec(_execute_create_award),
+    "freeze_scoreboard": ActionSpec(_execute_freeze_scoreboard),
+    "unfreeze_scoreboard": ActionSpec(_execute_unfreeze_scoreboard),
+    "create_announcement": ActionSpec(_execute_create_announcement),
 }
 
 

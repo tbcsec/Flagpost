@@ -1,24 +1,50 @@
 """Public (spectator) scoreboard — the one unauthenticated read (Phase 9).
 
-A ``public`` competition's standings are viewable without an account, for
-streamers, spectators and sponsors. Only public, non-archived competitions are
-exposed; anything else 404s so a private competition's existence isn't
+When an organiser opts a competition in (``public_scoreboard``), its standings
+are listed on ``/public`` and viewable without an account, for streamers,
+spectators and sponsors. Anything not opted-in (or archived) 404s so it isn't
 disclosed. The board respects a scoreboard freeze exactly like the competitor
-view (a spectator is a non-staff viewer), so freezing hides the final stretch
-from the public too.
+view (a spectator is a non-staff viewer). The **CTFtime feed** is a separate
+opt-in (``ctftime_enabled``).
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db import get_db
 from models.competition import Competition
-from schemas.scoreboard import PublicScoreboardOut
+from schemas.scoreboard import PublicCompetitionOut, PublicScoreboardOut
 from utils.scoreboard import compute_scoreboard
 
 router = APIRouter(prefix="/api/public", tags=["public"])
+
+
+@router.get("/competitions", response_model=list[PublicCompetitionOut])
+async def public_competitions(db: AsyncSession = Depends(get_db)) -> list:
+    """The competitions offering a public scoreboard — the /public directory."""
+    rows = (
+        await db.execute(
+            select(Competition)
+            .where(
+                Competition.public_scoreboard.is_(True),
+                Competition.archived_at.is_(None),
+            )
+            .order_by(Competition.start_at.is_(None), Competition.start_at.desc())
+        )
+    ).scalars().all()
+    return [
+        {
+            "id": c.id,
+            "name": c.name,
+            "participation_mode": c.participation_mode,
+            "start_at": c.start_at,
+            "end_at": c.end_at,
+        }
+        for c in rows
+    ]
 
 
 @router.get(
@@ -31,10 +57,10 @@ async def public_scoreboard(
     competition = await db.get(Competition, competition_id)
     if (
         competition is None
-        or competition.visibility != "public"
+        or not competition.public_scoreboard
         or competition.archived_at is not None
     ):
-        # Don't disclose that a private/archived competition exists.
+        # Don't disclose a competition that hasn't opted into a public board.
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Scoreboard not found"
         )
@@ -53,12 +79,12 @@ async def ctftime_feed(
 ) -> dict:
     """The [CTFtime scoreboard feed](https://ctftime.org/json-scoreboard-feed):
     ``{"standings": [{"pos", "team", "score"}, ...]}``. An organiser pastes this
-    URL into CTFtime so a public event can be rated. Public competitions only;
-    respects the freeze like the spectator board."""
+    URL into CTFtime so a public event can be rated. Opt-in per competition
+    (``ctftime_enabled``); respects the freeze like the spectator board."""
     competition = await db.get(Competition, competition_id)
     if (
         competition is None
-        or competition.visibility != "public"
+        or not competition.ctftime_enabled
         or competition.archived_at is not None
     ):
         raise HTTPException(

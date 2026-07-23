@@ -43,3 +43,13 @@ class PublicScoreboardOut(ScoreboardOut):
     name: str
     start_at: datetime | None = None
     end_at: datetime | None = None
+
+
+class PublicCompetitionOut(BaseModel):
+    """A public-scoreboard competition in the /public directory."""
+
+    id: str
+    name: str
+    participation_mode: str
+    start_at: datetime | None = None
+    end_at: datetime | None = None

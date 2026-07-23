@@ -16,3 +16,11 @@ export function usePublicScoreboard(competitionId: string) {
     refetchInterval: 30_000,
   });
 }
+
+/** The /public directory of competitions offering a public scoreboard. */
+export function usePublicCompetitions() {
+  return useQuery({
+    queryKey: ["public-competitions"],
+    queryFn: () => publicApi.competitions(),
+  });
+}

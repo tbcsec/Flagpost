@@ -57,6 +57,7 @@ import type {
   SetupRequest,
   SetupStatus,
   RoleAssignment,
+  PublicCompetition,
   PublicScoreboard,
   Scoreboard,
   SignedUrl,
@@ -487,6 +488,9 @@ export const scoreboardApi = {
 };
 
 export const publicApi = {
+  // The /public directory of competitions offering a public scoreboard.
+  competitions: () =>
+    apiFetch<PublicCompetition[]>(`/api/public/competitions`),
   // The unauthenticated spectator board (public competitions only).
   scoreboard: (competitionId: string) =>
     apiFetch<PublicScoreboard>(

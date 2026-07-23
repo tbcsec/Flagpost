@@ -33,13 +33,14 @@ import asyncio
 import logging
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from db import ensure_aware_utc, utcnow
 from models.automation import AutomationRule
 from models.competition import Competition
 from plugins.loader import is_module_enabled
 from utils.automation_engine import evaluate_conditions, run_rule
+from utils.event_bus import event_bus
 
 logger = logging.getLogger("automation")
 
@@ -87,6 +88,56 @@ async def run_time_rules(db_factory, *, now: datetime | None = None) -> None:
                 await run_rule(db, rule, TRIGGER, payload)
 
 
+async def emit_lifecycle_events(db_factory, *, now: datetime | None = None) -> None:
+    """Emit ``competition.started`` / ``competition.ended`` once each, when a
+    competition's ``start_at`` / ``end_at`` is reached (§3.2 lifecycle triggers).
+    Dedup persists via the ``*_event_fired`` flags so a restart can't double-fire.
+    Emitted for **audit** regardless of the automations module — the engine gates
+    on the module per-rule."""
+    now = ensure_aware_utc(now) if now is not None else utcnow()
+    to_emit: list[tuple[str, dict]] = []
+    async with db_factory() as db:
+        competitions = (
+            (
+                await db.execute(
+                    select(Competition).where(
+                        Competition.archived_at.is_(None),
+                        or_(
+                            Competition.started_event_fired.is_(False),
+                            Competition.ended_event_fired.is_(False),
+                        ),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for c in competitions:
+            if (
+                not c.started_event_fired
+                and c.start_at is not None
+                and now >= ensure_aware_utc(c.start_at)
+            ):
+                c.started_event_fired = True
+                to_emit.append(
+                    ("competition.started", {"competition_id": c.id, "name": c.name})
+                )
+            if (
+                not c.ended_event_fired
+                and c.end_at is not None
+                and now >= ensure_aware_utc(c.end_at)
+            ):
+                c.ended_event_fired = True
+                to_emit.append(
+                    ("competition.ended", {"competition_id": c.id, "name": c.name})
+                )
+        if to_emit:
+            await db.commit()
+    # Emit after commit so the fired flag is durable before any handler runs.
+    for name, payload in to_emit:
+        await event_bus.emit(name, payload)
+
+
 def start(db_factory, interval_seconds: float) -> None:
     """Launch the periodic tick (idempotent). Requires a running event loop."""
     global _task
@@ -105,6 +156,7 @@ def stop() -> None:
 async def _loop(db_factory, interval_seconds: float) -> None:
     while True:
         try:
+            await emit_lifecycle_events(db_factory)
             await run_time_rules(db_factory)
         except asyncio.CancelledError:
             raise

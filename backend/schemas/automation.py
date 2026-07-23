@@ -118,6 +118,20 @@ class CreateAwardAction(BaseModel):
     points: int = Field(default=0, ge=-10000, le=10000)
 
 
+class FreezeScoreboardAction(BaseModel):
+    type: Literal["freeze_scoreboard"]
+
+
+class UnfreezeScoreboardAction(BaseModel):
+    type: Literal["unfreeze_scoreboard"]
+
+
+class CreateAnnouncementAction(BaseModel):
+    type: Literal["create_announcement"]
+    title: str = Field(min_length=1, max_length=200)
+    body: str = Field(min_length=1, max_length=_TEMPLATE_MAX)
+
+
 Action = Annotated[
     Union[
         NotifyAction,
@@ -129,6 +143,9 @@ Action = Annotated[
         CreateTicketAction,
         UpdateScoreAction,
         CreateAwardAction,
+        FreezeScoreboardAction,
+        UnfreezeScoreboardAction,
+        CreateAnnouncementAction,
     ],
     Field(discriminator="type"),
 ]

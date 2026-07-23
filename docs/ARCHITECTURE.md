@@ -380,6 +380,8 @@ participants". Global time rules are skipped (they'd need per-competition dedup)
 | `create_ticket` | e.g. auto-flag a challenge with high fail rate |
 | `update_score` | bonus/penalty adjustments |
 | `open_survey` | mark a feedback survey open for responses (emits `survey.opened`) |
+| `freeze_scoreboard` / `unfreeze_scoreboard` | control the public board's freeze (emits `scoreboard.frozen`/`unfrozen`) — e.g. freeze on `competition.ended` |
+| `create_announcement` | post an announcement to the competition (emits `announcement.published`) |
 
 ### 5.4 Webhook Action Hardening
 
@@ -1130,6 +1132,10 @@ submission is the one endpoint they have direct incentive to script.
   freeze, later solves/adjustments/awards/hint-costs excluded — and the WS room
   serves that same frozen snapshot so it visibly stops moving. Staff read the
   live board with `?live=true`. Emits `scoreboard.frozen` / `scoreboard.unfrozen`.
+  A freeze **stops the board from moving publicly — competitors keep solving and
+  their points still count**; the UI states this (confirm on freeze + a note on
+  the frozen board). It's also an automation action, so a rule can freeze on
+  `competition.ended` (a lifecycle trigger the scheduler now emits).
 
 ### 13.3 File Storage & Access Control
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { use } from "react";
 
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
@@ -55,7 +56,10 @@ export default function PublicScoreboardPage({
       {data && (
         <>
           <div>
-            <h1 className="text-2xl font-semibold">{data.name}</h1>
+            <Link href="/public" className="text-xs text-primary underline">
+              ← All public scoreboards
+            </Link>
+            <h1 className="mt-1 text-2xl font-semibold">{data.name}</h1>
             <p className="text-sm text-muted-foreground">
               {data.mode === "team" ? "Team" : "Individual"} scoreboard
               {data.frozen && " · frozen"}

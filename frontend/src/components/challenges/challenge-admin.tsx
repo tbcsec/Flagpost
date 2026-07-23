@@ -35,9 +35,12 @@ import {
   useChallengeStateMutation,
   useChallenges,
   useCreateChallenge,
+  useExportChallenges,
+  useImportChallenges,
   useUpdateChallenge,
 } from "@/lib/hooks/use-challenges";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
+import { toast } from "@/stores/toast";
 import type {
   Category,
   Challenge,
@@ -65,9 +68,33 @@ export function ChallengeAdmin({ competitionId }: { competitionId: string }) {
   const challenges = useChallenges(competitionId);
   const categories = useCategories(competitionId);
   const [editing, setEditing] = useState<Challenge | "new" | null>(null);
+  const exportChallenges = useExportChallenges(competitionId);
+  const importChallenges = useImportChallenges(competitionId);
 
   const categoryName = (id: string | null) =>
     categories.data?.find((c) => c.id === id)?.name ?? "—";
+
+  function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    importChallenges.mutate(file, {
+      onSuccess: (r) =>
+        toast(
+          `Imported ${r.created} challenge${r.created === 1 ? "" : "s"}` +
+            (r.skipped ? `, ${r.skipped} skipped` : ""),
+          {
+            variant: "success",
+            description: r.errors.length ? r.errors.slice(0, 3).join("; ") : undefined,
+          },
+        ),
+      onError: (err) =>
+        toast("Import failed", {
+          description: (err as Error).message,
+          variant: "destructive",
+        }),
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -81,7 +108,42 @@ export function ChallengeAdmin({ competitionId }: { competitionId: string }) {
               {challenges.data?.length ?? 0} challenge(s)
             </CardDescription>
           </div>
-          <Button onClick={() => setEditing("new")}>New challenge</Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                exportChallenges.mutate(undefined, {
+                  onError: (err) =>
+                    toast("Export failed", {
+                      description: (err as Error).message,
+                      variant: "destructive",
+                    }),
+                })
+              }
+              disabled={exportChallenges.isPending || !challenges.data?.length}
+            >
+              Export
+            </Button>
+            <label>
+              <span
+                className={cn(
+                  "inline-flex h-9 cursor-pointer items-center rounded-md border border-border px-3 text-sm font-medium hover:bg-accent/60",
+                  importChallenges.isPending && "pointer-events-none opacity-60",
+                )}
+              >
+                {importChallenges.isPending ? "Importing…" : "Import"}
+              </span>
+              <input
+                type="file"
+                accept=".zip,application/zip"
+                className="hidden"
+                onChange={onImportFile}
+                disabled={importChallenges.isPending}
+              />
+            </label>
+            <Button onClick={() => setEditing("new")}>New challenge</Button>
+          </div>
         </CardHeader>
         <CardContent>
           {challenges.isError && (

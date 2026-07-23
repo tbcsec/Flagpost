@@ -15,7 +15,7 @@ an unsolvable published challenge is a configuration error, caught here.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +38,7 @@ from schemas.challenge import (
 )
 from storage import get_storage
 from storage.base import ObjectStorage
+from utils.challenge_yaml import export_challenges, import_challenges
 from utils.event_bus import event_bus
 from utils.flags import hash_static_flag, make_salt
 from utils.scoring import (
@@ -334,6 +335,68 @@ async def list_challenges(
                 else max(0, limit - attempts.get(challenge.id, 0))
             )
     return challenges
+
+
+# --- bulk YAML import/export (ctfcli). Registered before the dynamic
+# `/{challenge_id}` routes so `/export` isn't captured as a challenge id. ---
+
+# 50 MB cap on an import bundle — generous for YAML + reasonable attachments.
+_IMPORT_MAX_BYTES = 50 * 1024 * 1024
+
+
+@router.get("/export")
+async def export_challenges_zip(
+    competition_id: str,
+    current_user: User = Depends(require_permission("challenge_edit")),
+    db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
+) -> Response:
+    """Download the competition's challenges as a ctfcli-format zip (Phase 9).
+    Static flags are omitted (they're stored hashed); regex patterns round-trip."""
+    competition = await db.get(Competition, competition_id)
+    if competition is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"
+        )
+    blob = await export_challenges(db, competition, storage)
+    return Response(
+        content=blob,
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="challenges.zip"'},
+    )
+
+
+@router.post("/import")
+async def import_challenges_zip(
+    competition_id: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_permission("challenge_create")),
+    db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
+) -> dict:
+    """Bulk-create challenges from a ctfcli-format zip (Phase 9). Additive — a
+    challenge whose title already exists is skipped."""
+    competition = await db.get(Competition, competition_id)
+    if competition is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"
+        )
+    blob = await file.read()
+    if len(blob) > _IMPORT_MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Import bundle is too large (50 MB max)",
+        )
+    try:
+        result = await import_challenges(db, competition, blob, storage)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+    # Bulk import is an atomic authoring op (like the platform backup import), so
+    # it doesn't emit a challenge.created per row — a null-subject event would
+    # misfire automations. The created challenges appear via the list refresh.
+    return result
 
 
 @router.get("/{challenge_id}", response_model=ChallengeOut)

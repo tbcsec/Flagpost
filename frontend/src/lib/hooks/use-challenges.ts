@@ -65,6 +65,22 @@ export function useCreateChallenge(competitionId: string) {
   });
 }
 
+/** Download the competition's challenges as a ctfcli-format zip. */
+export function useExportChallenges(competitionId: string) {
+  return useMutation({
+    mutationFn: () => challengesApi.exportZip(competitionId),
+  });
+}
+
+/** Bulk-import challenges from a ctfcli zip; refreshes the list on success. */
+export function useImportChallenges(competitionId: string) {
+  const invalidate = useInvalidate(competitionId);
+  return useMutation({
+    mutationFn: (file: File) => challengesApi.importZip(competitionId, file),
+    onSuccess: invalidate,
+  });
+}
+
 export function useUpdateChallenge(competitionId: string, challengeId: string) {
   const queryClient = useQueryClient();
   return useMutation({

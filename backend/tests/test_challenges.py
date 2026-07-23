@@ -344,3 +344,79 @@ async def test_category_from_another_competition_is_rejected(client):
         headers=_auth(admin),
     )
     assert resp.status_code == 400
+
+
+# --- bulk YAML import/export (ctfcli) ----------------------------------------
+
+
+async def test_challenge_yaml_import_and_export_roundtrip(client):
+    import io
+    import zipfile
+
+    import yaml
+
+    admin = await admin_token(client)
+    comp = await _make_competition(client)
+
+    # Build a ctfcli-style import zip with two challenges (static + dynamic).
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr(
+            "welcome/challenge.yml",
+            yaml.safe_dump({
+                "name": "Welcome",
+                "category": "misc",
+                "description": "Say hi",
+                "value": 50,
+                "flags": ["flag{hi}"],
+                "tags": ["easy-tag"],
+                "state": "visible",
+                "hints": [{"content": "wave", "cost": 5}],
+            }),
+        )
+        zf.writestr(
+            "hard/challenge.yml",
+            yaml.safe_dump({
+                "name": "Hard One",
+                "category": "pwn",
+                "description": "tough",
+                "type": "dynamic",
+                "value": 500,
+                "extra": {"initial": 500, "decay": 20, "minimum": 100, "difficulty": "Hard"},
+                "flags": [{"type": "regex", "content": "flag\\{.*\\}"}],
+                "prerequisites": ["Welcome"],
+            }),
+        )
+
+    imp = await client.post(
+        f"/api/competitions/{comp}/challenges/import",
+        files={"file": ("challenges.zip", buf.getvalue(), "application/zip")},
+        headers=_auth(admin),
+    )
+    assert imp.status_code == 200, imp.text
+    assert imp.json()["created"] == 2
+
+    listing = {c["title"]: c for c in (await client.get(f"/api/competitions/{comp}/challenges", headers=_auth(admin))).json()}
+    assert set(listing) == {"Welcome", "Hard One"}
+    assert listing["Hard One"]["scoring_type"] == "dynamic"
+    assert listing["Hard One"]["decay"] == 20 and listing["Hard One"]["difficulty"] == "Hard"
+    # Prerequisite resolved by title → the Welcome challenge's id.
+    assert listing["Hard One"]["prerequisites"] == [listing["Welcome"]["id"]]
+
+    # A re-import is additive: both titles already exist → skipped.
+    again = await client.post(
+        f"/api/competitions/{comp}/challenges/import",
+        files={"file": ("challenges.zip", buf.getvalue(), "application/zip")},
+        headers=_auth(admin),
+    )
+    assert again.json() == {"created": 0, "skipped": 2, "errors": []}
+
+    # Export returns a zip with a challenge.yml per challenge.
+    exp = await client.get(f"/api/competitions/{comp}/challenges/export", headers=_auth(admin))
+    assert exp.status_code == 200
+    out = zipfile.ZipFile(io.BytesIO(exp.content))
+    ymls = [n for n in out.namelist() if n.endswith("challenge.yml")]
+    assert len(ymls) == 2
+    # The regex flag round-trips; the static one is omitted (hashed).
+    hard = yaml.safe_load(out.read([n for n in ymls if n.startswith("hard-one")][0]))
+    assert hard["flags"] == [{"type": "regex", "content": "flag\\{.*\\}"}]

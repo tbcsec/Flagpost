@@ -431,6 +431,20 @@ export const challengesApi = {
       `/api/competitions/${competitionId}/challenges/${challengeId}/reset-guesses`,
       { method: "POST", body: JSON.stringify(target) },
     ),
+  // Bulk YAML (ctfcli) export/import.
+  exportZip: (competitionId: string) =>
+    downloadFile(
+      `/api/competitions/${competitionId}/challenges/export`,
+      "challenges.zip",
+    ),
+  importZip: (competitionId: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiFetch<{ created: number; skipped: number; errors: string[] }>(
+      `/api/competitions/${competitionId}/challenges/import`,
+      { method: "POST", body: form },
+    );
+  },
 };
 
 export const ratingsApi = {

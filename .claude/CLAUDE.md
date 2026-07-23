@@ -559,6 +559,20 @@ What's built:
       Settings → Challenges; a tag-chip + difficulty-select picker in the
       challenge editor (only shown once vocab exists); difficulty badge + tag
       chips on the browse cards.
+    - **Bulk challenge import/export (ctfcli YAML, zipped)** — `utils/challenge_yaml.py`:
+      `GET .../challenges/export` (`challenge_edit`) zips one `<slug>/challenge.yml`
+      per challenge (ctfcli format) + attachment files; `POST .../challenges/import`
+      (`challenge_create`, 50 MB cap) bulk-creates from such a zip, **additive**
+      (skip by existing title). Field map: name/category(created)/description
+      (TipTap↔plain)/value/`type:dynamic`+`extra`/flags(static+regex)/tags(unioned
+      into vocab)/`extra.difficulty`/hints/files/state/prerequisites(by **title**,
+      resolved post-pass). **Static flags omitted on export** (stored hashed; regex
+      round-trips) — import hashes the plaintext the YAML supplies, so
+      authoring→import is lossless. Routes registered **before** `/{challenge_id}`
+      so `/export` isn't captured as an id. Like the platform backup import, bulk
+      import emits no per-row event (atomic authoring op). Frontend: Export/Import
+      buttons on the Manage-challenges header (`useExportChallenges`/`useImportChallenges`,
+      reusing the `downloadFile` helper).
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

@@ -16,11 +16,11 @@ an unsolvable published challenge is a configuration error, caught here.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import require_permission, user_has_permission
-from db import get_db
+from db import ensure_aware_utc, get_db, utcnow
 from models.attachment import Attachment
 from models.challenge import Category, Challenge
 from models.competition import Competition
@@ -156,13 +156,24 @@ async def _get_scoped_challenge(
     return challenge
 
 
+def _is_released(challenge: Challenge) -> bool:
+    """Whether a challenge's scheduled release time (if any) has arrived."""
+    return (
+        challenge.release_at is None
+        or ensure_aware_utc(challenge.release_at) <= utcnow()
+    )
+
+
 async def load_visible_challenge(
     db: AsyncSession, competition_id: str, challenge_id: str, user: User
 ) -> Challenge:
-    """Return a scoped challenge, hiding drafts from non-editors (a draft 404s,
-    indistinguishable from missing). Shared by challenge and attachment reads."""
+    """Return a scoped challenge, hiding what a competitor shouldn't see yet — a
+    draft, or a published challenge whose scheduled release hasn't arrived — as a
+    404 (indistinguishable from missing). Editors see everything. Shared by
+    challenge and attachment reads."""
     challenge = await _get_scoped_challenge(db, competition_id, challenge_id)
-    if challenge.state != "published" and not await user_has_permission(
+    hidden = challenge.state != "published" or not _is_released(challenge)
+    if hidden and not await user_has_permission(
         db, user.id, "challenge_edit", competition_id
     ):
         raise HTTPException(
@@ -200,7 +211,15 @@ async def list_challenges(
     )
     query = select(Challenge).where(Challenge.competition_id == competition_id)
     if not can_edit:
-        query = query.where(Challenge.state == "published")
+        # Competitors see only published challenges whose scheduled release (if
+        # any) has arrived; staff see everything.
+        query = query.where(
+            Challenge.state == "published",
+            or_(
+                Challenge.release_at.is_(None),
+                Challenge.release_at <= utcnow(),
+            ),
+        )
     result = await db.execute(query.order_by(Challenge.created_at))
     challenges = list(result.scalars().all())
 
@@ -382,6 +401,7 @@ async def create_challenge(
         scoring_type=body.scoring_type,
         min_points=body.min_points,
         decay=body.decay,
+        release_at=body.release_at,
         flag_type=body.flag_type,
         case_insensitive=body.case_insensitive,
     )

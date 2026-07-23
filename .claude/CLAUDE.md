@@ -525,6 +525,18 @@ What's built:
       `{"standings":[{"pos","team","score"}]}` so a public event can be rated.
       Staff see the public-board + CTFtime-feed URLs on the scoreboard page when
       the competition is public.
+    - **Scheduled / waved challenge release** — `Challenge.release_at` (migration
+      `e3f4a5b6c7d8`). A published challenge with a future `release_at` stays
+      hidden from competitors (list filter + `load_visible_challenge` 404 via a
+      shared `_is_released`); staff always see it. `ChallengeCreate/Update/Out`
+      carry `release_at`. Clone clears it (schedule = clean slate); backup carries
+      it. Frontend: a `datetime-local` "Release at" field in the editor + a
+      "· scheduled" marker on the admin row. **Also fixed a latent test-infra
+      gap**: `models/__init__` didn't import `MCGuessReset`/`ChallengeRating`, so
+      their tables were only registered by import side-effects (the participant
+      challenge-list path — which always queries `mc_guess_resets` — 404'd "no
+      such table" in isolation); both are now imported so `Base.metadata` is
+      complete.
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

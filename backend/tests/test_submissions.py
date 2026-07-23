@@ -96,6 +96,56 @@ async def _submissions(challenge_id: str):
         ).scalars().all()
 
 
+# --- Scheduled release -------------------------------------------------------
+
+
+async def test_scheduled_release_hides_challenge_until_its_time(client):
+    from datetime import timedelta
+
+    from db import utcnow
+
+    comp = await _make_competition(client, mode="individual")
+    admin = await admin_token(client)
+    future = (utcnow() + timedelta(hours=1)).isoformat()
+    past = (utcnow() - timedelta(hours=1)).isoformat()
+
+    # One challenge scheduled for later, one already released.
+    later = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges",
+            json={"title": "Later", "points": 100, "flag": "flag{l}", "release_at": future},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    await client.post(f"/api/competitions/{comp}/challenges/{later}/publish", headers=_auth(admin))
+    now = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges",
+            json={"title": "Now", "points": 100, "flag": "flag{n}", "release_at": past},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    await client.post(f"/api/competitions/{comp}/challenges/{now}/publish", headers=_auth(admin))
+
+    player, pid = await _register(client, "ada@example.com")
+    await _assign_participant(pid, comp)
+
+    # The competitor sees only the released one; staff see both.
+    player_list = (await client.get(f"/api/competitions/{comp}/challenges", headers=_auth(player))).json()
+    assert {c["title"] for c in player_list} == {"Now"}
+    staff_list = (await client.get(f"/api/competitions/{comp}/challenges", headers=_auth(admin))).json()
+    assert {c["title"] for c in staff_list} == {"Later", "Now"}
+
+    # The unreleased challenge 404s for the competitor (detail + submit).
+    assert (await client.get(f"/api/competitions/{comp}/challenges/{later}", headers=_auth(player))).status_code == 404
+    submit = await client.post(
+        f"/api/competitions/{comp}/challenges/{later}/submit",
+        json={"flag": "flag{l}"},
+        headers=_auth(player),
+    )
+    assert submit.status_code == 404
+
+
 # --- Solver list + first blood -----------------------------------------------
 
 

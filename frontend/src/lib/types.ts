@@ -494,6 +494,9 @@ export interface Challenge {
   /** Current worth given the solve count (== points for static, decayed for
    *  dynamic). This is what cards should display. */
   value: number;
+  /** Scheduled release time; null = released on publish. Competitors never see
+   *  a challenge before this (staff do, badged "Scheduled"). */
+  release_at: string | null;
   state: ChallengeState;
   flag_type: FlagType;
   case_insensitive: boolean;
@@ -521,6 +524,7 @@ export interface ChallengeCreate {
   scoring_type?: ScoringType;
   min_points?: number | null;
   decay?: number | null;
+  release_at?: string | null;
   flag_type?: FlagType;
   case_insensitive?: boolean;
   flag?: string | null;

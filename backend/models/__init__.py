@@ -15,12 +15,14 @@ from models.competition import Competition
 from models.competition_module import CompetitionModule
 from models.dashboard_layout import DashboardLayout
 from models.feedback import (
+    ChallengeRating,
     Survey,
     SurveyAnswer,
     SurveyQuestion,
     SurveyResponse,
 )
 from models.hint import Hint, HintReveal
+from models.mc_guess_reset import MCGuessReset
 from models.notification import Notification
 from models.role import Role, RoleAssignment
 from models.score_adjustment import ScoreAdjustment
@@ -38,12 +40,14 @@ __all__ = [
     "AutomationRule",
     "Category",
     "Challenge",
+    "ChallengeRating",
     "CollabDocument",
     "Competition",
     "CompetitionModule",
     "DashboardLayout",
     "Hint",
     "HintReveal",
+    "MCGuessReset",
     "Notification",
     "Role",
     "RoleAssignment",

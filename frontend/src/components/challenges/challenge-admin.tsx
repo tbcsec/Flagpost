@@ -46,6 +46,15 @@ import type {
   ScoringType,
 } from "@/lib/types";
 
+// An ISO/UTC instant → the local "YYYY-MM-DDTHH:mm" a datetime-local input wants.
+function toLocalInput(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+    d.getHours(),
+  )}:${pad(d.getMinutes())}`;
+}
+
 // Admin authoring surface (ROADMAP #8/#9). All server state via the domain
 // hooks; RBAC (view/create/edit/publish/delete) is enforced server-side and
 // any 403 surfaces inline. The flag is write-only — the form shows *that* one
@@ -176,7 +185,19 @@ function ChallengeRow({
           challenge.points
         )}
       </TableCell>
-      <TableCell className="capitalize">{challenge.state}</TableCell>
+      <TableCell className="capitalize">
+        {challenge.state}
+        {challenge.state === "published" &&
+          challenge.release_at &&
+          new Date(challenge.release_at) > new Date() && (
+            <span
+              className="ml-1.5 text-xs normal-case text-muted-foreground"
+              title={`Releases ${new Date(challenge.release_at).toLocaleString()}`}
+            >
+              · scheduled
+            </span>
+          )}
+      </TableCell>
       <TableCell className="space-x-2 text-right">
         <Button variant="ghost" size="sm" onClick={onEdit}>
           Edit
@@ -234,6 +255,10 @@ function ChallengeForm({
   );
   const [minPoints, setMinPoints] = useState(String(challenge?.min_points ?? 100));
   const [decay, setDecay] = useState(String(challenge?.decay ?? 20));
+  // `datetime-local` wants "YYYY-MM-DDTHH:mm" in local time; store "" for none.
+  const [releaseAt, setReleaseAt] = useState(
+    challenge?.release_at ? toLocalInput(challenge.release_at) : "",
+  );
   const [flagType, setFlagType] = useState<FlagType>(
     challenge?.flag_type ?? "static",
   );
@@ -270,6 +295,8 @@ function ChallengeForm({
       base.min_points = Number(minPoints);
       base.decay = Number(decay);
     }
+    // A blank release clears any schedule (null); otherwise send it as ISO/UTC.
+    base.release_at = releaseAt ? new Date(releaseAt).toISOString() : null;
     if (flagType === "multiple_choice") {
       const trimmed = choices.map((c) => c.trim());
       const hasCorrect = correctIndex !== null && !!trimmed[correctIndex];
@@ -389,6 +416,27 @@ function ChallengeForm({
                 </p>
               </div>
             )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="release-at">Release at</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="release-at"
+                type="datetime-local"
+                value={releaseAt}
+                onChange={(e) => setReleaseAt(e.target.value)}
+                className="max-w-xs"
+              />
+              {releaseAt && (
+                <Button type="button" variant="ghost" size="sm" onClick={() => setReleaseAt("")}>
+                  Clear
+                </Button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Optional. A published challenge stays hidden from competitors until
+              this time — leave blank to release as soon as it&apos;s published.
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="flag-type">Flag type</Label>

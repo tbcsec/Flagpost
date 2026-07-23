@@ -29,6 +29,8 @@ class ChallengeCreate(BaseModel):
     scoring_type: ScoringType = "static"
     min_points: int | None = Field(default=None, ge=0, le=100_000)
     decay: int | None = Field(default=None, ge=1, le=100_000)
+    # Scheduled release: hidden from competitors until this time (Phase 9).
+    release_at: datetime | None = None
     flag_type: FlagType = "static"
     case_insensitive: bool = False
     # Plaintext flag (static), pattern (regex), or the **correct option**
@@ -69,6 +71,7 @@ class ChallengeUpdate(BaseModel):
     scoring_type: ScoringType | None = None
     min_points: int | None = Field(default=None, ge=0, le=100_000)
     decay: int | None = Field(default=None, ge=1, le=100_000)
+    release_at: datetime | None = None
     flag_type: FlagType | None = None
     case_insensitive: bool | None = None
     flag: str | None = Field(default=None, min_length=1, max_length=500)
@@ -91,6 +94,9 @@ class ChallengeOut(BaseModel):
     min_points: int | None = None
     decay: int | None = None
     value: int = 0
+    # Scheduled release time; null = released on publish. Competitors never see a
+    # challenge before this, so when they can read one it's always released.
+    release_at: datetime | None = None
     state: ChallengeState
     flag_type: FlagType
     case_insensitive: bool

@@ -11,12 +11,13 @@ choice) — the editor's native format, portable across SQLite/Postgres via the
 generic JSON type (ADR-0006).
 """
 
+from datetime import datetime
 from uuid import uuid4
 
 from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from db import Base, CompetitionScopedMixin, TimestampMixin
+from db import Base, CompetitionScopedMixin, TimestampMixin, UtcDateTime
 
 
 class Category(Base, CompetitionScopedMixin, TimestampMixin):
@@ -59,6 +60,10 @@ class Challenge(Base, CompetitionScopedMixin, TimestampMixin):
     decay: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # "draft" | "published" (Tier 2 adds "review").
     state: Mapped[str] = mapped_column(String, nullable=False, default="draft")
+    # Scheduled/waved release (Phase 9): a published challenge with a future
+    # release_at stays hidden from competitors until then (staff always see it).
+    # Null = released as soon as it's published.
+    release_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
 
     # --- Flag config (§13.2) — the secret parts are never serialized ---
     # "static" | "regex" | "multiple_choice"

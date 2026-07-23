@@ -920,6 +920,35 @@ async def test_module_toggle_rbac_and_invariants(client):
     assert "module.disabled" in names
 
 
+async def test_enabled_modules_endpoint_is_member_readable(client):
+    comp = await _competition(client)
+    admin = await admin_token(client)
+    ada = await _participant(client, comp, "ada@example.com")
+
+    # A participant (challenge_view, not edit_competition) can read the enabled
+    # set — it's what gates their nav. Optional modules only; no required-core.
+    enabled = (
+        await client.get(
+            f"/api/competitions/{comp}/modules/enabled", headers=_auth(ada)
+        )
+    ).json()
+    assert "feedback" in enabled and "automations" in enabled
+    assert "tickets" not in enabled  # required-core is never listed here
+
+    # Disabling a module drops it from the member-readable set.
+    await client.put(
+        f"/api/competitions/{comp}/modules/feedback",
+        json={"enabled": False},
+        headers=_auth(admin),
+    )
+    enabled = (
+        await client.get(
+            f"/api/competitions/{comp}/modules/enabled", headers=_auth(ada)
+        )
+    ).json()
+    assert "feedback" not in enabled and "automations" in enabled
+
+
 async def test_disabled_module_stops_engine_and_api(client):
     comp = await _competition(client)
     chal = await _challenge(client, comp)

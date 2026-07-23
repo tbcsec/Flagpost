@@ -283,6 +283,9 @@ export const modulesApi = {
   // Per-competition module inventory + toggle (Admin → Plugins, §11.3).
   list: (competitionId: string) =>
     apiFetch<ModuleState[]>(`/api/competitions/${competitionId}/modules`),
+  // Member-readable enabled optional-module ids — gates the nav for every viewer.
+  enabled: (competitionId: string) =>
+    apiFetch<string[]>(`/api/competitions/${competitionId}/modules/enabled`),
   toggle: (competitionId: string, moduleId: string, enabled: boolean) =>
     apiFetch<ModuleState>(`/api/competitions/${competitionId}/modules/${moduleId}`, {
       method: "PUT",

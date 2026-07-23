@@ -444,7 +444,16 @@ Items (this list grows as the owner adds them):
   `edit_competition`, with a "Core" (locked) and "Optional" (toggleable) split.
   Frontend: `use-modules.ts` + `modulesApi`; the dead `PLUGINS` placeholder is
   removed. Tests: the existing module-toggle test updated for the new shape (+ a
-  core-module inventory assertion).
+  core-module inventory assertion). **Follow-up (owner):** confirmed module
+  scoping stays **per-competition** (§11.3 — multi-tenant, one install runs
+  competitions with different feature sets), *not* site-wide. And **disabled
+  modules now drop from the nav**: a member-readable `GET
+  /modules/enabled` (`challenge_view`, returns enabled optional-module ids —
+  unlike the `edit_competition` management list, so it gates *competitors'* nav
+  too) drives a `module` tag on the `COMP_NAV` items (Feedback/Analytics/
+  Automations); a disabled module's item is filtered out. The toggle shares the
+  `["modules", competitionId]` query key, so disabling a module removes its nav
+  entry live. Test: `test_enabled_modules_endpoint_is_member_readable` (+1).
 - **Cleanup: React hydration warning** ✅ — the no-flash theme script rewrites
   `<html>`'s palette/mode/accent before hydration, so the SSR defaults never
   matched the client's first paint (a `data-palette` mismatch warning on every

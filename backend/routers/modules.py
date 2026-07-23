@@ -24,7 +24,7 @@ from db import get_db
 from models.competition import Competition
 from models.competition_module import CompetitionModule
 from models.user import User
-from plugins.loader import all_manifests, loaded_manifest
+from plugins.loader import all_manifests, loaded_manifest, optional_modules
 from schemas.module import ModuleStateOut, ModuleToggle
 from utils.event_bus import event_bus
 
@@ -40,6 +40,33 @@ async def _competition_or_404(db: AsyncSession, competition_id: str) -> Competit
             status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"
         )
     return competition
+
+
+@router.get("/enabled", response_model=list[str])
+async def enabled_modules(
+    competition_id: str,
+    _user: User = Depends(require_permission("challenge_view")),
+    db: AsyncSession = Depends(get_db),
+) -> list[str]:
+    """The enabled **optional** module ids for this competition — a lightweight,
+    member-readable read (``challenge_view``, unlike the ``edit_competition``
+    management list) so the client can hide the nav entries of disabled modules
+    for every viewer, not just admins. Required-core modules are always on, so
+    they're not listed here (nothing gates them)."""
+    await _competition_or_404(db, competition_id)
+    overrides = {
+        module_id: enabled
+        for module_id, enabled in (
+            await db.execute(
+                select(CompetitionModule.module_id, CompetitionModule.enabled).where(
+                    CompetitionModule.competition_id == competition_id
+                )
+            )
+        ).all()
+    }
+    return sorted(
+        m.id for m in optional_modules() if overrides.get(m.id, True)
+    )
 
 
 @router.get("", response_model=list[ModuleStateOut])

@@ -18,6 +18,18 @@ export function useModules(competitionId: string, enabled = true) {
   });
 }
 
+/** The enabled optional-module ids for a competition — member-readable, so the
+ *  nav can hide disabled modules' entries for every viewer. Its own query key
+ *  (separate from the admin list) so a toggle can refresh both. */
+export function useEnabledModules(competitionId: string, enabled = true) {
+  const isAuthenticated = useAuthStore((s) => s.status === "authenticated");
+  return useQuery({
+    queryKey: ["modules", competitionId, "enabled"],
+    queryFn: () => modulesApi.enabled(competitionId),
+    enabled: isAuthenticated && enabled && Boolean(competitionId),
+  });
+}
+
 export function useToggleModule(competitionId: string) {
   const qc = useQueryClient();
   return useMutation({

@@ -75,7 +75,7 @@ code.
 | Admin → Competitions (list + New competition) | **Wired** (`useCompetitions`, `CreateCompetitionDialog`) |
 | Profile — change password | **Wired** (new `authApi.changePassword` + `useChangePassword`) |
 | Lobby — join public / join by code | **Wired** (pre-Tier-2 — `useJoinCompetition` / `useJoinByCode`; refetches permissions so the nav leaves the lobby) |
-| Role-aware navigation | **Wired** (pre-Tier-2 — `useAccess` off `/me/permissions` gates manager-only nav + the Admin section; direct admin URLs are guarded) |
+| Role-aware navigation | **Wired** (pre-Tier-2 — `useAccess` off `/me/permissions` gates manager-only nav + the Admin section; direct admin URLs are guarded). Tier 3 Phase 9: also **module-aware** — an optional module disabled for the active competition drops its nav entry (`GET /modules/enabled`, member-readable) |
 | Admin → Event log | **Wired** — audit-log viewer over every emitted event (§3.3), gated on `view_audit_log`; GitLab-style filtering by event/competition/team/actor/time/free-text, pagination, expandable payloads (`use-audit-log`) |
 | Dashboard | **Wired** (Tier 2 Phase 1 + Tier 3 Phase 6) — widget-registration architecture (§10.1) off `dashboard` module endpoints: manager stats/recent-solves/challenge-health/support-queue, participant standing/solves, announcements. Managers (`customize_dashboard`) get an **edit mode** (§10.2–10.5): drag-reorder, per-widget size-cycle, show/hide, save / cancel / reset-to-default, persisted per-user in `dashboard_layouts` (`use-dashboard`, `DashboardGrid`) |
 | Support tickets | **Wired** (Tier 2 Phase 2) — `tickets` module: competitor create/reply, staff assign/resolve/internal-notes, ownership scoping; live thread + staff-queue WS rooms with the §4.4 audio cue (`use-tickets`) |

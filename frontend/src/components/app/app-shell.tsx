@@ -10,6 +10,7 @@ import { PaletteMenu } from "@/components/theme/palette-menu";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { useCompetitions } from "@/lib/hooks/use-competitions";
+import { useEnabledModules } from "@/lib/hooks/use-modules";
 import { useAccess } from "@/lib/hooks/use-permissions";
 import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
 import { useLogout } from "@/lib/hooks/use-users";
@@ -59,16 +60,24 @@ const settingsIcon: Icon = (
 );
 
 // `manage: true` items are shown only to a Judge/organiser of the active
-// competition (gated by useAccess); the rest are competitor-facing.
-const COMP_NAV: { href: string; label: string; icon: Icon; manage?: boolean }[] = [
+// competition (gated by useAccess); the rest are competitor-facing. `module`
+// ties an item to an optional module (§11.3) — the item is hidden when that
+// module is disabled for the active competition (nothing there would work).
+const COMP_NAV: {
+  href: string;
+  label: string;
+  icon: Icon;
+  manage?: boolean;
+  module?: string;
+}[] = [
   { href: "/", label: "Dashboard", icon: dashIcon },
   { href: "/challenges", label: "Challenges", icon: <span className="text-base leading-none">⚑</span> },
   { href: "/scoreboard", label: "Scoreboard", icon: scoreboardIcon },
   { href: "/participants", label: "Participants", icon: peopleIcon },
   { href: "/support", label: "Support", icon: supportIcon },
-  { href: "/feedback", label: "Feedback", icon: feedbackIcon },
-  { href: "/analytics", label: "Analytics", icon: analyticsIcon, manage: true },
-  { href: "/automations", label: "Automations", icon: boltIcon, manage: true },
+  { href: "/feedback", label: "Feedback", icon: feedbackIcon, module: "feedback" },
+  { href: "/analytics", label: "Analytics", icon: analyticsIcon, manage: true, module: "analytics" },
+  { href: "/automations", label: "Automations", icon: boltIcon, manage: true, module: "automations" },
   { href: "/settings", label: "Settings", icon: settingsIcon, manage: true },
 ];
 
@@ -99,6 +108,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [adminOpen, setAdminOpen] = React.useState(pathname.startsWith("/admin"));
   const logout = useLogout();
   const user = useAuthStore((s) => s.user);
+  const activeCompetitionId = useAuthStore((s) => s.activeCompetitionId);
   const access = useAccess();
   const { data: siteSettings } = useSiteSettings();
   const platformName = (siteSettings ?? FALLBACK_SETTINGS).platform_name;
@@ -128,9 +138,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // from non-admins, and swap the whole competition nav for a Lobby link when a
   // signed-in user has no competition access yet.
   const showLobby = access.ready && access.inLobby;
-  const compNav = COMP_NAV.filter(
-    (item) => !item.manage || access.canManageActiveCompetition,
+  // Optional modules disabled for the active competition drop out of the nav
+  // (§11.3). Member-readable, so it gates competitors' nav too. Until it loads
+  // we don't filter — modules are on by default, so hiding-then-showing would
+  // flicker more than the rare disabled case.
+  const enabledModules = useEnabledModules(
+    activeCompetitionId ?? "",
+    Boolean(activeCompetitionId) && access.ready && !access.inLobby,
   );
+  const compNav = COMP_NAV.filter((item) => {
+    if (item.manage && !access.canManageActiveCompetition) return false;
+    if (item.module && enabledModules.data && !enabledModules.data.includes(item.module))
+      return false;
+    return true;
+  });
   const adminDenied = isAdminSection && access.ready && !access.isAdmin;
 
   // A lobby user (no competition access) has no competition-scoped pages to be

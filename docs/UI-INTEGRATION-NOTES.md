@@ -69,6 +69,7 @@ code.
 | Announcements — post + live banner + dashboard widget | **Wired** (Phase 8 — `useAnnouncements`: REST + WS room, `NewAnnouncementDialog`) |
 | Hints — reveal (competitor) + authoring (editor) | **Wired** (Phase 9 — `useHints`: reveal-on-request with cost, hidden body until revealed; scoreboard deducts cost live) |
 | Participants — team mode (create/join/leave, browse teams) | **Wired** (reuses `TeamPanel`) |
+| Participants — individual mode (competitor roster + standing) | **Wired** (Tier 3 Phase 9) — `GET /participants` lists Participant-role holders with join time / solves / rank / points (reusing the scoreboard computation); `ParticipantsPanel` shows a "your standing" summary + the roster (`use-participants`) |
 | Competition Settings | **Wired** (`CompetitionSettingsForm` on the active competition) |
 | Admin → Competitions (list + New competition) | **Wired** (`useCompetitions`, `CreateCompetitionDialog`) |
 | Profile — change password | **Wired** (new `authApi.changePassword` + `useChangePassword`) |

@@ -239,6 +239,15 @@ What's built:
   **dialog widths +25%** (`components/ui/dialog.tsx` base `max-w-lg`→`max-w-[40rem]`,
   512→640px; override tiers scaled to match) so the collaborative notes get more
   room, and the `CollabNote` editor min-height `min-h-24`→`min-h-32`.
+- **Tier 3 Phase 9** (owner-inserted ad-hoc pre-release phase; **not yet pushed**
+  — accumulates until the owner signals done) — items so far:
+  - **Individual-mode Participants page**: `GET
+    /api/competitions/{id}/participants` (`routers/participants.py`, mounted by
+    the `competitions` module) — the roster of competition-scoped Participant-role
+    holders (§7.5) with join time / distinct-solve count / standing (rank+points
+    reused from `compute_scoreboard`); `challenge_view`-gated, competition-scoped,
+    no migration/event. Frontend `use-participants.ts` + `ParticipantsPanel`
+    replaces the old individual-mode placeholder on `/participants`.
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0012 (event-dispatch sync-critical vs background, supersedes

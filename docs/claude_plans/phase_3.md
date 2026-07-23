@@ -422,7 +422,18 @@ complete; work accumulates until then.
 
 Items (this list grows as the owner adds them):
 
-- _None yet — awaiting the owner's first item._
+- **Individual-mode Participants page** ✅ — the `/participants` page rendered a
+  "no endpoint yet" placeholder in individual mode (team mode was already wired
+  via `TeamPanel`). Now backed by a real roster: `GET
+  /api/competitions/{id}/participants` (`routers/participants.py`, mounted by the
+  `competitions` module) lists every competition-scoped Participant-role holder
+  (§7.5) with join time, distinct-solve count, and standing (rank/points reused
+  from `compute_scoreboard` so ranking matches the board exactly); gated on
+  `challenge_view`, scoped by `competition_id`. Frontend: `use-participants.ts` +
+  a `ParticipantsPanel` (a "your standing" summary + the competitors roster,
+  self-row highlighted) wired into the page. No migration; no new event (pure
+  read). Tests: backend +4 (`test_participants.py` — roster+standing, RBAC,
+  competition scoping, 404).
 
 ## Phase 10 — Accessibility, responsiveness & optimization pass (#28)
 

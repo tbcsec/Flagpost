@@ -40,6 +40,7 @@ import type {
   Hint,
   HintAuthored,
   MyTeam,
+  Participant,
   Permissions,
   PermissionEntry,
   Role,
@@ -269,6 +270,12 @@ export const teamsApi = {
     apiFetch<void>(`/api/competitions/${competitionId}/teams/leave`, {
       method: "POST",
     }),
+};
+
+export const participantsApi = {
+  // The individual-mode roster: Participant-role holders + their standing.
+  list: (competitionId: string) =>
+    apiFetch<Participant[]>(`/api/competitions/${competitionId}/participants`),
 };
 
 export const categoriesApi = {

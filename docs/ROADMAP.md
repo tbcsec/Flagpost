@@ -76,6 +76,8 @@ This is the actual MVP: enough to run one competition, live, end to end.
    (public/private).
 7. **Team management** — create a team, invite/join a team, leave a team,
    solo-vs-team mode toggle per competition (some CTFs are solo-only).
+   *(The individual-mode counterpart — a `/participants` competitor roster with
+   standing — was wired in the ad-hoc Tier 3 Phase 9.)*
 8. **Challenge CRUD (admin)** — title, description (rich text), category,
    points, flag (with basic flag formats — static, regex, case-insensitive
    toggle), file attachments, visibility toggle. No review workflow yet

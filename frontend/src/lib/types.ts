@@ -360,6 +360,16 @@ export interface MyTeam {
   created_at: string;
 }
 
+/** A single competitor in an individual-mode competition's roster. */
+export interface Participant {
+  user_id: string;
+  display_name: string;
+  joined_at: string;
+  rank: number | null;
+  points: number;
+  solve_count: number;
+}
+
 export interface Category {
   id: string;
   competition_id: string;

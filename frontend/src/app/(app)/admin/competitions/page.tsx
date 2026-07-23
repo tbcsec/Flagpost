@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { CreateCompetitionDialog } from "@/components/competitions/create-competition-dialog";
-import { NotWiredNote, SectionHeader } from "@/components/app/section-header";
+import { SectionHeader } from "@/components/app/section-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,7 +25,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useCloneCompetition, useCompetitions } from "@/lib/hooks/use-competitions";
+import {
+  useArchiveCompetition,
+  useCloneCompetition,
+  useCompetitions,
+  useDeleteCompetition,
+} from "@/lib/hooks/use-competitions";
 import type { Competition } from "@/lib/types";
 import { toast } from "@/stores/toast";
 
@@ -34,7 +39,20 @@ import { toast } from "@/stores/toast";
 // "add the UI, don't fake the feature" rule.
 export default function AdminCompetitionsPage() {
   const { data: competitions, isLoading, isError, error } = useCompetitions();
+  const archive = useArchiveCompetition();
   const [cloning, setCloning] = useState<Competition | null>(null);
+  const [deleting, setDeleting] = useState<Competition | null>(null);
+
+  function onArchive(c: Competition) {
+    const archived = !c.archived_at;
+    archive.mutate(
+      { id: c.id, archived },
+      {
+        onSuccess: () => toast(`${c.name} ${archived ? "archived" : "unarchived"}`),
+        onError: (e) => toast("Couldn't update", { description: (e as Error).message, variant: "destructive" }),
+      },
+    );
+  }
 
   return (
     <>
@@ -49,7 +67,6 @@ export default function AdminCompetitionsPage() {
           <CreateCompetitionDialog />
         </CardHeader>
         <CardContent className="space-y-4">
-          <NotWiredNote>Archive and delete have no endpoint yet — those actions are disabled.</NotWiredNote>
           {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
           {isError && <p className="text-sm text-destructive">{(error as Error).message}</p>}
           {competitions && competitions.length > 0 && (
@@ -64,8 +81,11 @@ export default function AdminCompetitionsPage() {
               </TableHeader>
               <TableBody>
                 {competitions.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell className="font-medium">{c.name}</TableCell>
+                  <TableRow key={c.id} className={c.archived_at ? "opacity-60" : undefined}>
+                    <TableCell className="font-medium">
+                      {c.name}
+                      {c.archived_at && <Badge variant="outline" className="ml-2">Archived</Badge>}
+                    </TableCell>
                     <TableCell className="capitalize">{c.participation_mode}</TableCell>
                     <TableCell>
                       <Badge variant={c.visibility === "public" ? "success" : "muted"}>
@@ -76,8 +96,20 @@ export default function AdminCompetitionsPage() {
                       <Button variant="ghost" size="sm" onClick={() => setCloning(c)}>
                         Clone
                       </Button>
-                      <Button variant="ghost" size="sm" disabled>Archive</Button>
-                      <Button variant="ghost" size="sm" className="text-destructive" disabled>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={archive.isPending}
+                        onClick={() => onArchive(c)}
+                      >
+                        {c.archived_at ? "Unarchive" : "Archive"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive"
+                        onClick={() => setDeleting(c)}
+                      >
                         Delete
                       </Button>
                     </TableCell>
@@ -90,7 +122,46 @@ export default function AdminCompetitionsPage() {
       </Card>
 
       <CloneDialog source={cloning} onClose={() => setCloning(null)} />
+      <DeleteDialog target={deleting} onClose={() => setDeleting(null)} />
     </>
+  );
+}
+
+function DeleteDialog({ target, onClose }: { target: Competition | null; onClose: () => void }) {
+  const del = useDeleteCompetition();
+
+  function onConfirm() {
+    if (!target) return;
+    del.mutate(target.id, {
+      onSuccess: () => {
+        toast(`Deleted ${target.name}`, { variant: "success" });
+        onClose();
+      },
+      onError: (e) => toast("Couldn't delete", { description: (e as Error).message, variant: "destructive" }),
+    });
+  }
+
+  return (
+    <Dialog open={Boolean(target)} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete competition?</DialogTitle>
+          <DialogDescription>
+            This permanently removes <span className="font-medium">{target?.name}</span> and
+            everything under it — challenges, teams, submissions, scores, tickets, surveys. This
+            can&apos;t be undone. To just close it out, archive it instead.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={onConfirm} disabled={del.isPending}>
+            {del.isPending ? "Deleting…" : "Delete competition"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

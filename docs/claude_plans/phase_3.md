@@ -517,6 +517,23 @@ Items (this list grows as the owner adds them):
   Fixed in the test harness: `conftest._create_schema` now drains
   `event_bus.wait_for_background()` before `drop_all`, so no background task
   leaks across the per-test schema boundary. Suite is deterministic again.
+- **Admin → Competitions: archive + delete** ✅ — the placeholder Archive/Delete
+  buttons are now wired. **Archive** (`POST /competitions/{id}/archive` +
+  `/unarchive`, `edit_competition`) = a reversible soft-close: new
+  `Competition.archived_at` (+ migration), retained but **hidden from the topbar
+  switcher and the lobby** (the active selection stays visible even if just
+  archived) and badged in the admin list. **Delete** (`DELETE /competitions/{id}`,
+  the existing `delete_competition` perm) hard-removes the competition and its
+  whole tenant tree (§6.2 FK cascade), behind a confirm dialog. New §3.2 events
+  `competition.archived/unarchived/deleted` (event + automation catalogs;
+  archive→`edit_competition`, delete→`delete_competition` triggers). Frontend:
+  `archive_at` on the `Competition` type, `useArchiveCompetition`/
+  `useDeleteCompetition`, the wired admin page (archive toggle, delete confirm,
+  Archived badge) + switcher/lobby filtering. Tests: backend +5
+  (`test_competitions.py` — archive/unarchive+events, RBAC, delete+event, RBAC, 404).
+- **Branded favicon** ✅ — there was no favicon. Added `app/icon.svg` (Next.js
+  auto-serves it as `<link rel="icon">`): the Flagpost mark — green flag on a
+  light post — on a dark brand tile, matching the sidebar lockup.
 - **Cleanup: nested `<form>` on the challenge editor** ✅ — `ChallengeForm`
   rendered `AttachmentsSection` + `HintsSection` (each with its own `<form>`)
   *inside* the challenge `<form>`, which is invalid HTML (a hydration warning).

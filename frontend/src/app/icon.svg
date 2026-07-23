@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Flagpost mark on a dark brand tile (LOGO-SPEC): green flag on a light post.
+       Fixed colours (a static favicon can't read theme tokens); matches the
+       dark-theme lockup users see in the app sidebar. -->
+  <rect width="64" height="64" rx="14" fill="#0f1a24" />
+  <rect x="20" y="12" width="5" height="40" rx="2.5" fill="#e7eae5" />
+  <path d="M25 15 H44 L39 21.5 L44 28 H25 Z" fill="#2bbd7e" />
+</svg>

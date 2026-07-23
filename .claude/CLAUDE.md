@@ -287,6 +287,17 @@ What's built:
     `competition.created` (+`cloned_from`). Frontend: `useCloneCompetition` + a
     Clone action + name-prompt dialog on Admin → Competitions. Owner scope:
     attachments + surveys in, automation rules out.
+  - **Competition archive + delete**: `POST /competitions/{id}/archive`+`/unarchive`
+    (`edit_competition`) = reversible soft-close via new `Competition.archived_at`
+    (+ migration) — hidden from the switcher/lobby, badged in the admin list.
+    `DELETE /competitions/{id}` (`delete_competition`) hard-deletes the tenant tree
+    behind a confirm. New §3.2 `competition.archived/unarchived/deleted` events.
+    Frontend: `useArchiveCompetition`/`useDeleteCompetition` + wired Admin page.
+  - **Branded favicon**: `app/icon.svg` (Next.js auto-serves it) — the Flagpost
+    mark on a dark brand tile.
+  - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
+    before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
+    across the per-test schema and flake unrelated tests.
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0012 (event-dispatch sync-critical vs background, supersedes

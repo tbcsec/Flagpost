@@ -247,6 +247,12 @@ export const competitionsApi = {
       method: "POST",
       body: JSON.stringify({ name }),
     }),
+  archive: (id: string) =>
+    apiFetch<Competition>(`/api/competitions/${id}/archive`, { method: "POST" }),
+  unarchive: (id: string) =>
+    apiFetch<Competition>(`/api/competitions/${id}/unarchive`, { method: "POST" }),
+  remove: (id: string) =>
+    apiFetch<void>(`/api/competitions/${id}`, { method: "DELETE" }),
   // Self-serve join for a public competition (from the lobby list).
   join: (id: string) =>
     apiFetch<Competition>(`/api/competitions/${id}/join`, { method: "POST" }),

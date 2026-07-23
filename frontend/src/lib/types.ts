@@ -33,6 +33,8 @@ export interface Competition {
   /** Organiser-shareable code for joining a private competition. */
   invite_code: string;
   created_at: string;
+  /** Set when an organiser has archived (closed out) the competition. */
+  archived_at: string | null;
 }
 
 /** Effective permissions for the current user (auth/me/permissions). The set

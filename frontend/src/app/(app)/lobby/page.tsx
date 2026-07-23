@@ -25,7 +25,10 @@ export default function LobbyPage() {
   const joinByCode = useJoinByCode();
   const [code, setCode] = useState("");
 
-  const publicComps = (competitions ?? []).filter((c) => c.visibility === "public");
+  // Public and not archived — an archived competition is closed to new joiners.
+  const publicComps = (competitions ?? []).filter(
+    (c) => c.visibility === "public" && !c.archived_at,
+  );
 
   function onJoined(name: string) {
     toast(`Joined ${name}`, { variant: "success" });

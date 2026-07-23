@@ -24,7 +24,7 @@ from auth.membership import (
     has_global_role,
     member_competition_ids,
 )
-from db import get_db
+from db import get_db, utcnow
 from models.competition import Competition
 from models.user import User
 from schemas.competition import (
@@ -240,3 +240,68 @@ async def update_competition(
         },
     )
     return competition
+
+
+async def _competition_or_404(db: AsyncSession, competition_id: str) -> Competition:
+    competition = await db.get(Competition, competition_id)
+    if competition is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"
+        )
+    return competition
+
+
+@router.post("/{competition_id}/archive", response_model=CompetitionOut)
+async def archive_competition(
+    competition_id: str,
+    current_user: User = Depends(require_permission("edit_competition")),
+    db: AsyncSession = Depends(get_db),
+) -> Competition:
+    """Close a competition out: retained but hidden from the switcher/lobby and
+    flagged in the admin list. Reversible (§`archived_at`)."""
+    competition = await _competition_or_404(db, competition_id)
+    if competition.archived_at is None:
+        competition.archived_at = utcnow()
+        await db.commit()
+        await db.refresh(competition)
+        await event_bus.emit(
+            "competition.archived",
+            {"competition_id": competition.id, "user_id": current_user.id},
+        )
+    return competition
+
+
+@router.post("/{competition_id}/unarchive", response_model=CompetitionOut)
+async def unarchive_competition(
+    competition_id: str,
+    current_user: User = Depends(require_permission("edit_competition")),
+    db: AsyncSession = Depends(get_db),
+) -> Competition:
+    competition = await _competition_or_404(db, competition_id)
+    if competition.archived_at is not None:
+        competition.archived_at = None
+        await db.commit()
+        await db.refresh(competition)
+        await event_bus.emit(
+            "competition.unarchived",
+            {"competition_id": competition.id, "user_id": current_user.id},
+        )
+    return competition
+
+
+@router.delete("/{competition_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_competition(
+    competition_id: str,
+    current_user: User = Depends(require_permission("delete_competition")),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Permanently delete a competition and everything under it (§6.2 tenant
+    tree cascades on the FK). Irreversible — the destructive counterpart to
+    archive."""
+    competition = await _competition_or_404(db, competition_id)
+    await db.delete(competition)
+    await db.commit()
+    await event_bus.emit(
+        "competition.deleted",
+        {"competition_id": competition_id, "user_id": current_user.id},
+    )

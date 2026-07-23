@@ -94,6 +94,30 @@ export function useCloneCompetition() {
   });
 }
 
+export function useArchiveCompetition() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, archived }: { id: string; archived: boolean }) =>
+      archived ? competitionsApi.archive(id) : competitionsApi.unarchive(id),
+    onSuccess: (updated: Competition) => {
+      queryClient.setQueryData(competitionKeys.detail(updated.id), updated);
+      queryClient.invalidateQueries({ queryKey: competitionKeys.all });
+    },
+  });
+}
+
+export function useDeleteCompetition() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => competitionsApi.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: competitionKeys.all });
+      // A deleted competition may have been the active one; permissions change.
+      queryClient.invalidateQueries({ queryKey: ["permissions"] });
+    },
+  });
+}
+
 export function useUpdateCompetition(id: string) {
   const queryClient = useQueryClient();
   return useMutation({

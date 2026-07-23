@@ -19,6 +19,9 @@ from __future__ import annotations
 EVENT_TYPES: tuple[str, ...] = (
     "competition.created",
     "competition.updated",
+    "competition.archived",
+    "competition.unarchived",
+    "competition.deleted",
     "competition.started",
     "competition.ended",
     "competition.member_joined",

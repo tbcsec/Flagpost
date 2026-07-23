@@ -160,3 +160,68 @@ async def test_list_and_get_competition(client):
 
     missing = await client.get("/api/competitions/does-not-exist", headers=_auth(token))
     assert missing.status_code == 404
+
+
+async def _make_competition(client, admin, name="Baseline") -> str:
+    return (
+        await client.post(
+            "/api/competitions",
+            json={"name": name, "participation_mode": "individual", "visibility": "public"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+
+
+async def test_archive_and_unarchive(client):
+    admin = await admin_token(client)
+    comp = await _make_competition(client, admin)
+
+    archived = await client.post(f"/api/competitions/{comp}/archive", headers=_auth(admin))
+    assert archived.status_code == 200
+    assert archived.json()["archived_at"] is not None
+
+    # Idempotent-ish: still archived, no error.
+    again = await client.post(f"/api/competitions/{comp}/archive", headers=_auth(admin))
+    assert again.status_code == 200 and again.json()["archived_at"] is not None
+
+    unarchived = await client.post(f"/api/competitions/{comp}/unarchive", headers=_auth(admin))
+    assert unarchived.status_code == 200 and unarchived.json()["archived_at"] is None
+
+    async with SessionLocal() as session:
+        names = (await session.scalars(select(AuditLogEntry.event_name))).all()
+    assert "competition.archived" in names and "competition.unarchived" in names
+
+
+async def test_archive_requires_edit_permission(client):
+    admin = await admin_token(client)
+    comp = await _make_competition(client, admin)
+    outsider = await _register(client, "outsider@example.com")
+    resp = await client.post(f"/api/competitions/{comp}/archive", headers=_auth(outsider))
+    assert resp.status_code == 403
+
+
+async def test_delete_competition(client):
+    admin = await admin_token(client)
+    comp = await _make_competition(client, admin)
+
+    resp = await client.delete(f"/api/competitions/{comp}", headers=_auth(admin))
+    assert resp.status_code == 204
+    assert (await client.get(f"/api/competitions/{comp}", headers=_auth(admin))).status_code == 404
+
+    async with SessionLocal() as session:
+        names = (await session.scalars(select(AuditLogEntry.event_name))).all()
+    assert "competition.deleted" in names
+
+
+async def test_delete_requires_permission(client):
+    admin = await admin_token(client)
+    comp = await _make_competition(client, admin)
+    outsider = await _register(client, "nope@example.com")
+    resp = await client.delete(f"/api/competitions/{comp}", headers=_auth(outsider))
+    assert resp.status_code == 403
+
+
+async def test_delete_missing_is_404(client):
+    admin = await admin_token(client)
+    resp = await client.delete("/api/competitions/nope", headers=_auth(admin))
+    assert resp.status_code == 404

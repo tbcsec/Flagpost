@@ -22,7 +22,7 @@ from uuid import uuid4
 from sqlalchemy import DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from db import Base, TimestampMixin
+from db import Base, TimestampMixin, UtcDateTime
 
 
 def generate_invite_code() -> str:
@@ -65,3 +65,7 @@ class Competition(Base, TimestampMixin):
     invite_code: Mapped[str] = mapped_column(
         String, nullable=False, unique=True, default=generate_invite_code
     )
+    # Archived = an organiser has closed the competition out. Data is retained;
+    # it's just hidden from the switcher/lobby and flagged in the admin list.
+    # Reversible (unarchive). Null = active.
+    archived_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)

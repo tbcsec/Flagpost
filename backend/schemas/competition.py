@@ -50,6 +50,7 @@ class CompetitionOut(BaseModel):
     # code travels with the record for organisers to share.
     invite_code: str
     created_at: datetime
+    archived_at: datetime | None = None
 
 
 class CompetitionJoinRequest(BaseModel):

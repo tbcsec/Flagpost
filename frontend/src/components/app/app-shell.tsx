@@ -320,7 +320,12 @@ function Topbar({
 }) {
   const activeCompetitionId = useAuthStore((s) => s.activeCompetitionId);
   const setActiveCompetition = useAuthStore((s) => s.setActiveCompetition);
-  const { data: competitions } = useCompetitions();
+  const { data: allCompetitions } = useCompetitions();
+  // Archived competitions drop out of the switcher (they're closed out) — but
+  // keep the current selection visible even if it was just archived.
+  const competitions = (allCompetitions ?? []).filter(
+    (c) => !c.archived_at || c.id === activeCompetitionId,
+  );
 
   const [notifOpen, setNotifOpen] = React.useState(false);
   const notifRef = React.useRef<HTMLDivElement>(null);

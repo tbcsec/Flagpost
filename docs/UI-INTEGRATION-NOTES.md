@@ -72,7 +72,7 @@ code.
 | Participants — individual mode (competitor roster + standing) | **Wired** (Tier 3 Phase 9) — `GET /participants` lists Participant-role holders with join time / solves / rank / points (reusing the scoreboard computation); `ParticipantsPanel` shows a "your standing" summary + the roster (`use-participants`) |
 | Settings → Modules (module enable/disable) | **Wired** (Tier 3 Phase 9, §11.3) — on **Competition Settings** (module state is per-competition, so it lives with the competition's config, not the global Admin section): the full inventory — required-core locked "always on", optional toggleable via `GET`/`PUT /api/competitions/{id}/modules`, gated on `edit_competition` (`use-modules`, `ModulesPanel`). Disabling a module also drops its nav entry (see role-aware navigation) |
 | Competition Settings | **Wired** (`CompetitionSettingsForm` on the active competition) |
-| Admin → Competitions (list + New competition + Clone) | **Wired** (`useCompetitions`, `CreateCompetitionDialog`). Tier 3 Phase 9: a per-row **Clone** action (name-prompt dialog) deep-copies a baseline's config — settings/categories/challenges/hints/attachments/surveys/module toggles — into a fresh competition (`POST /clone`, `useCloneCompetition`); archive/delete still disabled |
+| Admin → Competitions (list + New + Clone + Archive + Delete) | **Wired** (`useCompetitions`, `CreateCompetitionDialog`). Tier 3 Phase 9: per-row **Clone** (name-prompt dialog, deep-copies a baseline's config), **Archive/Unarchive** (reversible soft-close via `archived_at` — archived competitions drop from the switcher/lobby and are badged here), and **Delete** (hard-delete behind a confirm, `delete_competition`) — `useCloneCompetition`/`useArchiveCompetition`/`useDeleteCompetition` |
 | Profile — change password | **Wired** (new `authApi.changePassword` + `useChangePassword`) |
 | Lobby — join public / join by code | **Wired** (pre-Tier-2 — `useJoinCompetition` / `useJoinByCode`; refetches permissions so the nav leaves the lobby) |
 | Role-aware navigation | **Wired** (pre-Tier-2 — `useAccess` off `/me/permissions` gates manager-only nav + the Admin section; direct admin URLs are guarded). Tier 3 Phase 9: also **module-aware** — an optional module disabled for the active competition drops its nav entry (`GET /modules/enabled`, member-readable) |
@@ -105,8 +105,6 @@ a retrofit later; **none of the data is real**.
   admin UI to set it — it's env-configured, §5.3.)
 - **Profile → notification preferences** — the notification *inbox* is wired
   (topbar bell, see above), but per-user mute/channel preferences aren't built.
-- **Lobby join actions / Admin archive+delete competition** — no endpoint;
-  buttons present but disabled.
 
 ## Deliberately not carried over from the mock
 

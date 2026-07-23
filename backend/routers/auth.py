@@ -25,6 +25,7 @@ from auth.security import (
 from config import settings
 from auth.membership import effective_permissions
 from db import ensure_aware_utc, get_db, utcnow
+from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 from models.user import RefreshSession, User
 from schemas.auth import (
     ChangePasswordRequest,
@@ -74,6 +75,15 @@ async def _issue_session(db: AsyncSession, user: User, response: Response) -> st
 async def register(
     body: RegisterRequest, response: Response, db: AsyncSession = Depends(get_db)
 ) -> TokenResponse:
+    # Site-wide registration policy (Admin → Site settings): when closed, only an
+    # administrator can mint accounts (Admin → Users).
+    site = await db.get(SiteSettings, SITE_SETTINGS_ID)
+    if site is not None and not site.registration_open:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registration is closed. Contact an administrator for an account.",
+        )
+
     existing = await db.scalar(select(User).where(User.email == body.email))
     if existing is not None:
         raise HTTPException(

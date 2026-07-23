@@ -21,11 +21,47 @@ from config import settings
 logger = logging.getLogger("mailer")
 
 
+async def _effective_smtp():
+    """Resolve the SMTP config: the DB SiteSettings row wins when its host is set
+    (Admin → Site settings), otherwise fall back to the env config. Returns a
+    dict of connection kwargs, or None if no host is configured anywhere."""
+    from db import SessionLocal
+    from models.site_settings import SITE_SETTINGS_ID, SiteSettings
+
+    row = None
+    try:
+        async with SessionLocal() as db:
+            row = await db.get(SiteSettings, SITE_SETTINGS_ID)
+    except Exception:  # noqa: BLE001 — never let a settings-read failure block delivery attempts
+        row = None
+
+    if row is not None and row.smtp_host:
+        return {
+            "host": row.smtp_host,
+            "port": row.smtp_port,
+            "username": row.smtp_username,
+            "password": row.smtp_password,
+            "from": row.smtp_from,
+            "starttls": row.smtp_starttls,
+        }
+    if settings.smtp_host:
+        return {
+            "host": settings.smtp_host,
+            "port": settings.smtp_port,
+            "username": settings.smtp_username,
+            "password": settings.smtp_password,
+            "from": settings.smtp_from,
+            "starttls": settings.smtp_starttls,
+        }
+    return None
+
+
 async def send_email(to: list[str], subject: str, body: str) -> bool:
     """Send a plain-text email. Returns True if handed to the SMTP server."""
-    if not settings.smtp_host:
+    smtp = await _effective_smtp()
+    if smtp is None:
         logger.info(
-            "SMTP not configured (smtp_host unset); dropping email %r to %s",
+            "SMTP not configured (no host in DB or env); dropping email %r to %s",
             subject,
             to,
         )
@@ -34,17 +70,17 @@ async def send_email(to: list[str], subject: str, body: str) -> bool:
     import aiosmtplib  # imported lazily so an unconfigured install never needs it
 
     message = EmailMessage()
-    message["From"] = settings.smtp_from
+    message["From"] = smtp["from"]
     message["To"] = ", ".join(to)
     message["Subject"] = subject
     message.set_content(body)
 
     await aiosmtplib.send(
         message,
-        hostname=settings.smtp_host,
-        port=settings.smtp_port,
-        username=settings.smtp_username,
-        password=settings.smtp_password,
-        start_tls=settings.smtp_starttls,
+        hostname=smtp["host"],
+        port=smtp["port"],
+        username=smtp["username"],
+        password=smtp["password"],
+        start_tls=smtp["starttls"],
     )
     return True

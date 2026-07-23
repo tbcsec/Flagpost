@@ -546,6 +546,22 @@ Items (this list grows as the owner adds them):
   `lib/placeholder-data.ts` file is **deleted** — its last consumers
   (`MODULE_STATUS`, `DIRECTORY_USERS`, …) are all wired now. Tests: backend +3
   (`test_admin_overview.py` — totals+health, status derivation incl. archived, RBAC).
+- **Admin → Site settings (operational)** ✅ — was a placeholder; now the two
+  operational (non-theming) site configs that belong there today. **Registration
+  policy**: a new `SiteSettings.registration_open` (+ migration) — when closed,
+  `POST /register` returns 403 (only admins mint accounts via Admin → Users); the
+  public `GET /site-settings` now carries `registration_open` so the login page
+  hides the Register link and `/register` shows a "closed" notice. **SMTP config**:
+  `smtp_host/port/username/password/from/starttls` on `SiteSettings`, editable via
+  `GET`/`PUT /site-settings/operational` (`manage_site_settings`; the password is
+  **write-only** — never serialized, GET returns `smtp_password_set`). The
+  `send_email` action's mailer now resolves SMTP from the **DB** (falling back to
+  the env config, then a logged no-op) — so email is admin-configurable, no env
+  redeploy. AI config stays deferred (a disabled note). Frontend: operational
+  types/api/`use-site-settings` hooks + the wired page (registration select + SMTP
+  form) + register/login handling. Tests: backend +3 (`test_site_settings.py` —
+  operational RBAC, SMTP password write-only round-trip, closing registration
+  blocks signup; the two public-shape assertions updated for `registration_open`).
 - **Branded favicon** ✅ — there was no favicon. Added `app/icon.svg` (Next.js
   auto-serves it as `<link rel="icon">`): the Flagpost mark — green flag on a
   light post — on a dark brand tile, matching the sidebar lockup.

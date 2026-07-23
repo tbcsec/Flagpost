@@ -28,9 +28,11 @@ async def test_public_read_returns_defaults_without_auth(client):
         "platform_name": DEFAULT_PLATFORM_NAME,
         "default_palette": DEFAULT_PALETTE,
         "accent": DEFAULT_ACCENT,
+        "registration_open": True,
     }
     # Public shape only — no internal fields leak.
     assert "updated_at" not in body
+    assert "smtp_host" not in body
 
 
 async def test_admin_update_round_trips(client):
@@ -50,6 +52,7 @@ async def test_admin_update_round_trips(client):
         "platform_name": "ACME CTF",
         "default_palette": "eclipse",
         "accent": "#A855F7",
+        "registration_open": True,
     }
 
 
@@ -105,3 +108,83 @@ async def test_update_emits_settings_updated_event(client):
     assert len(events) == 1
     assert events[0].payload["accent"] == "azure"
     assert events[0].user_id is not None  # actor lifted for the audit log
+
+
+# --- Operational settings (Phase 9): registration policy + SMTP ---
+
+
+async def _register_resp(client, email: str):
+    return await client.post(
+        "/api/auth/register",
+        json={"email": email, "password": "password123", "display_name": "U"},
+    )
+
+
+async def test_operational_requires_permission(client):
+    resp = await client.get("/api/site-settings/operational")
+    assert resp.status_code in (401, 403)
+    token = (await _register_resp(client, "nobody@example.com")).json()["access_token"]
+    resp = await client.get(
+        "/api/site-settings/operational", headers=_auth(token)
+    )
+    assert resp.status_code == 403
+
+
+async def test_smtp_round_trips_password_write_only(client):
+    admin = await admin_token(client)
+    resp = await client.put(
+        "/api/site-settings/operational",
+        json={
+            "registration_open": True,
+            "smtp_host": "smtp.example.com",
+            "smtp_port": 465,
+            "smtp_username": "postmaster",
+            "smtp_from": "ctf@example.com",
+            "smtp_starttls": False,
+            "smtp_password": "s3cret",
+        },
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["smtp_host"] == "smtp.example.com"
+    assert body["smtp_port"] == 465
+    assert body["smtp_password_set"] is True
+    assert "smtp_password" not in body  # never serialized back
+
+    # Re-saving without a password keeps the stored one.
+    resp = await client.put(
+        "/api/site-settings/operational",
+        json={
+            "registration_open": True,
+            "smtp_host": "smtp.example.com",
+            "smtp_port": 465,
+            "smtp_from": "ctf@example.com",
+            "smtp_starttls": False,
+        },
+        headers=_auth(admin),
+    )
+    assert resp.json()["smtp_password_set"] is True
+
+
+async def test_closing_registration_blocks_signup(client):
+    admin = await admin_token(client)
+    # Open by default: a signup works.
+    assert (await _register_resp(client, "early@example.com")).status_code == 201
+
+    await client.put(
+        "/api/site-settings/operational",
+        json={"registration_open": False},
+        headers=_auth(admin),
+    )
+    # Public read reflects it, and signup is now refused.
+    assert (await client.get("/api/site-settings")).json()["registration_open"] is False
+    assert (await _register_resp(client, "late@example.com")).status_code == 403
+
+    # Reopening restores it.
+    await client.put(
+        "/api/site-settings/operational",
+        json={"registration_open": True},
+        headers=_auth(admin),
+    )
+    assert (await _register_resp(client, "back@example.com")).status_code == 201

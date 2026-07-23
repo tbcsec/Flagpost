@@ -82,6 +82,7 @@ code.
 | Presence indicators | **Wired** (Tier 2 Phase 3, §4.1) — WS presence with debounced clear: "N others viewing" on the challenge dialog (new presence-only `challenge` room) and "a judge is looking at this ticket" on the ticket thread (`usePresence` + `PresenceIndicator`) |
 | Admin → Appearance (site-wide theming) | **Wired** (Tier 2 Phase 4, §9) — platform name + palette + accent (preset or custom hex) with live preview, `manage_site_settings`-gated `site_settings` module; login/register/sidebar/tab-title brand from the public read (`use-site-settings`, `lib/theme.ts`) |
 | Admin → Roles (custom role editor) | **Wired** (Tier 2 Phase 5, §7.4) — `roles` module gated on `manage_roles`: list + permission catalog, create/clone/edit/delete custom roles, assign(by-email)/unassign; system roles read-only, last-admin guard (`use-roles`) |
+| Admin → Site settings (operational) | **Wired** (Tier 3 Phase 9) — registration policy (`registration_open`; closed → `/register` 403 + hidden link) and SMTP config for the `send_email` action (`GET`/`PUT /site-settings/operational`, `manage_site_settings`; password write-only). The mailer resolves SMTP from the DB (env fallback). AI/SSO deferred (`use-site-settings`) |
 | Admin → Dashboard (site overview) | **Wired** (Tier 3 Phase 9, §6.3) — cross-competition oversight gated on `view_global_analytics`: platform totals (accounts / competitions / teams / challenges / solves) + a per-competition **health** table (status / participants / challenges / solves / open tickets) off `GET /api/admin/overview` (`use-admin-overview`) |
 | Admin → Users (account directory + lifecycle) | **Wired** (Tier 3 Phase 9, §7) — `users` module: directory + search (`view_all_users`), create / edit(+password) / soft-ban / unban / hard-delete (`manage_users`). Ban = `User.is_active`, enforced at the auth dependency + login + refresh, revokes sessions; can't ban/delete yourself or the last admin. Role *assignment* stays on Admin → Roles (`use-users`, `UserFormDialog`) |
 | Notifications (topbar bell) | **Wired** (Tier 3 Phase 0, §4.4) — real per-user inbox: `notifications` required-core module, `/ws/user/<id>` live push, list/mark-read/read-all; ticket events routed like the audio cue (`use-notifications`). Per-user *preferences*/mute still unbuilt |
@@ -99,10 +100,9 @@ a retrofit later; **none of the data is real**.
   Phase 6, see the wired table above). The widget-registration architecture that
   shipped as a fixed layout made the drag-and-drop customization layer additive,
   exactly as intended (§10.2) — it's now built for the manager dashboard.
-- **Admin → Site settings** (SMTP / AI / integrations) — deferred; the theming
-  half of this page is now real on Admin → Appearance (see the wired table).
-  (Note: the automation `send_email` action does use SMTP config, but there's no
-  admin UI to set it — it's env-configured, §5.3.)
+- **Admin → Site settings — AI / SSO / integrations** — deferred; the theming
+  half moved to Admin → Appearance, and the operational half (registration policy
+  + SMTP) is now wired (see the wired table). AI and SSO stay off the roadmap.
 - **Profile → notification preferences** — the notification *inbox* is wired
   (topbar bell, see above), but per-user mute/channel preferences aren't built.
 

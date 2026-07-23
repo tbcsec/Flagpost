@@ -23,6 +23,7 @@ export default function RegisterPage() {
   const register = useRegister();
   const { data: settings } = useSiteSettings();
   const platformName = (settings ?? FALLBACK_SETTINGS).platform_name;
+  const registrationOpen = (settings ?? FALLBACK_SETTINGS).registration_open;
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -48,6 +49,11 @@ export default function RegisterPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {!registrationOpen ? (
+            <p className="text-sm text-muted-foreground">
+              Registration is closed. Ask an administrator to create an account for you.
+            </p>
+          ) : (
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="display_name">Display name</Label>
@@ -94,6 +100,7 @@ export default function RegisterPage() {
               {register.isPending ? "Creating…" : "Create account"}
             </Button>
           </form>
+          )}
           <p className="mt-4 text-sm text-muted-foreground">
             Already have an account?{" "}
             <Link href="/login" className="text-primary hover:underline">

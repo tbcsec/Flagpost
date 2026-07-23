@@ -50,6 +50,8 @@ import type {
   RoleAssignment,
   Scoreboard,
   SignedUrl,
+  OperationalSettings,
+  OperationalSettingsUpdate,
   SiteSettings,
   SiteSettingsAdmin,
   SubmitResult,
@@ -489,6 +491,14 @@ export const siteSettingsApi = {
   get: () => apiFetch<SiteSettings>("/api/site-settings", {}, { auth: false }),
   update: (input: { platform_name: string; default_palette: string; accent: string }) =>
     apiFetch<SiteSettingsAdmin>("/api/site-settings", {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  // Operational settings — admin-only (registration policy + SMTP).
+  operational: () =>
+    apiFetch<OperationalSettings>("/api/site-settings/operational"),
+  updateOperational: (input: OperationalSettingsUpdate) =>
+    apiFetch<OperationalSettings>("/api/site-settings/operational", {
       method: "PUT",
       body: JSON.stringify(input),
     }),

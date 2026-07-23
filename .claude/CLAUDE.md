@@ -299,6 +299,14 @@ What's built:
     health (derived status / participants / challenges / solves / open tickets).
     Frontend `use-admin-overview.ts` + tiles & health table. `lib/placeholder-data.ts`
     **deleted** (all consumers wired).
+  - **Admin → Site settings wired** (was placeholder): the operational (non-theming)
+    site config. **Registration policy** — `SiteSettings.registration_open`
+    (+ migration); closed → `POST /register` 403 (admins mint accounts via Users);
+    public `GET /site-settings` carries `registration_open` (login hides Register,
+    `/register` shows a closed notice). **SMTP** — `smtp_*` on `SiteSettings`, editable
+    via `GET`/`PUT /site-settings/operational` (`manage_site_settings`; password
+    **write-only** — GET returns `smtp_password_set`); the `send_email` mailer now
+    resolves SMTP from the DB (env fallback). AI stays deferred.
   - **Branded favicon**: `app/icon.svg` (Next.js auto-serves it) — the Flagpost
     mark on a dark brand tile.
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`

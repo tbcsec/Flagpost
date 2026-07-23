@@ -21,13 +21,14 @@ ACCENT_PATTERN = r"^([a-z][a-z0-9-]{1,31}|#[0-9a-fA-F]{6})$"
 
 class SiteSettingsOut(BaseModel):
     """Public shape — served unauthenticated so the login/register screens can
-    brand themselves before there's a session."""
+    brand themselves before there's a session, and know whether to offer sign-up."""
 
     model_config = ConfigDict(from_attributes=True)
 
     platform_name: str
     default_palette: str
     accent: str
+    registration_open: bool
 
 
 class SiteSettingsUpdate(BaseModel):
@@ -40,3 +41,31 @@ class SiteSettingsAdminOut(SiteSettingsOut):
     """Admin shape — adds the last-updated timestamp for the settings page."""
 
     updated_at: datetime | None
+
+
+class OperationalSettingsOut(BaseModel):
+    """The operational (non-theming) site config — registration policy + SMTP.
+    The SMTP password is never serialized back; ``smtp_password_set`` says whether
+    one is stored."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    registration_open: bool
+    smtp_host: str | None
+    smtp_port: int
+    smtp_username: str | None
+    smtp_from: str
+    smtp_starttls: bool
+    smtp_password_set: bool
+    updated_at: datetime | None
+
+
+class OperationalSettingsUpdate(BaseModel):
+    registration_open: bool
+    smtp_host: str | None = Field(default=None, max_length=255)
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_username: str | None = Field(default=None, max_length=255)
+    smtp_from: str = Field(default="flagpost@localhost", min_length=1, max_length=320)
+    smtp_starttls: bool = True
+    # Omitted / null = leave the stored password unchanged; a value replaces it.
+    smtp_password: str | None = Field(default=None, max_length=255)

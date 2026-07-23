@@ -536,11 +536,35 @@ export interface SiteSettings {
   platform_name: string;
   default_palette: string;
   accent: string;
+  registration_open: boolean;
 }
 
 // Admin shape adds the last-updated timestamp.
 export interface SiteSettingsAdmin extends SiteSettings {
   updated_at: string | null;
+}
+
+/** Operational site config (Admin → Site settings): registration + SMTP. */
+export interface OperationalSettings {
+  registration_open: boolean;
+  smtp_host: string | null;
+  smtp_port: number;
+  smtp_username: string | null;
+  smtp_from: string;
+  smtp_starttls: boolean;
+  smtp_password_set: boolean;
+  updated_at: string | null;
+}
+
+export interface OperationalSettingsUpdate {
+  registration_open: boolean;
+  smtp_host: string | null;
+  smtp_port: number;
+  smtp_username: string | null;
+  smtp_from: string;
+  smtp_starttls: boolean;
+  /** Omit / null to keep the stored password; a value replaces it. */
+  smtp_password?: string | null;
 }
 
 // RBAC admin (§7.4). Roles are data: a permission-key array + scope.

@@ -14,7 +14,7 @@ fixed sentinel so a second row can't be created by accident.
 
 from datetime import datetime
 
-from sqlalchemy import String
+from sqlalchemy import Boolean, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base, TimestampMixin, UtcDateTime, utcnow
@@ -44,6 +44,29 @@ class SiteSettings(Base, TimestampMixin):
     # Accent (action colours) — either a preset slug or a "#RRGGBB" custom hex.
     accent: Mapped[str] = mapped_column(
         String, nullable=False, default=DEFAULT_ACCENT
+    )
+    # --- Operational settings (Admin → Site settings) ---
+    # Whether the public self-serve /register endpoint accepts new sign-ups.
+    # Off = invite-only (admins mint accounts on Admin → Users).
+    registration_open: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="1"
+    )
+    # Outbound SMTP for the send_email automation action (§5.3). When smtp_host
+    # is set these override the env config; unset = fall back to env (or, if that
+    # too is unset, email is a logged no-op). smtp_password is write-only in the
+    # API (never serialized back).
+    smtp_host: Mapped[str | None] = mapped_column(String, nullable=True)
+    smtp_port: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=587, server_default="587"
+    )
+    smtp_username: Mapped[str | None] = mapped_column(String, nullable=True)
+    smtp_password: Mapped[str | None] = mapped_column(String, nullable=True)
+    smtp_from: Mapped[str] = mapped_column(
+        String, nullable=False, default="flagpost@localhost",
+        server_default="flagpost@localhost",
+    )
+    smtp_starttls: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="1"
     )
     updated_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, onupdate=utcnow, nullable=True

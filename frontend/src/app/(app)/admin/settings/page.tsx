@@ -1,70 +1,181 @@
 "use client";
 
-import { NotWiredNote, SectionHeader } from "@/components/app/section-header";
+import { useEffect, useState } from "react";
+
+import { SectionHeader } from "@/components/app/section-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useAccess } from "@/lib/hooks/use-permissions";
+import {
+  useOperationalSettings,
+  useUpdateOperationalSettings,
+} from "@/lib/hooks/use-site-settings";
+import { toast } from "@/stores/toast";
 
-// Admin → Site settings. AI config, SMTP, registration policy and site-wide
-// notices. None of these have backends yet (AI and SSO are explicitly deferred;
-// SMTP/registration policy aren't built), so the whole surface is placeholder.
+// Admin → Site settings. The operational (non-theming) site config: the public
+// registration policy and the SMTP server the send_email automation action uses.
+// Theming lives on Admin → Appearance; AI/SSO are deferred. Gated on
+// manage_site_settings.
 export default function AdminSettingsPage() {
+  const access = useAccess();
+  const canManage = access.has("manage_site_settings");
+  const settings = useOperationalSettings();
+  const update = useUpdateOperationalSettings();
+
+  const [registrationOpen, setRegistrationOpen] = useState(true);
+  const [host, setHost] = useState("");
+  const [port, setPort] = useState("587");
+  const [from, setFrom] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [starttls, setStarttls] = useState(true);
+
+  const data = settings.data;
+  useEffect(() => {
+    if (!data) return;
+    setRegistrationOpen(data.registration_open);
+    setHost(data.smtp_host ?? "");
+    setPort(String(data.smtp_port));
+    setFrom(data.smtp_from);
+    setUsername(data.smtp_username ?? "");
+    setStarttls(data.smtp_starttls);
+    setPassword("");
+  }, [data]);
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    update.mutate(
+      {
+        registration_open: registrationOpen,
+        smtp_host: host.trim() || null,
+        smtp_port: Number(port) || 587,
+        smtp_username: username.trim() || null,
+        smtp_from: from.trim() || "flagpost@localhost",
+        smtp_starttls: starttls,
+        // Only send a password when the admin typed a new one (write-only).
+        ...(password ? { smtp_password: password } : {}),
+      },
+      {
+        onSuccess: () => toast("Settings saved", { variant: "success" }),
+        onError: (err) =>
+          toast("Couldn't save", { description: (err as Error).message, variant: "destructive" }),
+      },
+    );
+  }
+
+  if (!access.ready) return <Skeleton className="h-64 w-full" />;
+  if (!canManage) {
+    return (
+      <>
+        <SectionHeader title="Admin — Site settings" subtitle="Global — platform-wide" />
+        <EmptyState title="No access" description="You need the manage-site-settings permission to change site settings." />
+      </>
+    );
+  }
+
   return (
     <>
-      <SectionHeader title="Admin — Site settings" subtitle="Global — platform-wide, not scoped to a competition" />
-      <div className="grid max-w-xl gap-5">
-        <NotWiredNote>
-          AI, SMTP, registration policy and site-wide notices aren&apos;t built
-          (AI is explicitly deferred). Nothing here persists.
-        </NotWiredNote>
+      <SectionHeader title="Admin — Site settings" subtitle="Global — registration policy & outbound email" />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>AI configuration</CardTitle>
-            <CardDescription>Deferred past MVP</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-2">
-              <Label htmlFor="aik">API key</Label>
-              <Input id="aik" type="password" placeholder="sk-…" disabled />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>SMTP configuration</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-3">
+      {settings.isLoading || !data ? (
+        <Skeleton className="h-64 w-full" />
+      ) : (
+        <form onSubmit={onSubmit} className="grid max-w-2xl gap-5">
+          <Card>
+            <CardHeader>
+              <CardTitle>Registration</CardTitle>
+              <CardDescription>
+                Whether anyone can sign up. When closed, only an administrator can create accounts
+                (Admin → Users).
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
               <div className="grid gap-2">
-                <Label htmlFor="sh">Host</Label>
-                <Input id="sh" placeholder="smtp.flagpost.dev" disabled />
+                <Label htmlFor="reg">Public sign-up</Label>
+                <Select
+                  id="reg"
+                  value={registrationOpen ? "open" : "closed"}
+                  onChange={(e) => setRegistrationOpen(e.target.value === "open")}
+                  className="max-w-xs"
+                >
+                  <option value="open">Open — anyone can register</option>
+                  <option value="closed">Closed — invite / admin-created only</option>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>SMTP (outbound email)</CardTitle>
+              <CardDescription>
+                Used by the automation <span className="font-mono text-xs">send_email</span> action.
+                Leave the host blank to disable email (the action becomes a no-op).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2 grid gap-2">
+                  <Label htmlFor="host">Host</Label>
+                  <Input id="host" value={host} onChange={(e) => setHost(e.target.value)} placeholder="smtp.example.com" />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="port">Port</Label>
+                  <Input id="port" type="number" min={1} max={65535} value={port} onChange={(e) => setPort(e.target.value)} />
+                </div>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="sp">Port</Label>
-                <Input id="sp" placeholder="587" disabled />
+                <Label htmlFor="from">From address</Label>
+                <Input id="from" type="email" value={from} onChange={(e) => setFrom(e.target.value)} placeholder="ctf@example.com" />
               </div>
-            </div>
-          </CardContent>
-        </Card>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="user">Username</Label>
+                  <Input id="user" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="pass">Password</Label>
+                  <Input
+                    id="pass"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="new-password"
+                    placeholder={data.smtp_password_set ? "•••••••• (unchanged)" : "Not set"}
+                  />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={starttls} onChange={(e) => setStarttls(e.target.checked)} />
+                Use STARTTLS
+              </label>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Registration</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Select defaultValue="open" disabled>
-              <option value="open">Open registration</option>
-              <option value="invite">Invite-only</option>
-            </Select>
-          </CardContent>
-        </Card>
+          <Card className="opacity-70">
+            <CardHeader>
+              <CardTitle>AI assistant</CardTitle>
+              <CardDescription>Deferred past MVP — not configurable yet.</CardDescription>
+            </CardHeader>
+          </Card>
 
-        <Button className="w-fit" disabled>Save changes</Button>
-      </div>
+          <div className="flex items-center gap-3">
+            <Button type="submit" className="w-fit" disabled={update.isPending}>
+              {update.isPending ? "Saving…" : "Save changes"}
+            </Button>
+            {data.updated_at && (
+              <span className="text-xs text-muted-foreground">
+                Last saved {new Date(data.updated_at).toLocaleString()}
+              </span>
+            )}
+          </div>
+        </form>
+      )}
     </>
   );
 }

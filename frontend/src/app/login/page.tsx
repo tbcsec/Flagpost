@@ -77,12 +77,14 @@ export default function LoginPage() {
               {login.isPending ? "Signing in…" : "Sign in"}
             </Button>
           </form>
-          <p className="mt-4 text-sm text-muted-foreground">
-            No account?{" "}
-            <Link href="/register" className="text-primary hover:underline">
-              Register
-            </Link>
-          </p>
+          {(settings ?? FALLBACK_SETTINGS).registration_open && (
+            <p className="mt-4 text-sm text-muted-foreground">
+              No account?{" "}
+              <Link href="/register" className="text-primary hover:underline">
+                Register
+              </Link>
+            </p>
+          )}
         </CardContent>
       </Card>
     </main>

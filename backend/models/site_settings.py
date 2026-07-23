@@ -14,10 +14,10 @@ fixed sentinel so a second row can't be created by accident.
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, Integer, String
+from sqlalchemy import Boolean, Integer, LargeBinary, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from db import Base, TimestampMixin, UtcDateTime, utcnow
+from db import Base, TimestampMixin, UtcDateTime, ensure_aware_utc, utcnow
 
 # The single row's fixed primary key — the singleton sentinel.
 SITE_SETTINGS_ID = "site"
@@ -45,6 +45,27 @@ class SiteSettings(Base, TimestampMixin):
     accent: Mapped[str] = mapped_column(
         String, nullable=False, default=DEFAULT_ACCENT
     )
+    # --- Branding (Admin → Appearance) ---
+    # A custom organisation logo that replaces the built-in Flagpost mark in the
+    # lockup (sidebar / login / register). Stored as a blob **in the DB**, not in
+    # object storage, so branding works on the infra-free stack and pre-auth
+    # (like the collab snapshot, ADR-0014). The bytes are ``deferred`` so the
+    # frequently-read settings row never drags the image along — only the public
+    # ``GET .../logo`` streaming endpoint undefers it. ``logo_content_type`` being
+    # set is the "a logo exists" flag (checkable without loading the blob).
+    logo_data: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True, deferred=True
+    )
+    logo_content_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    logo_updated_at: Mapped[datetime | None] = mapped_column(
+        UtcDateTime, nullable=True
+    )
+    # Whether the platform-name wordmark shows beside the logo. Orgs whose logo
+    # already bakes in their name turn this off; icon-only marks keep it on.
+    # Flagpost stays attributed regardless via the mandatory "Powered by" footer.
+    show_wordmark: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="1"
+    )
     # --- Operational settings (Admin → Site settings) ---
     # Whether the public self-serve /register endpoint accepts new sign-ups.
     # Off = invite-only (admins mint accounts on Admin → Users).
@@ -71,3 +92,18 @@ class SiteSettings(Base, TimestampMixin):
     updated_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, onupdate=utcnow, nullable=True
     )
+
+    @property
+    def logo_url(self) -> str | None:
+        """Stable public path to the custom logo, or ``None`` if unset. Carries a
+        ``?v=`` version (the logo's last-updated epoch) so a replaced logo busts
+        any client/CDN cache. Reads only non-deferred columns, so exposing it on
+        the settings row doesn't load the blob."""
+        if not self.logo_content_type:
+            return None
+        version = (
+            int(ensure_aware_utc(self.logo_updated_at).timestamp())
+            if self.logo_updated_at
+            else 0
+        )
+        return f"/api/site-settings/logo?v={version}"

@@ -6,7 +6,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { siteSettingsApi } from "@/lib/api";
+import { apiAssetUrl, siteSettingsApi } from "@/lib/api";
 import {
   DEFAULT_ACCENT,
   DEFAULT_PALETTE,
@@ -25,7 +25,15 @@ export const FALLBACK_SETTINGS: SiteSettings = {
   default_palette: DEFAULT_PALETTE,
   accent: DEFAULT_ACCENT,
   registration_open: true,
+  logo_url: null,
+  show_wordmark: true,
 };
+
+/** Rewrite the backend-relative `logo_url` to the API origin so an `<img src>`
+ *  resolves against the backend (which may be a different host in dev/prod). */
+function absolutizeLogo(s: SiteSettings): SiteSettings {
+  return s.logo_url ? { ...s, logo_url: apiAssetUrl(s.logo_url) } : s;
+}
 
 /** The site theme/branding. Rarely changes, so it's cached long and served from
  *  any page (public included). Falls back to the shipped defaults until loaded. */
@@ -33,6 +41,7 @@ export function useSiteSettings() {
   return useQuery({
     queryKey: SITE_SETTINGS_KEY,
     queryFn: siteSettingsApi.get,
+    select: absolutizeLogo,
     staleTime: 5 * 60_000,
   });
 }
@@ -44,15 +53,30 @@ export function useUpdateSiteSettings() {
       platform_name: string;
       default_palette: string;
       accent: string;
+      show_wordmark: boolean;
     }) => siteSettingsApi.update(input),
-    onSuccess: (data) => {
-      queryClient.setQueryData(SITE_SETTINGS_KEY, {
-        platform_name: data.platform_name,
-        default_palette: data.default_palette,
-        accent: data.accent,
-        registration_open: data.registration_open,
-      });
-    },
+    // The admin response is a superset of the public shape (adds updated_at);
+    // caching it directly keeps every branding field (logo_url, show_wordmark)
+    // intact. `select` absolutizes logo_url on read.
+    onSuccess: (data) => queryClient.setQueryData(SITE_SETTINGS_KEY, data),
+  });
+}
+
+/** Upload a custom org logo (Admin → Appearance). */
+export function useUploadLogo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => siteSettingsApi.uploadLogo(file),
+    onSuccess: (data) => queryClient.setQueryData(SITE_SETTINGS_KEY, data),
+  });
+}
+
+/** Clear the custom logo, reverting to the built-in Flagpost mark. */
+export function useDeleteLogo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => siteSettingsApi.deleteLogo(),
+    onSuccess: (data) => queryClient.setQueryData(SITE_SETTINGS_KEY, data),
   });
 }
 

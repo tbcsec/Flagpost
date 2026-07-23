@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,7 +23,8 @@ export default function LoginPage() {
   const router = useRouter();
   const login = useLogin();
   const { data: settings } = useSiteSettings();
-  const platformName = (settings ?? FALLBACK_SETTINGS).platform_name;
+  const brand = settings ?? FALLBACK_SETTINGS;
+  const platformName = brand.platform_name;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -37,7 +39,13 @@ export default function LoginPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 p-8">
       <div className="flex justify-center">
-        <Lockup size={40} theme="dark" label={platformName} />
+        <Lockup
+          size={40}
+          theme="dark"
+          label={platformName}
+          logoUrl={brand.logo_url}
+          showWordmark={brand.show_wordmark}
+        />
       </div>
       <Card>
         <CardHeader>
@@ -77,7 +85,7 @@ export default function LoginPage() {
               {login.isPending ? "Signing in…" : "Sign in"}
             </Button>
           </form>
-          {(settings ?? FALLBACK_SETTINGS).registration_open && (
+          {brand.registration_open && (
             <p className="mt-4 text-sm text-muted-foreground">
               No account?{" "}
               <Link href="/register" className="text-primary hover:underline">
@@ -87,6 +95,7 @@ export default function LoginPage() {
           )}
         </CardContent>
       </Card>
+      <PoweredByFooter />
     </main>
   );
 }

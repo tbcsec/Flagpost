@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,8 +23,9 @@ export default function RegisterPage() {
   const router = useRouter();
   const register = useRegister();
   const { data: settings } = useSiteSettings();
-  const platformName = (settings ?? FALLBACK_SETTINGS).platform_name;
-  const registrationOpen = (settings ?? FALLBACK_SETTINGS).registration_open;
+  const brand = settings ?? FALLBACK_SETTINGS;
+  const platformName = brand.platform_name;
+  const registrationOpen = brand.registration_open;
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -39,7 +41,13 @@ export default function RegisterPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 p-8">
       <div className="flex justify-center">
-        <Lockup size={40} theme="dark" label={platformName} />
+        <Lockup
+          size={40}
+          theme="dark"
+          label={platformName}
+          logoUrl={brand.logo_url}
+          showWordmark={brand.show_wordmark}
+        />
       </div>
       <Card>
         <CardHeader>
@@ -109,6 +117,7 @@ export default function RegisterPage() {
           </p>
         </CardContent>
       </Card>
+      <PoweredByFooter />
     </main>
   );
 }

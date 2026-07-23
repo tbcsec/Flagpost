@@ -752,6 +752,18 @@ This makes a few features possible without touching component code:
   `localStorage`); the accent and platform name stay site-wide. The
   per-competition / white-label variant is deferred and may return later if
   demand warrants (ADR-0011).
+- **Custom logo (site-wide branding, Tier 3 Phase 9)**: an administrator may
+  replace the built-in Flagpost mark with the organisation's own **logo** — a
+  superset of the earlier "only the name is white-labelled" rule (this relaxes
+  LOGO-SPEC §7). The logo image is stored **in the DB** on the site-settings
+  singleton (a `deferred` blob, not object storage) so it renders **pre-auth**
+  and on the infra-free stack, and served by a **public** streaming endpoint with
+  `nosniff` + a `sandbox` CSP so a direct-navigation SVG can't execute script. An
+  admin **`show_wordmark`** toggle hides the platform-name wordmark for logos that
+  bake in the name. **Attribution is mandatory and not configurable**: a subtle
+  "Powered by Flagpost" footer (built-in mark → the project's GitHub) renders on
+  every page — an org may fully rebrand, but Flagpost stays visibly the
+  underlying platform. Site-wide only, like the rest of theming (ADR-0011).
 - **Palette mode** drives the `dark:` Tailwind custom variant
   (`@custom-variant dark`) via a `data-mode` attribute the shell mirrors from
   the active palette, rather than a class scattered through every component —

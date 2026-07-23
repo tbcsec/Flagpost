@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 
 import { AnnouncementBanner } from "@/components/announcements/announcement-banner";
+import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
 import { PaletteMenu } from "@/components/theme/palette-menu";
 import { Button } from "@/components/ui/button";
@@ -110,7 +111,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const activeCompetitionId = useAuthStore((s) => s.activeCompetitionId);
   const access = useAccess();
   const { data: siteSettings } = useSiteSettings();
-  const platformName = (siteSettings ?? FALLBACK_SETTINGS).platform_name;
+  const brand = siteSettings ?? FALLBACK_SETTINGS;
+  const platformName = brand.platform_name;
 
   // The theme (palette + accent) is applied globally by <ThemeApplier>, which
   // also restores the saved per-user palette override — the shell no longer
@@ -198,7 +200,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
       >
         <div className={cn("flex items-center gap-2 px-1 pb-5", collapsed && !mobileOpen ? "md:justify-center" : "justify-start")}>
-          {navExpanded && <Lockup size={26} theme="dark" label={platformName} />}
+          {navExpanded && (
+            <Lockup
+              size={26}
+              theme="dark"
+              label={platformName}
+              logoUrl={brand.logo_url}
+              showWordmark={brand.show_wordmark}
+            />
+          )}
           <button
             onClick={() => setCollapsed((c) => !c)}
             title="Toggle sidebar"
@@ -291,8 +301,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Live announcement banner on competition-scoped pages (not Admin,
             which is global, nor the lobby, which has no active competition). */}
         {!isAdminSection && pathname !== "/lobby" && <AnnouncementBanner />}
-        <main className="flex-1 overflow-y-auto p-4 md:p-8">
-          <div className="mx-auto grid max-w-5xl gap-6">
+        <main className="flex flex-1 flex-col overflow-y-auto p-4 md:p-8">
+          <div className="mx-auto grid w-full max-w-5xl flex-1 gap-6">
             {adminDenied ? (
               <div className="rounded-lg border border-border bg-card p-10 text-center">
                 <p className="text-sm text-muted-foreground">
@@ -303,6 +313,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               children
             )}
           </div>
+          <PoweredByFooter />
         </main>
       </div>
     </div>

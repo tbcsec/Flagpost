@@ -226,6 +226,13 @@ Do not:
   3:1 contrast — use mono instead.
 - Use the mark as a bullet, a status icon, or a UI affordance. It is a logo.
 
+> **White-labelling (Tier 3 Phase 9).** These rules govern the **Flagpost** mark.
+> An installation may replace it site-wide with the operating organisation's own
+> logo (Admin → Appearance) — the guidance above then applies to *their* asset at
+> their discretion, not ours. Flagpost's own attribution is preserved separately
+> by the mandatory "Powered by Flagpost" footer, which always uses the primary
+> mark per this spec and is not configurable.
+
 ---
 
 ## 8. Asset Manifest

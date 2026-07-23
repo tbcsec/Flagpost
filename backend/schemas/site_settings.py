@@ -29,12 +29,19 @@ class SiteSettingsOut(BaseModel):
     default_palette: str
     accent: str
     registration_open: bool
+    # Public path to the custom org logo (with a cache-busting version), or None
+    # when the built-in Flagpost mark should be used. Needed pre-auth so the
+    # login/register lockup can render the org's brand.
+    logo_url: str | None
+    # Whether the platform-name wordmark shows beside the logo in the lockup.
+    show_wordmark: bool
 
 
 class SiteSettingsUpdate(BaseModel):
     platform_name: str = Field(min_length=1, max_length=64)
     default_palette: str = Field(pattern=PALETTE_PATTERN)
     accent: str = Field(pattern=ACCENT_PATTERN)
+    show_wordmark: bool = True
 
 
 class SiteSettingsAdminOut(SiteSettingsOut):

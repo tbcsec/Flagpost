@@ -54,30 +54,58 @@ export interface LockupProps {
   theme?: "light" | "dark";
   className?: string;
   /** The wordmark text — the site's platform name (§9). Defaults to "Flagpost".
-   *  The mark itself never changes; only the name is white-labelled. */
+   *  The built-in mark never changes; only the name is white-labelled. */
   label?: string;
+  /** A custom org logo that replaces the built-in mark (Admin → Appearance). When
+   *  set, this image is shown instead of the Flagpost flag mark. */
+  logoUrl?: string | null;
+  /** Whether the wordmark text renders beside the mark/logo. Orgs whose logo
+   *  bakes in their name turn this off. Defaults to true. */
+  showWordmark?: boolean;
 }
 
-/** The mark + wordmark, horizontally locked up (LOGO-SPEC §4). */
-export function Lockup({ size = 28, theme = "dark", className, label = "Flagpost" }: LockupProps) {
+/** The mark + wordmark, horizontally locked up (LOGO-SPEC §4). A custom logo may
+ *  swap in for the mark; the wordmark is optional. Flagpost stays attributed via
+ *  the mandatory "Powered by Flagpost" footer regardless of branding here. */
+export function Lockup({
+  size = 28,
+  theme = "dark",
+  className,
+  label = "Flagpost",
+  logoUrl = null,
+  showWordmark = true,
+}: LockupProps) {
   return (
     <span
       className={className}
       style={{ display: "inline-flex", alignItems: "center", gap: size * 0.28 }}
     >
-      <FlagpostMark size={size} theme={theme} />
-      <span
-        style={{
-          fontFamily: "var(--font-display)",
-          fontWeight: 700,
-          fontSize: size * 0.82,
-          letterSpacing: "-0.035em",
-          lineHeight: 1,
-          color: "hsl(var(--foreground))",
-        }}
-      >
-        {label}
-      </span>
+      {logoUrl ? (
+        // A dynamic brand asset from the API origin; next/image can't optimize it
+        // and would need per-deployment remotePatterns config.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={logoUrl}
+          alt={label}
+          style={{ height: size, width: "auto", maxWidth: size * 6, objectFit: "contain" }}
+        />
+      ) : (
+        <FlagpostMark size={size} theme={theme} />
+      )}
+      {showWordmark && (
+        <span
+          style={{
+            fontFamily: "var(--font-display)",
+            fontWeight: 700,
+            fontSize: size * 0.82,
+            letterSpacing: "-0.035em",
+            lineHeight: 1,
+            color: "hsl(var(--foreground))",
+          }}
+        >
+          {label}
+        </span>
+      )}
     </span>
   );
 }

@@ -309,6 +309,28 @@ What's built:
     resolves SMTP from the DB (env fallback). AI stays deferred.
   - **Branded favicon**: `app/icon.svg` (Next.js auto-serves it) — the Flagpost
     mark on a dark brand tile.
+  - **Expanded branding — custom logo + mandatory attribution** (extends §9 /
+    LOGO-SPEC §7): orgs may replace the built-in mark with their own **logo** while
+    Flagpost stays visible. Logo bytes live **in the DB** (a `deferred` `logo_data`
+    `LargeBinary` on the `SiteSettings` singleton + `logo_content_type`/
+    `logo_updated_at`, migration `b4c5d6e7f8a9`), *not* object storage — so branding
+    works infra-free and pre-auth (like the collab snapshot, ADR-0014). Public
+    `GET /site-settings` gains `logo_url` (a `/api/site-settings/logo?v=<epoch>`
+    path — the model property reads only non-deferred cols, so the settings row
+    never drags the blob) + `show_wordmark`. `manage_site_settings`-gated
+    `POST`/`DELETE /site-settings/logo` (1 MB cap, PNG/JPEG/WebP/GIF/SVG) store/clear
+    it; the **public** `GET /site-settings/logo` undefers + streams the bytes
+    defensively (`nosniff` + `Content-Security-Policy: … sandbox` so a
+    direct-navigation SVG can't run script — the app renders it via `<img>`, which
+    already neuters SVG scripting). The **Admin toggle** `show_wordmark` (on the
+    existing appearance `PUT`) hides the platform-name wordmark for logos that bake
+    in their name. Frontend: `Lockup` gained `logoUrl`/`showWordmark` (sidebar +
+    login + register), `use-site-settings` absolutizes `logo_url` to the API origin
+    (`apiAssetUrl`) via a query `select`, `useUploadLogo`/`useDeleteLogo`, and the
+    Admin → Appearance Logo section. A **mandatory, non-configurable
+    `PoweredByFooter`** ("Powered by Flagpost" → the GitHub repo, built-in mark) on
+    every page (app shell + auth screens) keeps attribution even under a full
+    rebrand. Reuses `site.settings_updated`; no new event.
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

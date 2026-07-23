@@ -537,6 +537,11 @@ export interface SiteSettings {
   default_palette: string;
   accent: string;
   registration_open: boolean;
+  // Path to the custom org logo (absolutized to the API origin by the hook), or
+  // null to use the built-in Flagpost mark.
+  logo_url: string | null;
+  // Whether the platform-name wordmark shows beside the logo in the lockup.
+  show_wordmark: boolean;
 }
 
 // Admin shape adds the last-updated timestamp.

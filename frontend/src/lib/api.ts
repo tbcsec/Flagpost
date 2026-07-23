@@ -64,6 +64,12 @@ import type {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+/** Absolutize a backend-relative path (e.g. a logo URL) to the API origin, so an
+ *  `<img src>` resolves against the backend, not the frontend host. */
+export function apiAssetUrl(path: string): string {
+  return `${API_URL}${path}`;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -489,7 +495,12 @@ export const rolesApi = {
 export const siteSettingsApi = {
   // Public read — served unauthenticated so login/register can brand themselves.
   get: () => apiFetch<SiteSettings>("/api/site-settings", {}, { auth: false }),
-  update: (input: { platform_name: string; default_palette: string; accent: string }) =>
+  update: (input: {
+    platform_name: string;
+    default_palette: string;
+    accent: string;
+    show_wordmark: boolean;
+  }) =>
     apiFetch<SiteSettingsAdmin>("/api/site-settings", {
       method: "PUT",
       body: JSON.stringify(input),
@@ -502,6 +513,17 @@ export const siteSettingsApi = {
       method: "PUT",
       body: JSON.stringify(input),
     }),
+  // Branding — a custom org logo. Admin-only; the served bytes are public.
+  uploadLogo: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiFetch<SiteSettingsAdmin>("/api/site-settings/logo", {
+      method: "POST",
+      body: form,
+    });
+  },
+  deleteLogo: () =>
+    apiFetch<SiteSettingsAdmin>("/api/site-settings/logo", { method: "DELETE" }),
 };
 
 export const auditLogApi = {

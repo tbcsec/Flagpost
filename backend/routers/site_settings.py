@@ -13,11 +13,13 @@ without a data migration.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import undefer
 
 from auth.deps import require_permission
-from db import get_db
+from db import get_db, utcnow
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 from models.user import User
 from schemas.site_settings import (
@@ -30,6 +32,17 @@ from schemas.site_settings import (
 from utils.event_bus import event_bus
 
 router = APIRouter(prefix="/api/site-settings", tags=["site-settings"])
+
+# A custom logo is small by nature; cap it well under an attachment. Big enough
+# for a detailed SVG or a 2x raster mark, small enough to sit in the DB row.
+MAX_LOGO_BYTES = 1 * 1024 * 1024  # 1 MB
+ALLOWED_LOGO_TYPES = {
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/gif",
+    "image/svg+xml",
+}
 
 
 async def get_or_create_settings(db: AsyncSession) -> SiteSettings:
@@ -58,6 +71,7 @@ async def update_site_settings(
     settings.platform_name = body.platform_name
     settings.default_palette = body.default_palette
     settings.accent = body.accent
+    settings.show_wordmark = body.show_wordmark
     await db.commit()
     await db.refresh(settings)
 
@@ -71,6 +85,94 @@ async def update_site_settings(
         },
     )
     return settings
+
+
+@router.post("/logo", response_model=SiteSettingsAdminOut)
+async def upload_logo(
+    file: UploadFile,
+    current_user: User = Depends(require_permission("manage_site_settings")),
+    db: AsyncSession = Depends(get_db),
+) -> SiteSettings:
+    """Store a custom org logo that replaces the built-in mark in the lockup.
+    Kept in the DB (not object storage) so branding works on the infra-free
+    stack and pre-auth. Emits ``site.settings_updated`` like any branding change."""
+    content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
+    if content_type not in ALLOWED_LOGO_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Logo must be a PNG, JPEG, WebP, GIF, or SVG image",
+        )
+    data = await file.read()
+    if len(data) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Empty file"
+        )
+    if len(data) > MAX_LOGO_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Logo exceeds {MAX_LOGO_BYTES // (1024 * 1024)} MB limit",
+        )
+
+    settings = await get_or_create_settings(db)
+    settings.logo_data = data
+    settings.logo_content_type = content_type
+    settings.logo_updated_at = utcnow()
+    await db.commit()
+    await db.refresh(settings)
+
+    await event_bus.emit(
+        "site.settings_updated",
+        {"user_id": current_user.id, "section": "logo"},
+    )
+    return settings
+
+
+@router.delete("/logo", response_model=SiteSettingsAdminOut)
+async def delete_logo(
+    current_user: User = Depends(require_permission("manage_site_settings")),
+    db: AsyncSession = Depends(get_db),
+) -> SiteSettings:
+    """Clear the custom logo, reverting the lockup to the built-in Flagpost mark."""
+    settings = await get_or_create_settings(db)
+    settings.logo_data = None
+    settings.logo_content_type = None
+    settings.logo_updated_at = None
+    await db.commit()
+    await db.refresh(settings)
+
+    await event_bus.emit(
+        "site.settings_updated",
+        {"user_id": current_user.id, "section": "logo"},
+    )
+    return settings
+
+
+@router.get("/logo")
+async def read_logo(db: AsyncSession = Depends(get_db)) -> Response:
+    """Stream the custom logo bytes. **Public** — the login/register lockup needs
+    it before auth. The blob is ``deferred`` on the model, so undefer it here; the
+    settings row's normal reads still skip it. Served defensively so a
+    direct-navigation SVG can't execute script (it's rendered via ``<img>`` in the
+    app, which already neuters SVG scripting, but a pasted URL would not)."""
+    settings = await db.scalar(
+        select(SiteSettings)
+        .where(SiteSettings.id == SITE_SETTINGS_ID)
+        .options(undefer(SiteSettings.logo_data))
+    )
+    if settings is None or settings.logo_data is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No logo set"
+        )
+    return Response(
+        content=settings.logo_data,
+        media_type=settings.logo_content_type or "application/octet-stream",
+        headers={
+            "Cache-Control": "public, max-age=3600",
+            "X-Content-Type-Options": "nosniff",
+            # Neutralise any script/network in a directly-opened SVG logo.
+            "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+        },
+    )
 
 
 def _operational_out(settings: SiteSettings) -> OperationalSettingsOut:

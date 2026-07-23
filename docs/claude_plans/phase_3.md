@@ -572,6 +572,38 @@ Items (this list grows as the owner adds them):
   of the challenge form (not children); the submit button lives outside it and
   submits via a `form={useId()}` attribute, preserving the fields → sub-sections
   → actions layout. No behaviour change.
+- **Expanded branding — custom logo + mandatory attribution** ✅ — orgs could
+  already set the platform name + palette + accent; this adds a **custom logo**
+  while keeping Flagpost visible as the underlying project. Owner call (via
+  question): the platform-name wordmark beside the logo is an **admin toggle**
+  (`show_wordmark`) — on for icon-only marks, off for logos that bake in the name.
+  - *Storage.* The logo lives **in the DB**, not object storage: a `deferred`
+    `logo_data` `LargeBinary` on the `SiteSettings` singleton (+ `logo_content_type`
+    / `logo_updated_at`), migration `b4c5d6e7f8a9`. Rationale: branding must render
+    **pre-auth** (login/register) and on the **infra-free** SQLite/preview stack,
+    where MinIO isn't reachable — same reasoning as the collab snapshot blob
+    (ADR-0014). The bytes are `deferred` so the frequently-read (and public)
+    settings row never loads them; only the streaming endpoint undefers.
+  - *API.* Public `GET /site-settings` gains `logo_url` (a
+    `/api/site-settings/logo?v=<epoch>` path from a model property that reads only
+    non-deferred columns) + `show_wordmark`. `manage_site_settings`-gated
+    `POST`/`DELETE /site-settings/logo` store/clear the logo (1 MB cap; PNG, JPEG,
+    WebP, GIF, SVG). The **public** `GET /site-settings/logo` undefers + streams the
+    bytes with `X-Content-Type-Options: nosniff` and a `Content-Security-Policy:
+    default-src 'none'; … sandbox` — so a **directly-opened SVG logo can't execute
+    script** (the app renders it via `<img>`, which already disables SVG scripting;
+    the header covers the pasted-URL case). `show_wordmark` rides the existing
+    appearance `PUT`. All reuse `site.settings_updated` — no new event.
+  - *Frontend.* `Lockup` gained `logoUrl` + `showWordmark` (custom `<img>` swaps in
+    for the mark; wordmark optional) across the sidebar, login and register. The
+    site-settings query **absolutizes** `logo_url` to the API origin (`apiAssetUrl`)
+    in a `select`, since `<img src>` resolves against the frontend host otherwise.
+    `useUploadLogo` / `useDeleteLogo`; a Logo section on Admin → Appearance (preview,
+    upload/replace/remove, the wordmark checkbox).
+  - *Attribution.* A **mandatory, non-configurable** `PoweredByFooter` — "Powered by
+    Flagpost" with the built-in mark, linking to the GitHub repo — renders on every
+    page (app shell + the public auth screens). This is the controlled part of the
+    rebrand: the logo/name/palette are the org's, but Flagpost stays credited.
 
 ## Phase 10 — Accessibility, responsiveness & optimization pass (#28)
 

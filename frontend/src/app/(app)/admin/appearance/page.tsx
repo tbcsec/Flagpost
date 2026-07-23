@@ -8,10 +8,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SkeletonCards } from "@/components/ui/skeleton";
+import { FlagpostMark } from "@/components/brand/flagpost-mark";
 import {
   FALLBACK_SETTINGS,
+  useDeleteLogo,
   useSiteSettings,
   useUpdateSiteSettings,
+  useUploadLogo,
 } from "@/lib/hooks/use-site-settings";
 import {
   ACCENTS,
@@ -31,12 +34,15 @@ import { toast } from "@/stores/toast";
 export default function AdminAppearancePage() {
   const { data, isLoading } = useSiteSettings();
   const update = useUpdateSiteSettings();
+  const uploadLogo = useUploadLogo();
+  const deleteLogo = useDeleteLogo();
   const paletteOverride = useAuthStore((s) => s.paletteOverride);
 
   const saved = data ?? FALLBACK_SETTINGS;
   const [platformName, setPlatformName] = useState(saved.platform_name);
   const [palette, setPalette] = useState(saved.default_palette);
   const [accent, setAccent] = useState(saved.accent);
+  const [showWordmark, setShowWordmark] = useState(saved.show_wordmark);
 
   // Seed the form once the settings load (they arrive async).
   const seeded = useRef(false);
@@ -46,6 +52,7 @@ export default function AdminAppearancePage() {
       setPlatformName(data.platform_name);
       setPalette(data.default_palette);
       setAccent(data.accent);
+      setShowWordmark(data.show_wordmark);
     }
   }, [data]);
 
@@ -73,16 +80,47 @@ export default function AdminAppearancePage() {
   const dirty =
     platformName !== saved.platform_name ||
     palette !== saved.default_palette ||
-    accent !== saved.accent;
+    accent !== saved.accent ||
+    showWordmark !== saved.show_wordmark;
 
   function onSave() {
     update.mutate(
-      { platform_name: platformName.trim(), default_palette: palette, accent },
+      {
+        platform_name: platformName.trim(),
+        default_palette: palette,
+        accent,
+        show_wordmark: showWordmark,
+      },
       {
         onSuccess: () => toast("Appearance saved", { variant: "success" }),
         onError: (e) => toast("Couldn't save", { description: (e as Error).message, variant: "destructive" }),
       },
     );
+  }
+
+  function onLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file after a failure
+    if (!file) return;
+    uploadLogo.mutate(file, {
+      onSuccess: () => toast("Logo updated", { variant: "success" }),
+      onError: (err) =>
+        toast("Couldn't upload logo", {
+          description: (err as Error).message,
+          variant: "destructive",
+        }),
+    });
+  }
+
+  function onRemoveLogo() {
+    deleteLogo.mutate(undefined, {
+      onSuccess: () => toast("Logo removed", { variant: "success" }),
+      onError: (err) =>
+        toast("Couldn't remove logo", {
+          description: (err as Error).message,
+          variant: "destructive",
+        }),
+    });
   }
 
   if (isLoading) {
@@ -205,6 +243,63 @@ export default function AdminAppearancePage() {
                 </span>
               </label>
             </div>
+          </section>
+
+          <section className="grid gap-3">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Logo</h3>
+            <p className="max-w-prose text-xs text-muted-foreground">
+              Replace the built-in mark with your organisation&apos;s logo. Shown in the
+              sidebar and on the sign-in screen. PNG, SVG, WebP or GIF, up to 1&nbsp;MB —
+              a transparent background that reads on a dark ground works best. Flagpost
+              stays credited via the &ldquo;Powered by Flagpost&rdquo; footer regardless.
+            </p>
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex h-16 min-w-[8rem] items-center justify-center rounded-lg border border-border bg-background px-4">
+                {saved.logo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- dynamic brand asset from the API origin
+                  <img src={saved.logo_url} alt="Current logo" className="h-10 w-auto object-contain" />
+                ) : (
+                  <FlagpostMark size={40} theme="dark" />
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <label>
+                  <span className={cn(
+                    "inline-flex h-9 cursor-pointer items-center rounded-md border border-border px-3 text-sm font-medium hover:bg-accent/60",
+                    uploadLogo.isPending && "pointer-events-none opacity-60",
+                  )}>
+                    {uploadLogo.isPending ? "Uploading…" : saved.logo_url ? "Replace logo" : "Upload logo"}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                    className="hidden"
+                    onChange={onLogoFile}
+                    disabled={uploadLogo.isPending}
+                  />
+                </label>
+                {saved.logo_url && (
+                  <Button variant="ghost" size="sm" onClick={onRemoveLogo} disabled={deleteLogo.isPending}>
+                    {deleteLogo.isPending ? "Removing…" : "Remove"}
+                  </Button>
+                )}
+              </div>
+            </div>
+            <label className="mt-1 flex items-center gap-2.5">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-border"
+                style={{ accentColor: "hsl(var(--primary))" }}
+                checked={showWordmark}
+                onChange={(e) => setShowWordmark(e.target.checked)}
+              />
+              <span className="text-sm">
+                Show the platform name beside the logo
+                <span className="ml-1 text-xs text-muted-foreground">
+                  (turn off if your logo already includes your name)
+                </span>
+              </span>
+            </label>
           </section>
         </CardContent>
       </Card>

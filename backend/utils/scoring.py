@@ -35,6 +35,34 @@ class Subject:
     team_id: str | None  # the credited team, or None in individual mode
 
 
+def dynamic_value(initial: int, minimum: int, decay: int, solve_count: int) -> int:
+    """A dynamic challenge's current worth given how many subjects have solved it.
+
+    The CTFd model: value falls quadratically from ``initial`` toward
+    ``minimum`` over ``decay`` solves, then stays at ``minimum``. Every solver of
+    the challenge is worth this same current value (the scoreboard converges them
+    on each new solve), so the number shown on the card is exactly what each
+    solve is worth right now.
+    """
+    if decay <= 0:
+        return minimum if minimum > initial else initial
+    value = ((minimum - initial) / (decay**2)) * (solve_count**2) + initial
+    return max(int(round(value)), minimum)
+
+
+def challenge_value(challenge, solve_count: int) -> int:
+    """The current point worth of ``challenge`` given its solve count. Static
+    challenges are always their fixed ``points``; dynamic ones decay (§13.2)."""
+    if challenge.scoring_type == "dynamic":
+        return dynamic_value(
+            challenge.points,
+            challenge.min_points or 0,
+            challenge.decay or 0,
+            solve_count,
+        )
+    return challenge.points
+
+
 async def resolve_subject(
     db: AsyncSession, competition: Competition, user: User
 ) -> Subject | None:

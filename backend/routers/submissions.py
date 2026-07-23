@@ -22,7 +22,7 @@ resolved in ``utils/scoring`` so this route never re-derives it.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import require_permission
@@ -39,6 +39,7 @@ from schemas.submission import SubmitFlagRequest, SubmitResult
 from utils.event_bus import event_bus
 from utils.flags import verify_regex_flag, verify_static_flag
 from utils.scoring import (
+    challenge_value,
     resolve_subject,
     subject_attempt_count,
     subject_has_solved,
@@ -137,7 +138,9 @@ async def submit_flag(
             )
         )
         is_first_blood = prior_solves == 0
-        points_awarded = challenge.points
+        # This solve makes the count `prior_solves + 1`; a dynamic challenge is
+        # then worth less, and *every* solver converges to that current value.
+        points_awarded = challenge_value(challenge, prior_solves + 1)
 
     # Every attempt is logged — success, failure, or duplicate (§13.2).
     db.add(
@@ -152,6 +155,18 @@ async def submit_flag(
             points_awarded=points_awarded,
         )
     )
+    if award and challenge.scoring_type == "dynamic":
+        # Re-value the prior solvers to the new (lower) worth so the board stays
+        # consistent — every solve of a dynamic challenge is worth the same now.
+        await db.execute(
+            update(Submission)
+            .where(
+                Submission.challenge_id == challenge_id,
+                Submission.is_correct.is_(True),
+                Submission.is_duplicate.is_(False),
+            )
+            .values(points_awarded=points_awarded)
+        )
     await db.commit()
 
     if award:

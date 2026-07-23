@@ -475,6 +475,7 @@ export interface Category {
 
 export type FlagType = "static" | "regex" | "multiple_choice";
 export type ChallengeState = "draft" | "published";
+export type ScoringType = "static" | "dynamic";
 
 /** TipTap/ProseMirror document. */
 export type RichTextDoc = Record<string, unknown>;
@@ -485,7 +486,14 @@ export interface Challenge {
   title: string;
   description: RichTextDoc;
   category_id: string | null;
+  /** Configured value — the *initial* worth for dynamic challenges. */
   points: number;
+  scoring_type: ScoringType;
+  min_points: number | null;
+  decay: number | null;
+  /** Current worth given the solve count (== points for static, decayed for
+   *  dynamic). This is what cards should display. */
+  value: number;
   state: ChallengeState;
   flag_type: FlagType;
   case_insensitive: boolean;
@@ -510,6 +518,9 @@ export interface ChallengeCreate {
   description?: RichTextDoc;
   category_id?: string | null;
   points?: number;
+  scoring_type?: ScoringType;
+  min_points?: number | null;
+  decay?: number | null;
   flag_type?: FlagType;
   case_insensitive?: boolean;
   flag?: string | null;

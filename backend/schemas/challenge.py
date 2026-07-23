@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 FlagType = Literal["static", "regex", "multiple_choice"]
 ChallengeState = Literal["draft", "published"]
+ScoringType = Literal["static", "dynamic"]
 
 # A multiple-choice option list: 2–10 options, each a short string.
 Choices = list[str]
@@ -23,6 +24,11 @@ class ChallengeCreate(BaseModel):
     description: dict[str, Any] = Field(default_factory=dict)
     category_id: str | None = None
     points: int = Field(default=100, ge=0, le=100_000)
+    # Scoring model. For "dynamic", min_points + decay are required and
+    # min_points must not exceed points (validated in the router).
+    scoring_type: ScoringType = "static"
+    min_points: int | None = Field(default=None, ge=0, le=100_000)
+    decay: int | None = Field(default=None, ge=1, le=100_000)
     flag_type: FlagType = "static"
     case_insensitive: bool = False
     # Plaintext flag (static), pattern (regex), or the **correct option**
@@ -50,6 +56,9 @@ class ChallengeUpdate(BaseModel):
     description: dict[str, Any] | None = None
     category_id: str | None = None
     points: int | None = Field(default=None, ge=0, le=100_000)
+    scoring_type: ScoringType | None = None
+    min_points: int | None = Field(default=None, ge=0, le=100_000)
+    decay: int | None = Field(default=None, ge=1, le=100_000)
     flag_type: FlagType | None = None
     case_insensitive: bool | None = None
     flag: str | None = Field(default=None, min_length=1, max_length=500)
@@ -64,7 +73,14 @@ class ChallengeOut(BaseModel):
     title: str
     description: dict[str, Any]
     category_id: str | None
+    # ``points`` is the configured value (the *initial* worth for dynamic
+    # challenges); ``value`` is what it's worth right now given its solve count
+    # (equal to ``points`` for static, decayed for dynamic). Cards show ``value``.
     points: int
+    scoring_type: ScoringType = "static"
+    min_points: int | None = None
+    decay: int | None = None
+    value: int = 0
     state: ChallengeState
     flag_type: FlagType
     case_insensitive: bool

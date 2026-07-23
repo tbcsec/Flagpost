@@ -478,6 +478,21 @@ What's built:
     in the app shell), `useUpdateNotificationPreferences`, `NotificationPreferencesCard`
     on `/profile` (browser toggle requests the OS `Notification` permission on
     enable). Backup carries the column (plain JSON on `users`, no FK).
+  - **Pre-ship feature-parity tranche** (owner ask — CTF-platform table-stakes
+    other platforms ship; built in order, each its own commit):
+    - **Dynamic (decay) scoring** (§13.2) — a per-challenge `scoring_type`
+      (`static` default | `dynamic`) + `min_points`/`decay` (migration
+      `c1d2e3f4a5b6`). Dynamic uses the CTFd quadratic model: worth `points`
+      initially, decaying toward `min_points` over `decay` solves. `utils/scoring`
+      gains `dynamic_value`/`challenge_value`; the submit path recomputes the
+      award and **re-values all prior solvers' `points_awarded`** on each new
+      solve so everyone converges to the current value (scoreboard read path —
+      `sum(points_awarded)` — unchanged). `ChallengeOut` gains `scoring_type`/
+      `min_points`/`decay` + a computed **`value`** (current worth; cards show
+      this, `points` stays the configured initial). Validated (dynamic needs
+      min+decay, min ≤ points). Clone + backup carry the columns. Frontend:
+      challenge editor scoring selector + min/decay fields, cards/dialog show
+      `value` with a "dynamic" marker.
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

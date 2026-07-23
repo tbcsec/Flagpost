@@ -1115,6 +1115,14 @@ submission is the one endpoint they have direct incentive to script.
   a `mc_guess_resets` row records a **cutoff** so the count only tallies
   submissions made after it — targeted at one subject or challenge-wide (bulk) —
   keeping the submission history intact for analytics/audit.
+- **Scoring model** (per challenge, Tier 3 Phase 9): `static` (a fixed
+  `points` award) or `dynamic` (the CTFd decay model — worth `points` initially,
+  falling quadratically toward `min_points` over `decay` solves). A dynamic
+  challenge's value is a property of its **solve count**, and *every* solver
+  converges to the current value: on each new solve the awarded value is
+  recomputed and all prior solvers' `points_awarded` are re-valued to match, so
+  the scoreboard read path (sum of `points_awarded`) stays unchanged and the
+  card's displayed `value` is exactly what each solve is worth right now.
 
 ### 13.3 File Storage & Access Control
 

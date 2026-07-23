@@ -40,6 +40,7 @@ from storage.base import ObjectStorage
 from utils.event_bus import event_bus
 from utils.flags import hash_static_flag, make_salt
 from utils.scoring import (
+    challenge_value,
     resolve_subject,
     solve_counts,
     solved_challenge_ids,
@@ -100,6 +101,42 @@ def _validate_multiple_choice(challenge: Challenge, raw_flag: str | None) -> Non
             detail="The correct answer must be one of the options",
         )
     challenge.choices = cleaned
+
+
+async def _set_value(db: AsyncSession, challenge: Challenge) -> None:
+    """Annotate a challenge with its current worth for the response (§13.2)."""
+    count = (
+        await db.scalar(
+            select(func.count(Submission.id)).where(
+                Submission.challenge_id == challenge.id,
+                Submission.is_correct.is_(True),
+                Submission.is_duplicate.is_(False),
+            )
+        )
+    ) or 0
+    challenge.value = challenge_value(challenge, count)
+
+
+def _validate_scoring(challenge: Challenge) -> None:
+    """Dynamic scoring needs a floor and a decay, and the floor can't exceed the
+    initial value (§13.2). Static challenges ignore both fields."""
+    if challenge.scoring_type != "dynamic":
+        return
+    if challenge.min_points is None or challenge.decay is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Dynamic scoring needs a minimum value and a decay",
+        )
+    if challenge.decay < 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Decay must be at least 1",
+        )
+    if challenge.min_points > challenge.points:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Minimum value can't exceed the initial value",
+        )
 
 
 async def _get_scoped_challenge(
@@ -204,6 +241,7 @@ async def list_challenges(
         }
     for challenge in challenges:
         challenge.solve_count = counts.get(challenge.id, 0)
+        challenge.value = challenge_value(challenge, challenge.solve_count)
         challenge.solved = challenge.id in solved
         challenge.my_rating = ratings.get(challenge.id)
         if challenge.flag_type == "multiple_choice" and limit is not None:
@@ -234,6 +272,7 @@ async def get_challenge(
             )
         )
     ) or 0
+    challenge.value = challenge_value(challenge, challenge.solve_count)
     competition = await db.get(Competition, competition_id)
     subject = (
         await resolve_subject(db, competition, current_user)
@@ -279,9 +318,13 @@ async def create_challenge(
         description=body.description,
         category_id=body.category_id,
         points=body.points,
+        scoring_type=body.scoring_type,
+        min_points=body.min_points,
+        decay=body.decay,
         flag_type=body.flag_type,
         case_insensitive=body.case_insensitive,
     )
+    _validate_scoring(challenge)
     if body.flag_type == "multiple_choice" and body.choices is not None:
         challenge.choices = body.choices
         _validate_multiple_choice(challenge, body.flag)
@@ -289,6 +332,7 @@ async def create_challenge(
         _apply_flag(challenge, body.flag)
     db.add(challenge)
     await db.commit()
+    challenge.value = challenge_value(challenge, 0)  # brand-new: no solves yet
 
     await event_bus.emit(
         "challenge.created",
@@ -318,6 +362,7 @@ async def update_challenge(
     raw_flag = changes.pop("flag", None)
     for field, value in changes.items():
         setattr(challenge, field, value)
+    _validate_scoring(challenge)
 
     # Multiple-choice options can't be verified against the already-hashed answer,
     # so a change to the option set (or a switch into multiple_choice) requires
@@ -361,6 +406,7 @@ async def update_challenge(
             ),
         },
     )
+    await _set_value(db, challenge)
     return challenge
 
 
@@ -389,6 +435,7 @@ async def publish_challenge(
                 "title": challenge.title,
             },
         )
+    await _set_value(db, challenge)
     return challenge
 
 
@@ -412,6 +459,7 @@ async def unpublish_challenge(
                 "changed_fields": ["state"],
             },
         )
+    await _set_value(db, challenge)
     return challenge
 
 

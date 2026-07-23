@@ -96,6 +96,67 @@ async def _submissions(challenge_id: str):
         ).scalars().all()
 
 
+# --- Dynamic (decay) scoring -------------------------------------------------
+
+
+async def test_dynamic_scoring_decays_and_converges(client):
+    comp = await _make_competition(client, mode="individual")
+    chal = await _make_published_challenge(
+        client, comp, flag="flag{d}", points=500,
+        scoring_type="dynamic", min_points=100, decay=10,
+    )
+    tokens = []
+    for i in range(3):
+        tok, uid = await _register(client, f"dyn{i}@example.com")
+        await _assign_participant(uid, comp)
+        tokens.append(tok)
+
+    awarded = []
+    for tok in tokens:
+        r = await client.post(
+            f"/api/competitions/{comp}/challenges/{chal}/submit",
+            json={"flag": "flag{d}"},
+            headers=_auth(tok),
+        )
+        awarded.append(r.json()["points_awarded"])
+
+    # The value drops with each solve (CTFd quadratic decay).
+    assert awarded == [496, 484, 464]
+
+    # Every solver converges to the current (lowest) value — the board is fair.
+    solves = [s for s in await _submissions(chal) if s.is_correct and not s.is_duplicate]
+    assert {s.points_awarded for s in solves} == {464}
+
+    # The challenge reports its current worth + config.
+    detail = (
+        await client.get(
+            f"/api/competitions/{comp}/challenges/{chal}", headers=_auth(tokens[0])
+        )
+    ).json()
+    assert detail["scoring_type"] == "dynamic"
+    assert detail["value"] == 464
+    assert detail["points"] == 500  # the configured initial is preserved
+
+    # The scoreboard credits the converged value.
+    board = (
+        await client.get(
+            f"/api/competitions/{comp}/scoreboard", headers=_auth(tokens[0])
+        )
+    ).json()
+    assert all(e["points"] == 464 for e in board["entries"])
+
+
+async def test_dynamic_scoring_requires_min_and_decay(client):
+    comp = await _make_competition(client, mode="individual")
+    token = await admin_token(client)
+    resp = await client.post(
+        f"/api/competitions/{comp}/challenges",
+        json={"title": "Bad", "points": 500, "scoring_type": "dynamic"},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 400
+
+
 # --- Correctness + scoring ---------------------------------------------------
 
 

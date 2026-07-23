@@ -64,7 +64,7 @@ code.
 | Challenges — browse grid + category chips | **Wired** (`useChallenges`, `useCategories`) |
 | Challenges — detail dialog (title/points/category/description) | **Wired** (description rendered read-only via `richTextToPlain`) |
 | Challenges — flag submission + solve state | **Wired** (Phase 6 — `useSubmitFlag`, solved/solve_count badges, first-blood) |
-| Challenges — "Manage challenges" authoring (CRUD, categories, publish, attachments) | **Wired** (reuses `ChallengeAdmin`) |
+| Challenges — "Manage challenges" authoring (CRUD, categories, publish, attachments) | **Wired** (reuses `ChallengeAdmin`) — incl. **dynamic scoring** (Phase 9): scoring-type selector + min/decay fields; cards/dialog show the current decayed `value` with a "dynamic" marker |
 | Scoreboard — live rankings | **Wired** (Phase 7 — `useScoreboard`: REST initial load + WebSocket room updates, first-frame auth, backoff reconnect) |
 | Announcements — post + live banner + dashboard widget | **Wired** (Phase 8 — `useAnnouncements`: REST + WS room, `NewAnnouncementDialog`) |
 | Hints — reveal (competitor) + authoring (editor) | **Wired** (Phase 9 — `useHints`: reveal-on-request with cost, hidden body until revealed; scoreboard deducts cost live) |

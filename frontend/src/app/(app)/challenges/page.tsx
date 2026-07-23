@@ -154,7 +154,12 @@ export default function ChallengesPage() {
               </div>
               <div className="text-base font-semibold">{ch.title}</div>
               <div className="flex items-baseline justify-between">
-                <span className="font-mono text-sm font-semibold text-primary">{ch.points} pts</span>
+                <span className="font-mono text-sm font-semibold text-primary">
+                  {ch.value} pts
+                  {ch.scoring_type === "dynamic" && (
+                    <span className="ml-1 text-[10px] font-normal text-muted-foreground">dynamic</span>
+                  )}
+                </span>
                 <span className="text-xs text-muted-foreground">{ch.solve_count} solves</span>
               </div>
             </button>
@@ -233,7 +238,8 @@ function ChallengeDialogBody({
       <DialogHeader>
         <DialogTitle>{challenge.title}</DialogTitle>
         <DialogDescription>
-          {categoryName} · {challenge.points} pts · {challenge.solve_count} solves
+          {categoryName} · {challenge.value} pts
+          {challenge.scoring_type === "dynamic" && " (dynamic)"} · {challenge.solve_count} solves
         </DialogDescription>
       </DialogHeader>
       {presence.others.length > 0 && (

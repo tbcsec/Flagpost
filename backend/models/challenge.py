@@ -46,7 +46,17 @@ class Challenge(Base, CompetitionScopedMixin, TimestampMixin):
     category_id: Mapped[str | None] = mapped_column(
         ForeignKey("categories.id", ondelete="SET NULL"), index=True, nullable=True
     )
+    # For static scoring this is the fixed award; for dynamic it's the *initial*
+    # value a challenge is worth before anyone solves it.
     points: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    # "static" (fixed points) | "dynamic" (value decays toward min_points as more
+    # subjects solve it — the CTFd model; every solver converges to the current
+    # value). min_points/decay are required + only meaningful when dynamic.
+    scoring_type: Mapped[str] = mapped_column(
+        String, nullable=False, default="static", server_default="static"
+    )
+    min_points: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    decay: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # "draft" | "published" (Tier 2 adds "review").
     state: Mapped[str] = mapped_column(String, nullable=False, default="draft")
 

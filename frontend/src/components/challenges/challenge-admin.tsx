@@ -43,6 +43,7 @@ import type {
   ChallengeCreate,
   FlagType,
   RichTextDoc,
+  ScoringType,
 } from "@/lib/types";
 
 // Admin authoring surface (ROADMAP #8/#9). All server state via the domain
@@ -165,7 +166,16 @@ function ChallengeRow({
     <TableRow>
       <TableCell className="font-medium">{challenge.title}</TableCell>
       <TableCell className="text-muted-foreground">{categoryName}</TableCell>
-      <TableCell>{challenge.points}</TableCell>
+      <TableCell>
+        {challenge.scoring_type === "dynamic" ? (
+          <span title={`Dynamic: ${challenge.points}→${challenge.min_points} over ~${challenge.decay} solves`}>
+            {challenge.value}{" "}
+            <span className="text-xs text-muted-foreground">dyn</span>
+          </span>
+        ) : (
+          challenge.points
+        )}
+      </TableCell>
       <TableCell className="capitalize">{challenge.state}</TableCell>
       <TableCell className="space-x-2 text-right">
         <Button variant="ghost" size="sm" onClick={onEdit}>
@@ -219,6 +229,11 @@ function ChallengeForm({
   );
   const [categoryId, setCategoryId] = useState(challenge?.category_id ?? "");
   const [points, setPoints] = useState(String(challenge?.points ?? 100));
+  const [scoringType, setScoringType] = useState<ScoringType>(
+    challenge?.scoring_type ?? "static",
+  );
+  const [minPoints, setMinPoints] = useState(String(challenge?.min_points ?? 100));
+  const [decay, setDecay] = useState(String(challenge?.decay ?? 20));
   const [flagType, setFlagType] = useState<FlagType>(
     challenge?.flag_type ?? "static",
   );
@@ -248,8 +263,13 @@ function ChallengeForm({
       description,
       category_id: categoryId || null,
       points: Number(points),
+      scoring_type: scoringType,
       flag_type: flagType,
     };
+    if (scoringType === "dynamic") {
+      base.min_points = Number(minPoints);
+      base.decay = Number(decay);
+    }
     if (flagType === "multiple_choice") {
       const trimmed = choices.map((c) => c.trim());
       const hasCorrect = correctIndex !== null && !!trimmed[correctIndex];
@@ -314,7 +334,9 @@ function ChallengeForm({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="points">Points</Label>
+              <Label htmlFor="points">
+                {scoringType === "dynamic" ? "Initial points" : "Points"}
+              </Label>
               <Input
                 id="points"
                 type="number"
@@ -324,6 +346,49 @@ function ChallengeForm({
                 required
               />
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="scoring-type">Scoring</Label>
+            <Select
+              id="scoring-type"
+              value={scoringType}
+              onChange={(e) => setScoringType(e.target.value as ScoringType)}
+              className="max-w-xs"
+            >
+              <option value="static">Static (fixed points)</option>
+              <option value="dynamic">Dynamic (decays as more solve)</option>
+            </Select>
+            {scoringType === "dynamic" && (
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="space-y-2">
+                  <Label htmlFor="min-points">Minimum points</Label>
+                  <Input
+                    id="min-points"
+                    type="number"
+                    min={0}
+                    value={minPoints}
+                    onChange={(e) => setMinPoints(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="decay">Decay (solves)</Label>
+                  <Input
+                    id="decay"
+                    type="number"
+                    min={1}
+                    value={decay}
+                    onChange={(e) => setDecay(e.target.value)}
+                    required
+                  />
+                </div>
+                <p className="col-span-2 text-xs text-muted-foreground">
+                  Worth {points || 0} until solves accumulate, decaying toward{" "}
+                  {minPoints || 0} over ~{decay || 0} solves. Every solver always
+                  holds the current value.
+                </p>
+              </div>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="flag-type">Flag type</Label>

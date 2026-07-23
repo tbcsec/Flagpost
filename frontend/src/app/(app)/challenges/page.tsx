@@ -29,8 +29,9 @@ import { usePresence } from "@/lib/hooks/use-presence";
 import { useAccess } from "@/lib/hooks/use-permissions";
 import { useCategories } from "@/lib/hooks/use-categories";
 import { ChallengeRatingPrompt } from "@/components/challenges/challenge-rating-prompt";
-import { useChallenges } from "@/lib/hooks/use-challenges";
+import { useChallenges, useChallengeSolves } from "@/lib/hooks/use-challenges";
 import { useSubmitFlag } from "@/lib/hooks/use-submissions";
+import { relativeTime } from "@/lib/datetime";
 import { richTextToPlain } from "@/lib/rich-text";
 import type { Challenge } from "@/lib/types";
 import { toast } from "@/stores/toast";
@@ -336,6 +337,8 @@ function ChallengeDialogBody({
 
       <ChallengeHints competitionId={competitionId} challengeId={challenge.id} />
 
+      <ChallengeSolves competitionId={competitionId} challengeId={challenge.id} />
+
       {myTeam.data && (
         <section className="grid gap-2">
           <div>
@@ -348,5 +351,49 @@ function ChallengeDialogBody({
         </section>
       )}
     </>
+  );
+}
+
+// "Who solved this" — earliest first, the first tagged as first blood (🩸).
+function ChallengeSolves({
+  competitionId,
+  challengeId,
+}: {
+  competitionId: string;
+  challengeId: string;
+}) {
+  const { data: solvers } = useChallengeSolves(competitionId, challengeId);
+  if (!solvers || solvers.length === 0) {
+    return (
+      <section className="grid gap-1">
+        <h3 className="text-sm font-medium">Solves</h3>
+        <p className="text-xs text-muted-foreground">
+          No solves yet — be the first to draw blood.
+        </p>
+      </section>
+    );
+  }
+  return (
+    <section className="grid gap-2">
+      <h3 className="text-sm font-medium">
+        Solves <span className="text-muted-foreground">({solvers.length})</span>
+      </h3>
+      <ul className="grid max-h-48 gap-1 overflow-y-auto">
+        {solvers.map((s) => (
+          <li
+            key={s.subject_id}
+            className="flex items-center justify-between gap-2 text-sm"
+          >
+            <span className="flex items-center gap-1.5">
+              {s.is_first_blood && <span title="First blood">🩸</span>}
+              <span className={cn(s.is_first_blood && "font-medium")}>{s.name}</span>
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {relativeTime(s.solved_at)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

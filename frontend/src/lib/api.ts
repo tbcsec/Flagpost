@@ -33,6 +33,7 @@ import type {
   RecentSolve,
   Challenge,
   ChallengeCreate,
+  ChallengeSolver,
   ChallengeUpdate,
   Competition,
   CompetitionCreate,
@@ -389,6 +390,10 @@ export const challengesApi = {
   get: (competitionId: string, challengeId: string) =>
     apiFetch<Challenge>(
       `/api/competitions/${competitionId}/challenges/${challengeId}`,
+    ),
+  solves: (competitionId: string, challengeId: string) =>
+    apiFetch<ChallengeSolver[]>(
+      `/api/competitions/${competitionId}/challenges/${challengeId}/solves`,
     ),
   create: (competitionId: string, input: ChallengeCreate) =>
     apiFetch<Challenge>(`/api/competitions/${competitionId}/challenges`, {

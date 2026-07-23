@@ -506,6 +506,12 @@ What's built:
       now move the board live). `ScoreboardOut` gains `frozen`/`frozen_at`.
       Frontend: `useFreezeScoreboard`, a "Frozen" badge + staff Freeze/Unfreeze
       button on the scoreboard page.
+    - **Solver list + first-blood display** — `GET .../challenges/{id}/solves`
+      (`challenge_view`, `ChallengeSolver` schema): who solved a challenge,
+      earliest-first, the first tagged `is_first_blood`. Read-only off
+      submissions (no migration/event). Frontend: `useChallengeSolves` +
+      a "Solves (N)" section in the challenge dialog with a 🩸 first-blood marker;
+      auto-refreshes on solve (shares the `["challenges", comp]` invalidation).
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.

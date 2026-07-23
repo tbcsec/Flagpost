@@ -48,6 +48,16 @@ class ResetGuessesRequest(BaseModel):
     team_id: str | None = None
 
 
+class ChallengeSolver(BaseModel):
+    """One subject that solved a challenge (the "who solved this" list). Ordered
+    earliest-first; the earliest is the first blood."""
+
+    subject_id: str
+    name: str
+    solved_at: datetime
+    is_first_blood: bool
+
+
 class ChallengeUpdate(BaseModel):
     """PATCH body — only provided fields are applied. Sending ``flag`` (with
     ``flag_type``/``case_insensitive``/``choices`` as needed) replaces the stored flag."""

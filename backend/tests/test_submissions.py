@@ -96,6 +96,38 @@ async def _submissions(challenge_id: str):
         ).scalars().all()
 
 
+# --- Solver list + first blood -----------------------------------------------
+
+
+async def test_solves_list_orders_earliest_first_with_first_blood(client):
+    comp = await _make_competition(client, mode="individual")
+    chal = await _make_published_challenge(client, comp, flag="flag{s}", points=100)
+    first, fid = await _register(client, "first@example.com")
+    second, sid = await _register(client, "second@example.com")
+    await _assign_participant(fid, comp)
+    await _assign_participant(sid, comp)
+
+    await client.post(
+        f"/api/competitions/{comp}/challenges/{chal}/submit",
+        json={"flag": "flag{s}"},
+        headers=_auth(first),
+    )
+    await client.post(
+        f"/api/competitions/{comp}/challenges/{chal}/submit",
+        json={"flag": "flag{s}"},
+        headers=_auth(second),
+    )
+
+    solves = (
+        await client.get(
+            f"/api/competitions/{comp}/challenges/{chal}/solves", headers=_auth(first)
+        )
+    ).json()
+    assert [s["name"] for s in solves] == ["first", "second"]
+    assert solves[0]["is_first_blood"] is True
+    assert solves[1]["is_first_blood"] is False
+
+
 # --- Dynamic (decay) scoring -------------------------------------------------
 
 

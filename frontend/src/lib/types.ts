@@ -530,6 +530,14 @@ export interface ChallengeCreate {
 
 export type ChallengeUpdate = Partial<ChallengeCreate>;
 
+/** One subject that solved a challenge (the "who solved this" list). */
+export interface ChallengeSolver {
+  subject_id: string;
+  name: string;
+  solved_at: string;
+  is_first_blood: boolean;
+}
+
 export interface Attachment {
   id: string;
   challenge_id: string;

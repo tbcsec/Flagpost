@@ -32,6 +32,22 @@ export function useChallenge(competitionId: string, challengeId: string) {
   });
 }
 
+/** Who solved a challenge (earliest first; the first is the first blood).
+ *  `enabled` lets the dialog defer the fetch until it's open. */
+export function useChallengeSolves(
+  competitionId: string,
+  challengeId: string,
+  enabled = true,
+) {
+  const isAuthenticated = useAuthStore((s) => s.status === "authenticated");
+  return useQuery({
+    queryKey: [...challengeKeys.detail(competitionId, challengeId), "solves"],
+    queryFn: () => challengesApi.solves(competitionId, challengeId),
+    enabled:
+      isAuthenticated && enabled && Boolean(competitionId) && Boolean(challengeId),
+  });
+}
+
 function useInvalidate(competitionId: string) {
   const queryClient = useQueryClient();
   return () =>

@@ -32,6 +32,7 @@ from models.user import User
 from schemas.challenge import (
     ChallengeCreate,
     ChallengeOut,
+    ChallengeSolver,
     ChallengeUpdate,
     ResetGuessesRequest,
 )
@@ -301,6 +302,66 @@ async def get_challenge(
             )
         )
     return challenge
+
+
+@router.get("/{challenge_id}/solves", response_model=list[ChallengeSolver])
+async def list_solves(
+    competition_id: str,
+    challenge_id: str,
+    current_user: User = Depends(require_permission("challenge_view")),
+    db: AsyncSession = Depends(get_db),
+) -> list[ChallengeSolver]:
+    """Who solved this challenge, earliest first (the first is the first blood).
+    Visible to anyone who can see the challenge — the same disclosure the
+    scoreboard already makes."""
+    # 404s a draft for non-editors + enforces competition scoping.
+    await load_visible_challenge(db, competition_id, challenge_id, current_user)
+    competition = await db.get(Competition, competition_id)
+    team_mode = competition is not None and competition.participation_mode == "team"
+    subj_col = Submission.team_id if team_mode else Submission.user_id
+    scope = (
+        Submission.team_id.isnot(None)
+        if team_mode
+        else Submission.team_id.is_(None)
+    )
+    rows = (
+        await db.execute(
+            select(subj_col, Submission.created_at)
+            .where(
+                Submission.challenge_id == challenge_id,
+                Submission.is_correct.is_(True),
+                Submission.is_duplicate.is_(False),
+                scope,
+            )
+            .order_by(Submission.created_at)
+        )
+    ).all()
+    if not rows:
+        return []
+
+    # Resolve subject names in one query (team name, or user display name).
+    ids = [sid for sid, _ in rows]
+    if team_mode:
+        name_rows = (
+            await db.execute(select(Team.id, Team.name).where(Team.id.in_(ids)))
+        ).all()
+    else:
+        name_rows = (
+            await db.execute(
+                select(User.id, User.display_name).where(User.id.in_(ids))
+            )
+        ).all()
+    names = dict(name_rows)
+
+    return [
+        ChallengeSolver(
+            subject_id=sid,
+            name=names.get(sid, "—"),
+            solved_at=solved_at,
+            is_first_blood=(i == 0),
+        )
+        for i, (sid, solved_at) in enumerate(rows)
+    ]
 
 
 @router.post("", response_model=ChallengeOut, status_code=status.HTTP_201_CREATED)

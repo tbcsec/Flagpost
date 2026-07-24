@@ -183,3 +183,26 @@ async def test_award_rejects_non_participant(client):
         headers=_auth(admin),
     )
     assert resp.status_code == 400
+
+
+async def test_award_rejected_in_team_mode(client):
+    """Manual awards are user-scoped (team_id=None); in team-mode the scoreboard
+    credits the team, so those points would silently vanish. Reject up front
+    rather than grant an invisible award."""
+    admin = await admin_token(client)
+    comp = (
+        await client.post(
+            "/api/competitions",
+            json={"name": "Team CTF", "participation_mode": "team", "visibility": "public"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    someone = await _register(client, "someone@example.com")
+    someone_id = (await client.get("/api/auth/me", headers=_auth(someone))).json()["id"]
+    resp = await client.post(
+        f"/api/competitions/{comp}/awards",
+        json={"user_ids": [someone_id], "title": "Nope", "points": 10},
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 400
+    assert "individual-mode" in resp.json()["detail"]

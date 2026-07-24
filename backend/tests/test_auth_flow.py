@@ -226,3 +226,25 @@ async def test_forgot_and_reset_password_flow(client, monkeypatch):
 async def test_reset_password_rejects_bad_token(client):
     resp = await client.post("/api/auth/reset-password", json={"token": "garbage", "new_password": "whatever1"})
     assert resp.status_code == 400
+
+
+async def test_forgot_password_matches_email_case_insensitively(client, monkeypatch):
+    """Login/registration match email case-insensitively (§7.7); the reset flow
+    must too, or a differently-cased address silently gets no email."""
+    from utils import mailer
+
+    sent: list[tuple] = []
+
+    async def _capture(to, subject, body):
+        sent.append((to, subject, body))
+        return True
+
+    monkeypatch.setattr(mailer, "send_email", _capture)
+    await _register(client, "Mixed.Case@Example.com", password="oldpassword1", name="Mc")
+
+    # Request with a different case — should still find the account and email it.
+    resp = await client.post(
+        "/api/auth/forgot-password", json={"email": "mixed.case@example.com"}
+    )
+    assert resp.status_code == 204
+    assert len(sent) == 1

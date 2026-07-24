@@ -183,6 +183,13 @@ async def run_rule(
     per-action isolation, ``trigger_count``/``last_triggered_at`` bump, and the
     ``automation.rule_triggered`` event. Condition matching and the cascade
     guard belong to the *caller* (the scheduler computes its own payload)."""
+    # Capture identity up front: a failing action rolls the session back, which
+    # expires every instance in it — including this rule's own id/name. Reading
+    # them afterwards would fire a synchronous lazy-load, illegal in the async
+    # session (MissingGreenlet), so keep plain copies for the reload + emit.
+    rule_id = rule.id
+    rule_name = rule.name
+    needs_reload = False
     for action in rule.actions or []:
         try:
             await execute_action(db, rule, event_name, payload, action)
@@ -190,18 +197,25 @@ async def run_rule(
             logger.exception(
                 "action %r failed on rule %s (%s)",
                 action.get("type"),
-                rule.id,
-                rule.name,
+                rule_id,
+                rule_name,
             )
             await db.rollback()
-    rule.trigger_count += 1
+            needs_reload = True
+    if needs_reload:
+        # The rollback expired `rule`; reload it before mutating. A concurrent
+        # delete → gone, nothing to bump.
+        rule = await db.get(AutomationRule, rule_id)
+        if rule is None:
+            return
+    rule.trigger_count = (rule.trigger_count or 0) + 1
     rule.last_triggered_at = utcnow()
     await db.commit()
     await event_bus.emit(
         "automation.rule_triggered",
         {
-            "rule_id": rule.id,
-            "rule_name": rule.name,
+            "rule_id": rule_id,
+            "rule_name": rule_name,
             "trigger_type": event_name,
             "competition_id": payload.get("competition_id"),
             "triggered_by_user_id": payload.get("user_id"),

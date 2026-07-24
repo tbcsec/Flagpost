@@ -46,6 +46,17 @@ async def create_awards(
             status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"
         )
 
+    # Manual awards are user-scoped (team_id=None). In a team-mode competition the
+    # scoreboard credits the *team* subject, so a user-scoped award's points would
+    # silently never show — reject rather than grant invisible points. (The UI only
+    # surfaces this on the individual-mode roster; automation's create_award, which
+    # can credit a team, is the team-mode path.)
+    if competition.participation_mode == "team":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Manual awards are only available in individual-mode competitions",
+        )
+
     # Only competitors in *this* competition can be awarded (§6.2/§7.5).
     participant_ids = set(
         (

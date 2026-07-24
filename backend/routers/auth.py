@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import get_current_user
@@ -288,7 +288,12 @@ async def forgot_password(
     import secrets
     from datetime import timedelta
 
-    user = await db.scalar(select(User).where(User.email == str(body.email)))
+    # Match the email case-insensitively, like login/registration do (§7.7,
+    # auth/identity) — otherwise a differently-cased address silently gets no
+    # reset email (and the neutral 204 hides that from the user).
+    user = await db.scalar(
+        select(User).where(func.lower(User.email) == str(body.email).strip().lower())
+    )
     if user is not None and user.is_active:
         raw = secrets.token_urlsafe(32)
         db.add(

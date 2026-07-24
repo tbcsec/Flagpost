@@ -2,7 +2,11 @@
 semantics. Scoping, the depth guard, module gating and the executors are
 covered end-to-end in tests/test_automations.py."""
 
+import utils.automation_engine as engine
+from db import SessionLocal
+from models.automation import AutomationRule
 from utils.automation_engine import evaluate_conditions
+from utils.event_bus import event_bus
 
 
 def _c(field, operator, value=None):
@@ -76,3 +80,39 @@ def test_conditions_are_anded():
 
 def test_unknown_operator_is_false():
     assert not evaluate_conditions([_c("points", "matches", ".*")], {"points": 1})
+
+
+async def test_run_rule_bumps_stats_even_when_an_action_fails(monkeypatch):
+    """Regression: a failing action rolls back the session, which expires every
+    instance in it (the rule included). ``run_rule`` must reload the rule before
+    bumping its stats rather than trip a synchronous lazy-load in the async
+    session (MissingGreenlet). A webhook to an unreachable host hits this path.
+    """
+    async with SessionLocal() as db:
+        rule = AutomationRule(
+            name="R",
+            trigger_type="challenge.solved",
+            conditions=[],
+            actions=[{"type": "webhook", "url": "http://example.invalid"}],
+            is_enabled=True,
+        )
+        db.add(rule)
+        await db.commit()
+        rule_id = rule.id
+
+    async def boom(db, rule, event_name, payload, action):
+        raise RuntimeError("action failed")
+
+    monkeypatch.setattr(engine, "execute_action", boom)
+
+    async with SessionLocal() as db:
+        rule = await db.get(AutomationRule, rule_id)
+        # Must complete without raising despite the rolled-back action.
+        await engine.run_rule(db, rule, "challenge.solved", {"foo": "bar"})
+
+    await event_bus.wait_for_background()
+
+    async with SessionLocal() as db:
+        reloaded = await db.get(AutomationRule, rule_id)
+        assert reloaded.trigger_count == 1
+        assert reloaded.last_triggered_at is not None

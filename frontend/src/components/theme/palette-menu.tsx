@@ -52,7 +52,7 @@ export function PaletteMenu() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-8 z-50 w-60 overflow-hidden rounded-lg border border-border bg-popover shadow-lg">
+        <div className="anim-drop absolute right-0 top-8 z-50 w-60 overflow-hidden rounded-lg border border-border bg-popover shadow-lg">
           <div className="border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Theme
           </div>

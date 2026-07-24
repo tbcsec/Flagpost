@@ -203,7 +203,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Mobile drawer backdrop. */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/50 md:hidden"
+          className="anim-fade fixed inset-0 z-30 bg-black/50 md:hidden"
           onClick={() => setMobileOpen(false)}
           aria-hidden
         />
@@ -448,7 +448,7 @@ function Topbar({
           )}
         </button>
         {notifOpen && (
-          <div className="absolute right-0 top-[calc(100%+10px)] z-50 w-[400px] overflow-hidden rounded-lg border border-border bg-card shadow-lg">
+          <div className="anim-drop absolute right-0 top-[calc(100%+10px)] z-50 w-[400px] overflow-hidden rounded-lg border border-border bg-card shadow-lg">
             <div className="flex items-center justify-between border-b border-border px-4 py-3.5">
               <span className="text-sm font-semibold">Notifications</span>
               {hasUnread && (

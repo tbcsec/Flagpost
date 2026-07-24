@@ -155,7 +155,7 @@ export function EntityCombobox({
         <ul
           id={listId}
           role="listbox"
-          className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-border bg-popover text-popover-foreground shadow-lg"
+          className="anim-drop absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-border bg-popover text-popover-foreground shadow-lg"
         >
           {filtered.length === 0 ? (
             <li className="px-3 py-2 text-sm text-muted-foreground">{emptyText}</li>

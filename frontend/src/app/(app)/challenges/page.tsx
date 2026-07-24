@@ -2,10 +2,24 @@
 
 import { useState } from "react";
 
-import { ChallengeAdmin } from "@/components/challenges/challenge-admin";
+import dynamic from "next/dynamic";
+
 import { NoCompetition } from "@/components/app/no-competition";
 import { ChallengeHints } from "@/components/challenges/challenge-hints";
-import { CollabNote } from "@/components/collab/collab-note";
+import { Skeleton } from "@/components/ui/skeleton";
+
+// Heavy editors load on demand, not in the page bundle: ChallengeAdmin pulls
+// the TipTap rich-text editor (staff-only surface) and CollabNote pulls
+// TipTap + Y.js (team scratchpad). A competitor browsing challenges downloads
+// neither until they actually open one.
+const ChallengeAdmin = dynamic(
+  () => import("@/components/challenges/challenge-admin").then((m) => m.ChallengeAdmin),
+  { ssr: false, loading: () => <Skeleton className="h-40 w-full" /> },
+);
+const CollabNote = dynamic(
+  () => import("@/components/collab/collab-note").then((m) => m.CollabNote),
+  { ssr: false, loading: () => <Skeleton className="h-32 w-full" /> },
+);
 import { PresenceIndicator } from "@/components/presence/presence-indicator";
 import { SectionHeader } from "@/components/app/section-header";
 import { FlagpostMark } from "@/components/brand/flagpost-mark";
@@ -337,7 +351,7 @@ function ChallengeDialogBody({
           </p>
         </div>
       ) : justSolved ? (
-        <div className="flex flex-col items-center gap-2 rounded-lg border border-success/40 bg-success/10 p-6 text-center">
+        <div className="anim-toast flex flex-col items-center gap-2 rounded-lg border border-success/40 bg-success/10 p-6 text-center">
           <FlagpostMark size={40} theme="dark" />
           <div className="text-base font-semibold text-success">
             {result.is_first_blood ? "First blood!" : "Solved!"}

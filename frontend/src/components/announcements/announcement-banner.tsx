@@ -17,7 +17,7 @@ export function AnnouncementBanner() {
   if (!competitionId || !latest || latest.id === dismissedId) return null;
 
   return (
-    <div className="flex items-start gap-3 border-b border-primary/30 bg-primary/10 px-8 py-2.5">
+    <div className="anim-fade flex items-start gap-3 border-b border-primary/30 bg-primary/10 px-8 py-2.5">
       <span className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
         Announcement
       </span>

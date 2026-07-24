@@ -137,13 +137,9 @@ async def handle_event(db_factory, event_name: str, payload: dict[str, Any]) -> 
 
     competition_id = payload.get("competition_id")
     async with db_factory() as db:
-        # Per-competition module toggle (§11.3): disabled = no automation for
-        # this competition's events, global rules included.
-        if competition_id is not None and not await is_module_enabled(
-            db, "automations", competition_id
-        ):
-            return
-
+        # Rules first, module toggle second: this handler runs for *every*
+        # emitted event, and the indexed trigger_type lookup is usually empty —
+        # so the common no-rules event costs one query, not two.
         rules = (
             (
                 await db.execute(
@@ -163,6 +159,13 @@ async def handle_event(db_factory, event_name: str, payload: dict[str, Any]) -> 
             and evaluate_conditions(r.conditions, payload)
         ]
         if not matched:
+            return
+
+        # Per-competition module toggle (§11.3): disabled = no automation for
+        # this competition's events, global rules included.
+        if competition_id is not None and not await is_module_enabled(
+            db, "automations", competition_id
+        ):
             return
 
         token = _depth.set(depth + 1)

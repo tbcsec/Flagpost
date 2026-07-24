@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from auth.seed import seed_system_roles
 from config import settings
@@ -59,6 +60,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Compress the larger JSON reads (scoreboard, challenge list, audit log — all
+# highly repetitive JSON that deflates ~10x). Small responses skip it so the
+# hot small endpoints don't pay the header/CPU overhead.
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
 # Auth, the real-time WebSocket endpoint, and the per-competition module

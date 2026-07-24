@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 
-import { CollabNote } from "@/components/collab/collab-note";
+import dynamic from "next/dynamic";
+
 import { PresenceIndicator } from "@/components/presence/presence-indicator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { relativeTime } from "@/lib/datetime";
 import { usePresence } from "@/lib/hooks/use-presence";
 import {
@@ -21,6 +23,13 @@ import {
 } from "@/lib/hooks/use-tickets";
 import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast";
+
+// The staff notes pad pulls TipTap + Y.js — load it only when a staff viewer
+// actually renders the thread, not in every competitor's support bundle.
+const CollabNote = dynamic(
+  () => import("@/components/collab/collab-note").then((m) => m.CollabNote),
+  { ssr: false, loading: () => <Skeleton className="h-32 w-full" /> },
+);
 
 // The live ticket thread (§4.4). Messages refetch over the ticket's WS room, so
 // a reply from the other side appears (and cues) without a manual refresh.

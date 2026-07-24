@@ -299,3 +299,56 @@
     color: hsl(var(--foreground));
   }
 }
+
+/* ---- Motion layer (pre-public Stage 3) ----------------------------------
+ *
+ * Small, fast, purposeful transitions: overlays fade, dialogs pop, dropdowns
+ * drop, toasts rise. Durations stay under ~200ms so the UI never feels like
+ * it's waiting on choreography. Everything lives behind
+ * `prefers-reduced-motion: no-preference`, so users who ask for reduced
+ * motion get instant state changes — and Radix unmounts immediately when no
+ * close animation is defined, which is exactly the right fallback.
+ *
+ * The dialog animates `transform: scale()` + opacity only; its centering uses
+ * Tailwind v4's native `translate` property, a separate compositor channel,
+ * so the two never fight. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes fp-fade-in {
+    from { opacity: 0; }
+  }
+  @keyframes fp-pop-in {
+    from { opacity: 0; transform: scale(0.96); }
+  }
+  @keyframes fp-drop-in {
+    from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  }
+  @keyframes fp-rise-in {
+    from { opacity: 0; transform: translateY(8px); }
+  }
+
+  /* Entrances only — deliberately no [data-state="closed"] exit animations.
+   * With a close animation defined, Radix defers unmount until `animationend`,
+   * and Chromium neither advances animation clocks nor delivers their events
+   * in hidden tabs — so a dialog closed while the tab is backgrounded (e.g. by
+   * a WS-driven state change) would linger until refocus. With no exit
+   * defined, close unmounts synchronously: deterministic everywhere, and a
+   * ~120ms exit fade is imperceptible anyway. */
+  .anim-overlay[data-state="open"] {
+    animation: fp-fade-in 150ms ease-out;
+  }
+  .anim-dialog[data-state="open"] {
+    animation: fp-pop-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* One-shot entrances for conditionally-rendered UI (no exit choreography —
+   * these unmount instantly, which reads as responsiveness, not jank). */
+  .anim-drop {
+    animation: fp-drop-in 140ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .anim-toast {
+    animation: fp-rise-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .anim-fade {
+    animation: fp-fade-in 150ms ease-out;
+  }
+}

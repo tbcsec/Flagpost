@@ -36,7 +36,7 @@ export function Toaster() {
           role={t.variant === "destructive" ? "alert" : "status"}
           aria-live={t.variant === "destructive" ? "assertive" : "polite"}
           className={cn(
-            "pointer-events-auto flex items-start gap-3 overflow-hidden rounded-lg border p-4 shadow-lg",
+            "anim-toast pointer-events-auto flex items-start gap-3 overflow-hidden rounded-lg border p-4 shadow-lg",
             VARIANT_CLASS[t.variant],
           )}
         >

@@ -1,0 +1,24 @@
+# Flagpost reverse proxy — one public origin fronting both services, so the
+# browser makes same-origin API + WebSocket calls (no CORS to configure).
+#
+# SITE_ADDRESS is supplied by docker-compose. It defaults to ":80" (plain HTTP
+# on a mapped host port, for local use). Set it to your domain (e.g.
+# ctf.example.com) and Caddy obtains and renews a TLS certificate automatically.
+
+{$SITE_ADDRESS} {
+	# API + WebSocket traffic → backend. Caddy proxies WebSocket upgrades
+	# transparently, so /ws/* just works.
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+	handle /ws/* {
+		reverse_proxy backend:8000
+	}
+
+	# Everything else → the Next.js frontend.
+	handle {
+		reverse_proxy frontend:3000
+	}
+
+	encode gzip
+}

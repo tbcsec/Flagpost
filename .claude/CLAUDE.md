@@ -684,8 +684,15 @@ per-competition; ADR-0011).
 **Local dev note:** `.claude/launch.json`'s backend config runs against
 SQLite by default (`DATABASE_URL` env var overrides it) so `preview` needs
 no infra, matching the test stack (ADR-0006). Migrations run automatically
-on every start. Use `docker compose up` for the full Postgres/Redis/MinIO
-stack.
+on every start. `docker compose up` is now the **production** stack (Caddy
+single-origin on :8080); for the full Postgres/Redis/MinIO **dev** stack with
+hot reload use `docker compose -f docker-compose.dev.yml up`.
+
+**Migrations aren't covered by the test suite** (it builds the schema from
+`Base.metadata`, not by running migrations — ADR-0006), and SQLite silently
+accepts things Postgres rejects (e.g. `SET boolcol = 1` — Postgres needs
+`TRUE`). So a migration bug only surfaces against real Postgres: run `docker
+compose up` (or the dev stack) at least once before shipping a migration.
 
 ## Non-negotiable architectural rules
 
@@ -744,10 +751,12 @@ something already decided there (e.g. Zustand + TanStack Query, not
 Redux; SQLAlchemy 2.x async, not a different ORM).
 
 ```
-# Whole stack (Postgres/Redis/MinIO + backend + frontend), verified.
-# The backend container runs `alembic upgrade head` before serving, so the
-# DB is migrated + system roles seeded automatically on first boot.
-docker compose up --build     # frontend :3000, backend :8000
+# Whole PRODUCTION stack (Caddy + backend + frontend + Postgres/Redis/MinIO).
+# Caddy fronts everything single-origin; the backend runs `alembic upgrade head`
+# before serving, so the DB is migrated + roles seeded on first boot.
+docker compose up --build            # app on http://localhost:8080
+# DEV stack (hot reload, source-mounted, dev servers):
+docker compose -f docker-compose.dev.yml up --build   # frontend :3000, backend :8000
 
 # Backend only (needs a venv — this host's Python is externally-managed)
 cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt

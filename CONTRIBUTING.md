@@ -1,0 +1,82 @@
+# Contributing to Flagpost
+
+Thanks for your interest in improving Flagpost! This guide covers how to get set
+up, the conventions the codebase follows, and how to get a change merged.
+
+## Ground rules
+
+- **Read the docs first.** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is
+  binding — it's how the system is designed, not aspirational. The
+  [`docs/adr/`](docs/adr/) records explain *why* past decisions were made; check
+  them before proposing an alternative to something already settled.
+- **Security issues are different.** Do **not** open a public issue or PR for a
+  vulnerability — follow [`SECURITY.md`](SECURITY.md).
+- Be respectful; this project follows the
+  [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Getting set up
+
+The fastest way to a running stack is Docker (see the README). For iterating on
+the code you'll usually run each side directly:
+
+```bash
+# Backend — the host Python is often externally-managed, so use a venv
+cd backend
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/alembic upgrade head          # against a reachable Postgres
+.venv/bin/uvicorn main:app --reload
+
+# Frontend — requires Node 20+
+cd frontend && npm install && npm run dev
+```
+
+The backend test suite is SQLite-backed and needs no infrastructure.
+
+## Before you open a pull request
+
+Run the same checks CI does — all four must pass:
+
+```bash
+cd backend  && .venv/bin/pytest                 # backend tests
+cd frontend && npm run test                     # frontend unit tests (vitest)
+cd frontend && npx tsc --noEmit                 # type-check
+cd frontend && npx eslint .                     # lint
+```
+
+If your change is observable in the UI, run it in the browser and confirm it
+works — don't rely on tests alone for user-facing behaviour.
+
+## Conventions the codebase enforces
+
+These aren't style preferences; they're architectural rules (ARCHITECTURE.md §1,
+some enforced by ESLint):
+
+- **Every mutation emits an event** through the event bus, using the
+  `<entity>.<verb>` past-tense vocabulary in §3.2. Add a new event type there
+  before using it.
+- **Every tenant-scoped query and route is scoped by `competition_id`** at the
+  data-access layer (§6.2).
+- **Permission checks go through `require_permission`**, never an inline role
+  check (§7.6). New capability? Add it to the catalog in §7.1 first.
+- **One hook module per frontend domain** under `frontend/src/lib/hooks/`;
+  components never call the API client directly.
+- **Colours and spacing come from design tokens**, never a raw hex or magic
+  number in a component (§9).
+- Backend: Pydantic schemas are separate from SQLAlchemy models; one router per
+  domain. One migration per PR, named `YYYY-MM-DD_<revid>_<desc>.py`.
+
+## Pull request flow
+
+1. Fork and branch from `main`.
+2. Keep the change focused; unrelated cleanups belong in their own PR.
+3. Make sure the four checks above pass locally.
+4. Open the PR with a clear description of *what* and *why*. Reference any issue
+   it closes.
+5. A maintainer will review. Expect questions — the goal is a codebase that
+   stays coherent, not just code that works.
+
+## Licensing of contributions
+
+Flagpost is licensed under the **GNU AGPL-3.0** (see [`LICENSE`](LICENSE)). By
+submitting a contribution, you agree that it is licensed under the same terms.

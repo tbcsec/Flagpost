@@ -6,6 +6,7 @@ a locally-running Postgres without extra setup.
 """
 
 import logging
+import os
 import secrets as _secrets
 from pathlib import Path
 
@@ -23,9 +24,13 @@ _INSECURE_JWT_DEFAULTS = frozenset(
         "dev-insecure-secret-change-me-0000000000",
     }
 )
-# Persist a generated secret next to the code (deterministic regardless of CWD)
-# so tokens survive restarts without the operator having to set JWT_SECRET.
-_JWT_SECRET_FILE = Path(__file__).resolve().parent / ".jwt_secret"
+# Persist a generated secret so tokens survive restarts without the operator
+# having to set JWT_SECRET. Defaults next to the code (deterministic regardless
+# of CWD); JWT_SECRET_FILE can point it at a mounted volume so the secret also
+# survives a container being recreated (see docker-compose.yml).
+_JWT_SECRET_FILE = Path(
+    os.environ.get("JWT_SECRET_FILE") or (Path(__file__).resolve().parent / ".jwt_secret")
+)
 
 
 def _resolve_jwt_secret(configured: str) -> str:

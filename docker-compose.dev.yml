@@ -1,0 +1,107 @@
+# Development stack for Flagpost — hot reload, source mounted, dev servers.
+#
+#   docker compose -f docker-compose.dev.yml up --build
+#     frontend  -> http://localhost:3000   (next dev)
+#     backend   -> http://localhost:8000/docs
+#     MinIO UI  -> http://localhost:9001
+#
+# For a production stack, use the default `docker compose up` (docker-compose.yml).
+
+name: flagpost
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-flagpost}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-flagpost}
+      POSTGRES_DB: ${POSTGRES_DB:-flagpost}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-flagpost} -d ${POSTGRES_DB:-flagpost}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # web console
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    # Apply migrations (creates tables + seeds the built-in roles) before
+    # serving, so a fresh `docker compose up` is immediately usable.
+    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-flagpost}:${POSTGRES_PASSWORD:-flagpost}@postgres:5432/${POSTGRES_DB:-flagpost}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      # The backend reaches MinIO at minio:9000 inside the network, but signed
+      # download URLs must point at a host the browser can reach (§13.3).
+      MINIO_PUBLIC_ENDPOINT: localhost:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      CORS_ORIGINS: http://localhost:3000
+      # Pass JWT_SECRET through when set; when unset the app derives + persists a
+      # strong per-install secret rather than run on a public default
+      # (config._resolve_jwt_secret). Set it explicitly in prod / multi-host so
+      # every replica shares one (ARCHITECTURE.md §7.7).
+      JWT_SECRET: ${JWT_SECRET:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app          # hot reload of source
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    command: npm run dev
+    environment:
+      # Consumed in the browser, so it must resolve from the host, not the
+      # compose network — hence localhost, not the `backend` service name.
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules       # keep the image's installed deps
+    depends_on:
+      - backend
+
+volumes:
+  postgres-data:
+  minio-data:

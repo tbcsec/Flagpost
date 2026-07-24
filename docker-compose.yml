@@ -1,27 +1,92 @@
-# Local development stack for Flagpost.
+# Production stack for Flagpost — the default `docker compose up`.
 #
-# This is the Tier 0 *skeleton* wiring only: it stands up the infrastructure
-# (Postgres / Redis / MinIO) and both application containers, and proves the
-# frontend and backend can talk to each other. It intentionally does NOT
-# build any Tier 0 feature — no schema, no migrations, no auth. See
-# docs/ROADMAP.md for what comes next.
+#   docker compose up --build        →  http://localhost:8080
 #
-#   docker compose up --build
-#     frontend  -> http://localhost:3000
-#     backend   -> http://localhost:8000/api/hello
-#     MinIO UI  -> http://localhost:9001
+# Caddy fronts both app services on a single origin, so the browser makes
+# same-origin API + WebSocket calls with no CORS to configure. The defaults
+# below work as-is for a local run; for a real deployment set at least:
+#
+#   SITE_ADDRESS   your domain (e.g. ctf.example.com) → Caddy gets TLS for you
+#   PUBLIC_ORIGIN  the browser-facing origin (e.g. https://ctf.example.com)
+#   JWT_SECRET     a long random value (else one is generated + persisted)
+#   POSTGRES_PASSWORD / MINIO_ROOT_USER / MINIO_ROOT_PASSWORD  real credentials
+#
+# See the README "Deploying to production" section and .env.example.
+#
+# For development (hot reload) use: docker compose -f docker-compose.dev.yml up
 
 name: flagpost
 
 services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      # ":80" = plain HTTP on the mapped port (local). Set to a domain for HTTPS.
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+      - "443:443"       # used only when SITE_ADDRESS is a domain (auto-HTTPS)
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - frontend
+      - backend
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Baked into the client bundle at build time — the origin the browser
+        # uses to reach the API (the Caddy front door).
+        NEXT_PUBLIC_API_URL: ${PUBLIC_ORIGIN:-http://localhost:8080}
+    restart: unless-stopped
+    expose:
+      - "3000"          # internal only; Caddy is the public entrypoint
+    depends_on:
+      - backend
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    # Apply migrations (creates tables + seeds the built-in roles) before serving.
+    # Single process by design (ADR-0005): the WebSocket layer is in-process.
+    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-flagpost}:${POSTGRES_PASSWORD:-flagpost}@postgres:5432/${POSTGRES_DB:-flagpost}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      # Signed download URLs must point at a host the browser can reach (§13.3).
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-localhost:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      CORS_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost:8080}
+      # Set JWT_SECRET explicitly in real deployments (and always for multi-host).
+      # Left unset, the app derives a strong secret and persists it to the volume
+      # below, so sessions survive restarts and container recreation.
+      JWT_SECRET: ${JWT_SECRET:-}
+      JWT_SECRET_FILE: /data/.jwt_secret
+    expose:
+      - "8000"          # internal only; reached via Caddy /api and /ws
+    volumes:
+      - backend-data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-flagpost}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-flagpost}
       POSTGRES_DB: ${POSTGRES_DB:-flagpost}
-    ports:
-      - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -32,8 +97,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -42,13 +106,13 @@ services:
 
   minio:
     image: minio/minio:latest
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # web console
+      - "9000:9000"     # S3 API — the browser fetches attachments via signed URLs
     volumes:
       - minio-data:/data
     healthcheck:
@@ -57,53 +121,9 @@ services:
       timeout: 5s
       retries: 5
 
-  backend:
-    build: ./backend
-    # Apply migrations (creates tables + seeds the built-in roles) before
-    # serving, so a fresh `docker compose up` is immediately usable.
-    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
-    environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-flagpost}:${POSTGRES_PASSWORD:-flagpost}@postgres:5432/${POSTGRES_DB:-flagpost}
-      REDIS_URL: redis://redis:6379/0
-      MINIO_ENDPOINT: minio:9000
-      # The backend reaches MinIO at minio:9000 inside the network, but signed
-      # download URLs must point at a host the browser can reach (§13.3).
-      MINIO_PUBLIC_ENDPOINT: localhost:9000
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
-      CORS_ORIGINS: http://localhost:3000
-      # Pass JWT_SECRET through when set; when unset the app derives + persists a
-      # strong per-install secret rather than run on a public default
-      # (config._resolve_jwt_secret). Set it explicitly in prod / multi-host so
-      # every replica shares one (ARCHITECTURE.md §7.7).
-      JWT_SECRET: ${JWT_SECRET:-}
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./backend:/app          # hot reload of source
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-
-  frontend:
-    build: ./frontend
-    command: npm run dev
-    environment:
-      # Consumed in the browser, so it must resolve from the host, not the
-      # compose network — hence localhost, not the `backend` service name.
-      NEXT_PUBLIC_API_URL: http://localhost:8000
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules       # keep the image's installed deps
-    depends_on:
-      - backend
-
 volumes:
   postgres-data:
   minio-data:
+  backend-data:
+  caddy-data:
+  caddy-config:

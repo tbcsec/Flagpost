@@ -5,6 +5,9 @@ const require = createRequire(import.meta.url);
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Emit a self-contained server bundle (server.js + minimal node_modules) so the
+  // production Docker image is small and doesn't ship dev dependencies.
+  output: "standalone",
   webpack: (config) => {
     // Force every `yjs` import/require to resolve to one module instance. Y.js
     // must be a singleton — a second copy (our ESM import vs a transitive CJS

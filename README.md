@@ -43,38 +43,53 @@ owner account (no hard-coded credentials) and the initial branding (ADR-0017).
 Public registration is blocked until an owner exists and never grants above
 Participant.
 
-## Running locally (dev / demo)
+## Quick start (Docker)
 
-Requires Docker with Compose. This stack runs the dev servers (`next dev`,
-`uvicorn --reload`) against Postgres/Redis/MinIO — it's for local development
-and evaluation, **not** a production deployment (see below).
+Requires Docker with Compose. The default stack is **production** — built
+images, a Caddy reverse proxy fronting everything on one origin, Postgres, Redis,
+and MinIO:
 
 ```bash
-cp .env.example .env      # optional; defaults work as-is for local
+cp .env.example .env      # optional; defaults run as-is locally
 docker compose up --build
 ```
 
-| Service       | URL                                            |
-|---------------|------------------------------------------------|
-| Frontend      | http://localhost:3000                          |
-| Backend API   | http://localhost:8000/docs                     |
-| MinIO console | http://localhost:9001 (minioadmin/minioadmin)  |
-
-Open the frontend and complete the setup wizard to create the owner account.
+Open **http://localhost:8080** and complete the setup wizard to create the owner
+account. That's it — the app, its API, and its live WebSocket updates are all
+served same-origin through Caddy, so there's nothing else to configure for a
+local run.
 
 ## Deploying to production
 
-The shipped compose is a dev stack; a real deployment must additionally:
+The default compose *is* the production stack, so a real deployment is mostly
+configuration in `.env`:
 
-- Set a strong **`JWT_SECRET`** (the app derives and persists a per-install
-  secret if you don't, but set one explicitly for multi-host — see
-  `backend/config.py`).
-- Point **`NEXT_PUBLIC_API_URL`** at the browser-reachable backend URL (it's
-  baked into the frontend at build time), and set **`CORS_ORIGINS`** to your
-  frontend origin.
-- Use real credentials for Postgres, Redis, and MinIO/S3, and serve behind TLS.
-- Build and serve the frontend for production (`next build && next start`) and
-  run the backend under a production process manager rather than `--reload`.
+- **`SITE_ADDRESS`** — your domain (e.g. `ctf.example.com`). Caddy obtains and
+  renews TLS automatically. Map ports `80` and `443`.
+- **`PUBLIC_ORIGIN`** — the browser-facing origin (e.g. `https://ctf.example.com`).
+  It's baked into the frontend at build time, so set it before `docker compose
+  build`.
+- **`JWT_SECRET`** — a long random value (required for multi-host; otherwise the
+  app derives and persists one in a volume).
+- Real **Postgres / MinIO credentials**, and `MINIO_PUBLIC_ENDPOINT` pointing at
+  a browser-reachable MinIO host for attachment downloads.
+
+The backend runs as a single process by design (the WebSocket layer is
+in-process — ADR-0005). To run **without Docker in production**: build and serve
+the frontend with `npm run build && npm run start`, and run the backend with
+`alembic upgrade head` then `uvicorn main:app` (no `--reload`) behind your own
+TLS-terminating proxy.
+
+## Local development (hot reload)
+
+For iterating on the code, the dev stack mounts source and runs the dev servers:
+
+```bash
+docker compose -f docker-compose.dev.yml up --build
+# frontend → http://localhost:3000   backend → http://localhost:8000/docs
+```
+
+Or run each side directly (see "Running each side without Docker" below).
 
 ## Layout
 

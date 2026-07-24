@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
+import { RouteProgress } from "@/components/app/route-progress";
 import { SetupGuard } from "@/components/setup/setup-guard";
 import { ThemeApplier } from "@/components/theme/theme-applier";
 import { ConfirmProvider } from "@/components/ui/confirm";
@@ -41,6 +42,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <SessionRestorer />
       <ThemeApplier />
       <SetupGuard />
+      <RouteProgress />
       <ConfirmProvider>{children}</ConfirmProvider>
       <Toaster />
     </QueryClientProvider>

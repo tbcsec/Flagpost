@@ -15,12 +15,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { EntityCombobox } from "@/components/ui/entity-combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { SkeletonCards } from "@/components/ui/skeleton";
 import { useAccess } from "@/lib/hooks/use-permissions";
 import { useCompetitions } from "@/lib/hooks/use-competitions";
+import { useUsers } from "@/lib/hooks/use-users";
 import {
   useAssignRole,
   useCreateRole,
@@ -335,29 +337,46 @@ function RoleDialog({
 function AssignmentsCard({ roles }: { roles: Role[] }) {
   const assignments = useRoleAssignments();
   const competitions = useCompetitions();
+  const users = useUsers("");
   const assign = useAssignRole();
   const unassign = useUnassignRole();
   const confirm = useConfirm();
 
-  const [email, setEmail] = useState("");
+  const [userId, setUserId] = useState("");
   const [roleId, setRoleId] = useState("");
   const [competitionId, setCompetitionId] = useState("");
 
   const selectedRole = roles.find((r) => r.id === roleId) ?? null;
   const needsCompetition = selectedRole?.scope === "competition";
 
+  // Pick a user by name/email from a searchable list; the assign endpoint
+  // resolves by identifier (email or username, §7.7), so we submit the chosen
+  // user's email when they have one and fall back to their username otherwise —
+  // keeping email-less accounts assignable.
+  const userOptions = useMemo(
+    () =>
+      (users.data ?? []).map((u) => ({
+        value: u.id,
+        label: u.display_name,
+        hint: u.email ?? undefined,
+      })),
+    [users.data],
+  );
+  const selectedUser = users.data?.find((u) => u.id === userId) ?? null;
+
   function onAssign(e: React.FormEvent) {
     e.preventDefault();
+    if (!selectedUser) return;
     assign.mutate(
       {
-        email: email.trim(),
+        email: selectedUser.email ?? selectedUser.display_name,
         role_id: roleId,
         competition_id: needsCompetition ? competitionId : null,
       },
       {
         onSuccess: () => {
           toast("Role assigned", { variant: "success" });
-          setEmail("");
+          setUserId("");
         },
         onError: (err) => toast("Couldn't assign", { description: (err as Error).message, variant: "destructive" }),
       },
@@ -368,13 +387,20 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
     <Card>
       <CardHeader>
         <CardTitle>Assignments</CardTitle>
-        <CardDescription>Grant a role to a user by email — per competition, or site-wide for a global role.</CardDescription>
+        <CardDescription>Grant a role to a user — per competition, or site-wide for a global role.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-5">
         <form className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end" onSubmit={onAssign}>
           <div className="grid gap-1.5">
-            <Label htmlFor="assign-email">User email or username</Label>
-            <Input id="assign-email" type="text" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <Label htmlFor="assign-user">User</Label>
+            <EntityCombobox
+              id="assign-user"
+              options={userOptions}
+              value={userId}
+              onChange={setUserId}
+              placeholder="Search by name or email…"
+              emptyText={users.isLoading ? "Loading users…" : "No matching users"}
+            />
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="assign-role">Role</Label>
@@ -401,7 +427,7 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
               <div className="flex h-9 items-center text-sm text-muted-foreground">Site-wide</div>
             </div>
           )}
-          <Button type="submit" disabled={assign.isPending || !roleId}>Assign</Button>
+          <Button type="submit" disabled={assign.isPending || !roleId || !userId}>Assign</Button>
         </form>
 
         <div className="grid gap-2">

@@ -34,7 +34,7 @@ import {
   useUpdateRole,
 } from "@/lib/hooks/use-roles";
 import { groupCatalog } from "@/lib/roles";
-import type { Role } from "@/lib/types";
+import type { Role, RoleAssignment } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast";
 
@@ -364,6 +364,39 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
   );
   const selectedUser = users.data?.find((u) => u.id === userId) ?? null;
 
+  // One entry per user, listing all their role assignments (each still
+  // individually removable), rather than a separate line per assignment.
+  const byUser = useMemo(() => {
+    const map = new Map<
+      string,
+      { userId: string; name: string; email: string | null; roles: RoleAssignment[] }
+    >();
+    for (const a of assignments.data ?? []) {
+      const group =
+        map.get(a.user_id) ??
+        { userId: a.user_id, name: a.user_display_name, email: a.user_email, roles: [] };
+      group.roles.push(a);
+      map.set(a.user_id, group);
+    }
+    return [...map.values()].sort((x, y) => x.name.localeCompare(y.name));
+  }, [assignments.data]);
+
+  async function onUnassign(a: RoleAssignment, userName: string) {
+    if (
+      !(await confirm({
+        title: "Remove this role assignment?",
+        description: `${userName} will lose the ${a.role_name} role${a.competition_name ? ` on ${a.competition_name}` : " (site-wide)"}.`,
+        confirmLabel: "Unassign",
+      }))
+    ) {
+      return;
+    }
+    unassign.mutate(a.id, {
+      onSuccess: () => toast("Unassigned"),
+      onError: (err) => toast("Couldn't unassign", { description: (err as Error).message, variant: "destructive" }),
+    });
+  }
+
   function onAssign(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedUser) return;
@@ -434,36 +467,32 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
           {assignments.data?.length === 0 && (
             <p className="text-sm text-muted-foreground">No role assignments yet.</p>
           )}
-          {assignments.data?.map((a) => (
-            <div key={a.id} className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm">
+          {byUser.map((u) => (
+            <div key={u.userId} className="grid gap-1.5 rounded-md border border-border px-3 py-2 text-sm">
               <div className="min-w-0">
-                <span className="font-medium">{a.user_display_name}</span>
-                <span className="text-muted-foreground">
-                  {" "}· {a.role_name} · {a.competition_name ?? "site-wide"}
-                </span>
+                <span className="font-medium">{u.name}</span>
+                {u.email && <span className="ml-1.5 text-xs text-muted-foreground">{u.email}</span>}
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive"
-                onClick={async () => {
-                  if (
-                    !(await confirm({
-                      title: "Remove this role assignment?",
-                      description: `${a.user_display_name} will lose the ${a.role_name} role${a.competition_name ? ` on ${a.competition_name}` : " (site-wide)"}.`,
-                      confirmLabel: "Unassign",
-                    }))
-                  ) {
-                    return;
-                  }
-                  unassign.mutate(a.id, {
-                    onSuccess: () => toast("Unassigned"),
-                    onError: (err) => toast("Couldn't unassign", { description: (err as Error).message, variant: "destructive" }),
-                  });
-                }}
-              >
-                Remove
-              </Button>
+              <div className="flex flex-wrap gap-1.5">
+                {u.roles.map((a) => (
+                  <span
+                    key={a.id}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/50 py-0.5 pl-2.5 pr-1 text-xs"
+                  >
+                    <span className="font-medium text-foreground">{a.role_name}</span>
+                    <span className="text-muted-foreground">· {a.competition_name ?? "site-wide"}</span>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${a.role_name}${a.competition_name ? ` on ${a.competition_name}` : " (site-wide)"} from ${u.name}`}
+                      title="Remove"
+                      className="flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => onUnassign(a, u.name)}
+                    >
+                      <span aria-hidden="true">×</span>
+                    </button>
+                  </span>
+                ))}
+              </div>
             </div>
           ))}
         </div>

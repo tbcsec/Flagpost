@@ -1,0 +1,10 @@
+[Unit]
+Description=Reset the Flagpost demo (pull latest images, wipe data, recreate)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Adjust to where you deployed the repo / docker-compose.demo.yml.
+Environment=FLAGPOST_DIR=/opt/flagpost
+ExecStart=/opt/flagpost/deploy/demo-reset.sh

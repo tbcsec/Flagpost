@@ -1,0 +1,136 @@
+# Demo deployment for Flagpost (demo.flagpost.io).
+#
+# Pulls prebuilt images from GHCR (built by .github/workflows/demo-images.yml),
+# runs behind a Cloudflare Tunnel so NO host ports are exposed, and enables demo
+# mode. The instance is reset hourly by an external timer (see deploy/).
+#
+#   docker compose -f docker-compose.demo.yml pull
+#   docker compose -f docker-compose.demo.yml up -d
+#
+# Requires TUNNEL_TOKEN (the Cloudflare Tunnel token). In the Cloudflare Zero
+# Trust dashboard, point the tunnel's public hostname demo.flagpost.io at the
+# HTTP service http://caddy:80. Cloudflare terminates TLS, so Caddy stays plain
+# HTTP and needs no certificate.
+
+name: flagpost-demo
+
+services:
+  # Outbound-only connection to Cloudflare; routes demo.flagpost.io → caddy:80.
+  # If you already run cloudflared on the host, delete this service.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN to your Cloudflare Tunnel token}
+    depends_on:
+      - caddy
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      # Plain HTTP — Cloudflare terminates TLS at its edge. No ports published:
+      # only cloudflared (same network) reaches it.
+      SITE_ADDRESS: ":80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_healthy
+
+  frontend:
+    image: ghcr.io/tbcsec/flagpost-frontend:demo
+    pull_policy: always
+    restart: unless-stopped
+    expose:
+      - "3000"
+    depends_on:
+      - backend
+
+  backend:
+    image: ghcr.io/tbcsec/flagpost-backend:demo
+    pull_policy: always
+    restart: unless-stopped
+    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-flagpost}:${POSTGRES_PASSWORD:-flagpost}@postgres:5432/${POSTGRES_DB:-flagpost}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      CORS_ORIGINS: https://demo.flagpost.io
+      # The public connection is HTTPS (via Cloudflare), so mark the cookie Secure.
+      REFRESH_COOKIE_SECURE: "true"
+      DEMO_MODE: "true"
+      JWT_SECRET_FILE: /data/.jwt_secret
+      # MINIO_PUBLIC_ENDPOINT intentionally unset: MinIO isn't exposed, so
+      # attachment *downloads* don't resolve on the demo. The seed adds no
+      # attachments, so nothing user-facing depends on it.
+    expose:
+      - "8000"
+    volumes:
+      - backend-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request as u,sys; sys.exit(0 if u.urlopen('http://localhost:8000/api/health').status==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-flagpost}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-flagpost}
+      POSTGRES_DB: ${POSTGRES_DB:-flagpost}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-flagpost} -d ${POSTGRES_DB:-flagpost}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
+  minio-data:
+  backend-data:
+  caddy-data:
+  caddy-config:

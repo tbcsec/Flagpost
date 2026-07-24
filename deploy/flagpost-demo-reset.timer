@@ -1,0 +1,10 @@
+[Unit]
+Description=Reset the Flagpost demo every hour, on the hour
+
+[Timer]
+# Top of every hour (matches the in-app "resets every hour, on the hour" banner).
+OnCalendar=*-*-* *:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

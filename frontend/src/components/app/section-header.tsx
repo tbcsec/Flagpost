@@ -22,13 +22,3 @@ export function SectionHeader({
     </div>
   );
 }
-
-/** Flags a surface whose UI is built but not yet wired to a backend, so it's
- *  obvious in-app (and in review) that the data is placeholder. */
-export function NotWiredNote({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-md border border-warning/40 bg-warning/10 px-4 py-2.5 text-[13px] text-foreground">
-      <span className="font-medium text-warning">Preview</span> — {children}
-    </div>
-  );
-}

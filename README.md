@@ -5,47 +5,76 @@ Flagpost is a modern, open-source CTF competition management platform.
 - **What & why:** [`docs/VISION.md`](docs/VISION.md)
 - **How (binding technical design):** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - **Build order:** [`docs/ROADMAP.md`](docs/ROADMAP.md)
+- **Why past decisions were made:** [`docs/adr/`](docs/adr/)
 
-## Current state
+## What it does
 
-**Tier 0 (Foundation) — built.** On top of the scaffold, the kernel and Tier
-0 foundations now exist (see `docs/ROADMAP.md`):
+A full competition lifecycle, multi-tenant from the ground up (every event is
+scoped to a competition):
 
-- **Event bus** (async pub/sub) with an audit-log consumer persisting every
-  event.
-- **Auth & RBAC** — JWT access tokens + httpOnly refresh cookies, argon2
-  passwords, and roles/permissions as data with the three built-in roles.
-  The first account registered on a fresh install becomes the administrator.
-- **Competition entity** — the multi-tenant root every later entity scopes to.
-- **Design system** — a Tailwind v4 `@theme` token layer (dark + light
-  palettes) with shadcn-style primitives.
-- **Frontend data layer** — TanStack Query hooks per domain + a Zustand auth
-  store, with login/register and an authenticated competitions view.
+- **Competitions** — team or individual mode, public/private, schedule, pause,
+  archive, clone, and per-competition module toggles.
+- **Challenges** — categories, static / regex / multiple-choice flags, dynamic
+  (decay) scoring, hints, file attachments, prerequisites (unlock chains),
+  scheduled release, tags & difficulty, per-competition guess caps, and bulk
+  ctfcli-format YAML import/export.
+- **Scoring & scoreboard** — live over WebSocket, first blood, freeze, brackets/
+  divisions, a public spectator board, and a CTFtime feed.
+- **Teams & participants** — invite codes, optional captain approval, size caps,
+  rosters, and manual judge awards.
+- **Support tickets, announcements, live presence, and collaborative notes**
+  (CRDT) on challenges and tickets.
+- **Automation engine** — a visual When → If → Then rule builder with SSRF-
+  hardened webhooks, email, in-app notifications, and time-based triggers.
+- **Feedback surveys & challenge ratings, challenge/team analytics, and an
+  operational dashboard** with drag-and-drop widgets.
+- **Administration** — users, a data-driven roles/permissions editor, site-wide
+  theming and branding (custom logo), SMTP, a full-fidelity export/import
+  backup, and a cross-competition event/audit log.
 
-Tier 1 (a live, end-to-end competition) is next.
+Password auth only for now; SSO/LDAP and an AI assistant are deliberately
+deferred (see the "Explicitly Deferred" section of `docs/ROADMAP.md`).
 
-## Running locally
+## First run
 
-Requires Docker with Compose.
+A fresh install ships with **no administrator** — it's *unconfigured* until an
+operator completes the one-time **setup wizard** at `/setup`, which creates the
+owner account (no hard-coded credentials) and the initial branding (ADR-0017).
+Public registration is blocked until an owner exists and never grants above
+Participant.
+
+## Running locally (dev / demo)
+
+Requires Docker with Compose. This stack runs the dev servers (`next dev`,
+`uvicorn --reload`) against Postgres/Redis/MinIO — it's for local development
+and evaluation, **not** a production deployment (see below).
 
 ```bash
-cp .env.example .env      # optional; defaults work as-is
+cp .env.example .env      # optional; defaults work as-is for local
 docker compose up --build
 ```
 
-Then:
+| Service       | URL                                            |
+|---------------|------------------------------------------------|
+| Frontend      | http://localhost:3000                          |
+| Backend API   | http://localhost:8000/docs                     |
+| MinIO console | http://localhost:9001 (minioadmin/minioadmin)  |
 
-| Service       | URL                                   |
-|---------------|---------------------------------------|
-| Frontend      | http://localhost:3000                 |
-| Backend API   | http://localhost:8000/api/hello       |
-| API docs      | http://localhost:8000/docs            |
-| MinIO console | http://localhost:9001 (minioadmin/minioadmin) |
+Open the frontend and complete the setup wizard to create the owner account.
 
-Open the frontend, **register an account** (the first one becomes the
-administrator), then create a competition — it appears in the list, and the
-`user.registered` / `competition.created` events land in the `audit_log`
-table.
+## Deploying to production
+
+The shipped compose is a dev stack; a real deployment must additionally:
+
+- Set a strong **`JWT_SECRET`** (the app derives and persists a per-install
+  secret if you don't, but set one explicitly for multi-host — see
+  `backend/config.py`).
+- Point **`NEXT_PUBLIC_API_URL`** at the browser-reachable backend URL (it's
+  baked into the frontend at build time), and set **`CORS_ORIGINS`** to your
+  frontend origin.
+- Use real credentials for Postgres, Redis, and MinIO/S3, and serve behind TLS.
+- Build and serve the frontend for production (`next build && next start`) and
+  run the backend under a production process manager rather than `--reload`.
 
 ## Layout
 

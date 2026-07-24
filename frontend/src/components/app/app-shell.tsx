@@ -482,6 +482,14 @@ function Topbar({
                     if (!n.read) markRead.mutate(n.id);
                     setNotifOpen(false);
                   };
+                  // Only ever follow an internal, same-origin path — never an
+                  // absolute/scheme URL. Notification links are server-built
+                  // today, but this defends against a future producer letting a
+                  // "javascript:"/"//evil.com" value reach an anchor href.
+                  const safeLink =
+                    n.link && n.link.startsWith("/") && !n.link.startsWith("//")
+                      ? n.link
+                      : null;
                   return (
                     <li
                       key={n.id}
@@ -490,8 +498,8 @@ function Topbar({
                         !n.read && "bg-primary/5",
                       )}
                     >
-                      {n.link ? (
-                        <Link href={n.link} onClick={onActivate} className="block px-4 py-3 hover:bg-muted/50">
+                      {safeLink ? (
+                        <Link href={safeLink} onClick={onActivate} className="block px-4 py-3 hover:bg-muted/50">
                           {body}
                         </Link>
                       ) : (

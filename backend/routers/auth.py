@@ -7,6 +7,7 @@ so it's only ever sent to these endpoints and never readable by JS.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -46,6 +47,11 @@ from utils.event_bus import event_bus
 logger = logging.getLogger("auth")
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+# A valid hash to verify against when a login's account doesn't exist, so a miss
+# and a wrong password cost the same argon2 work — otherwise skipping the hash on
+# a miss is a user-enumeration timing oracle. Computed once at import.
+_DUMMY_PASSWORD_HASH = hash_password("flagpost-login-timing-equalizer")
 
 REFRESH_COOKIE_NAME = "refresh_token"
 REFRESH_COOKIE_PATH = "/api/auth"
@@ -116,7 +122,9 @@ async def register(
     # from a RoleAssignment when a user joins a competition (§7.5).
     user = User(
         email=body.email,
-        password_hash=hash_password(body.password),
+        # Offload argon2 to a thread so this unauthenticated endpoint can't be
+        # used to peg the event loop by flooding registrations.
+        password_hash=await asyncio.to_thread(hash_password, body.password),
         display_name=body.display_name,
     )
     db.add(user)
@@ -137,9 +145,13 @@ async def login(
     # The identifier is the display name (username) or the email, matched
     # case-insensitively (§7.7).
     user = await find_by_identifier(db, body.identifier)
-    # Verify even when the user is missing to avoid leaking which accounts exist
-    # via timing; use a throwaway hash comparison shape.
-    if user is None or not verify_password(body.password, user.password_hash):
+    # Always run the (expensive) verify — against a dummy hash when the account
+    # is missing — so a miss and a wrong password take the same time (no
+    # enumeration oracle). Offloaded to a thread so the argon2 work (which
+    # blocks for tens of ms) can't stall the event loop under a login flood.
+    target_hash = user.password_hash if user is not None else _DUMMY_PASSWORD_HASH
+    password_ok = await asyncio.to_thread(verify_password, body.password, target_hash)
+    if user is None or not password_ok:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",

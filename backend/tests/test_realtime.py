@@ -130,6 +130,24 @@ async def test_unknown_room_type_is_rejected(client):
         assert await ws.expect_close() == 4404
 
 
+async def test_banned_user_cannot_open_a_socket(client):
+    """A soft-banned account's still-valid access token must be rejected on the
+    WS handshake too, not just on REST — otherwise a ban leaks live rooms until
+    the short access token expires."""
+    comp, _ = await _competition_with_challenge(client)
+    admin = await admin_token(client)
+    # A real participant on the competition (would normally be allowed in).
+    victim = await _register(client, "victim@example.com")
+    await client.post(f"/api/competitions/{comp}/teams", json={"name": "V"}, headers=_auth(victim))
+    victim_id = (await client.get("/api/auth/me", headers=_auth(victim))).json()["id"]
+    # Ban them — their access token stays cryptographically valid for now.
+    resp = await client.post(f"/api/users/{victim_id}/ban", headers=_auth(admin))
+    assert resp.status_code == 200, resp.text
+    async with WsTestClient(main.app, f"/ws/scoreboard/{comp}") as ws:
+        await ws.send_json({"token": victim})
+        assert await ws.expect_close() == 4401
+
+
 async def test_challenge_presence_join_and_debounced_clear(client, monkeypatch):
     # Short grace so the end-to-end debounced clear resolves inside the test
     # rather than the 5s default (§4.1); the timing itself is unit-tested.

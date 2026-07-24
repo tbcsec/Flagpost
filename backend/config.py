@@ -5,7 +5,68 @@ falls back to local-dev defaults so `uvicorn main:app --reload` works against
 a locally-running Postgres without extra setup.
 """
 
+import logging
+import secrets as _secrets
+from pathlib import Path
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Secrets that must never authenticate a real deployment: the repo ships these
+# as dev conveniences, so they're *public knowledge*. Running on one would let
+# anyone forge a JWT for any account (including Administrator). Treated as
+# "unset" — a per-install secret is derived instead (see _resolve_jwt_secret).
+_INSECURE_JWT_DEFAULTS = frozenset(
+    {
+        "",
+        "dev-insecure-secret-change-me-in-production",
+        "dev-insecure-secret-change-me-0000000000",
+    }
+)
+# Persist a generated secret next to the code (deterministic regardless of CWD)
+# so tokens survive restarts without the operator having to set JWT_SECRET.
+_JWT_SECRET_FILE = Path(__file__).resolve().parent / ".jwt_secret"
+
+
+def _resolve_jwt_secret(configured: str) -> str:
+    """Return a usable JWT secret, never a public default.
+
+    An explicit, non-default ``JWT_SECRET`` wins. Otherwise derive a strong
+    per-install secret and persist it — so a fresh dev/compose run works with
+    zero config yet never signs tokens with a value that's public in the repo.
+    Set ``JWT_SECRET`` explicitly for multi-host deployments (each replica would
+    otherwise generate its own and reject each other's tokens).
+    """
+    if configured and configured not in _INSECURE_JWT_DEFAULTS:
+        return configured
+    log = logging.getLogger("startup")
+    try:
+        if _JWT_SECRET_FILE.exists():
+            existing = _JWT_SECRET_FILE.read_text().strip()
+            if existing:
+                return existing
+        generated = _secrets.token_urlsafe(64)
+        _JWT_SECRET_FILE.write_text(generated)
+        try:
+            _JWT_SECRET_FILE.chmod(0o600)
+        except OSError:
+            pass
+        log.warning(
+            "JWT_SECRET not set — generated a persistent per-install secret at "
+            "%s. Set JWT_SECRET explicitly for multi-host deployments.",
+            _JWT_SECRET_FILE,
+        )
+        return generated
+    except OSError:
+        # Read-only filesystem: fall back to an ephemeral per-process secret.
+        # Tokens won't survive a restart, but we still never use a public default.
+        log.warning(
+            "JWT_SECRET not set and %s is unwritable — using an ephemeral "
+            "per-process secret; sessions won't survive a restart. Set "
+            "JWT_SECRET to fix.",
+            _JWT_SECRET_FILE,
+        )
+        return _secrets.token_urlsafe(64)
 
 
 class Settings(BaseSettings):
@@ -73,14 +134,23 @@ class Settings(BaseSettings):
     signed_url_ttl_seconds: int = 300
 
     # --- Auth (ARCHITECTURE.md §7.7, ADR-0003) ---
-    # Dev default only; MUST be overridden in any real deployment. Kept ≥32
-    # bytes so HS256 doesn't emit an insecure-key-length warning in local runs.
-    jwt_secret: str = "dev-insecure-secret-change-me-in-production"
+    # An unset (or known public-default) secret is resolved to a strong
+    # per-install secret at startup — the app never signs tokens with a value
+    # that's public in the repo (see _resolve_jwt_secret). Set JWT_SECRET
+    # explicitly in production, and always for multi-host deployments.
+    jwt_secret: str = ""
     jwt_algorithm: str = "HS256"
     access_token_ttl_minutes: int = 15
     refresh_token_ttl_days: int = 14
     # httpOnly refresh cookie is sent over http in local dev; set true in prod.
     refresh_cookie_secure: bool = False
+
+    @model_validator(mode="after")
+    def _harden_jwt_secret(self) -> "Settings":
+        # Replace an unset / public-default secret with a real per-install one,
+        # so no deployment ever runs on a forgeable auth root of trust.
+        self.jwt_secret = _resolve_jwt_secret(self.jwt_secret)
+        return self
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -130,6 +130,13 @@ async def room_socket(websocket: WebSocket, room_type: str, room_id: str) -> Non
         if user is None:
             await websocket.close(code=4401, reason="User no longer exists")
             return
+        # A banned account's still-valid access token must be rejected on the WS
+        # handshake too, exactly like get_current_user does for REST — otherwise
+        # a soft-ban leaks live rooms (scoreboard, tickets, collab) until the
+        # short access token expires.
+        if not user.is_active:
+            await websocket.close(code=4401, reason="This account has been disabled")
+            return
         if not await room.authorize(db, user, room_id):
             await websocket.close(code=4403, reason="Not allowed in this room")
             return

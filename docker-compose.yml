@@ -72,8 +72,11 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       CORS_ORIGINS: http://localhost:3000
-      # Dev-only secret; override in any real deployment (ARCHITECTURE.md §7.7).
-      JWT_SECRET: ${JWT_SECRET:-dev-insecure-secret-change-me-0000000000}
+      # Pass JWT_SECRET through when set; when unset the app derives + persists a
+      # strong per-install secret rather than run on a public default
+      # (config._resolve_jwt_secret). Set it explicitly in prod / multi-host so
+      # every replica shares one (ARCHITECTURE.md §7.7).
+      JWT_SECRET: ${JWT_SECRET:-}
     ports:
       - "8000:8000"
     volumes:

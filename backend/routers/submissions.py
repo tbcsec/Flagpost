@@ -21,6 +21,8 @@ resolved in ``utils/scoring`` so this route never re-derives it.
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -145,7 +147,11 @@ async def submit_flag(
             detail="No guesses remaining for this question",
         )
 
-    correct = _flag_matches(challenge, body.flag)
+    # Grade off the event-loop thread: a regex flag runs a bounded but
+    # potentially heavy match (ADR-0018), and `regex` releases the GIL, so a
+    # single match never stalls the loop for other requests. (Static/MC grading
+    # is trivially fast; the offload is uniform and harmless there.)
+    correct = await asyncio.to_thread(_flag_matches, challenge, body.flag)
     already_solved = correct and await subject_has_solved(db, challenge_id, subject)
     award = correct and not already_solved
 

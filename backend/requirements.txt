@@ -16,6 +16,11 @@ pwdlib[argon2]>=0.2.1,<0.3
 # Module loader manifests (§11.1)
 pyyaml>=6.0,<7.0
 
+# Regex flag matching under a hard timeout (ADR-0018) — stdlib `re` can't be
+# interrupted and holds the GIL, so a catastrophic staff-authored pattern could
+# stall the whole event loop. `regex` releases the GIL and honours `timeout=`.
+regex>=2024.11,<2025.0
+
 # Object storage — MinIO/S3 for challenge files (§13.3); multipart for uploads
 minio>=7.2,<8.0
 python-multipart>=0.0.12,<0.1

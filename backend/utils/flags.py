@@ -20,8 +20,16 @@ Built in Phase 4 (challenge authoring); Phase 6 (submission) reuses
 from __future__ import annotations
 
 import hashlib
-import re
 import secrets
+
+import regex  # PCRE-compatible engine with a match `timeout=` (ADR-0018)
+
+# Hard wall-clock budget for a single regex flag match (ADR-0018). Orders of
+# magnitude above any honest flag check, so only catastrophic backtracking hits
+# it. A staff-authored pattern is trusted to be *correct*, not to be *safe*
+# against competitor-controlled input on a shared single-process runtime — this
+# is the backstop that keeps one bad pattern from stalling the event loop.
+REGEX_MATCH_TIMEOUT_SECONDS = 0.25
 
 
 def make_salt() -> str:
@@ -46,9 +54,25 @@ def verify_static_flag(
 
 
 def verify_regex_flag(submitted: str, pattern: str, case_insensitive: bool) -> bool:
-    flags = re.IGNORECASE if case_insensitive else 0
+    """Grade a regex flag under a hard per-match timeout (ADR-0018).
+
+    The pattern is staff-authored but ``submitted`` is competitor-controlled, and
+    the backend is a single-process async runtime (ADR-0005) — so a catastrophic
+    pattern (e.g. ``(a+)+$``) matched against a crafted input could otherwise burn
+    the CPU indefinitely and freeze *every* request on the instance. The ``regex``
+    engine honours ``timeout=`` and releases the GIL, so a runaway match is aborted
+    at ``REGEX_MATCH_TIMEOUT_SECONDS``. A timeout and a malformed pattern both fail
+    closed (treated as "did not match"), never a 500."""
+    flags = regex.IGNORECASE if case_insensitive else 0
     try:
-        return re.fullmatch(pattern, submitted.strip(), flags) is not None
-    except re.error:
-        # A malformed pattern must fail closed, not 500 a submission.
+        return (
+            regex.fullmatch(
+                pattern,
+                submitted.strip(),
+                flags=flags,
+                timeout=REGEX_MATCH_TIMEOUT_SECONDS,
+            )
+            is not None
+        )
+    except (regex.error, TimeoutError):
         return False

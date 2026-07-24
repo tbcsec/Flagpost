@@ -54,42 +54,6 @@ export default function LoginPage() {
           showWordmark={brand.show_wordmark}
         />
       </div>
-      {brand.demo_mode && (
-        <Card className="border-warning/40">
-          <CardHeader>
-            <CardTitle className="text-base">Demo instance</CardTitle>
-            <CardDescription>
-              Try Flagpost with an account below (password is{" "}
-              <span className="font-mono">password</span>). Data is public and
-              resets every hour, on the hour.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-2">
-            {DEMO_ACCOUNTS.map((a) => (
-              <button
-                key={a.user}
-                type="button"
-                onClick={() => {
-                  setIdentifier(a.user);
-                  setPassword("password");
-                }}
-                className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-left text-sm transition-colors hover:bg-accent/50"
-              >
-                <span>
-                  <span className="font-medium">{a.label}</span>{" "}
-                  <span className="text-muted-foreground">— {a.desc}</span>
-                </span>
-                <span className="font-mono text-xs text-muted-foreground">
-                  {a.user} / password
-                </span>
-              </button>
-            ))}
-            <p className="text-xs text-muted-foreground">
-              Click an account to fill the form, then sign in.
-            </p>
-          </CardContent>
-        </Card>
-      )}
       <Card>
         <CardHeader>
           <CardTitle>Sign in</CardTitle>
@@ -146,6 +110,44 @@ export default function LoginPage() {
           )}
         </CardContent>
       </Card>
+      {brand.demo_mode && (
+        <Card className="border-warning/40">
+          <CardHeader className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-warning">
+                Demo
+              </span>
+              <CardTitle className="text-base">Try it instantly</CardTitle>
+            </div>
+            <CardDescription>
+              Click an account to fill the form above — the password is{" "}
+              <span className="font-mono text-foreground">password</span>. Data
+              is public and resets every hour, on the hour.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-2">
+            {DEMO_ACCOUNTS.map((a) => (
+              <button
+                key={a.user}
+                type="button"
+                onClick={() => {
+                  setIdentifier(a.user);
+                  setPassword("password");
+                }}
+                className="group flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2 text-left transition-colors hover:border-primary/50 hover:bg-accent"
+              >
+                <span className="flex flex-col">
+                  <span className="text-sm font-medium">{a.label}</span>
+                  <span className="text-xs text-muted-foreground">{a.desc}</span>
+                </span>
+                <span className="shrink-0 rounded-md border border-border bg-background px-2 py-1 font-mono text-xs text-muted-foreground group-hover:text-foreground">
+                  {a.user}
+                </span>
+              </button>
+            ))}
+          </CardContent>
+        </Card>
+      )}
       <PoweredByFooter />
     </main>
   );

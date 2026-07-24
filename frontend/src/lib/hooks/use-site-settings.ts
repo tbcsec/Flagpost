@@ -31,6 +31,7 @@ export const FALLBACK_SETTINGS: SiteSettings = {
   registration_open: true,
   logo_url: null,
   show_wordmark: true,
+  demo_mode: false,
 };
 
 /** Rewrite the backend-relative `logo_url` to the API origin so an `<img src>`

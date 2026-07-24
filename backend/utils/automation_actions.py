@@ -37,6 +37,7 @@ from typing import Any, Awaitable, Callable
 
 from sqlalchemy import select
 
+from config import settings
 from db import utcnow
 from models.announcement import Announcement
 from models.automation import Achievement, AutomationRule
@@ -509,11 +510,20 @@ ACTIONS: dict[str, ActionSpec] = {
 }
 
 
+# Actions that reach *outside* the instance and are therefore disabled on a
+# public demo (they could be abused to send traffic/mail to arbitrary targets).
+DEMO_DISABLED_ACTIONS = frozenset({"webhook", "send_email"})
+
+
 async def execute_action(
     db, rule: AutomationRule, event_name: str, payload: dict, action: dict
 ) -> None:
-    spec = ACTIONS.get(action.get("type", ""))
+    action_type = action.get("type", "")
+    if settings.demo_mode and action_type in DEMO_DISABLED_ACTIONS:
+        logger.info("action %r disabled in demo mode (rule %s)", action_type, rule.id)
+        return
+    spec = ACTIONS.get(action_type)
     if spec is None:
-        logger.warning("unknown action type %r on rule %s", action.get("type"), rule.id)
+        logger.warning("unknown action type %r on rule %s", action_type, rule.id)
         return
     await spec.execute(db, rule, event_name, payload, action)

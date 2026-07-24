@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 
 import { AnnouncementBanner } from "@/components/announcements/announcement-banner";
+import { DemoBanner } from "@/components/app/demo-banner";
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
 import { PaletteMenu } from "@/components/theme/palette-menu";
@@ -192,7 +193,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen flex-col overflow-hidden">
       {/* Keyboard users can jump past the nav straight to page content. */}
       <a
         href="#main-content"
@@ -200,6 +201,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       >
         Skip to content
       </a>
+      {/* Demo-instance banner spans the full width above the shell. */}
+      <DemoBanner />
+      <div className="flex min-h-0 flex-1 overflow-hidden">
       {/* Mobile drawer backdrop. */}
       {mobileOpen && (
         <div
@@ -342,6 +346,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <PoweredByFooter className="mt-auto" />
           </div>
         </main>
+      </div>
       </div>
     </div>
   );

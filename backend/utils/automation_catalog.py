@@ -19,7 +19,8 @@ the two in lockstep.
 
 from __future__ import annotations
 
-from utils.automation_actions import ACTIONS
+from config import settings
+from utils.automation_actions import ACTIONS, DEMO_DISABLED_ACTIONS
 from utils.automation_engine import CONDITION_OPERATORS
 from utils.event_catalog import TRIGGERABLE_EVENTS
 
@@ -277,5 +278,8 @@ def build_catalog() -> dict:
                 "fields": ACTION_FIELDS.get(action_type, []),
             }
             for action_type in sorted(ACTIONS)
+            # Demo instances hide the outbound/abusable actions (also enforced at
+            # execution time) so the builder never offers them.
+            if not (settings.demo_mode and action_type in DEMO_DISABLED_ACTIONS)
         ],
     }

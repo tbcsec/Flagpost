@@ -35,6 +35,10 @@ class SiteSettingsOut(BaseModel):
     logo_url: str | None
     # Whether the platform-name wordmark shows beside the logo in the lockup.
     show_wordmark: bool
+    # Whether this instance is running in demo mode (config-driven, not stored) —
+    # drives the "resets hourly" banner and the login-page demo credentials. The
+    # router sets it from settings.demo_mode; defaults false everywhere else.
+    demo_mode: bool = False
 
 
 class SiteSettingsUpdate(BaseModel):

@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 
 from auth.deps import require_permission
+from config import settings as app_config
 from db import get_db, utcnow
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 from models.user import User
@@ -63,7 +64,10 @@ async def get_or_create_settings(db: AsyncSession) -> SiteSettings:
 @router.get("", response_model=SiteSettingsOut)
 async def read_site_settings(db: AsyncSession = Depends(get_db)) -> SiteSettings:
     # Public: the branding is needed before authentication.
-    return await get_or_create_settings(db)
+    settings = await get_or_create_settings(db)
+    # demo_mode is config-driven, not stored — annotate the row for serialization.
+    settings.demo_mode = app_config.demo_mode
+    return settings
 
 
 @router.put("", response_model=SiteSettingsAdminOut)

@@ -72,6 +72,11 @@ services:
       # below, so sessions survive restarts and container recreation.
       JWT_SECRET: ${JWT_SECRET:-}
       JWT_SECRET_FILE: /data/.jwt_secret
+      # Demo instance (e.g. demo.flagpost.io): seeds public demo accounts + sample
+      # data, shows a "resets hourly" banner, and disables outbound actions
+      # (webhooks/email). Never enable on a real deployment. Reset the instance by
+      # recreating the stack on a schedule (`docker compose down -v && up -d`).
+      DEMO_MODE: ${DEMO_MODE:-}
     expose:
       - "8000"          # internal only; reached via Caddy /api and /ws
     volumes:

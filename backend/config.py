@@ -150,6 +150,15 @@ class Settings(BaseSettings):
     # httpOnly refresh cookie is sent over http in local dev; set true in prod.
     refresh_cookie_secure: bool = False
 
+    # --- Demo mode (for a public demo instance, e.g. demo.flagpost.io) ---
+    # When true: a "resets hourly" banner shows app-wide, the login page lists
+    # the shared demo credentials, outbound/abusable automation actions (webhooks,
+    # email) are disabled, and demo accounts + sample data are seeded on startup.
+    # The actual hourly reset is done externally (the operator recreates the
+    # stack); this flag just makes the instance present + behave as a demo.
+    # MUST stay false for any real deployment — it seeds well-known credentials.
+    demo_mode: bool = False
+
     @model_validator(mode="after")
     def _harden_jwt_secret(self) -> "Settings":
         # Replace an unset / public-default secret with a real per-install one,

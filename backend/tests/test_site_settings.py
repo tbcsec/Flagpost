@@ -31,6 +31,7 @@ async def test_public_read_returns_defaults_without_auth(client):
         "registration_open": True,
         "logo_url": None,
         "show_wordmark": True,
+        "demo_mode": False,
     }
     # Public shape only — no internal fields leak.
     assert "updated_at" not in body
@@ -58,6 +59,7 @@ async def test_admin_update_round_trips(client):
         "registration_open": True,
         "logo_url": None,
         "show_wordmark": True,
+        "demo_mode": False,
     }
 
 

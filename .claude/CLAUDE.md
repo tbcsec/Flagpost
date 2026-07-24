@@ -688,6 +688,17 @@ on every start. `docker compose up` is now the **production** stack (Caddy
 single-origin on :8080); for the full Postgres/Redis/MinIO **dev** stack with
 hot reload use `docker compose -f docker-compose.dev.yml up`.
 
+**Demo mode** (`config.demo_mode`, env `DEMO_MODE`, passed through in
+docker-compose) is for a public demo instance (demo.flagpost.io). On startup it
+seeds well-known accounts (`admin`/`judge`/`participant`, password `password`) +
+a sample competition (`auth/demo.py`, idempotent, keyed on the demo competition
+name); it exposes `demo_mode` on the public `GET /api/site-settings` (drives the
+app-wide `DemoBanner` + the login-page credentials card), and disables the
+outbound automation actions (`webhook`/`send_email` — `DEMO_DISABLED_ACTIONS`,
+enforced in `execute_action` + hidden from the catalog). The hourly *reset* is
+external (recreate the stack). **Never enable on a real deployment** — it seeds
+public credentials.
+
 **Migrations aren't covered by the test suite** (it builds the schema from
 `Base.metadata`, not by running migrations — ADR-0006), and SQLite silently
 accepts things Postgres rejects (e.g. `SET boolcol = 1` — Postgres needs

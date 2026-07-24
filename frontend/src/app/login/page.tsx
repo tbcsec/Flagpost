@@ -19,6 +19,13 @@ import { Label } from "@/components/ui/label";
 import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
 import { useLogin } from "@/lib/hooks/use-users";
 
+// Shown only on a demo instance (seeded by auth/demo.py). Password is "password".
+const DEMO_ACCOUNTS = [
+  { user: "admin", label: "Administrator", desc: "full platform control" },
+  { user: "judge", label: "Judge", desc: "run a competition" },
+  { user: "participant", label: "Participant", desc: "solve challenges" },
+];
+
 export default function LoginPage() {
   const router = useRouter();
   const login = useLogin();
@@ -47,6 +54,42 @@ export default function LoginPage() {
           showWordmark={brand.show_wordmark}
         />
       </div>
+      {brand.demo_mode && (
+        <Card className="border-warning/40">
+          <CardHeader>
+            <CardTitle className="text-base">Demo instance</CardTitle>
+            <CardDescription>
+              Try Flagpost with an account below (password is{" "}
+              <span className="font-mono">password</span>). Data is public and
+              resets every hour, on the hour.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-2">
+            {DEMO_ACCOUNTS.map((a) => (
+              <button
+                key={a.user}
+                type="button"
+                onClick={() => {
+                  setIdentifier(a.user);
+                  setPassword("password");
+                }}
+                className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-left text-sm transition-colors hover:bg-accent/50"
+              >
+                <span>
+                  <span className="font-medium">{a.label}</span>{" "}
+                  <span className="text-muted-foreground">— {a.desc}</span>
+                </span>
+                <span className="font-mono text-xs text-muted-foreground">
+                  {a.user} / password
+                </span>
+              </button>
+            ))}
+            <p className="text-xs text-muted-foreground">
+              Click an account to fill the form, then sign in.
+            </p>
+          </CardContent>
+        </Card>
+      )}
       <Card>
         <CardHeader>
           <CardTitle>Sign in</CardTitle>

@@ -705,6 +705,9 @@ export interface SiteSettings {
   logo_url: string | null;
   // Whether the platform-name wordmark shows beside the logo in the lockup.
   show_wordmark: boolean;
+  // Demo instance (config-driven): drives the "resets hourly" banner + the
+  // login-page demo credentials.
+  demo_mode: boolean;
 }
 
 // Admin shape adds the last-updated timestamp.

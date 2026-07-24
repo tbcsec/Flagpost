@@ -40,6 +40,12 @@ async def lifespan(app: FastAPI):
     account (ADR-0017, supersedes the seeded default admin of ADR-0010)."""
     async with SessionLocal() as session:
         await seed_system_roles(session)
+        # Demo instances seed well-known accounts + sample data (demo-only,
+        # idempotent). The hourly reset is external; a fresh boot re-seeds.
+        if settings.demo_mode:
+            from auth.demo import seed_demo_data
+
+            await seed_demo_data(session)
     # Start the automation time-trigger scheduler (§5.2) — kernel wiring like the
     # audit-log consumer; the tick no-ops until a competition.time_remaining rule
     # exists. Not started under the test transport (no lifespan), so tests drive

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 380" role="img" aria-label="Flagpost — the modern, open-source CTF platform">
+  <!-- Self-contained dark brand tile so the banner reads on any GitHub theme.
+       Colours match the app's dark lockup + favicon (LOGO-SPEC): green flag on a
+       light post. -->
+  <rect width="960" height="380" rx="28" fill="#0f1a24"/>
+
+  <!-- Flag-on-post mark, centred around x=480. -->
+  <g transform="translate(427,46)">
+    <ellipse cx="24" cy="140" rx="30" ry="7" fill="#e7eae5" opacity="0.20"/>
+    <rect x="16" y="6" width="16" height="134" rx="8" fill="#e7eae5"/>
+    <path d="M32 14 H112 L90 40 L112 66 H32 Z" fill="#2bbd7e"/>
+  </g>
+
+  <!-- Wordmark + tagline. -->
+  <text x="480" y="286" text-anchor="middle"
+        font-family="'Segoe UI', system-ui, -apple-system, Helvetica, Arial, sans-serif"
+        font-size="90" font-weight="700" letter-spacing="-3" fill="#e7eae5">Flagpost</text>
+  <text x="480" y="332" text-anchor="middle"
+        font-family="'Segoe UI', system-ui, -apple-system, Helvetica, Arial, sans-serif"
+        font-size="26" font-weight="500" letter-spacing="0.3" fill="#8497a9">The modern, open-source CTF platform</text>
+</svg>

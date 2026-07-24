@@ -1,141 +1,226 @@
-# Flagpost
+<div align="center">
 
-Flagpost is a modern, open-source CTF competition management platform.
+<img src="docs/assets/flagpost-banner.svg" alt="Flagpost" width="720">
 
-- **What & why:** [`docs/VISION.md`](docs/VISION.md)
-- **How (binding technical design):** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-- **Build order:** [`docs/ROADMAP.md`](docs/ROADMAP.md)
-- **Why past decisions were made:** [`docs/adr/`](docs/adr/)
+**A modern, open-source platform for running Capture&nbsp;the&nbsp;Flag competitions —<br>self-hosted, real-time, and batteries-included.**
 
-## What it does
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-2bbd7e.svg)](LICENSE)
+[![CI](https://github.com/tbcsec/flagpost/actions/workflows/ci.yml/badge.svg)](https://github.com/tbcsec/flagpost/actions/workflows/ci.yml)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-2bbd7e.svg)](CONTRIBUTING.md)
+![Backend: FastAPI](https://img.shields.io/badge/backend-FastAPI-009688.svg)
+![Frontend: Next.js](https://img.shields.io/badge/frontend-Next.js%2015-black.svg)
 
-A full competition lifecycle, multi-tenant from the ground up (every event is
-scoped to a competition):
+[Highlights](#-highlights)&nbsp;·&nbsp;[Features](#-features)&nbsp;·&nbsp;[Quick start](#-quick-start)&nbsp;·&nbsp;[Deploy](#-deploying-to-production)&nbsp;·&nbsp;[Docs](#-documentation)
 
-- **Competitions** — team or individual mode, public/private, schedule, pause,
-  archive, clone, and per-competition module toggles.
-- **Challenges** — categories, static / regex / multiple-choice flags, dynamic
-  (decay) scoring, hints, file attachments, prerequisites (unlock chains),
-  scheduled release, tags & difficulty, per-competition guess caps, and bulk
-  ctfcli-format YAML import/export.
-- **Scoring & scoreboard** — live over WebSocket, first blood, freeze, brackets/
-  divisions, a public spectator board, and a CTFtime feed.
-- **Teams & participants** — invite codes, optional captain approval, size caps,
-  rosters, and manual judge awards.
-- **Support tickets, announcements, live presence, and collaborative notes**
-  (CRDT) on challenges and tickets.
-- **Automation engine** — a visual When → If → Then rule builder with SSRF-
-  hardened webhooks, email, in-app notifications, and time-based triggers.
-- **Feedback surveys & challenge ratings, challenge/team analytics, and an
-  operational dashboard** with drag-and-drop widgets.
-- **Administration** — users, a data-driven roles/permissions editor, site-wide
-  theming and branding (custom logo), SMTP, a full-fidelity export/import
-  backup, and a cross-competition event/audit log.
+</div>
 
-Password auth only for now; SSO/LDAP and an AI assistant are deliberately
-deferred (see the "Explicitly Deferred" section of `docs/ROADMAP.md`).
+---
 
-## First run
+Flagpost is a complete competition platform for CTF organisers: publish challenges,
+score solves the moment they land, support competitors, and automate the whole
+event — all from one self-hostable app. It's multi-tenant from the ground up (run
+many competitions from a single install), real-time throughout (WebSockets, not
+polling), and ships as a one-command production stack.
 
-A fresh install ships with **no administrator** — it's *unconfigured* until an
-operator completes the one-time **setup wizard** at `/setup`, which creates the
-owner account (no hard-coded credentials) and the initial branding (ADR-0017).
-Public registration is blocked until an owner exists and never grants above
-Participant.
+Password auth only for now; SSO/LDAP and an AI assistant are on the roadmap but
+deliberately not built yet.
 
-## Quick start (Docker)
+## ✨ Highlights
 
-Requires Docker with Compose. The default stack is **production** — built
-images, a Caddy reverse proxy fronting everything on one origin, Postgres, Redis,
-and MinIO:
+The things that set Flagpost apart — every one of them **built and working today**:
+
+- **⚡ Real-time everything.** The scoreboard, "who's viewing this challenge"
+  presence, notifications, and support-ticket threads all update live over
+  WebSockets. No refreshing, no polling.
+- **🤖 A visual automation engine.** A no-code **When → If → Then** rule builder:
+  on any event, run actions — notify, call a (SSRF-hardened) webhook, send email,
+  release a hint, unlock a bonus challenge, open a survey, adjust scores, grant an
+  award, freeze the board, or post an announcement. Includes time-based triggers
+  like *"an hour before the end, open the feedback survey."*
+- **📝 Live collaborative notes.** True CRDT (Y.js) co-editing: a shared scratchpad
+  per team on each challenge, and private staff notes on each ticket — everyone
+  types at once, conflict-free.
+- **🛡️ Permissions as data.** RBAC that isn't hard-coded: a visual role editor
+  lets you clone the built-ins and craft custom roles with granular, per-competition
+  or site-wide scope.
+- **🧩 A genuinely deep challenge model.** Static, regex, and multiple-choice flags;
+  dynamic (decay) scoring; prerequisite unlock chains; scheduled/waved release;
+  tags & difficulty; and per-competition guess caps.
+- **🏆 A scoreboard done right.** Live standings with first-blood, parallel
+  **brackets/divisions**, a **freeze** for the final stretch, a public **spectator
+  board**, and a **CTFtime feed** so rated events just work.
+- **🔁 CTFd-compatible & fully portable.** Bulk challenge import/export in the
+  **ctfcli YAML** format, plus a one-click, full-fidelity **platform backup**
+  (export/import any section of your install).
+- **🔒 Secure by default.** argon2 hashing, a per-install auto-derived JWT secret
+  (no shipped credentials — a first-run setup wizard creates your owner account),
+  SSRF-hardened webhooks, ReDoS-contained regex flags, and timing-safe auth.
+- **🚀 One command to production.** `docker compose up` brings up the whole stack
+  behind a Caddy reverse proxy on a single origin — with automatic HTTPS when you
+  point it at a domain.
+
+## 🧩 Features
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**Competitions**
+- Team **or** individual mode, per competition
+- Public / private visibility & self-serve or invite-code join
+- Schedule, **pause**, archive, and one-click **clone**
+- Per-competition module toggles (turn features on/off)
+
+**Challenges**
+- Categories, static / regex / **multiple-choice** flags
+- **Dynamic (decay)** or static scoring
+- Hints, file attachments (S3/MinIO)
+- **Prerequisite unlock chains**, scheduled release
+- Managed **tags & difficulty** vocab
+- Bulk **ctfcli YAML** import/export
+- Manual guess-cap resets for multiple-choice
+
+**Scoring & scoreboard**
+- Live over WebSocket, **first-blood** markers
+- **Dynamic value convergence** (all solvers stay fair)
+- **Brackets / divisions**, scoreboard **freeze**
+- Public **spectator board** + **CTFtime feed**
+- Manual judge awards & score adjustments
+
+</td>
+<td width="50%" valign="top">
+
+**Teams & participants**
+- Invite codes, optional **captain approval**, size caps
+- Team profiles; individual-mode roster with standing
+
+**Communicate & collaborate**
+- **Support tickets** with a live staff queue & audio cue
+- **Announcements** (live banner)
+- **Presence** — "N others viewing", "a judge is looking"
+- **Collaborative CRDT notes** on challenges & tickets
+
+**Automation, feedback & insight**
+- Visual **automation** rule builder (§ Highlights)
+- **Feedback surveys** + post-solve **challenge ratings**
+- **Challenge & team analytics**
+- Operational **dashboard** with drag-and-drop widgets
+
+**Administration**
+- **Users** directory + soft-ban / lifecycle
+- Data-driven **roles & permissions** editor
+- Site-wide **theming & branding** (custom logo, palettes)
+- SMTP, registration policy, cross-competition **audit log**
+- Full **export / import** backup (incl. secrets)
+
+</td>
+</tr>
+</table>
+
+## 🚀 Quick start
+
+Requires [Docker](https://docs.docker.com/get-docker/) with Compose. The default
+stack is **production**: built images behind a Caddy reverse proxy, with Postgres,
+Redis, and MinIO.
 
 ```bash
-cp .env.example .env      # optional; defaults run as-is locally
+git clone https://github.com/tbcsec/flagpost.git
+cd flagpost
 docker compose up --build
 ```
 
-Open **http://localhost:8080** and complete the setup wizard to create the owner
-account. That's it — the app, its API, and its live WebSocket updates are all
-served same-origin through Caddy, so there's nothing else to configure for a
-local run.
+Open **http://localhost:8080** and complete the one-time **setup wizard** to
+create your owner account. That's it — the app, its API, and its live WebSocket
+updates are all served same-origin through Caddy, so there's nothing else to
+configure for a local run.
 
-## Deploying to production
+> A fresh install ships with **no administrator** and no default password. It's
+> unconfigured until you complete the setup wizard, which creates the owner
+> account and initial branding.
 
-The default compose *is* the production stack, so a real deployment is mostly
-configuration in `.env`:
+## 🌐 Deploying to production
 
-- **`SITE_ADDRESS`** — your domain (e.g. `ctf.example.com`). Caddy obtains and
-  renews TLS automatically. Map ports `80` and `443`.
-- **`PUBLIC_ORIGIN`** — the browser-facing origin (e.g. `https://ctf.example.com`).
-  It's baked into the frontend at build time, so set it before `docker compose
-  build`.
-- **`JWT_SECRET`** — a long random value (required for multi-host; otherwise the
-  app derives and persists one in a volume).
-- Real **Postgres / MinIO credentials**, and `MINIO_PUBLIC_ENDPOINT` pointing at
-  a browser-reachable MinIO host for attachment downloads.
+The default compose *is* the production stack, so going live is mostly
+configuration in `.env` (copy `.env.example`):
 
-The backend runs as a single process by design (the WebSocket layer is
-in-process — ADR-0005). To run **without Docker in production**: build and serve
-the frontend with `npm run build && npm run start`, and run the backend with
-`alembic upgrade head` then `uvicorn main:app` (no `--reload`) behind your own
-TLS-terminating proxy.
+| Variable | What it does |
+|---|---|
+| `SITE_ADDRESS` | Your domain, e.g. `ctf.example.com`. Caddy obtains & renews **TLS automatically**. Map ports `80` + `443`. |
+| `PUBLIC_ORIGIN` | The browser-facing origin, e.g. `https://ctf.example.com`. Baked into the frontend at build time — set it before `docker compose build`. |
+| `JWT_SECRET` | A long random value (required for multi-host; otherwise the app derives and persists one). |
+| `POSTGRES_PASSWORD`, `MINIO_ROOT_USER/PASSWORD` | Real credentials. |
+| `MINIO_PUBLIC_ENDPOINT` | A browser-reachable MinIO host for signed attachment downloads. |
 
-## Local development (hot reload)
+The backend runs as a **single process by design** (the WebSocket layer is
+in-process). To run **without Docker**: build & serve the frontend with
+`npm run build && npm run start`, and run the backend with `alembic upgrade head`
+then `uvicorn main:app` (no `--reload`) behind your own TLS-terminating proxy.
 
-For iterating on the code, the dev stack mounts source and runs the dev servers:
+## 🛠️ Local development
+
+The dev stack mounts source and runs hot-reloading dev servers:
 
 ```bash
 docker compose -f docker-compose.dev.yml up --build
-# frontend → http://localhost:3000   backend → http://localhost:8000/docs
+# frontend → http://localhost:3000   ·   backend → http://localhost:8000/docs
 ```
 
-Or run each side directly (see "Running each side without Docker" below).
-
-## Layout
-
-```
-backend/    FastAPI app + the §14 package tree (models, schemas, routers,
-            utils, plugins, alembic)
-frontend/   Next.js App Router app + the §14 src tree (app, components,
-            lib/hooks, stores)
-docs/       Vision, architecture, roadmap, and ADRs
-```
-
-## Running each side without Docker
+Or run each side directly (backend needs Python 3.12 + a venv; frontend needs
+Node 20+):
 
 ```bash
-# Backend — the host Python is externally-managed, so use a venv
-cd backend
-python3 -m venv .venv
+# Backend
+cd backend && python3 -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/alembic upgrade head        # against a reachable Postgres
 .venv/bin/uvicorn main:app --reload
 
-# Frontend — REQUIRES Node 20+ (Tailwind v4's @tailwindcss/oxide engine)
+# Frontend
 cd frontend && npm install && npm run dev
 ```
 
-## Tests
+Run the checks CI runs before opening a PR:
 
 ```bash
-cd backend && .venv/bin/pytest        # pytest, SQLite-backed, no infra needed
-cd frontend && npm run test           # vitest
+cd backend  && .venv/bin/pytest        # SQLite-backed, no infra needed
+cd frontend && npm run test            # vitest
+cd frontend && npx tsc --noEmit && npx eslint .
 ```
 
-## License
+## 🧱 Tech stack
 
-Copyright (C) 2026 Tom Collier.
+**Backend** — Python · FastAPI · SQLAlchemy 2 (async) · Alembic · PostgreSQL ·
+Redis · MinIO/S3 · JWT + argon2 · a first-class async event bus.
+**Frontend** — TypeScript · Next.js 15 (App Router) · React 19 · TanStack Query ·
+Zustand · Tailwind v4 · TipTap + Y.js (CRDT).
+**Realtime** — WebSockets throughout. **Deploy** — Docker Compose + Caddy.
 
-Flagpost is free software: you can redistribute it and/or modify it under the
-terms of the **GNU Affero General Public License** as published by the Free
-Software Foundation, either version 3 of the License, or (at your option) any
-later version.
+## 📚 Documentation
 
-It is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
-PURPOSE. See the full [`LICENSE`](LICENSE) for details.
+| Doc | What's in it |
+|---|---|
+| [`docs/VISION.md`](docs/VISION.md) | What Flagpost is and why it exists |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | The binding technical design |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | Build order and what's next |
+| [`docs/adr/`](docs/adr/) | Architecture Decision Records — *why* things are the way they are |
 
-The AGPL's network-use clause (§13) means anyone running a **modified** Flagpost
-as a network service must offer its source to users. The built-in, non-removable
-"Powered by Flagpost" footer links every page to this repository, which is how
-Flagpost surfaces its source to remote users as §13 anticipates.
+## 🤝 Contributing
+
+Contributions are welcome! Start with [`CONTRIBUTING.md`](CONTRIBUTING.md) for
+setup, conventions, and the PR flow, and please follow the
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
+Found a security issue? **Don't** open a public issue — see
+[`SECURITY.md`](SECURITY.md) for private disclosure.
+
+## 📄 License
+
+Copyright © 2026 **Tom Collier**.
+
+Flagpost is licensed under the **[GNU Affero General Public License v3.0](LICENSE)**.
+You're free to use, modify, and self-host it; if you run a **modified** version as
+a network service, the AGPL's §13 requires you to offer your users its source. The
+built-in "Powered by Flagpost" footer links every page to this repository, which
+is how Flagpost surfaces its source to remote users.
+
+<div align="center"><sub>Built for the CTF community. Fly your flag. 🚩</sub></div>

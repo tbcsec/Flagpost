@@ -106,3 +106,21 @@ cd frontend && npm install && npm run dev
 cd backend && .venv/bin/pytest        # pytest, SQLite-backed, no infra needed
 cd frontend && npm run test           # vitest
 ```
+
+## License
+
+Copyright (C) 2026 Tom Collier.
+
+Flagpost is free software: you can redistribute it and/or modify it under the
+terms of the **GNU Affero General Public License** as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
+
+It is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+PURPOSE. See the full [`LICENSE`](LICENSE) for details.
+
+The AGPL's network-use clause (§13) means anyone running a **modified** Flagpost
+as a network service must offer its source to users. The built-in, non-removable
+"Powered by Flagpost" footer links every page to this repository, which is how
+Flagpost surfaces its source to remote users as §13 anticipates.

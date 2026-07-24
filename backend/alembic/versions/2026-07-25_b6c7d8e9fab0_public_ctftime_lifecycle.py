@@ -31,13 +31,15 @@ def upgrade() -> None:
             sa.Column("ended_event_fired", sa.Boolean(), nullable=False, server_default="0")
         )
     # Don't retro-fire started/ended for competitions whose boundaries are
-    # already in the past: mark them as already fired.
+    # already in the past: mark them as already fired. Use the TRUE keyword, not
+    # an integer literal — Postgres won't cast `1` to boolean (SQLite would), and
+    # both engines accept TRUE.
     op.execute(
-        "UPDATE competitions SET started_event_fired = 1 "
+        "UPDATE competitions SET started_event_fired = TRUE "
         "WHERE start_at IS NOT NULL AND start_at <= CURRENT_TIMESTAMP"
     )
     op.execute(
-        "UPDATE competitions SET ended_event_fired = 1 "
+        "UPDATE competitions SET ended_event_fired = TRUE "
         "WHERE end_at IS NOT NULL AND end_at <= CURRENT_TIMESTAMP"
     )
 

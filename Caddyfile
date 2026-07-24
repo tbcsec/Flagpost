@@ -7,7 +7,9 @@
 
 {$SITE_ADDRESS} {
 	# API + WebSocket traffic → backend. Caddy proxies WebSocket upgrades
-	# transparently, so /ws/* just works.
+	# transparently, so /ws/* just works. The backend sets its own per-response
+	# headers (e.g. the SVG-sandbox CSP on the logo), so we don't override them
+	# here.
 	handle /api/* {
 		reverse_proxy backend:8000
 	}
@@ -15,8 +17,24 @@
 		reverse_proxy backend:8000
 	}
 
-	# Everything else → the Next.js frontend.
+	# Everything else → the Next.js frontend, with the security headers that
+	# govern the app UI. HSTS is ignored by browsers over plain HTTP, so it's
+	# safe to send unconditionally (it takes effect once you're on HTTPS).
 	handle {
+		header {
+			Strict-Transport-Security "max-age=31536000; includeSubDomains"
+			X-Content-Type-Options "nosniff"
+			X-Frame-Options "SAMEORIGIN"
+			Referrer-Policy "strict-origin-when-cross-origin"
+			Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+			# Same-origin app (self-hosted font + API + WS). Scripts/styles use
+			# 'unsafe-inline' — Next.js and the no-flash theme script are inline
+			# and unnonced; the policy still blocks external scripts and pins
+			# frame-ancestors / base-uri / form-action.
+			Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'"
+			# Don't advertise the server software.
+			-Server
+		}
 		reverse_proxy frontend:3000
 	}
 

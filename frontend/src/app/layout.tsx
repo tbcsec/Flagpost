@@ -1,6 +1,15 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+// Self-hosted brand/display face (LOGO-SPEC) — vendored via @fontsource so it
+// works offline/air-gapped with no runtime Google Fonts request (and a clean
+// `font-src 'self'` CSP). Registers the "Space Grotesk" family that
+// `--font-display` (globals.css) references.
+import "@fontsource/space-grotesk/400.css";
+import "@fontsource/space-grotesk/500.css";
+import "@fontsource/space-grotesk/600.css";
+import "@fontsource/space-grotesk/700.css";
+
 import { Providers } from "./providers";
 import "./globals.css";
 

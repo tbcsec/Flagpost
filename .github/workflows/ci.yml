@@ -32,6 +32,57 @@ jobs:
         # so it needs no services.
         run: pytest -q
 
+  migrations:
+    name: Migrations (real Postgres)
+    runs-on: ubuntu-latest
+    # The pytest suite builds the schema from Base.metadata, never running the
+    # migrations, and SQLite silently accepts things Postgres rejects. So run the
+    # migration chain against a real Postgres to catch Postgres-only bugs (e.g.
+    # `SET boolcol = 1` — Postgres needs TRUE) before they ship.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: flagpost
+          POSTGRES_PASSWORD: flagpost
+          POSTGRES_DB: flagpost_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U flagpost -d flagpost_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql+asyncpg://flagpost:flagpost@localhost:5432/flagpost_ci
+      JWT_SECRET: ci-migration-check-secret-000000000000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install runtime dependencies
+        run: pip install -r requirements.txt
+      - name: Apply the full migration chain on Postgres
+        run: alembic upgrade head
+      - name: Boot check — seed roles on Postgres (mirrors app startup)
+        run: |
+          python - <<'PY'
+          import asyncio
+          import models  # noqa: F401 — populate Base.metadata
+          from db import SessionLocal
+          from auth.seed import seed_system_roles
+
+          async def main():
+              async with SessionLocal() as session:
+                  await seed_system_roles(session)
+          asyncio.run(main())
+          print("migrations + role seed OK on Postgres")
+          PY
+
   frontend:
     name: Frontend (types, lint, unit, build)
     runs-on: ubuntu-latest

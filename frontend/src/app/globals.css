@@ -1,9 +1,8 @@
 @import "tailwindcss";
 
 /* Space Grotesk — the brand/display face (wordmark, live numerals). UI body and
- * mono use system stacks. Loaded from Google Fonts at runtime (open-licence);
- * see the design-system readme → "Font substitution" to embed locally. */
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap");
+ * mono use system stacks. The font itself is self-hosted (vendored via
+ * @fontsource, imported in app/layout.tsx) — no runtime CDN request. */
 
 /* Design system = tokens, not components (ARCHITECTURE.md §9, principle 5).
  *

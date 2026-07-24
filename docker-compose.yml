@@ -32,8 +32,12 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
-      - frontend
-      - backend
+      frontend:
+        condition: service_started
+      # Wait for the backend to pass its healthcheck (migrations applied +
+      # serving) so Caddy doesn't route to it during cold start.
+      backend:
+        condition: service_healthy
 
   frontend:
     build:
@@ -72,6 +76,13 @@ services:
       - "8000"          # internal only; reached via Caddy /api and /ws
     volumes:
       - backend-data:/data
+    healthcheck:
+      # python (stdlib) rather than curl — the slim image has no curl.
+      test: ["CMD-SHELL", "python -c \"import urllib.request as u,sys; sys.exit(0 if u.urlopen('http://localhost:8000/api/health').status==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s   # allow time for `alembic upgrade head` on first boot
     depends_on:
       postgres:
         condition: service_healthy

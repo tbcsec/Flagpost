@@ -59,6 +59,34 @@ The things that set Flagpost apart — every one of them **built and working tod
   behind a Caddy reverse proxy on a single origin — with automatic HTTPS when you
   point it at a domain.
 
+## 📸 Screenshots
+
+> **Note:** these are placeholders. Real captures are on the way — the frames
+> below mark exactly which screens go where (`docs/assets/screenshots/`).
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/assets/screenshots/scoreboard.svg" alt="Live scoreboard"><br>
+      <sub><b>Live scoreboard</b> — real-time standings, first blood, brackets &amp; freeze</sub>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/assets/screenshots/challenges.svg" alt="Challenges"><br>
+      <sub><b>Challenges</b> — cards, hints, live solves &amp; flag submission</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/assets/screenshots/automations.svg" alt="Automation builder"><br>
+      <sub><b>Automation builder</b> — visual When → If → Then rules</sub>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/assets/screenshots/dashboard.svg" alt="Operational dashboard"><br>
+      <sub><b>Operational dashboard</b> — drag-and-drop widgets for organisers</sub>
+    </td>
+  </tr>
+</table>
+
 ## 🧩 Features
 
 <table>

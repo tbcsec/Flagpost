@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" role="img" aria-label="Live Scoreboard — screenshot placeholder">
+  <rect width="1200" height="675" rx="18" fill="#0f1a24"/>
+  <rect x="1" y="1" width="1198" height="673" rx="17" fill="none" stroke="#22303d" stroke-width="2" stroke-dasharray="10 8"/>
+  <!-- brand mark -->
+  <g transform="translate(560,150)">
+    <rect x="16" y="6" width="14" height="96" rx="7" fill="#e7eae5"/>
+    <path d="M30 12 H92 L75 32 L92 52 H30 Z" fill="#2bbd7e"/>
+  </g>
+  <text x="600" y="360" text-anchor="middle" font-family="'Segoe UI', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="54" font-weight="700" letter-spacing="-1" fill="#e7eae5">Live Scoreboard</text>
+  <text x="600" y="410" text-anchor="middle" font-family="'Segoe UI', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="26" font-weight="500" fill="#8497a9">Real-time standings, first blood, brackets &amp; freeze</text>
+  <text x="600" y="470" text-anchor="middle" font-family="'Segoe UI', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="20" font-weight="500" letter-spacing="1" fill="#5a6f82">▸ SCREENSHOT PLACEHOLDER — replace with a real capture</text>
+</svg>

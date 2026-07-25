@@ -62,7 +62,8 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "competition.member_joined": ["competition_id", "user_id"],
     "competition.archived": ["competition_id"],
     "competition.unarchived": ["competition_id"],
-    "competition.deleted": ["competition_id"],
+    # `auto` distinguishes a retention purge (#26) from a manual delete.
+    "competition.deleted": ["competition_id", "user_id", "auto"],
     "competition.time_remaining": ["competition_id", "minutes_remaining"],
     "competition.started": ["competition_id", "name"],
     "competition.ended": ["competition_id", "name"],

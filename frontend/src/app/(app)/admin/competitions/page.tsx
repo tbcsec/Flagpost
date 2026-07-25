@@ -32,6 +32,7 @@ import {
   useCompetitions,
   useDeleteCompetition,
 } from "@/lib/hooks/use-competitions";
+import { useSiteSettings } from "@/lib/hooks/use-site-settings";
 import type { Competition } from "@/lib/types";
 import { toast } from "@/stores/toast";
 
@@ -41,6 +42,7 @@ import { toast } from "@/stores/toast";
 export default function AdminCompetitionsPage() {
   const { data: competitions, isLoading, isError, error } = useCompetitions();
   const archive = useArchiveCompetition();
+  const { data: site } = useSiteSettings();
   const confirm = useConfirm();
   const [cloning, setCloning] = useState<Competition | null>(null);
   const [deleting, setDeleting] = useState<Competition | null>(null);
@@ -48,15 +50,35 @@ export default function AdminCompetitionsPage() {
   async function onArchive(c: Competition) {
     const archived = !c.archived_at;
     // Archiving closes a competition out (hidden from the switcher/lobby);
-    // unarchiving is restorative, so only the archive needs a confirm.
+    // unarchiving is restorative, so only the archive needs a confirm. With the
+    // retention policy on (#26), the archive is also a scheduled deletion — the
+    // dialog states the exact date so consent happens here, and asks for an
+    // export first. The server stamps the authoritative purge_after; this
+    // preview uses the same now + retention-days arithmetic.
+    const retention = site?.archive_auto_delete
+      ? {
+          description:
+            `It'll be hidden from the competition switcher and lobby. ` +
+            `Auto-delete is on: it will be permanently deleted on ` +
+            `${new Date(
+              Date.now() + (site?.archive_retention_days ?? 30) * 86_400_000,
+            ).toLocaleString()} (after ${site?.archive_retention_days ?? 30} days ` +
+            `archived) — database records and stored files. Unarchiving cancels ` +
+            `that. Export the competition first if you need the data.`,
+          destructive: true,
+        }
+      : {
+          description:
+            "It'll be hidden from the competition switcher and lobby. Its data is kept and you can unarchive it later.",
+          destructive: false,
+        };
     if (
       archived &&
       !(await confirm({
         title: `Archive ${c.name}?`,
-        description:
-          "It'll be hidden from the competition switcher and lobby. Its data is kept and you can unarchive it later.",
+        description: retention.description,
         confirmLabel: "Archive",
-        destructive: false,
+        destructive: retention.destructive,
       }))
     ) {
       return;
@@ -101,6 +123,11 @@ export default function AdminCompetitionsPage() {
                     <TableCell className="font-medium">
                       {c.name}
                       {c.archived_at && <Badge variant="outline" className="ml-2">Archived</Badge>}
+                      {c.purge_after && (
+                        <span className="ml-2 text-xs text-destructive">
+                          deletes {new Date(c.purge_after).toLocaleDateString()}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="capitalize">{c.participation_mode}</TableCell>
                     <TableCell>

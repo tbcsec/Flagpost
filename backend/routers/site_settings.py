@@ -263,6 +263,8 @@ def _operational_out(settings: SiteSettings) -> OperationalSettingsOut:
         smtp_from=settings.smtp_from,
         smtp_starttls=settings.smtp_starttls,
         smtp_password_set=bool(settings.smtp_password),
+        archive_auto_delete=settings.archive_auto_delete,
+        archive_retention_days=settings.archive_retention_days,
         updated_at=settings.updated_at,
     )
 
@@ -293,6 +295,10 @@ async def update_operational_settings(
     # Write-only password: only replace it when a new value is supplied.
     if body.smtp_password is not None:
         settings.smtp_password = body.smtp_password or None
+    # Retention policy (#26). Changing it never touches already-stamped
+    # purge_after clocks — it only governs future archive actions.
+    settings.archive_auto_delete = body.archive_auto_delete
+    settings.archive_retention_days = body.archive_retention_days
     await db.commit()
     await db.refresh(settings)
 

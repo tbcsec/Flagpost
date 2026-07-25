@@ -78,6 +78,9 @@ class CompetitionOut(BaseModel):
     invite_code: str
     created_at: datetime
     archived_at: datetime | None = None
+    # When the retention job will hard-delete this archived competition (#26);
+    # null = no clock (active, retention off, or archived before the feature).
+    purge_after: datetime | None = None
     mc_guess_limit: int | None = None
     challenge_ratings_enabled: bool = False
     challenge_tags: list[str] = Field(default_factory=list)

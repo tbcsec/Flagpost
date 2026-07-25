@@ -89,6 +89,17 @@ class SiteSettings(Base, TimestampMixin):
     smtp_starttls: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="1"
     )
+    # Archived-competition retention (#26): when on, archiving a competition
+    # stamps it `purge_after = now + archive_retention_days`, and the scheduler
+    # hard-deletes it (DB tree + attachment objects) once that passes. Only
+    # competitions archived *while this is on* ever get a clock — pre-existing
+    # archives keep purge_after = NULL and are never auto-deleted.
+    archive_auto_delete: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="1"
+    )
+    archive_retention_days: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=30, server_default="30"
+    )
     updated_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, onupdate=utcnow, nullable=True
     )

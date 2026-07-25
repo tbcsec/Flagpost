@@ -32,6 +32,8 @@ async def test_public_read_returns_defaults_without_auth(client):
         "logo_url": None,
         "show_wordmark": True,
         "demo_mode": False,
+        "archive_auto_delete": True,
+        "archive_retention_days": 30,
     }
     # Public shape only — no internal fields leak.
     assert "updated_at" not in body
@@ -60,6 +62,8 @@ async def test_admin_update_round_trips(client):
         "logo_url": None,
         "show_wordmark": True,
         "demo_mode": False,
+        "archive_auto_delete": True,
+        "archive_retention_days": 30,
     }
 
 

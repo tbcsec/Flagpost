@@ -35,6 +35,8 @@ export default function AdminSettingsPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [starttls, setStarttls] = useState(true);
+  const [autoDelete, setAutoDelete] = useState(true);
+  const [retentionDays, setRetentionDays] = useState("30");
 
   const data = settings.data;
   useEffect(() => {
@@ -46,6 +48,8 @@ export default function AdminSettingsPage() {
     setUsername(data.smtp_username ?? "");
     setStarttls(data.smtp_starttls);
     setPassword("");
+    setAutoDelete(data.archive_auto_delete);
+    setRetentionDays(String(data.archive_retention_days));
   }, [data]);
 
   function onSubmit(e: React.FormEvent) {
@@ -60,6 +64,8 @@ export default function AdminSettingsPage() {
         smtp_starttls: starttls,
         // Only send a password when the admin typed a new one (write-only).
         ...(password ? { smtp_password: password } : {}),
+        archive_auto_delete: autoDelete,
+        archive_retention_days: Math.min(3650, Math.max(1, Number(retentionDays) || 30)),
       },
       {
         onSuccess: () => toast("Settings saved", { variant: "success" }),
@@ -155,6 +161,46 @@ export default function AdminSettingsPage() {
                 <input type="checkbox" checked={starttls} onChange={(e) => setStarttls(e.target.checked)} />
                 Use STARTTLS
               </label>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Data retention</CardTitle>
+              <CardDescription>
+                When on, an <em>archived</em> competition is permanently deleted — database
+                records and stored files — once it has stayed archived for the retention
+                period. The archive dialog shows the exact deletion date; unarchiving cancels
+                the clock. Competitions archived before enabling this are never auto-deleted.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="autodel">Auto-delete archived competitions</Label>
+                <Select
+                  id="autodel"
+                  value={autoDelete ? "on" : "off"}
+                  onChange={(e) => setAutoDelete(e.target.value === "on")}
+                  className="max-w-xs"
+                >
+                  <option value="on">On — delete after the retention period</option>
+                  <option value="off">Off — keep archives forever</option>
+                </Select>
+              </div>
+              {autoDelete && (
+                <div className="grid gap-2">
+                  <Label htmlFor="retention">Retention period (days)</Label>
+                  <Input
+                    id="retention"
+                    type="number"
+                    min={1}
+                    max={3650}
+                    value={retentionDays}
+                    onChange={(e) => setRetentionDays(e.target.value)}
+                    className="max-w-32"
+                  />
+                </div>
+              )}
             </CardContent>
           </Card>
 

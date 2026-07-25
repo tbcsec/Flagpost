@@ -14,6 +14,8 @@ rather than per-endpoint memory.
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,10 +36,12 @@ from schemas.competition import (
     CompetitionOut,
     CompetitionUpdate,
 )
+from routers.site_settings import get_or_create_settings
 from storage import get_storage
 from storage.base import ObjectStorage
 from utils.competition_clone import clone_competition
 from utils.event_bus import event_bus
+from utils.retention import delete_competition_tree
 
 router = APIRouter(prefix="/api/competitions", tags=["competitions"])
 
@@ -267,15 +271,30 @@ async def archive_competition(
     db: AsyncSession = Depends(get_db),
 ) -> Competition:
     """Close a competition out: retained but hidden from the switcher/lobby and
-    flagged in the admin list. Reversible (§`archived_at`)."""
+    flagged in the admin list. Reversible (§`archived_at`). When the site's
+    archive_auto_delete retention is on (#26), also stamps the purge clock —
+    the confirm dialog has already shown the operator the exact deletion date."""
     competition = await _competition_or_404(db, competition_id)
     if competition.archived_at is None:
         competition.archived_at = utcnow()
+        site = await get_or_create_settings(db)
+        if site.archive_auto_delete:
+            competition.purge_after = competition.archived_at + timedelta(
+                days=site.archive_retention_days
+            )
         await db.commit()
         await db.refresh(competition)
         await event_bus.emit(
             "competition.archived",
-            {"competition_id": competition.id, "user_id": current_user.id},
+            {
+                "competition_id": competition.id,
+                "user_id": current_user.id,
+                "purge_after": (
+                    competition.purge_after.isoformat()
+                    if competition.purge_after
+                    else None
+                ),
+            },
         )
     return competition
 
@@ -289,6 +308,8 @@ async def unarchive_competition(
     competition = await _competition_or_404(db, competition_id)
     if competition.archived_at is not None:
         competition.archived_at = None
+        # Unarchiving cancels the retention clock; re-archiving restarts it.
+        competition.purge_after = None
         await db.commit()
         await db.refresh(competition)
         await event_bus.emit(
@@ -303,14 +324,13 @@ async def delete_competition(
     competition_id: str,
     current_user: User = Depends(require_permission("delete_competition")),
     db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
 ) -> None:
     """Permanently delete a competition and everything under it (§6.2 tenant
-    tree cascades on the FK). Irreversible — the destructive counterpart to
-    archive."""
+    tree cascades on the FK), including its stored attachment objects (#26 —
+    previously orphaned in MinIO). Irreversible — the destructive counterpart
+    to archive. Shares the tree-delete with the retention purge."""
     competition = await _competition_or_404(db, competition_id)
-    await db.delete(competition)
-    await db.commit()
-    await event_bus.emit(
-        "competition.deleted",
-        {"competition_id": competition_id, "user_id": current_user.id},
+    await delete_competition_tree(
+        db, storage, competition, actor_user_id=current_user.id
     )

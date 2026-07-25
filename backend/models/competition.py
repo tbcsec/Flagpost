@@ -69,6 +69,12 @@ class Competition(Base, TimestampMixin):
     # it's just hidden from the switcher/lobby and flagged in the admin list.
     # Reversible (unarchive). Null = active.
     archived_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    # When the retention job may hard-delete this archived competition (#26).
+    # Stamped at archive time from the site's archive_auto_delete settings;
+    # cleared on unarchive (re-archiving restarts the clock). Null = never —
+    # which is also what every competition archived before the feature has, so
+    # an upgrade can't retroactively schedule anything for deletion.
+    purge_after: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
     # Competition-wide cap on guesses per subject per multiple-choice challenge, to
     # blunt brute-forcing a finite option set. Null = unlimited. New competitions
     # **default to 2** — applied at the API layer (``CompetitionCreate``), not as a

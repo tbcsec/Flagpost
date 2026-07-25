@@ -39,6 +39,12 @@ class SiteSettingsOut(BaseModel):
     # drives the "resets hourly" banner and the login-page demo credentials. The
     # router sets it from settings.demo_mode; defaults false everywhere else.
     demo_mode: bool = False
+    # Archived-competition retention policy (#26). Public because the archive
+    # confirm dialog (edit_competition holders, who may lack manage_site_settings)
+    # must show the exact deletion date before the admin commits. Benign to
+    # disclose — a retention window, not infrastructure detail.
+    archive_auto_delete: bool = True
+    archive_retention_days: int = 30
 
 
 class SiteSettingsUpdate(BaseModel):
@@ -68,6 +74,8 @@ class OperationalSettingsOut(BaseModel):
     smtp_from: str
     smtp_starttls: bool
     smtp_password_set: bool
+    archive_auto_delete: bool
+    archive_retention_days: int
     updated_at: datetime | None
 
 
@@ -94,3 +102,6 @@ class OperationalSettingsUpdate(BaseModel):
     smtp_starttls: bool = True
     # Omitted / null = leave the stored password unchanged; a value replaces it.
     smtp_password: str | None = Field(default=None, max_length=255)
+    # Archived-competition retention (#26): 1 day to 10 years.
+    archive_auto_delete: bool = True
+    archive_retention_days: int = Field(default=30, ge=1, le=3650)

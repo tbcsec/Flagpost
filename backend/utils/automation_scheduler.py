@@ -154,10 +154,18 @@ def stop() -> None:
 
 
 async def _loop(db_factory, interval_seconds: float) -> None:
+    # Imported here, not at module top: retention pulls in the storage layer,
+    # which the pure rule-evaluation imports above shouldn't drag along.
+    from utils.retention import purge_expired_competitions
+
     while True:
         try:
             await emit_lifecycle_events(db_factory)
             await run_time_rules(db_factory)
+            # Archived-competition retention (#26) rides the same kernel tick —
+            # platform housekeeping like the lifecycle events, active
+            # regardless of any per-competition module toggle.
+            await purge_expired_competitions(db_factory)
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 — a bad tick must not kill the loop

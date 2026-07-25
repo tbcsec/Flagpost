@@ -1,0 +1,28 @@
+# Configures GitHub's auto-generated release notes
+# (Releases → Draft a new release → Generate release notes).
+# Merged PRs are grouped by label, so each release reads cleanly with no manual
+# sorting — good PR titles + labels are all it needs. The "*" catch-all must stay
+# last. Label a PR `ignore-for-release` to keep it out of the notes entirely.
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+  categories:
+    - title: 🔒 Security
+      labels:
+        - security
+    - title: 🚀 Features
+      labels:
+        - enhancement
+    - title: 🐛 Bug Fixes
+      labels:
+        - bug
+    - title: 📦 Dependencies
+      labels:
+        - dependencies
+    - title: 📚 Documentation
+      labels:
+        - documentation
+    - title: 🧹 Other Changes
+      labels:
+        - "*"

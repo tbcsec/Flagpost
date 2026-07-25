@@ -36,9 +36,44 @@ import { useSiteSettings } from "@/lib/hooks/use-site-settings";
 import type { Competition } from "@/lib/types";
 import { toast } from "@/stores/toast";
 
-// Admin → Competitions. Listing, creation and cloning are wired. Archive/delete
-// have no endpoints yet, so those actions are present-but-disabled per the
-// "add the UI, don't fake the feature" rule.
+// Admin → Competitions: listing, creation, cloning, archive/unarchive and
+// delete, all wired.
+
+/** Fallback when site settings haven't loaded — matches the server default. */
+const DEFAULT_RETENTION_DAYS = 30;
+
+/** The archive confirm's copy. With retention on (#26) an archive is also a
+ *  *scheduled deletion*, so the dialog states the exact date — consent happens
+ *  there — and asks for an export first. The server stamps the authoritative
+ *  `purge_after`; this is the same now + retention-days arithmetic, previewed.
+ *
+ *  Module-level on purpose: it reads the clock, and an impure call inside a
+ *  component body is a React Compiler purity violation (react-hooks/purity). */
+function archiveWarning(
+  autoDelete: boolean,
+  retentionDays: number,
+): { description: string; destructive: boolean } {
+  if (!autoDelete) {
+    return {
+      description:
+        "It'll be hidden from the competition switcher and lobby. Its data is kept and you can unarchive it later.",
+      destructive: false,
+    };
+  }
+  const deletesOn = new Date(
+    Date.now() + retentionDays * 86_400_000,
+  ).toLocaleString();
+  return {
+    description:
+      `It'll be hidden from the competition switcher and lobby. ` +
+      `Auto-delete is on: it will be permanently deleted on ${deletesOn} ` +
+      `(after ${retentionDays} days archived) — database records and stored ` +
+      `files. Unarchiving cancels that. Export the competition first if you ` +
+      `need the data.`,
+    destructive: true,
+  };
+}
+
 export default function AdminCompetitionsPage() {
   const { data: competitions, isLoading, isError, error } = useCompetitions();
   const archive = useArchiveCompetition();
@@ -50,28 +85,11 @@ export default function AdminCompetitionsPage() {
   async function onArchive(c: Competition) {
     const archived = !c.archived_at;
     // Archiving closes a competition out (hidden from the switcher/lobby);
-    // unarchiving is restorative, so only the archive needs a confirm. With the
-    // retention policy on (#26), the archive is also a scheduled deletion — the
-    // dialog states the exact date so consent happens here, and asks for an
-    // export first. The server stamps the authoritative purge_after; this
-    // preview uses the same now + retention-days arithmetic.
-    const retention = site?.archive_auto_delete
-      ? {
-          description:
-            `It'll be hidden from the competition switcher and lobby. ` +
-            `Auto-delete is on: it will be permanently deleted on ` +
-            `${new Date(
-              Date.now() + (site?.archive_retention_days ?? 30) * 86_400_000,
-            ).toLocaleString()} (after ${site?.archive_retention_days ?? 30} days ` +
-            `archived) — database records and stored files. Unarchiving cancels ` +
-            `that. Export the competition first if you need the data.`,
-          destructive: true,
-        }
-      : {
-          description:
-            "It'll be hidden from the competition switcher and lobby. Its data is kept and you can unarchive it later.",
-          destructive: false,
-        };
+    // unarchiving is restorative, so only the archive needs a confirm.
+    const retention = archiveWarning(
+      site?.archive_auto_delete ?? false,
+      site?.archive_retention_days ?? DEFAULT_RETENTION_DAYS,
+    );
     if (
       archived &&
       !(await confirm({

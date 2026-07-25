@@ -265,8 +265,11 @@ async def seed_demo_data(db: AsyncSession) -> None:
                 {"type": "create_announcement",
                  # ⚡ matches the lightning-bolt first-blood marker used across
                  # the UI (FirstBloodIcon) — not the old blood-drop idiom (#25).
+                 # {user_name}/{challenge_title} showcase the friendly template
+                 # fields (#27) — and make successive announcements visibly
+                 # distinct, so the banner clearly changes per first blood (#19).
                  "title": "⚡ First blood!",
-                 "body": "Someone just drew first blood on a challenge and earned a bonus. Who's next?"},
+                 "body": "{user_name} drew first blood on {challenge_title} and earned a bonus. Who's next?"},
                 {"type": "create_award",
                  "title": "First Blood",
                  "description": "Awarded for the first solve of a challenge.",
@@ -292,7 +295,7 @@ async def seed_demo_data(db: AsyncSession) -> None:
             actions=[
                 {"type": "notify", "target": "event_user",
                  "title": "Nice solve! 🚩",
-                 "body": "You earned {points} points. Keep it up!"},
+                 "body": "You solved {challenge_title} for {points} points. Keep it up!"},
             ],
         ),
     ])

@@ -93,6 +93,13 @@ class Settings(BaseSettings):
     submission_rate_limit: int = 10
     submission_rate_window_seconds: int = 30
 
+    # --- Public spectator page (#24) ---
+    # TTL for the memoised public insights/timeline payload. The endpoint is
+    # unauthenticated and can fan out to many spectators while the page polls
+    # every 30s, so a short memo collapses them onto one computation. Set to 0
+    # to disable (the tests do, so they can observe a mutation immediately).
+    public_insights_cache_seconds: float = 15.0
+
     # --- Real-time layer (§4.1) ---
     # How long a fresh WebSocket connection has to send its first-frame auth
     # message before the server closes it (the token is never in the URL,

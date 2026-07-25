@@ -666,6 +666,36 @@ export interface PublicCompetition {
   end_at: string | null;
 }
 
+/** Spectator context for a public competition (#24). Every score-derived figure
+ *  respects a scoreboard freeze exactly like the board it accompanies. */
+export interface PublicInsights {
+  frozen: boolean;
+  frozen_at: string | null;
+  stats: {
+    participants: number;
+    solves: number;
+    challenges: number;
+    unsolved: number;
+  };
+  highlights: {
+    most_solved: { title: string; count: number } | null;
+    most_attempted: { title: string; count: number } | null;
+    first_blood_leader: { name: string; count: number } | null;
+    fastest_solve: { title: string; name: string; seconds: number } | null;
+  };
+  timeline: {
+    start: string | null;
+    end: string | null;
+    /** Cumulative points per subject for the top entrants; each series ends on
+     *  that subject's board total. */
+    series: {
+      subject_id: string;
+      name: string;
+      points: { t: string; points: number }[];
+    }[];
+  };
+}
+
 /** A broadcast announcement (Phase 8). */
 export interface Announcement {
   id: string;

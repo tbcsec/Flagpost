@@ -58,6 +58,7 @@ import type {
   SetupStatus,
   RoleAssignment,
   PublicCompetition,
+  PublicInsights,
   PublicScoreboard,
   Scoreboard,
   SignedUrl,
@@ -549,6 +550,11 @@ export const publicApi = {
   scoreboard: (competitionId: string) =>
     apiFetch<PublicScoreboard>(
       `/api/public/competitions/${competitionId}/scoreboard`,
+    ),
+  // Spectator stats, highlights and the points timeline (#24).
+  insights: (competitionId: string) =>
+    apiFetch<PublicInsights>(
+      `/api/public/competitions/${competitionId}/insights`,
     ),
 };
 

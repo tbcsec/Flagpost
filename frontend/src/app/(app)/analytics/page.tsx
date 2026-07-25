@@ -5,20 +5,29 @@ import * as React from "react";
 import { SectionHeader } from "@/components/app/section-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  SortableTableHead,
+  TablePagination,
+  TableSearchInput,
+} from "@/components/ui/data-table";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
 import { relativeTime } from "@/lib/datetime";
 import { useChallengeAnalytics, useTeamAnalytics } from "@/lib/hooks/use-analytics";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
+import { useDataTable, type DataTableState } from "@/lib/hooks/use-data-table";
 import { useAccess } from "@/lib/hooks/use-permissions";
-import type { ChallengeAnalyticsReport } from "@/lib/types";
+import type {
+  ChallengeAnalytics,
+  ChallengeAnalyticsReport,
+  TeamAnalytics,
+} from "@/lib/types";
 
 // Challenge & team analytics (ROADMAP #23) — read-only reporting off the
 // submissions / hints / tickets data scoring already records. Staff-gated
@@ -31,6 +40,36 @@ export default function AnalyticsPage() {
 
   const challenges = useChallengeAnalytics(competition?.id ?? "", enabled);
   const teams = useTeamAnalytics(competition?.id ?? "", enabled);
+
+  // Sort / search / pagination (#16 #17 #20) — two independent instances, one
+  // per table, derived off the fetched reports.
+  const challengeTable = useDataTable(challenges.data?.challenges ?? [], {
+    columns: {
+      title: (c: ChallengeAnalytics) => c.title,
+      category: (c: ChallengeAnalytics) => c.category,
+      points: { value: (c: ChallengeAnalytics) => c.points, defaultDir: "desc" },
+      solves: { value: (c: ChallengeAnalytics) => c.solve_count, defaultDir: "desc" },
+      completion: { value: (c: ChallengeAnalytics) => c.completion_rate, defaultDir: "desc" },
+      avg_time: (c: ChallengeAnalytics) => c.avg_solve_time_seconds,
+      attempts: { value: (c: ChallengeAnalytics) => c.attempt_count, defaultDir: "desc" },
+      hints: { value: (c: ChallengeAnalytics) => c.hints_used, defaultDir: "desc" },
+      tickets: { value: (c: ChallengeAnalytics) => c.ticket_count, defaultDir: "desc" },
+      rating: { value: (c: ChallengeAnalytics) => c.avg_rating, defaultDir: "desc" },
+    },
+    searchKeys: [(c: ChallengeAnalytics) => c.title],
+  });
+  const teamTable = useDataTable(teams.data?.teams ?? [], {
+    columns: {
+      rank: (t: TeamAnalytics) => t.rank,
+      name: (t: TeamAnalytics) => t.name,
+      points: { value: (t: TeamAnalytics) => t.points, defaultDir: "desc" },
+      solves: { value: (t: TeamAnalytics) => t.solve_count, defaultDir: "desc" },
+      first_bloods: { value: (t: TeamAnalytics) => t.first_bloods, defaultDir: "desc" },
+      tickets: { value: (t: TeamAnalytics) => t.ticket_count, defaultDir: "desc" },
+      last_solve: { value: (t: TeamAnalytics) => t.last_solve_at, defaultDir: "desc" },
+    },
+    searchKeys: [(t: TeamAnalytics) => t.name],
+  });
 
   return (
     <>
@@ -59,23 +98,29 @@ export default function AnalyticsPage() {
               <CardTitle>Per-challenge</CardTitle>
             </CardHeader>
             <CardContent>
+              <TableSearchInput
+                value={challengeTable.query}
+                onChange={challengeTable.setQuery}
+                placeholder="Search challenges…"
+                className="mb-4"
+              />
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Challenge</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead className="text-right">Points</TableHead>
-                    <TableHead className="text-right">Solves</TableHead>
-                    <TableHead className="text-right">Completion</TableHead>
-                    <TableHead className="text-right">Avg. time</TableHead>
-                    <TableHead className="text-right">Attempts</TableHead>
-                    <TableHead className="text-right">Hints</TableHead>
-                    <TableHead className="text-right">Tickets</TableHead>
-                    <TableHead className="text-right">Rating</TableHead>
+                    <Sortable table={challengeTable} k="title">Challenge</Sortable>
+                    <Sortable table={challengeTable} k="category">Category</Sortable>
+                    <Sortable table={challengeTable} k="points" right>Points</Sortable>
+                    <Sortable table={challengeTable} k="solves" right>Solves</Sortable>
+                    <Sortable table={challengeTable} k="completion" right>Completion</Sortable>
+                    <Sortable table={challengeTable} k="avg_time" right>Avg. time</Sortable>
+                    <Sortable table={challengeTable} k="attempts" right>Attempts</Sortable>
+                    <Sortable table={challengeTable} k="hints" right>Hints</Sortable>
+                    <Sortable table={challengeTable} k="tickets" right>Tickets</Sortable>
+                    <Sortable table={challengeTable} k="rating" right>Rating</Sortable>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {challenges.data.challenges.map((c) => (
+                  {challengeTable.rows.map((c) => (
                     <TableRow key={c.challenge_id}>
                       <TableCell className="font-medium">
                         {c.title}
@@ -116,15 +161,18 @@ export default function AnalyticsPage() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {challenges.data.challenges.length === 0 && (
+                  {challengeTable.rows.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center text-muted-foreground">
-                        No challenges yet.
+                      <TableCell colSpan={10} className="text-center text-muted-foreground">
+                        {challengeTable.query
+                          ? "No challenges match your search."
+                          : "No challenges yet."}
                       </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
+              <TablePagination table={challengeTable} noun="challenges" className="mt-4" />
             </CardContent>
           </Card>
 
@@ -133,20 +181,30 @@ export default function AnalyticsPage() {
               <CardTitle>{challenges.data.mode === "team" ? "Teams" : "Competitors"}</CardTitle>
             </CardHeader>
             <CardContent>
+              <TableSearchInput
+                value={teamTable.query}
+                onChange={teamTable.setQuery}
+                placeholder={
+                  challenges.data.mode === "team" ? "Search teams…" : "Search competitors…"
+                }
+                className="mb-4"
+              />
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-right">#</TableHead>
-                    <TableHead>{challenges.data.mode === "team" ? "Team" : "Competitor"}</TableHead>
-                    <TableHead className="text-right">Points</TableHead>
-                    <TableHead className="text-right">Solves</TableHead>
-                    <TableHead className="text-right">First bloods</TableHead>
-                    <TableHead className="text-right">Tickets</TableHead>
-                    <TableHead className="text-right">Last solve</TableHead>
+                    <Sortable table={teamTable} k="rank" right>#</Sortable>
+                    <Sortable table={teamTable} k="name">
+                      {challenges.data.mode === "team" ? "Team" : "Competitor"}
+                    </Sortable>
+                    <Sortable table={teamTable} k="points" right>Points</Sortable>
+                    <Sortable table={teamTable} k="solves" right>Solves</Sortable>
+                    <Sortable table={teamTable} k="first_bloods" right>First bloods</Sortable>
+                    <Sortable table={teamTable} k="tickets" right>Tickets</Sortable>
+                    <Sortable table={teamTable} k="last_solve" right>Last solve</Sortable>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(teams.data?.teams ?? []).map((t) => (
+                  {teamTable.rows.map((t) => (
                     <TableRow key={t.subject_id}>
                       <TableCell className="text-right font-mono text-muted-foreground">
                         {t.rank}
@@ -167,20 +225,51 @@ export default function AnalyticsPage() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {teams.data && teams.data.teams.length === 0 && (
+                  {teams.data && teamTable.rows.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center text-muted-foreground">
-                        No participants yet.
+                        {teamTable.query
+                          ? "Nobody matches your search."
+                          : "No participants yet."}
                       </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
+              <TablePagination
+                table={teamTable}
+                noun={challenges.data.mode === "team" ? "teams" : "competitors"}
+                className="mt-4"
+              />
             </CardContent>
           </Card>
         </div>
       )}
     </>
+  );
+}
+
+/** Local shorthand — wires a SortableTableHead to a useDataTable instance so
+ *  the header rows above stay readable with ten columns. */
+function Sortable<T>({
+  table,
+  k,
+  right,
+  children,
+}: {
+  table: DataTableState<T>;
+  k: string;
+  right?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <SortableTableHead
+      align={right ? "right" : "left"}
+      active={table.sort?.key === k ? table.sort.dir : null}
+      onSort={() => table.toggleSort(k)}
+    >
+      {children}
+    </SortableTableHead>
   );
 }
 

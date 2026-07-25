@@ -8,13 +8,15 @@ import { NewTicketDialog } from "@/components/support/new-ticket-dialog";
 import { TicketThread } from "@/components/support/ticket-thread";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { TablePagination, TableSearchInput } from "@/components/ui/data-table";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { EmptyState, TicketEmptyIcon } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
+import { useDataTable } from "@/lib/hooks/use-data-table";
 import { useAccess } from "@/lib/hooks/use-permissions";
 import { useSupportQueueLive, useTickets } from "@/lib/hooks/use-tickets";
-import type { TicketStatus } from "@/lib/types";
+import type { Ticket, TicketStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 // Support tickets (ROADMAP #18). Staff see the whole queue with stats + filter
@@ -35,14 +37,20 @@ export default function SupportPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [openId, setOpenId] = useState<string | null>(null);
 
-  if (!competitionId) {
-    return <NoCompetition />;
-  }
-
   const all = tickets.data ?? [];
   const openCount = all.filter((t) => t.status === "open").length;
   const resolvedCount = all.filter((t) => t.status === "resolved").length;
+  // Status tabs narrow first; the data-table hook then layers subject search +
+  // pagination on top (#16 #20). Headless, so it drives this card list the same
+  // way it drives real tables. Declared before the early return — hook rules.
   const visible = all.filter((t) => filter === "all" || t.status === filter);
+  const table = useDataTable(visible, {
+    searchKeys: [(t: Ticket) => t.subject],
+  });
+
+  if (!competitionId) {
+    return <NoCompetition />;
+  }
 
   const filters: Filter[] = ["all", "open", "resolved"];
 
@@ -71,21 +79,32 @@ export default function SupportPage() {
         </div>
       )}
 
-      <div className="flex gap-2 border-b border-border">
-        {filters.map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={cn(
-              "-mb-px border-b-2 px-1 py-2.5 text-sm capitalize transition-colors",
-              filter === f
-                ? "border-primary font-semibold text-foreground"
-                : "border-transparent font-medium text-muted-foreground",
-            )}
-          >
-            {f}
-          </button>
-        ))}
+      <div className="flex items-center justify-between gap-3 border-b border-border">
+        <div className="flex gap-2">
+          {filters.map((f) => (
+            <button
+              key={f}
+              onClick={() => {
+                setFilter(f);
+                table.setPage(0);
+              }}
+              className={cn(
+                "-mb-px border-b-2 px-1 py-2.5 text-sm capitalize transition-colors",
+                filter === f
+                  ? "border-primary font-semibold text-foreground"
+                  : "border-transparent font-medium text-muted-foreground",
+              )}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+        <TableSearchInput
+          value={table.query}
+          onChange={table.setQuery}
+          placeholder="Search tickets…"
+          className="mb-1.5"
+        />
       </div>
 
       {tickets.isLoading && <Skeleton className="h-40 w-full" />}
@@ -105,7 +124,7 @@ export default function SupportPage() {
       <Card>
         <CardContent className="pt-5">
           <ul className="grid">
-            {visible.map((t) => (
+            {table.rows.map((t) => (
               <li key={t.id}>
                 <button
                   onClick={() => setOpenId(t.id)}
@@ -123,12 +142,14 @@ export default function SupportPage() {
                 </button>
               </li>
             ))}
-            {!tickets.isLoading && visible.length === 0 && (
+            {!tickets.isLoading && table.rows.length === 0 && (
               <li className="py-8 text-center text-sm text-muted-foreground">
-                No {filter === "all" ? "" : `${filter} `}tickets match this filter.
+                No {filter === "all" ? "" : `${filter} `}tickets match
+                {table.query ? " your search" : " this filter"}.
               </li>
             )}
           </ul>
+          <TablePagination table={table} noun="tickets" className="mt-4" />
         </CardContent>
       </Card>
       )}

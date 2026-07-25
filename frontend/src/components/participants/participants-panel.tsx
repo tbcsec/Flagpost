@@ -16,17 +16,22 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  SortableTableHead,
+  TablePagination,
+  TableSearchInput,
+} from "@/components/ui/data-table";
 import { EmptyState, PeopleEmptyIcon } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
 import { relativeTime } from "@/lib/datetime";
+import { useDataTable } from "@/lib/hooks/use-data-table";
 import { useParticipants } from "@/lib/hooks/use-participants";
 import { useAccess } from "@/lib/hooks/use-permissions";
 import type { Participant } from "@/lib/types";
@@ -40,6 +45,21 @@ export function ParticipantsPanel({ competitionId }: { competitionId: string }) 
   const canAward = access.has("score_override");
   const [awardOpen, setAwardOpen] = useState(false);
 
+  // Sort / search / pagination over the fetched roster (#16 #17 #20). Declared
+  // before the early returns below — hooks must run unconditionally.
+  const roster = participants.data ?? [];
+  const table = useDataTable(roster, {
+    columns: {
+      rank: (p: Participant) => p.rank,
+      name: (p: Participant) => p.display_name,
+      solves: { value: (p: Participant) => p.solve_count, defaultDir: "desc" },
+      points: { value: (p: Participant) => p.points, defaultDir: "desc" },
+      joined: (p: Participant) => p.joined_at,
+    },
+    searchKeys: [(p: Participant) => p.display_name],
+  });
+  const dir = (key: string) => (table.sort?.key === key ? table.sort.dir : null);
+
   if (participants.isLoading) {
     return (
       <div className="grid gap-4">
@@ -49,7 +69,6 @@ export function ParticipantsPanel({ competitionId }: { competitionId: string }) 
     );
   }
 
-  const roster = participants.data ?? [];
   if (roster.length === 0) {
     return (
       <EmptyState
@@ -79,18 +98,34 @@ export function ParticipantsPanel({ competitionId }: { competitionId: string }) 
           )}
         </CardHeader>
         <CardContent>
+          <TableSearchInput
+            value={table.query}
+            onChange={table.setQuery}
+            placeholder="Search competitors…"
+            className="mb-4"
+          />
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="text-right">#</TableHead>
-                <TableHead>Competitor</TableHead>
-                <TableHead className="text-right">Solves</TableHead>
-                <TableHead className="text-right">Points</TableHead>
-                <TableHead className="text-right">Joined</TableHead>
+                <SortableTableHead align="right" active={dir("rank")} onSort={() => table.toggleSort("rank")}>
+                  #
+                </SortableTableHead>
+                <SortableTableHead active={dir("name")} onSort={() => table.toggleSort("name")}>
+                  Competitor
+                </SortableTableHead>
+                <SortableTableHead align="right" active={dir("solves")} onSort={() => table.toggleSort("solves")}>
+                  Solves
+                </SortableTableHead>
+                <SortableTableHead align="right" active={dir("points")} onSort={() => table.toggleSort("points")}>
+                  Points
+                </SortableTableHead>
+                <SortableTableHead align="right" active={dir("joined")} onSort={() => table.toggleSort("joined")}>
+                  Joined
+                </SortableTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {roster.map((p) => (
+              {table.rows.map((p) => (
                 <TableRow
                   key={p.user_id}
                   className={cn(p.user_id === selfId && "bg-primary/5")}
@@ -111,8 +146,16 @@ export function ParticipantsPanel({ competitionId }: { competitionId: string }) 
                   </TableCell>
                 </TableRow>
               ))}
+              {table.rows.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    No competitors match your search.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
+          <TablePagination table={table} noun="competitors" className="mt-4" />
         </CardContent>
       </Card>
 

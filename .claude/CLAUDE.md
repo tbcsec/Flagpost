@@ -697,12 +697,28 @@ hot reload use `docker compose -f docker-compose.dev.yml up`.
 docker-compose) is for a public demo instance (demo.flagpost.io). On startup it
 seeds well-known accounts (`admin`/`judge`/`participant`, password `password`) +
 a sample competition (`auth/demo.py`, idempotent, keyed on the demo competition
-name); it exposes `demo_mode` on the public `GET /api/site-settings` (drives the
+name — ~15 challenges across categories/difficulties/tags with varied flag types,
+plus three demo automations: a first-blood announcement + bonus award, a
+welcome-on-join notification, and a per-solve congrats); it exposes `demo_mode`
+on the public `GET /api/site-settings` (drives the
 app-wide `DemoBanner` + the login-page credentials card), and disables the
 outbound automation actions (`webhook`/`send_email` — `DEMO_DISABLED_ACTIONS`,
 enforced in `execute_action` + hidden from the catalog). The hourly *reset* is
 external (recreate the stack). **Never enable on a real deployment** — it seeds
 public credentials.
+
+A separate **activity simulator** (`backend/demo_simulator.py`, run as the
+`simulator` service in `docker-compose.demo.yml`) makes the demo look *live*: it
+drives realistic HTTP-API traffic — rolling sign-ups, correct/incorrect solves
+(moving the live scoreboard, decaying dynamic challenges), tickets, and a
+provisioned `support_bot` judge answering them. It's **demo-guarded** (refuses
+unless the target's public site-settings report `demo_mode`; also gated on
+`DEMO_SIMULATOR=1`) and uses only throwaway bot accounts — never the shared
+demo logins, and staff actions touch only bot-opened tickets, so a visitor is
+never interfered with. The challenge answers it submits live in the pure-data
+module `auth/demo_data.py` (`DEMO_SOLUTIONS`/`DEMO_WRONG_FLAGS`), the single
+source of truth **shared with the seed** (`auth/demo.py` re-exports them), so the
+seed and the simulator can't drift.
 
 **Migrations aren't covered by the test suite** (it builds the schema from
 `Base.metadata`, not by running migrations — ADR-0006), and SQLite silently

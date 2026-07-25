@@ -96,8 +96,39 @@ sudo systemctl enable --now flagpost-demo-reset.timer
 systemctl list-timers flagpost-demo-reset.timer   # confirm next run is on the hour
 ```
 
-Each firing runs `pull → down -v → up -d`: it pulls the latest images **and**
-wipes the DB/object/secret volumes, so demo mode re-seeds a clean instance.
+Each firing runs `git pull --ff-only → pull → down -v → up -d`: it refreshes the
+checkout (so compose/config changes on `main` propagate on their own — the
+`git pull` is non-fatal, so a failure just leaves the last-known-good checkout in
+place), pulls the latest images, **and** wipes the DB/object/secret volumes, so
+demo mode re-seeds a clean instance.
+
+## 5. Live activity simulator (makes the demo look busy)
+
+`docker-compose.demo.yml` includes a **`simulator`** service that drives realistic
+traffic against the API so the demo advertises its *live* nature — rolling
+sign-ups, correct and incorrect flag submissions (correct ones move the live
+scoreboard over WebSocket, dynamic challenges visibly decaying, first bloods),
+support tickets, and a `support_bot` staff account answering and resolving them.
+It starts automatically with the stack; there's nothing extra to run.
+
+It's **demo-only and self-guarding**: it refuses to start unless the target
+reports `demo_mode`, and it only ever creates fresh throwaway competitors (wiped
+by the hourly reset). It never acts as the shared `admin` / `judge` /
+`participant` logins a visitor uses, and staff actions touch only tickets the
+bots themselves opened — so a real visitor is never interfered with.
+
+Tune it via env on the `simulator` service (all optional; defaults are gentle):
+
+| Env | Default | Meaning |
+|---|---|---|
+| `SIM_MAX_ACTIVE_BOTS` | `12` | Concurrent simulated competitors |
+| `SIM_SIGNUP_INTERVAL` | `25` | Avg seconds between new sign-ups |
+| `SIM_ACTION_INTERVAL` | `5` | Avg seconds between competitor actions |
+| `SIM_STAFF_INTERVAL` | `40` | Avg seconds between staff replies |
+| `SIM_ENABLE_STAFF` | `1` | Provision the `support_bot` staff account |
+
+For a **static** demo instead, remove the `simulator` service (or set
+`DEMO_SIMULATOR=0` on it).
 
 ## Notes / limits
 
@@ -106,5 +137,7 @@ wipes the DB/object/secret volumes, so demo mode re-seeds a clean instance.
   want them, add an MinIO ingress to the tunnel and set `MINIO_PUBLIC_ENDPOINT`.
 - Demo mode disables outbound automation actions (webhooks, email) and seeds the
   public accounts `admin` / `judge` / `participant` (password `password`).
+- The **activity simulator** (§5) creates throwaway competitor bots with
+  handle-style names plus a `support_bot` judge; all are wiped by the hourly reset.
 - **Never** point a real deployment at this file — `DEMO_MODE=true` seeds
   well-known credentials.

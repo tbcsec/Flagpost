@@ -89,6 +89,30 @@ services:
       minio:
         condition: service_healthy
 
+  # Demo activity simulator — drives realistic API traffic (rolling sign-ups,
+  # correct/incorrect solves that move the live scoreboard, support tickets with
+  # staff replies) so the demo advertises its *live* nature. Reuses the backend
+  # image (it already ships httpx + the shared demo data). Demo-only and
+  # self-guarding: it refuses to run unless the target reports demo_mode. Remove
+  # this service (or set DEMO_SIMULATOR=0) for a static demo.
+  simulator:
+    image: ghcr.io/tbcsec/flagpost-backend:demo
+    pull_policy: always
+    restart: unless-stopped
+    command: python demo_simulator.py
+    environment:
+      DEMO_SIMULATOR: "1"
+      SIM_BASE_URL: http://backend:8000
+      # Pacing overrides (optional; defaults are intentionally gentle):
+      # SIM_MAX_ACTIVE_BOTS: "12"   # concurrent simulated competitors
+      # SIM_SIGNUP_INTERVAL: "25"   # avg seconds between new sign-ups
+      # SIM_ACTION_INTERVAL: "5"    # avg seconds between competitor actions
+      # SIM_STAFF_INTERVAL: "40"    # avg seconds between staff replies
+      # SIM_ENABLE_STAFF: "1"       # provision a support_bot to answer tickets
+    depends_on:
+      backend:
+        condition: service_healthy
+
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped

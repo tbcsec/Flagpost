@@ -56,9 +56,25 @@ export function useNotifications() {
     if (!isAuthenticated || !userId) return;
     const socket = openRoomSocket("user", userId, {
       onMessage: (data) => {
-        const frame = data as { type?: string; title?: string; body?: string | null };
+        const frame = data as {
+          type?: string;
+          notification_type?: string;
+          competition_id?: string | null;
+          title?: string;
+          body?: string | null;
+        };
         if (frame.type === "notification") {
           queryClient.invalidateQueries({ queryKey: notificationKeys.all });
+          // A ticket notification means the underlying ticket changed — refresh
+          // the competition's ticket caches too (#18), so a competitor's list
+          // reflects a staff reply/resolution without the thread being open.
+          // (Muting in-app ticket notifications also mutes this refresh — the
+          // pref suppresses creation server-side; acceptable for a mute.)
+          if (frame.notification_type?.startsWith("ticket") && frame.competition_id) {
+            queryClient.invalidateQueries({
+              queryKey: ["tickets", frame.competition_id],
+            });
+          }
           maybeShowBrowserNotification(frame);
         }
       },

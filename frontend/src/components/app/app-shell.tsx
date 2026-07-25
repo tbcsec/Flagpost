@@ -12,6 +12,7 @@ import { PaletteMenu } from "@/components/theme/palette-menu";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { useCompetitions } from "@/lib/hooks/use-competitions";
+import { useActivityLive } from "@/lib/hooks/use-activity";
 import { useEnabledModules } from "@/lib/hooks/use-modules";
 import { useAccess } from "@/lib/hooks/use-permissions";
 import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
@@ -159,6 +160,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     activeCompetitionId ?? "",
     Boolean(activeCompetitionId) && access.ready && !access.inLobby,
   );
+  // The competition's activity room (#18): one shell-level socket that turns
+  // backend event pings into query refreshes, so every page under the shell is
+  // live. Gated like the modules query — a lobby user has no room access.
+  useActivityLive(access.ready && !access.inLobby ? activeCompetitionId : null);
   const compNav = COMP_NAV.filter((item) => {
     if (item.manage && !access.canManageActiveCompetition) return false;
     if (item.module && enabledModules.data && !enabledModules.data.includes(item.module))

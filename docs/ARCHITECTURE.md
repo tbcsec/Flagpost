@@ -125,8 +125,8 @@ competition.archived        competition.unarchived     competition.deleted
 team.created                team.member_joined         team.member_left
 team.deleted
 challenge.created           challenge.updated          challenge.published
-challenge.deleted           challenge.solved           challenge.hint_requested
-challenge.guesses_reset     challenge.rated
+challenge.deleted           challenge.solved           challenge.attempted
+challenge.guesses_reset     challenge.rated            challenge.hint_requested
 hint.released
 category.created            category.deleted
 user.registered              user.password_changed
@@ -152,6 +152,14 @@ carries no `competition_id` — the audit log records it with a null tenant,
 which is correct for a global setting change. The same is true of an
 `automation.rule_*` event for a **global** rule (`competition_id = None`,
 §5.1).
+
+`challenge.attempted` fires on every **graded** flag submission, right or
+wrong (§13.2 logs a row per attempt; this is that rule's event half — refusals
+before grading, like the rate limit or the MC guess cap, emit nothing). It's
+what keeps attempt-counting surfaces (dashboard stats, challenge health,
+analytics) live, and its automation trigger is gated
+`view_competition_analytics` — others' attempts are staff analytics data, not
+member-visible play state. Volume is bounded by the submission rate limit.
 
 `score.adjusted` and `achievement.awarded` are the automation engine's
 mutating-action events (§5.3 `update_score` / `create_award`) — an
@@ -212,6 +220,22 @@ Design decisions:
 - **Presence payload is minimal**: id, display name, avatar, role, and an
   optional `mode` (`view` / `edit`) so other clients can show a soft-lock
   banner when someone else is actively editing the same resource.
+
+Two room idioms coexist, chosen per surface:
+
+- **Snapshot rooms** (scoreboard, announcements) push the full shared state —
+  right when everyone in the room sees the same thing.
+- **Ping rooms** (tickets, and the per-competition **activity room**
+  `activity/<competition_id>`) push tiny id-only frames and let each client
+  refetch its own permission-filtered REST slice — required when the surface
+  is per-user (solved state, unlock chains, role-scoped stats), because a
+  shared snapshot can't exist. The activity room is the generic instance: the
+  competitions module fans out a **curated allowlist** of §3.2 events as
+  `{type: "activity", event}` frames (never payload bodies), and the frontend
+  maps event names to query invalidations (`lib/live.ts`) behind one
+  shell-level socket, throttled per query key so bursts collapse. Ticket and
+  announcement events stay off the allowlist — they have their own
+  tighter-scoped rooms. Adding a live surface is a map entry, not a new room.
 
 ### 4.2 Collaborative Editing
 

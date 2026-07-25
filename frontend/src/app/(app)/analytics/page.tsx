@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { analyticsInsights } from "@/lib/analytics-insights";
 import { relativeTime } from "@/lib/datetime";
 import { useChallengeAnalytics, useTeamAnalytics } from "@/lib/hooks/use-analytics";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
@@ -92,6 +93,10 @@ export default function AnalyticsPage() {
       ) : (
         <div className="grid gap-6">
           <Overview report={challenges.data} />
+          <Insights
+            challenges={challenges.data.challenges}
+            teams={teams.data?.teams ?? []}
+          />
 
           <Card>
             <CardHeader>
@@ -289,6 +294,36 @@ function Overview({ report }: { report: ChallengeAnalyticsReport }) {
           <CardContent className="p-4">
             <div className="text-2xl font-semibold tabular-nums">{s.value}</div>
             <div className="text-xs text-muted-foreground">{s.label}</div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+/** The judge-question insight cards (#23): least solved / most attempted /
+ *  most tickets / most first bloods, derived from the already-fetched reports
+ *  (lib/analytics-insights.ts). A question with no meaningful answer yet is
+ *  omitted; the whole row hides until at least one card has something to say. */
+function Insights({
+  challenges,
+  teams,
+}: {
+  challenges: ChallengeAnalytics[];
+  teams: TeamAnalytics[];
+}) {
+  const cards = analyticsInsights(challenges, teams);
+  if (cards.length === 0) return null;
+  return (
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      {cards.map((c) => (
+        <Card key={c.key} className="self-start">
+          <CardContent className="p-4">
+            <div className="text-xs text-muted-foreground">{c.label}</div>
+            <div className="mt-1 truncate text-sm font-medium" title={c.value}>
+              {c.value}
+            </div>
+            <div className="mt-0.5 text-xs text-muted-foreground">{c.detail}</div>
           </CardContent>
         </Card>
       ))}

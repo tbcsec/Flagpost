@@ -61,9 +61,6 @@ The things that set Flagpost apart — every one of them **built and working tod
 
 ## 📸 Screenshots
 
-> **Note:** these are placeholders. Real captures are on the way — the frames
-> below mark exactly which screens go where (`docs/assets/screenshots/`).
-
 <table>
   <tr>
     <td width="50%" align="center">

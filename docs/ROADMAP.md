@@ -166,8 +166,8 @@ what we have."
 
 ## Tier 3 — Pre-Launch Polish
 
-**Status: in progress**, built phase-by-phase per `docs/claude_plans/phase_3.md`
-(automation-first, full spec). Shipped so far: Phase 0 (notification-center +
+**Status: ✅ complete** — built phase-by-phase per `docs/claude_plans/phase_3.md`
+(automation-first, full spec). Phases 0–8: Phase 0 (notification-center +
 event-dispatch groundwork, ADR-0012); the **full automation engine (#25)**
 across Phases 1–3 — the engine + all eight §5.3 actions + the first optional
 per-competition-toggleable module (Phase 1), webhook hardening (Phase 2,
@@ -178,10 +178,19 @@ drag-and-drop (#26)** (Phase 6, per-user layout customization on the Tier-2
 widget registry); **collaborative rich-text / CRDT editing (#27)** (Phase 7,
 Y.js team scratchpad + staff ticket notes, ADR-0014); and **onboarding / empty
 states (#24)** (Phase 8, guided first-run states + a manager getting-started
-guide). Remaining: an **owner-inserted ad-hoc Phase 9** of pre-release features
-& cleanup (added 2026-07-23 — items listed in `phase_3.md`, shipped as one push
-at the end), then the a11y/optimization pass (#28), now **Phase 10** and the
-final phase before initial public release.
+guide). The owner-inserted ad-hoc **Phase 9** (pre-release features & cleanup,
+added 2026-07-23) then shipped its full tranche — multiple-choice + dynamic
+(decay) scoring, scoreboard freeze + public/spectator + CTFtime feeds,
+brackets/divisions, team QoL + captain approval, scheduled release +
+prerequisites, tags/difficulty vocab, bulk ctfcli-YAML import/export,
+self-service password reset, point-bearing awards, and more (see
+`.claude/CLAUDE.md` → "Current build stage" for the itemised list). **Phase 10
+(#28)** — the accessibility / responsiveness / optimization pass — shipped as a
+four-stage pre-public pass (accessibility, full bug pass, optimization + motion,
+in-depth security review). Release engineering on top: the AGPL-3.0 license, a
+single-origin production Docker stack, a marketing README, and demo mode + the
+hosted demo (demo.flagpost.io). The platform is at initial-public-release
+readiness.
 
 Worth doing before a public/1.0 release, not worth doing before Tiers 1–2
 are solid.
@@ -219,7 +228,10 @@ are solid.
     blob persistence, ADR-0014.)*
 28. **Accessibility, Responsiveness, and Optimization pass** — keyboard navigation, contrast,
     mobile layout for the competitor-facing screens in particular (people
-    check scoreboards from their phones), a full optimization pass.
+    check scoreboards from their phones), a full optimization pass. *(Shipped —
+    Tier 3 Phase 10, run as a four-stage pre-public pass: an accessibility pass,
+    a full bug pass, an optimization + motion-layer pass, and an in-depth
+    security review & testing pass.)*
 
 ---
 

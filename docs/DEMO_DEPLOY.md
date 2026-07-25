@@ -38,23 +38,44 @@ docker pull ghcr.io/tbcsec/flagpost-backend:demo
 
 ## 2. Set up the Cloudflare Tunnel
 
-In **Cloudflare Zero Trust → Networks → Tunnels**:
+In **Cloudflare Zero Trust → Networks → Tunnels → Create a tunnel** (pick the
+**Cloudflared / token** connector). The current wizard makes you run the
+connector *before* it will let you add a route, so the order is:
 
-1. Create a tunnel; copy its **token**.
-2. Add a **public hostname**: `demo.flagpost.io` → service `HTTP` → `caddy:80`.
-   (`cloudflared` runs in the same Docker network as Caddy, so `caddy` resolves.)
+1. Name the tunnel and **copy its token** (shown on the "install a connector"
+   step). Ignore the install commands it prints — `cloudflared` runs as a
+   container from `docker-compose.demo.yml`, not on the host.
+2. Put the token on the box and bring the stack up (§3) so the `cloudflared`
+   container connects. The wizard won't advance until it sees a live connector.
+3. Once the dashboard shows the connector **connected**, add the route (the
+   **"Add published application" / Public Hostname** step):
+   - **Subdomain** `demo`, **Domain** `flagpost.io` → `demo.flagpost.io`
+   - **Path** — leave empty (match all paths; Caddy does the `/api`+`/ws`
+     routing internally)
+   - **Service URL** — `http://caddy:80`. Note **`http://`** (Cloudflare
+     terminates TLS, so Caddy serves plain HTTP) and the service name **`caddy`**
+     (`cloudflared` shares the compose network, so `caddy` resolves).
 
-Cloudflare terminates TLS, so make sure **WebSockets** are enabled (default) for
-the zone — the live scoreboard/notifications ride `wss://demo.flagpost.io/ws`.
+WebSockets pass through automatically, so the live scoreboard/notifications ride
+`wss://demo.flagpost.io/ws` with no extra toggle.
 
 ## 3. Run it on the box (Hetzner)
 
-Put the repo (or at least `docker-compose.demo.yml` + `Caddyfile`) at
-`/opt/flagpost`, then:
+Get the deploy files onto the box at `/opt/flagpost` (the systemd units and the
+`./Caddyfile` mount assume that exact path). Only `docker-compose.demo.yml`,
+`Caddyfile`, and `deploy/` are actually needed — the app is pulled as images, so
+you don't need to build anything:
 
 ```bash
+sudo mkdir -p /opt/flagpost && sudo chown "$USER" /opt/flagpost
+git clone https://github.com/tbcsec/flagpost.git /opt/flagpost
 cd /opt/flagpost
-export TUNNEL_TOKEN=<your-cloudflare-tunnel-token>   # e.g. in /opt/flagpost/.env
+```
+
+Then set the tunnel token and bring the stack up:
+
+```bash
+echo "TUNNEL_TOKEN=<your-cloudflare-tunnel-token>" >> .env   # never commit this
 docker compose -f docker-compose.demo.yml pull
 docker compose -f docker-compose.demo.yml up -d
 ```

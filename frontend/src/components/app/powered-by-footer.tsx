@@ -3,7 +3,7 @@ import { FlagpostMark } from "@/components/brand/flagpost-mark";
 // The Flagpost project's public home. This footer is a **mandatory** attribution:
 // an org may fully rebrand the platform (custom logo, name, palette), but Flagpost
 // stays visible as the underlying project. It is intentionally not configurable.
-const FLAGPOST_URL = "https://github.com/tbcsec/flagpost";
+const FLAGPOST_URL = "https://flagpost.io";
 
 /** A subtle, always-present "Powered by Flagpost" footer. Rendered on every page
  *  (the app shell and the public auth screens) so attribution can't be removed by

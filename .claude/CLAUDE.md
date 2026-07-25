@@ -28,14 +28,18 @@ file, don't ignore it.
 ## Current build stage
 
 <!-- Update this line as tiers/phases complete. -->
-**Tier 0, Tier 1, and Tier 2 ("Makes It Good") are all complete — Tier 2 was
-built phase-by-phase per `docs/claude_plans/phase_2.md` (Phases 0–5 all
-shipped). Tier 3 is the current tier and is now scoped/planned in
-`docs/claude_plans/phase_3.md` (Phases 0–10; **Phases 0–8 shipped**, Phase 9 —
-an **owner-inserted ad-hoc phase** of pre-release features & cleanup — is the
-current one (built item-by-item, **one push at the end**), and Phase 10 —
-accessibility / responsiveness / optimization pass — is the final phase before
-initial public release).
+**Tiers 0–3 are all complete — the platform is at initial-public-release
+readiness.** Tier 2 was built phase-by-phase per `docs/claude_plans/phase_2.md`
+(Phases 0–5 all shipped); Tier 3 per `docs/claude_plans/phase_3.md` (Phases
+0–10, **all shipped**). Phase 9 — the **owner-inserted ad-hoc phase** of
+pre-release features & cleanup — shipped its full tranche (built item-by-item,
+across many commits, not one squashed push); Phase 10 — the accessibility /
+responsiveness / optimization pass — shipped as a **four-stage pre-public pass**
+(accessibility, full bug pass, optimization + motion layer, in-depth security
+review & testing). Release engineering on top of the tiers: the **AGPL-3.0
+license** (© Tom Collier), a **single-origin production Docker stack** (Caddy on
+:8080), a marketing README, and **demo mode** + the hosted demo deployment
+(demo.flagpost.io — GHCR images behind a Cloudflare Tunnel, hourly reset).
 An owner revision pulled three previously-deferred subsystems up into Tier 3 —
 the **full automation engine** (§5), **dashboard drag-and-drop** (§10), and
 **collaborative rich-text/CRDT editing** (§4.2) — alongside the polish items
@@ -241,8 +245,8 @@ What's built:
   **dialog widths +25%** (`components/ui/dialog.tsx` base `max-w-lg`→`max-w-[40rem]`,
   512→640px; override tiers scaled to match) so the collaborative notes get more
   room, and the `CollabNote` editor min-height `min-h-24`→`min-h-32`.
-- **Tier 3 Phase 9** (owner-inserted ad-hoc pre-release phase; **not yet pushed**
-  — accumulates until the owner signals done) — items so far:
+- **Tier 3 Phase 9** (owner-inserted ad-hoc pre-release phase; **shipped** —
+  built item-by-item, one commit per item) — items:
   - **Individual-mode Participants page**: `GET
     /api/competitions/{id}/participants` (`routers/participants.py`, mounted by
     the `competitions` module) — the roster of competition-scoped Participant-role
@@ -665,7 +669,8 @@ ADR-0009), ADR-0013 (webhook egress hardening), ADR-0014 (CRDT transport —
 dumb relay + client snapshot), ADR-0011 (site-wide theming only —
 per-competition deferred), ADR-0015 (username-primary identity, optional
 email), ADR-0016 (export/import backup), ADR-0017 (first-run setup wizard,
-supersedes the seeded admin of ADR-0010).
+supersedes the seeded admin of ADR-0010), ADR-0018 (regex-flag ReDoS
+containment), ADR-0019 (per-install JWT secret — never a repo-public default).
 There is **no seeded default admin** in production: a fresh install ships with
 **no** administrator and is *unconfigured* until an operator completes the
 **first-run setup wizard** (`/setup`, ADR-0017), which creates the owner account

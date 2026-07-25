@@ -43,7 +43,7 @@ Status is one of:
 | [0007](0007-first-user-admin-bootstrap.md) | First registered user becomes the Administrator | Superseded by ADR-0010 |
 | [0008](0008-stateful-refresh-sessions.md) | Refresh tokens are stateful, hashed, rotating DB sessions | Accepted |
 | [0009](0009-synchronous-event-dispatch-tier0.md) | Event dispatch is synchronous (awaited) in Tier 0 | Superseded by ADR-0012 |
-| [0010](0010-seeded-admin-default-credentials.md) | Seed a default administrator with default credentials | Accepted |
+| [0010](0010-seeded-admin-default-credentials.md) | Seed a default administrator with default credentials | Superseded by ADR-0017 |
 | [0011](0011-site-wide-theming-only.md) | Site-wide theming only for now (per-competition deferred) | Accepted |
 | [0012](0012-event-dispatch-sync-critical-vs-background.md) | Event dispatch splits into sync-critical vs async-background handlers | Accepted |
 | [0013](0013-webhook-egress-hardening.md) | Webhook action egress policy — SSRF blocklist + value hardening | Accepted |
@@ -52,3 +52,4 @@ Status is one of:
 | [0016](0016-platform-export-import.md) | Platform export/import — registry-driven, additive backup | Accepted |
 | [0017](0017-first-run-setup-wizard.md) | First-run setup wizard (no seeded default admin) | Accepted |
 | [0018](0018-regex-flag-redos-containment.md) | Containing ReDoS in regex flag matching | Accepted |
+| [0019](0019-jwt-secret-hardening.md) | Derive a per-install JWT secret instead of a public default | Accepted |

@@ -126,6 +126,7 @@ team.created                team.member_joined         team.member_left
 team.deleted
 challenge.created           challenge.updated          challenge.published
 challenge.deleted           challenge.solved           challenge.hint_requested
+challenge.guesses_reset     challenge.rated
 hint.released
 category.created            category.deleted
 user.registered              user.password_changed
@@ -139,9 +140,11 @@ survey.submitted             survey.opened
 announcement.published
 site.settings_updated
 score.adjusted               achievement.awarded
+scoreboard.frozen            scoreboard.unfrozen
 module.enabled               module.disabled
 automation.rule_triggered    automation.rule_created
 automation.rule_updated      automation.rule_deleted
+platform.imported
 ```
 
 `site.settings_updated` is site-wide (not competition-scoped), so its payload
@@ -154,10 +157,16 @@ which is correct for a global setting change. The same is true of an
 mutating-action events (§5.3 `update_score` / `create_award`) — an
 automation's side effects are events like any other mutation's.
 `achievement.awarded` also fires for a **manual** judge award (same record).
-`module.enabled` / `module.disabled` record the per-competition optional-module
-toggle (§11.3); the canonical vocabulary above is mirrored in code by
-`backend/utils/event_catalog.py`, which is also what validates an automation
-rule's `trigger_type` (§5.1).
+`scoreboard.frozen` / `scoreboard.unfrozen` record a scoreboard freeze/unfreeze
+(§13) — both a staff action and an automation action. `platform.imported` is a
+**platform-administration** event (a backup import, ADR-0016): like the
+`automation.*` family, `platform.*` events are site-wide (null tenant) and
+**excluded from automation triggers** — they are not competition events, so
+nothing automates on them (`TRIGGERABLE_EVENTS` in `event_catalog.py` drops both
+prefixes). `module.enabled` / `module.disabled` record the per-competition
+optional-module toggle (§11.3); the canonical vocabulary above is mirrored in
+code by `backend/utils/event_catalog.py`, which is also what validates an
+automation rule's `trigger_type` (§5.1).
 
 This vocabulary is the single source of truth for what "things happen" in
 the system — it should be documented and versioned alongside the schema, not
@@ -1203,8 +1212,13 @@ enforced at the storage layer too, not just in the database:
 
 Keep this section honest — update as decisions are made:
 
-- Scoreboard freeze mechanics: implemented as a scheduled event, or a
-  read-path filter? (Affects whether "freeze" is itself an emitted event.)
+- ~~Scoreboard freeze mechanics: implemented as a scheduled event, or a
+  read-path filter?~~ **(resolved, Tier 3 Phase 9.)** A **read-path filter** —
+  `compute_scoreboard`'s `freeze_cutoff` computes the board as of the freeze
+  instant (dynamic values by solve count at that time; later
+  solves/adjustments/awards excluded) — **and** an emitted event
+  (`scoreboard.frozen` / `scoreboard.unfrozen`, §13), so a freeze is both a
+  staff/automation action and an audit + automation trigger.
 - Plugin sandboxing: current plugin model assumes trusted, reviewed code
   running in-process. Marketplace-distributed third-party plugins (per
   `VISION.md`'s Plugin Marketplace) will need a stronger isolation story
@@ -1228,23 +1242,28 @@ Keep this section honest — update as decisions are made:
   automation feedback loops specifically, not competition scale. Worth
   revisiting with real trigger-volume numbers from a large event before
   picking specific thresholds.
-- Notification mute: whether a user can mute the ticket audio cue from
-  §4.4 entirely (e.g. a judge who wants visual-only notifications), or
-  whether it's always on given there's only one category to mute.
-- Scoreboard tie-breaking: two teams/individuals at equal points — ranked
-  by earliest time reaching that score (standard CTF convention), or some
-  other rule? Affects whether the scoreboard needs a secondary sort key
-  captured at submission time, not just the point total.
-- Administrator bootstrap hardening (see ADR-0010, which superseded
-  ADR-0007): a default Administrator is now seeded at install with
-  **hardcoded default credentials** (`admin@example.com` / `changeme`),
-  guarded only by a loud startup warning while the password is unchanged.
-  That's fine for an operator who rotates it immediately, but an install
-  left on defaults is trivially compromised. Before any public/self-serve
-  deployment, decide the hardening: force a password change on first
-  login, and/or make the seed a no-op unless credentials are explicitly
-  provided (so no instance ships with a known-default admin). Not urgent
-  for the local/self-hosted model, but a hard blocker for public launch.
+- ~~Notification mute: whether a user can mute the ticket audio cue from
+  §4.4 entirely, or whether it's always on given there's only one category to
+  mute.~~ **(resolved, Tier 3 Phase 9.)** Per-user notification preferences
+  (§4.4, `GET/PUT /api/notifications/preferences`) expose in-app category mutes
+  (tickets / automations, honored centrally in `create_notifications`) plus
+  client-honored `browser` / `sound` delivery hints — so a judge can go
+  visual-only.
+- ~~Scoreboard tie-breaking: two teams/individuals at equal points — ranked by
+  earliest time reaching that score, or some other rule?~~ **(resolved.)**
+  Standard CTF convention: points descending, ties broken by the **earliest time
+  the subject reached its current score** — `compute_scoreboard`'s `sort_key`
+  uses each subject's last-awarding solve time as the secondary key (subjects
+  with no solves sort last).
+- ~~Administrator bootstrap hardening (see ADR-0010, which superseded
+  ADR-0007).~~ **(resolved, ADR-0017, which superseded ADR-0010.)** There is
+  **no seeded default admin** in production: a fresh install ships with no
+  administrator and is *unconfigured* until an operator completes the
+  **first-run setup wizard** (`/setup`), which creates the owner account with
+  operator-chosen credentials — no known-default admin ever exists
+  (`instance_needs_setup` gates the wizard and blocks public registration until
+  an owner exists). The test suite still seeds `admin@example.com` / `changeme`
+  in its fixtures only.
 - ~~Event-dispatch model & delivery durability~~ **(resolved, ADR-0012).**
   `emit()` now runs foreground handlers awaited (the default — the audit log
   stays synchronous and lossless, tests stay deterministic) and schedules

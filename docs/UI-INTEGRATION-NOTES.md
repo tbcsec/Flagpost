@@ -7,23 +7,28 @@ real Next.js frontend.
 The mock is a single-page prototype of the *whole* product vision — dashboard,
 challenges, scoreboard, participants, support, analytics, automations, a full
 admin console, notifications, per-competition theming, drag-and-drop dashboard
-widgets. The shell and every section were built, but only the sections with a
-real backend are wired; the rest render as faithful UI seeded with placeholder
-data and flagged in-app with a **"Preview — …"** banner (`NotWiredNote`).
+widgets. The shell and every section were built. At handoff, only the sections
+with a real backend were wired; the rest rendered as faithful UI seeded with
+placeholder data and flagged in-app with a "Preview — …" banner. **Every section
+is now wired** (see below), so that scaffolding — the banner component and
+`placeholder-data.ts` — has since been removed.
 
-**Status: Tier 2 complete; Tier 3 in progress (Phases 0–8 shipped).** Since the
-original handoff the backend has caught up through all of Tier 1 and Tier 2 and
-into Tier 3 (per `claude_plans/phase_3.md`): the notification bell (Phase 0), the
-whole automation surface — rules + the visual builder (Phases 1–3), feedback /
-surveys (Phase 4), challenge & team analytics (Phase 5), **dashboard
-customization** — drag-reorder / resize / show-hide edit mode (Phase 6),
-**collaborative CRDT notes** — a team challenge scratchpad + staff ticket notes
-(Phase 7), and **guided first-run empty states** — a reusable `EmptyState` across
+**Status: Tiers 0–3 all complete (Phases 0–10 shipped) — initial-public-release
+ready.** Since the original handoff the backend caught up through every tier
+(per `claude_plans/phase_3.md`): the notification bell (Phase 0), the whole
+automation surface — rules + the visual builder (Phases 1–3), feedback / surveys
+(Phase 4), challenge & team analytics (Phase 5), **dashboard customization** —
+drag-reorder / resize / show-hide edit mode (Phase 6), **collaborative CRDT
+notes** — a team challenge scratchpad + staff ticket notes (Phase 7), and
+**guided first-run empty states** — a reusable `EmptyState` across
 challenges/scoreboard/support/feedback + a manager dashboard getting-started
-guide (Phase 8) — are all real too. The tables below are kept current; the remaining placeholder surfaces
-are the Admin → Users directory, the Admin → Plugins toggle UI (its
-per-competition module-toggle *backend* now exists), Admin → Dashboard global
-stats, and per-user notification *preferences* (the inbox itself is wired).
+guide (Phase 8) — are all real. The **Phase 9** pre-release tranche and the
+**Phase 10** four-stage pre-public pass (accessibility / bug / optimization /
+security) then wired every last placeholder — Admin → Users, Admin → Dashboard
+global stats, Admin → Site settings (operational), per-user notification
+preferences, and the per-competition module toggle (now on Competition Settings
+→ Modules; the old Admin → Plugins page was removed) — and `placeholder-data.ts`
+was deleted. The tables below are kept current.
 
 ## Design system adopted
 
@@ -37,7 +42,8 @@ stats, and per-user notification *preferences* (the inbox itself is wired).
   (`FlagpostMark` + `Lockup`, adapted from `docs/branding/FlagpostMark.jsx`).
 - App shell: `components/app/app-shell.tsx` (persistent sidebar + topbar with the
   competition switcher, notifications, and the light/dark toggle) and
-  `components/app/section-header.tsx` (`SectionHeader`, `NotWiredNote`).
+  `components/app/section-header.tsx` (`SectionHeader`; the handoff's
+  `NotWiredNote` "Preview" banner was removed once every section was wired).
 - Theming is site-wide (Tier 2 Phase 4, §9): an admin sets the default palette +
   accent (Admin → Appearance), stored in a SiteSettings singleton and read
   publicly. `ThemeApplier` (mounted above every page) applies palette + accent to
@@ -93,10 +99,11 @@ code.
 | Analytics | **Wired** (Tier 3 Phase 5, #23) — the `analytics` optional module (staff, `view_competition_analytics`): overview + per-challenge table (solves / attempts+fails / completion rate / avg solve time / hints / linked tickets) and a competitors/teams ranking (rank / points / solves / first bloods / tickets / last solve), read off existing submission data (`use-analytics`) |
 | Collaborative notes | **Wired** (Tier 3 Phase 7, §4.2, ADR-0014) — the required-core `collab` module: a **team per-challenge scratchpad** in the challenge dialog and **staff notes** on a ticket thread, both live-collaborative rich text (Y.js under TipTap over a `note/<doc_key>` WS room, dumb-relay transport + blob persistence). Scoped per-request — team membership / `ticket_view_internal_notes` (`CollabNote`, `lib/collab`) |
 
-## Built as UI, NOT wired (placeholder data + in-app "Preview" banner)
+## Formerly UI-only (now wired or deferred)
 
-These need features that are still on the roadmap. UI is in place so they're not
-a retrofit later; **none of the data is real**.
+At handoff these rendered as placeholder UI. All are now resolved — wired to a
+real backend, or the underlying feature deferred with the placeholder UI removed.
+**No placeholder data remains anywhere in the app.**
 
 - **Dashboard** — now fully wired *and customizable* (Tier 2 Phase 1 + Tier 3
   Phase 6, see the wired table above). The widget-registration architecture that

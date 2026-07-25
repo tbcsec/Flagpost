@@ -9,6 +9,10 @@ import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
+import {
+  SortableTableHead,
+  TablePagination,
+} from "@/components/ui/data-table";
 import { EmptyState, TrophyEmptyIcon } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -21,10 +25,12 @@ import {
 } from "@/components/ui/table";
 import { parseServerDate } from "@/lib/datetime";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
+import { useDataTable } from "@/lib/hooks/use-data-table";
 import { useAccess } from "@/lib/hooks/use-permissions";
 import { useMyTeam } from "@/lib/hooks/use-teams";
 import { useSetSubjectBracket } from "@/lib/hooks/use-brackets";
 import { useFreezeScoreboard, useScoreboard } from "@/lib/hooks/use-scoreboard";
+import type { ScoreboardEntry } from "@/lib/types";
 import { useAuthStore } from "@/stores/auth";
 import { toast } from "@/stores/toast";
 import { cn } from "@/lib/utils";
@@ -117,19 +123,37 @@ export default function ScoreboardPage() {
     return () => clearTimeout(t);
   }, [entries]);
 
+  // Bracket filter is client-side (each entry already carries its bracket), so
+  // it stays live over the WS; ranks are renumbered within the division.
+  const shown = useMemo(
+    () =>
+      bracketFilter === "all"
+        ? entries
+        : entries
+            .filter((e) => e.bracket === bracketFilter)
+            .map((e, i) => ({ ...e, rank: i + 1 })),
+    [entries, bracketFilter],
+  );
+
+  // Sort + pagination for the standings table (#16 #17). Server rank order is
+  // the default until a header is clicked; the top-10 chart below intentionally
+  // stays rank-ordered off `shown`, not the sorted view. Live WS updates simply
+  // re-derive (the hook clamps the page if the board shrinks).
+  const table = useDataTable(shown, {
+    columns: {
+      rank: (e: ScoreboardEntry) => e.rank,
+      name: (e: ScoreboardEntry) => e.name,
+      points: { value: (e: ScoreboardEntry) => e.points, defaultDir: "desc" },
+      last_solve: { value: (e: ScoreboardEntry) => e.last_solve_at, defaultDir: "desc" },
+    },
+  });
+  const dir = (key: string) => (table.sort?.key === key ? table.sort.dir : null);
+
   if (!competitionId) {
     return <NoCompetition />;
   }
 
   const mySubjectId = isTeam ? myTeam.data?.id : userId;
-  // Bracket filter is client-side (each entry already carries its bracket), so
-  // it stays live over the WS; ranks are renumbered within the division.
-  const shown =
-    bracketFilter === "all"
-      ? entries
-      : entries
-          .filter((e) => e.bracket === bracketFilter)
-          .map((e, i) => ({ ...e, rank: i + 1 }));
   const top = shown.slice(0, 10);
   const maxPoints = Math.max(1, ...top.map((e) => e.points));
   const live = board.socketStatus === "open";
@@ -186,7 +210,10 @@ export default function ScoreboardPage() {
           <span className="text-muted-foreground">Division</span>
           <Select
             value={bracketFilter}
-            onChange={(e) => setBracketFilter(e.target.value)}
+            onChange={(e) => {
+              setBracketFilter(e.target.value);
+              table.setPage(0);
+            }}
             className="h-8 w-auto"
           >
             <option value="all">All</option>
@@ -256,17 +283,25 @@ export default function ScoreboardPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Rank</TableHead>
-                  <TableHead>{isTeam ? "Team" : "Participant"}</TableHead>
+                  <SortableTableHead active={dir("rank")} onSort={() => table.toggleSort("rank")}>
+                    Rank
+                  </SortableTableHead>
+                  <SortableTableHead active={dir("name")} onSort={() => table.toggleSort("name")}>
+                    {isTeam ? "Team" : "Participant"}
+                  </SortableTableHead>
                   {brackets.length > 0 && bracketFilter === "all" && (
                     <TableHead>Division</TableHead>
                   )}
-                  <TableHead>Points</TableHead>
-                  <TableHead>Last solve</TableHead>
+                  <SortableTableHead active={dir("points")} onSort={() => table.toggleSort("points")}>
+                    Points
+                  </SortableTableHead>
+                  <SortableTableHead active={dir("last_solve")} onSort={() => table.toggleSort("last_solve")}>
+                    Last solve
+                  </SortableTableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {shown.map((e) => (
+                {table.rows.map((e) => (
                   <TableRow
                     key={e.subject_id}
                     className={cn(
@@ -322,6 +357,11 @@ export default function ScoreboardPage() {
                 ))}
               </TableBody>
             </Table>
+            <TablePagination
+              table={table}
+              noun={isTeam ? "teams" : "competitors"}
+              className="mt-4 pb-3"
+            />
           </CardContent>
         </Card>
       )}

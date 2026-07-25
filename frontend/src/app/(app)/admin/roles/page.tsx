@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { TablePagination } from "@/components/ui/data-table";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +23,7 @@ import { Select } from "@/components/ui/select";
 import { SkeletonCards } from "@/components/ui/skeleton";
 import { useAccess } from "@/lib/hooks/use-permissions";
 import { useCompetitions } from "@/lib/hooks/use-competitions";
+import { useDataTable } from "@/lib/hooks/use-data-table";
 import { useUsers } from "@/lib/hooks/use-users";
 import {
   useAssignRole,
@@ -381,6 +383,10 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
     return [...map.values()].sort((x, y) => x.name.localeCompare(y.name));
   }, [assignments.data]);
 
+  // Pagination over the grouped per-user entries (#16); the list stays
+  // name-sorted, so no sortable headers are needed on this card layout.
+  const table = useDataTable(byUser);
+
   async function onUnassign(a: RoleAssignment, userName: string) {
     if (
       !(await confirm({
@@ -467,7 +473,7 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
           {assignments.data?.length === 0 && (
             <p className="text-sm text-muted-foreground">No role assignments yet.</p>
           )}
-          {byUser.map((u) => (
+          {table.rows.map((u) => (
             <div key={u.userId} className="grid gap-1.5 rounded-md border border-border px-3 py-2 text-sm">
               <div className="min-w-0">
                 <span className="font-medium">{u.name}</span>
@@ -495,6 +501,7 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
               </div>
             </div>
           ))}
+          <TablePagination table={table} noun="users" />
         </div>
       </CardContent>
     </Card>

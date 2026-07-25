@@ -73,8 +73,12 @@ The things that set Flagpost apart — every one of them **built and working tod
     </td>
   </tr>
   <tr>
-    <td colspan="2" align="center">
-      <img src="docs/assets/screenshots/dashboard.png" alt="Operational dashboard" width="50%"><br>
+    <td width="50%" align="center">
+      <img src="docs/assets/screenshots/automations.png" alt="Automation builder"><br>
+      <sub><b>Automation builder</b> — visual When → If → Then rules</sub>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/assets/screenshots/dashboard.png" alt="Operational dashboard"><br>
       <sub><b>Operational dashboard</b> — drag-and-drop widgets for organisers</sub>
     </td>
   </tr>

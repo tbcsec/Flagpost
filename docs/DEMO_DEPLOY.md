@@ -125,6 +125,7 @@ Tune it via env on the `simulator` service (all optional; defaults are gentle):
 | `SIM_SIGNUP_INTERVAL` | `25` | Avg seconds between new sign-ups |
 | `SIM_ACTION_INTERVAL` | `5` | Avg seconds between competitor actions |
 | `SIM_STAFF_INTERVAL` | `40` | Avg seconds between staff replies |
+| `SIM_TICKET_COOLDOWN` | `300` | Min seconds between bot-opened tickets (global) |
 | `SIM_ENABLE_STAFF` | `1` | Provision the `support_bot` staff account |
 
 For a **static** demo instead, remove the `simulator` service (or set

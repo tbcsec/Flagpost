@@ -32,6 +32,7 @@ import logging
 import os
 import random
 import sys
+import time
 
 import httpx
 
@@ -67,6 +68,11 @@ MAX_ACTIVE_BOTS = int(_env("SIM_MAX_ACTIVE_BOTS", "12"))
 SIGNUP_INTERVAL = float(_env("SIM_SIGNUP_INTERVAL", "25"))  # seconds between sign-ups
 ACTION_INTERVAL = float(_env("SIM_ACTION_INTERVAL", "5"))  # seconds between competitor actions
 STAFF_INTERVAL = float(_env("SIM_STAFF_INTERVAL", "40"))  # seconds between staff actions
+# Global floor between bot-opened tickets: solves are the headline live signal,
+# tickets the garnish — without this, a dozen bots hitting the ticket action
+# flooded the queue (owner feedback). ~1 ticket / 5 min ≈ a handful per hourly
+# demo reset.
+TICKET_COOLDOWN = float(_env("SIM_TICKET_COOLDOWN", "300"))
 
 # All bots share one password (they only exist for the demo, and get wiped
 # hourly). ≥ 8 chars to satisfy the register/create-user policy.
@@ -141,6 +147,12 @@ class Sim:
         self.bots: list[dict] = []  # active competitors: {token, name, solved:set, tickets:list}
         self.bot_ticket_ids: set[str] = set()  # tickets opened by bots (staff acts only on these)
         self.staff: dict | None = None  # {token, name} or None
+        # Monotonic timestamp of the last bot-opened ticket (TICKET_COOLDOWN gate).
+        self.last_ticket_at: float = float("-inf")
+        # Bot tickets with an unanswered competitor message (created or replied-to
+        # since the last staff response). The staff bot only picks from this set,
+        # so it never stacks multiple replies before the "competitor" writes back.
+        self.awaiting_staff: set[str] = set()
 
 
 # --- API helpers -------------------------------------------------------------
@@ -321,6 +333,8 @@ async def _act_wrong(client: httpx.AsyncClient, sim: Sim, bot: dict) -> None:
 async def _act_ticket(client: httpx.AsyncClient, sim: Sim, bot: dict) -> None:
     if len(bot["tickets"]) >= 2 or not sim.challenges:
         return  # one or two tickets per bot — no spamming the queue
+    if time.monotonic() - sim.last_ticket_at < TICKET_COOLDOWN:
+        return  # global pacing: at most one bot ticket per cooldown window
     c = random.choice(sim.challenges)
     r = await client.post(
         f"{BASE_URL}/api/competitions/{sim.competition_id}/tickets",
@@ -335,6 +349,8 @@ async def _act_ticket(client: httpx.AsyncClient, sim: Sim, bot: dict) -> None:
         tid = r.json()["id"]
         bot["tickets"].append(tid)
         sim.bot_ticket_ids.add(tid)
+        sim.awaiting_staff.add(tid)  # a fresh ticket awaits a staff response
+        sim.last_ticket_at = time.monotonic()
         log.info("ticket %-16s opened a ticket", bot["name"])
 
 
@@ -342,11 +358,13 @@ async def _act_reply(client: httpx.AsyncClient, sim: Sim, bot: dict) -> None:
     if not bot["tickets"]:
         return
     tid = random.choice(bot["tickets"])
-    await client.post(
+    r = await client.post(
         f"{BASE_URL}/api/competitions/{sim.competition_id}/tickets/{tid}/messages",
         headers=_auth(bot["token"]),
         json={"body": random.choice(_COMPETITOR_REPLIES)},
     )
+    if r.status_code == 200:
+        sim.awaiting_staff.add(tid)  # the competitor wrote back — staff may respond again
 
 
 async def _do_action(client: httpx.AsyncClient, sim: Sim, bot: dict) -> None:
@@ -397,19 +415,26 @@ async def _staff_loop(client: httpx.AsyncClient, sim: Sim) -> None:
             )
             if r.status_code != 200:
                 continue
-            # Strictly bot-opened, not-yet-resolved tickets — never a visitor's.
+            # Strictly bot-opened, unresolved tickets with an unanswered
+            # competitor message — never a visitor's ticket, and never a second
+            # staff reply before the "competitor" has written back.
             candidates = [
                 t for t in r.json()
-                if t["id"] in sim.bot_ticket_ids and t.get("status") != "resolved"
+                if t["id"] in sim.bot_ticket_ids
+                and t["id"] in sim.awaiting_staff
+                and t.get("status") != "resolved"
             ]
             if not candidates:
                 continue
             t = random.choice(candidates)
-            await client.post(
+            reply = await client.post(
                 f"{BASE_URL}/api/competitions/{sim.competition_id}/tickets/{t['id']}/messages",
                 headers=_auth(sim.staff["token"]),
                 json={"body": random.choice(_STAFF_REPLIES)},
             )
+            if reply.status_code != 200:
+                continue
+            sim.awaiting_staff.discard(t["id"])  # answered — wait for the competitor
             log.info("staff  replied to a ticket")
             if random.random() < 0.4:
                 await client.post(

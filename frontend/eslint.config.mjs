@@ -1,17 +1,10 @@
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-
-import { FlatCompat } from "@eslint/eslintrc";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// Next 15's ESLint configs (next/core-web-vitals, next/typescript) still ship as
-// eslintrc-style presets; FlatCompat adapts them into this flat config. They
-// bundle the plugins that matter for this app: @next/next (Next correctness),
-// react + react-hooks (exhaustive-deps / rules-of-hooks — the load-bearing one
-// for our effect-heavy hooks), jsx-a11y, and typescript-eslint.
-const compat = new FlatCompat({ baseDirectory: __dirname });
+// eslint-config-next 16 ships native flat configs (no FlatCompat needed —
+// issue #15's major bump). They bundle the plugins that matter for this app:
+// @next/next (Next correctness), react + react-hooks (exhaustive-deps /
+// rules-of-hooks — the load-bearing one for our effect-heavy hooks), jsx-a11y,
+// and typescript-eslint.
+import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
+import nextTypescript from "eslint-config-next/typescript";
 
 const eslintConfig = [
   {
@@ -23,7 +16,8 @@ const eslintConfig = [
       "public/**",
     ],
   },
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  ...nextCoreWebVitals,
+  ...nextTypescript,
   {
     rules: {
       // Allow deliberately-unused args/vars prefixed with `_`.
@@ -31,6 +25,17 @@ const eslintConfig = [
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
+      // react-hooks v7 (bundled by eslint-config-next 16) adds the React
+      // Compiler-era rules as errors. The codebase predates them and carries
+      // ~27 hits of deliberate pre-compiler idioms (latest-ref, sync-state-in
+      // -effect, render-scoped subcomponents). Warn — visible in editors and
+      // lint output, not a CI gate — while they're burned down incrementally.
+      // rules-of-hooks / exhaustive-deps stay errors, as ever.
+      "react-hooks/refs": "warn",
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/static-components": "warn",
+      "react-hooks/immutability": "warn",
+      "react-hooks/preserve-manual-memoization": "warn",
     },
   },
 

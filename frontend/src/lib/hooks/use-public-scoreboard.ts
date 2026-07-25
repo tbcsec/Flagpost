@@ -17,6 +17,18 @@ export function usePublicScoreboard(competitionId: string) {
   });
 }
 
+/** Spectator stats, highlights and the points timeline (#24). Fetched
+ *  separately from the board so the standings still render if it fails, and
+ *  polled on the same cadence so the two stay in step. */
+export function usePublicInsights(competitionId: string) {
+  return useQuery({
+    queryKey: ["public-insights", competitionId],
+    queryFn: () => publicApi.insights(competitionId),
+    enabled: Boolean(competitionId),
+    refetchInterval: 30_000,
+  });
+}
+
 /** The /public directory of competitions offering a public scoreboard. */
 export function usePublicCompetitions() {
   return useQuery({

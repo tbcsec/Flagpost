@@ -57,3 +57,71 @@ class PublicCompetitionOut(BaseModel):
     participation_mode: str
     start_at: datetime | None = None
     end_at: datetime | None = None
+
+
+# --- Public insights + points timeline (#24) ---------------------------------
+
+
+class InsightStats(BaseModel):
+    """Headline counts, all computed as of the freeze cutoff when frozen —
+    except ``challenges``, the released inventory (a freeze stops the board
+    moving, it doesn't retract a released challenge)."""
+
+    participants: int
+    solves: int
+    challenges: int
+    unsolved: int
+
+
+class ChallengeHighlight(BaseModel):
+    title: str
+    count: int
+
+
+class SubjectHighlight(BaseModel):
+    name: str
+    count: int
+
+
+class FastestSolve(BaseModel):
+    title: str
+    name: str
+    seconds: float
+
+
+class InsightHighlights(BaseModel):
+    """Each is null until the competition has the data to fill it."""
+
+    most_solved: ChallengeHighlight | None = None
+    most_attempted: ChallengeHighlight | None = None
+    first_blood_leader: SubjectHighlight | None = None
+    fastest_solve: FastestSolve | None = None
+
+
+class TimelinePoint(BaseModel):
+    t: datetime
+    points: int
+
+
+class TimelineSeries(BaseModel):
+    subject_id: str
+    name: str
+    points: list[TimelinePoint]
+
+
+class PointsTimeline(BaseModel):
+    """Cumulative points per subject for the top entrants. Each series ends on
+    that subject's board total — solves, hint costs, score adjustments and award
+    points all contribute, exactly as the scoreboard folds them."""
+
+    start: datetime | None = None
+    end: datetime | None = None
+    series: list[TimelineSeries] = []
+
+
+class PublicInsightsOut(BaseModel):
+    frozen: bool = False
+    frozen_at: datetime | None = None
+    stats: InsightStats
+    highlights: InsightHighlights
+    timeline: PointsTimeline

@@ -53,6 +53,25 @@
   --radius: 0.5rem;
 }
 
+/* Categorical data-series colours for charts (#24 public points timeline).
+ * Ten distinguishable hues at a consistent saturation/lightness, chosen to read
+ * on both light and dark grounds — so, like the brand `--success` green, they're
+ * declared once and deliberately *not* varied per palette: a series' identity
+ * shouldn't shift when a viewer changes theme, and the accent never recolours
+ * them. Consumed as `hsl(var(--chart-N))` (see lib/timeline-chart.ts). */
+:root {
+  --chart-1: 210 90% 58%;
+  --chart-2: 145 63% 45%;
+  --chart-3: 35 92% 55%;
+  --chart-4: 340 78% 60%;
+  --chart-5: 265 78% 66%;
+  --chart-6: 190 85% 45%;
+  --chart-7: 15 85% 60%;
+  --chart-8: 90 52% 45%;
+  --chart-9: 300 58% 62%;
+  --chart-10: 225 22% 62%;
+}
+
 /* Harbor (dark, default) — deep blue-slate. Applied when no data-palette is set
  * and for data-palette="harbor". The default accent is dark-corrected brand green. */
 :root,

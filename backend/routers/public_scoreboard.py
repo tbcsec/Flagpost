@@ -16,10 +16,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from db import get_db
 from models.competition import Competition
-from schemas.scoreboard import PublicCompetitionOut, PublicScoreboardOut
+from schemas.scoreboard import (
+    PublicCompetitionOut,
+    PublicInsightsOut,
+    PublicScoreboardOut,
+)
+from utils.public_insights import public_insights
 from utils.scoreboard import compute_scoreboard
 
 router = APIRouter(prefix="/api/public", tags=["public"])
+
+
+async def _load_public_competition(db: AsyncSession, competition_id: str) -> Competition:
+    """The competition behind a spectator route, or 404. A competition that
+    hasn't opted into a public board (or has been archived) is never disclosed —
+    the 404 is identical to one that doesn't exist."""
+    competition = await db.get(Competition, competition_id)
+    if (
+        competition is None
+        or not competition.public_scoreboard
+        or competition.archived_at is not None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Scoreboard not found"
+        )
+    return competition
 
 
 @router.get("/competitions", response_model=list[PublicCompetitionOut])
@@ -54,16 +75,7 @@ async def public_competitions(db: AsyncSession = Depends(get_db)) -> list:
 async def public_scoreboard(
     competition_id: str, db: AsyncSession = Depends(get_db)
 ) -> dict:
-    competition = await db.get(Competition, competition_id)
-    if (
-        competition is None
-        or not competition.public_scoreboard
-        or competition.archived_at is not None
-    ):
-        # Don't disclose a competition that hasn't opted into a public board.
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Scoreboard not found"
-        )
+    competition = await _load_public_competition(db, competition_id)
     board = await compute_scoreboard(db, competition)  # spectator = non-staff
     return {
         **board,
@@ -71,6 +83,21 @@ async def public_scoreboard(
         "start_at": competition.start_at,
         "end_at": competition.end_at,
     }
+
+
+@router.get(
+    "/competitions/{competition_id}/insights",
+    response_model=PublicInsightsOut,
+)
+async def public_competition_insights(
+    competition_id: str, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Spectator context for the public page (#24): headline stats, standout
+    challenges/competitors, and a cumulative points timeline for the top
+    entrants. Freeze-aware exactly like the board it accompanies — see
+    ``utils/public_insights``. Same opt-in gating as the scoreboard."""
+    competition = await _load_public_competition(db, competition_id)
+    return await public_insights(db, competition)
 
 
 @router.get("/competitions/{competition_id}/ctftime")

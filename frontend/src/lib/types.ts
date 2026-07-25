@@ -37,6 +37,9 @@ export interface Competition {
   created_at: string;
   /** Set when an organiser has archived (closed out) the competition. */
   archived_at: string | null;
+  /** When the retention job will hard-delete this archived competition (#26);
+   *  null = no clock (active, retention off, or archived pre-feature). */
+  purge_after: string | null;
   /** Competition-wide cap on guesses per subject per multiple-choice challenge
    *  (null = unlimited). */
   mc_guess_limit: number | null;
@@ -738,6 +741,10 @@ export interface SiteSettings {
   // Demo instance (config-driven): drives the "resets hourly" banner + the
   // login-page demo credentials.
   demo_mode: boolean;
+  // Archived-competition retention (#26) — public so the archive confirm can
+  // show the exact deletion date to edit_competition holders.
+  archive_auto_delete: boolean;
+  archive_retention_days: number;
 }
 
 // Admin shape adds the last-updated timestamp.
@@ -754,6 +761,9 @@ export interface OperationalSettings {
   smtp_from: string;
   smtp_starttls: boolean;
   smtp_password_set: boolean;
+  /** Archived-competition retention (#26). */
+  archive_auto_delete: boolean;
+  archive_retention_days: number;
   updated_at: string | null;
 }
 
@@ -792,6 +802,8 @@ export interface OperationalSettingsUpdate {
   smtp_starttls: boolean;
   /** Omit / null to keep the stored password; a value replaces it. */
   smtp_password?: string | null;
+  archive_auto_delete: boolean;
+  archive_retention_days: number;
 }
 
 // RBAC admin (§7.4). Roles are data: a permission-key array + scope.

@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
 import { announcementsApi } from "@/lib/api";
-import type { Announcement } from "@/lib/types";
+import type { Announcement, AnnouncementCreate } from "@/lib/types";
 import { openRoomSocket } from "@/lib/ws";
 import { useAuthStore } from "@/stores/auth";
 
@@ -68,7 +68,7 @@ export function useAnnouncements(
 export function useCreateAnnouncement(competitionId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { title: string; body: string }) =>
+    mutationFn: (input: AnnouncementCreate) =>
       announcementsApi.create(competitionId, input),
     // The WS frame also arrives, but invalidating keeps the poster's own view
     // correct even if their socket is momentarily down.

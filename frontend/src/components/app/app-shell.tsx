@@ -12,6 +12,7 @@ import { PaletteMenu } from "@/components/theme/palette-menu";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { useCompetitions } from "@/lib/hooks/use-competitions";
+import { severityStyle } from "@/lib/announcement-severity";
 import { useActivityLive } from "@/lib/hooks/use-activity";
 import { useEnabledModules } from "@/lib/hooks/use-modules";
 import { useAccess } from "@/lib/hooks/use-permissions";
@@ -384,7 +385,8 @@ function Topbar({
   const markRead = useMarkNotificationRead();
   const markAllRead = useMarkAllNotificationsRead();
   const items = notifications ?? [];
-  const hasUnread = items.some((n) => !n.read);
+  const unreadCount = items.reduce((n, item) => (item.read ? n : n + 1), 0);
+  const hasUnread = unreadCount > 0;
 
   // Default the active competition to the first one once the list loads.
   React.useEffect(() => {
@@ -447,14 +449,23 @@ function Topbar({
           type="button"
           onClick={() => setNotifOpen((o) => !o)}
           title="Notifications"
-          aria-label={hasUnread ? "Notifications (unread)" : "Notifications"}
+          aria-label={
+            hasUnread ? `Notifications (${unreadCount} unread)` : "Notifications"
+          }
           aria-haspopup="menu"
           aria-expanded={notifOpen}
           className="relative flex items-center text-muted-foreground hover:text-foreground"
         >
           <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22a2.2 2.2 0 0 0 2.2-2.2h-4.4A2.2 2.2 0 0 0 12 22Zm7-6.2V11a7 7 0 0 0-5.5-6.84V3a1.5 1.5 0 0 0-3 0v1.16A7 7 0 0 0 5 11v4.8L3 17.8V19h18v-1.2Z" /></svg>
-          {hasUnread && (
-            <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-primary" />
+          {unreadCount > 0 && (
+            // A count, not a bare dot — "3 waiting" reads very differently from
+            // "something happened at some point".
+            <span
+              aria-hidden="true"
+              className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground"
+            >
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
           )}
         </button>
         {notifOpen && (
@@ -477,16 +488,47 @@ function Topbar({
             ) : (
               <ul className="max-h-80 overflow-y-auto">
                 {items.map((n) => {
+                  // An announcement notification carries its urgency in the
+                  // type (`announcement.<severity>`), so the row can show the
+                  // same accent the banner used.
+                  const announced = n.type.startsWith("announcement.")
+                    ? severityStyle(n.type.slice("announcement.".length))
+                    : null;
                   const body = (
-                    <>
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-[13px] font-medium">{n.title}</span>
-                        <span className="whitespace-nowrap text-[11px] text-muted-foreground">
-                          {relativeTime(n.created_at)}
-                        </span>
+                    <div className="flex gap-2.5">
+                      {/* Explicit per-row unread marker — the old faint row
+                          tint alone was easy to miss. */}
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full",
+                          n.read ? "bg-transparent" : "bg-primary",
+                        )}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="text-[13px] font-medium">{n.title}</span>
+                          <span className="whitespace-nowrap text-[11px] text-muted-foreground">
+                            {relativeTime(n.created_at)}
+                          </span>
+                        </div>
+                        {announced && (
+                          <span
+                            className={cn(
+                              "mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                              announced.chip,
+                            )}
+                          >
+                            {announced.label}
+                          </span>
+                        )}
+                        {n.body && (
+                          <div className="mt-0.5 text-[13px] text-muted-foreground">
+                            {n.body}
+                          </div>
+                        )}
                       </div>
-                      {n.body && <div className="mt-0.5 text-[13px]">{n.body}</div>}
-                    </>
+                    </div>
                   );
                   const onActivate = () => {
                     if (!n.read) markRead.mutate(n.id);

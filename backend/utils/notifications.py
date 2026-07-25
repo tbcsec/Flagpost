@@ -33,6 +33,7 @@ from realtime.manager import manager
 DEFAULT_PREFS: dict[str, bool] = {
     "inapp_tickets": True,
     "inapp_automations": True,
+    "inapp_announcements": True,
     "browser": False,
     "sound": True,
 }
@@ -51,11 +52,16 @@ def resolve_prefs(raw: dict | None) -> dict[str, bool]:
 def inapp_key_for_type(type: str) -> str:
     """Which ``inapp_*`` preference governs a notification of this ``type``.
 
-    Ticket events form the one distinct category a user might reasonably mute;
-    everything else (chiefly automation ``notify`` actions, which carry the
-    trigger event name as their type) falls under automations & alerts.
+    Tickets and announcements are the two distinct categories a user might
+    reasonably mute; everything else (chiefly automation ``notify`` actions,
+    which carry the trigger event name as their type) falls under automations
+    & alerts.
     """
-    return "inapp_tickets" if type.startswith("ticket.") else "inapp_automations"
+    if type.startswith("ticket."):
+        return "inapp_tickets"
+    if type.startswith("announcement."):
+        return "inapp_announcements"
+    return "inapp_automations"
 
 
 async def create_notifications(
@@ -67,12 +73,19 @@ async def create_notifications(
     body: str | None = None,
     link: str | None = None,
     competition_id: str | None = None,
+    force: bool = False,
 ) -> list[Notification]:
     """Persist one notification per recipient (deduped), flushed but not committed.
 
     Recipients who have muted this notification's category (``inapp_*``) are
     dropped before creation. Returns the created rows so the caller can commit
     and then broadcast them.
+
+    ``force`` bypasses the category mute — the **only** sanctioned use is a
+    ``critical`` announcement (#40), where the operator is telling the whole
+    competition something it cannot afford to miss. It deliberately overrides
+    the in-app mute *only*: ``browser`` and ``sound`` stay opt-in, since those
+    need an OS permission grant and forcing audio on someone is hostile.
     """
     wanted = [u for u in dict.fromkeys(recipients) if u]  # dedupe, drop falsy
     if not wanted:
@@ -80,12 +93,13 @@ async def create_notifications(
 
     # Drop recipients who've opted out of this category. A user with no stored
     # prefs (null) keeps the default (opted in), so this only ever narrows.
-    key = inapp_key_for_type(type)
-    rows = await db.execute(
-        select(User.id, User.notification_prefs).where(User.id.in_(wanted))
-    )
-    prefs = {uid: resolve_prefs(raw) for uid, raw in rows}
-    wanted = [u for u in wanted if prefs.get(u, DEFAULT_PREFS)[key]]
+    if not force:
+        key = inapp_key_for_type(type)
+        rows = await db.execute(
+            select(User.id, User.notification_prefs).where(User.id.in_(wanted))
+        )
+        prefs = {uid: resolve_prefs(raw) for uid, raw in rows}
+        wanted = [u for u in wanted if prefs.get(u, DEFAULT_PREFS)[key]]
 
     made: list[Notification] = []
     for user_id in wanted:

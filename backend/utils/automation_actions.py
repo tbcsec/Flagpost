@@ -39,7 +39,7 @@ from sqlalchemy import select
 
 from config import settings
 from db import utcnow
-from models.announcement import Announcement
+from models.announcement import DEFAULT_SEVERITY, SEVERITIES, Announcement
 from models.automation import Achievement, AutomationRule
 from models.challenge import Challenge
 from models.competition import Competition
@@ -514,17 +514,24 @@ async def _execute_create_announcement(db, rule, event_name, payload, config) ->
     if not competition_id:
         logger.info("create_announcement: no competition on %s", event_name)
         return
+    # Audience stays "all" for rule-posted announcements: targeting by raw id in
+    # a rule builder is a worse experience than it looks, and a rule firing on a
+    # competition-wide event is inherently competition-wide.
+    severity = config.get("severity") or DEFAULT_SEVERITY
+    if severity not in SEVERITIES:
+        severity = DEFAULT_SEVERITY
     announcement = Announcement(
         competition_id=competition_id,
         title=render_template(config.get("title", ""), payload),
         body=render_template(config.get("body", ""), payload),
+        severity=severity,
         created_by=None,  # system-posted
     )
     db.add(announcement)
     await db.commit()
     await db.refresh(announcement)
-    # Same event the announcements router emits, so it reaches the WS feed the
-    # same way a hand-posted one does.
+    # Same event the announcements router emits, so it reaches the WS feed and
+    # the bell notifications the same way a hand-posted one does.
     await event_bus.emit(
         "announcement.published",
         {
@@ -532,6 +539,8 @@ async def _execute_create_announcement(db, rule, event_name, payload, config) ->
             "announcement_id": announcement.id,
             "title": announcement.title,
             "body": announcement.body,
+            "severity": announcement.severity,
+            "audience_type": announcement.audience_type,
             "created_at": announcement.created_at.isoformat(),
             "rule_id": rule.id,
         },

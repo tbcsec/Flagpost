@@ -285,6 +285,23 @@ already worked out itself.
   challenge draft)
 - Announcements banner
 
+**Announcement severity & audience.** An announcement carries a `severity`
+(`info` / `warning` / `critical`) and an audience: the whole competition, or a
+chosen set of teams/users. Two rules follow from targeting:
+
+- **Read is filtered** — a targeted announcement is simply absent from the list
+  for anyone outside its audience. Staff who can post see every announcement
+  (their own sent history).
+- **Targeted announcements never touch the shared room.** The
+  `announcements/<competition_id>` room fans a frame to *every* connected
+  member, so broadcasting a targeted one there would leak the body to the whole
+  competition while merely *looking* targeted. Whole-competition announcements
+  keep that cheap shared broadcast; targeted ones are delivered per-recipient
+  over their `/ws/user/<id>` room instead. The join snapshot is filtered the
+  same way, so a reconnect can't reveal what the live path withheld. Audience
+  resolution lives in one place (`utils/announcements`) so read and delivery
+  can't drift.
+
 ### 4.4 In-App Notifications
 
 Baseline notification delivery is **in-app only**: a notification center
@@ -308,9 +325,20 @@ module), and email delivery arrived as promised as the automation
 `send_email` action (§5.3, Tier 3 Phase 1) rather than a second notification
 system — SMTP is env-configured and the action no-ops when it's unset.
 Per-user **preferences** are now built (Tier 3 Phase 9): `User.notification_prefs`
-holds in-app category mutes (`inapp_tickets` / `inapp_automations`, enforced in
-`create_notifications` so every producer respects them) plus client-honored
-`browser` / `sound` delivery hints, read/written at `/api/notifications/preferences`.
+holds in-app category mutes (`inapp_tickets` / `inapp_automations` /
+`inapp_announcements`, enforced in `create_notifications` so every producer
+respects them) plus client-honored `browser` / `sound` delivery hints,
+read/written at `/api/notifications/preferences`.
+
+Posting an announcement (§4.3) also creates a bell notification per recipient —
+the banner auto-dismisses, so without one an announcement could be missed
+entirely by looking away. There is exactly **one sanctioned override** of a
+category mute: a **`critical`** announcement is delivered even when
+`inapp_announcements` is off (`create_notifications(..., force=True)`), because
+the operator is saying something the competition can't afford to miss. It
+overrides the *in-app* mute only — `browser` and `sound` stay opt-in, since
+those need an OS permission grant and forcing audio on someone is hostile. Any
+new use of `force` is a product decision, not a convenience.
 Per-user **email** delivery stays deferred (email is automation-rule-driven,
 not a per-user channel); *push* (service-worker) delivery stays deferred too.
 

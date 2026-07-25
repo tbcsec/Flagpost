@@ -8,6 +8,8 @@ import Link from "next/link";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { severityStyle } from "@/lib/announcement-severity";
+import { cn } from "@/lib/utils";
 import { relativeTime } from "@/lib/datetime";
 import { useAnnouncements } from "@/lib/hooks/use-announcements";
 import { useChallenges } from "@/lib/hooks/use-challenges";
@@ -125,17 +127,32 @@ export function AnnouncementsWidget({ competitionId }: WidgetProps) {
     <ListCard title="Announcements" description="Archive, newest first">
       {announcements.data && announcements.data.length > 0 ? (
         <ul className="grid gap-3">
-          {announcements.data.map((an) => (
-            <li key={an.id} className="grid gap-0.5">
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-[13px] font-medium">{an.title}</span>
-                <span className="whitespace-nowrap text-[11px] text-muted-foreground">
-                  {relativeTime(an.created_at)}
-                </span>
-              </div>
-              <span className="text-[13px] text-muted-foreground">{an.body}</span>
-            </li>
-          ))}
+          {announcements.data.map((an) => {
+            const style = severityStyle(an.severity);
+            return (
+              <li key={an.id} className="grid gap-0.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[13px] font-medium">{an.title}</span>
+                  <span className="whitespace-nowrap text-[11px] text-muted-foreground">
+                    {relativeTime(an.created_at)}
+                  </span>
+                </div>
+                {/* Only flag the elevated rungs — chipping every routine
+                    announcement would just add noise. */}
+                {an.severity !== "info" && (
+                  <span
+                    className={cn(
+                      "w-fit rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                      style.chip,
+                    )}
+                  >
+                    {style.label}
+                  </span>
+                )}
+                <span className="text-[13px] text-muted-foreground">{an.body}</span>
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <p className="text-sm text-muted-foreground">No announcements yet.</p>

@@ -39,7 +39,7 @@ from config import settings
 from db import utcnow
 from models.automation import AutomationRule
 from plugins.loader import is_module_enabled
-from utils.automation_actions import execute_action
+from utils.automation_actions import enrich_payload, execute_action
 from utils.event_bus import event_bus
 
 logger = logging.getLogger("automation")
@@ -192,6 +192,14 @@ async def run_rule(
     # session (MissingGreenlet), so keep plain copies for the reload + emit.
     rule_id = rule.id
     rule_name = rule.name
+    # Resolve friendly template fields ({user_name}, {challenge_title}, …) once
+    # per rule run (#27) — the single choke point both the engine and the
+    # time-based scheduler pass through, so every action's render_template sees
+    # them. Condition matching (the caller's job) stays on the raw payload.
+    try:
+        payload = await enrich_payload(db, payload)
+    except Exception:  # noqa: BLE001 — enrichment must never block the rule
+        logger.exception("payload enrichment failed on rule %s (%s)", rule_id, rule_name)
     needs_reload = False
     for action in rule.actions or []:
         try:

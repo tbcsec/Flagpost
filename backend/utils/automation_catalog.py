@@ -20,7 +20,7 @@ the two in lockstep.
 from __future__ import annotations
 
 from config import settings
-from utils.automation_actions import ACTIONS, DEMO_DISABLED_ACTIONS
+from utils.automation_actions import ACTIONS, DEMO_DISABLED_ACTIONS, FRIENDLY_FIELDS
 from utils.automation_engine import CONDITION_OPERATORS
 from utils.event_catalog import TRIGGERABLE_EVENTS
 
@@ -251,6 +251,16 @@ def _titleize(event_or_type: str) -> str:
     return " ".join(event_or_type.replace(".", " ").replace("_", " ").split()).capitalize()
 
 
+def _with_friendly(fields: list[str]) -> list[str]:
+    """Append the resolved friendly companions (#27) for every id field a
+    trigger carries — {user_name}, {challenge_title}, … — so the builder
+    suggests the human-readable placeholder alongside the raw id. The engine
+    resolves them at rule-run time (utils.automation_actions.enrich_payload)."""
+    return fields + [
+        FRIENDLY_FIELDS[f][0] for f in fields if f in FRIENDLY_FIELDS
+    ]
+
+
 def build_catalog() -> dict:
     """The full editor catalog (§5.5) as plain dicts for the response model."""
     return {
@@ -258,7 +268,7 @@ def build_catalog() -> dict:
             {
                 "event": event,
                 "label": _titleize(event),
-                "fields": TRIGGER_FIELDS.get(event, _COMMON_FIELDS),
+                "fields": _with_friendly(TRIGGER_FIELDS.get(event, _COMMON_FIELDS)),
             }
             for event in TRIGGERABLE_EVENTS
         ],

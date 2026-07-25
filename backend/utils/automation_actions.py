@@ -45,9 +45,11 @@ from models.challenge import Challenge
 from models.competition import Competition
 from models.hint import Hint, HintReveal
 from models.role import Role, RoleAssignment
+from models.feedback import Survey
 from models.score_adjustment import ScoreAdjustment
-from models.team import TeamMembership
+from models.team import Team, TeamMembership
 from models.ticket import Ticket, TicketMessage
+from models.user import User
 from utils import mailer, webhook_security
 from utils.event_bus import event_bus
 from utils.notifications import broadcast_notifications, create_notifications
@@ -68,6 +70,50 @@ def render_template(template: str, payload: dict[str, Any]) -> str:
         return str(payload[field]) if field in payload else match.group(0)
 
     return _PLACEHOLDER.sub(_sub, template)
+
+
+# --- Friendly template fields (#27) ------------------------------------------
+# Event payloads carry raw ids, so a template like "{user_id} solved it" renders
+# a UUID. Before a matched rule's actions run, the id fields below are resolved
+# into human-friendly companion fields ({user_name}, {challenge_title}, …) —
+# advertised to the builder via the automation catalog, which derives its
+# suggestions from this map. The id fields themselves keep their raw values:
+# webhooks and conditions legitimately need ids.
+#
+# payload id field -> (derived field name, model, attribute)
+FRIENDLY_FIELDS: dict[str, tuple[str, type, str]] = {
+    "user_id": ("user_name", User, "display_name"),
+    "opener_user_id": ("opener_user_name", User, "display_name"),
+    "assignee_user_id": ("assignee_user_name", User, "display_name"),
+    "author_user_id": ("author_user_name", User, "display_name"),
+    "actor_user_id": ("actor_user_name", User, "display_name"),
+    "team_id": ("team_name", Team, "name"),
+    "challenge_id": ("challenge_title", Challenge, "title"),
+    "survey_id": ("survey_title", Survey, "title"),
+    "ticket_id": ("ticket_subject", Ticket, "subject"),
+    "competition_id": ("competition_name", Competition, "name"),
+}
+
+
+async def enrich_payload(db, payload: dict[str, Any]) -> dict[str, Any]:
+    """Return the payload plus resolved friendly fields for every id it carries.
+
+    Runs once per matched rule (run_rule), on the background lane — a handful of
+    primary-key lookups. An id that no longer resolves (entity deleted between
+    the event and the rule firing) falls back to the raw id, so an advertised
+    placeholder never renders as a literal ``{user_name}``. Fields already in
+    the payload are never overwritten (an emitter that supplied its own
+    ``title``/``subject``-style field wins).
+    """
+    enriched = dict(payload)
+    for id_field, (name_field, model, attr) in FRIENDLY_FIELDS.items():
+        value = payload.get(id_field)
+        if value is None or name_field in enriched:
+            continue
+        row = await db.get(model, value)
+        resolved = getattr(row, attr, None) if row is not None else None
+        enriched[name_field] = resolved if resolved is not None else value
+    return enriched
 
 
 async def _notify_users(
@@ -275,8 +321,6 @@ async def _execute_unlock_challenge(db, rule, event_name, payload, config) -> No
 
 
 async def _execute_open_survey(db, rule, event_name, payload, config) -> None:
-    from models.feedback import Survey
-
     competition_id = payload.get("competition_id")
     survey = await db.get(Survey, config.get("survey_id"))
     # Tenant guard (§6.2): only open a survey in the event's own competition.

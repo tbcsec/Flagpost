@@ -263,7 +263,9 @@ async def seed_demo_data(db: AsyncSession) -> None:
             conditions=[{"field": "is_first_blood", "operator": "equals", "value": True}],
             actions=[
                 {"type": "create_announcement",
-                 "title": "🩸 First blood!",
+                 # ⚡ matches the lightning-bolt first-blood marker used across
+                 # the UI (FirstBloodIcon) — not the old blood-drop idiom (#25).
+                 "title": "⚡ First blood!",
                  "body": "Someone just drew first blood on a challenge and earned a bonus. Who's next?"},
                 {"type": "create_award",
                  "title": "First Blood",

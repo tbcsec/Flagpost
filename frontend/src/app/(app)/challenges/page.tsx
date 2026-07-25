@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import dynamic from "next/dynamic";
 
@@ -37,7 +37,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { TablePagination } from "@/components/ui/data-table";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
+import { useDataTable } from "@/lib/hooks/use-data-table";
 import { useMyTeam } from "@/lib/hooks/use-teams";
 import { usePresence } from "@/lib/hooks/use-presence";
 import { useAccess } from "@/lib/hooks/use-permissions";
@@ -62,6 +64,24 @@ export default function ChallengesPage() {
   const [open, setOpen] = useState<Challenge | null>(null);
   const [managing, setManaging] = useState(false);
 
+  const allData = challenges.data ?? [];
+  const hasLocked = allData.some((c) => c.locked);
+  const visible = useMemo(
+    () =>
+      allData.filter(
+        (c) =>
+          (filter === "all" || c.category_id === filter) &&
+          (availability === "all" ||
+            (availability === "locked" ? c.locked : !c.locked)),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- allData is derived from challenges.data
+    [challenges.data, filter, availability],
+  );
+  // Pagination over the filtered card grid (#16) — a long challenge list no
+  // longer extends the page indefinitely. Category/availability filters reset
+  // to the first page on change.
+  const grid = useDataTable(visible);
+
   if (!competitionId) {
     return <NoCompetition />;
   }
@@ -69,14 +89,6 @@ export default function ChallengesPage() {
   const categoryName = (id: string | null) =>
     categories.data?.find((c) => c.id === id)?.name ?? "uncategorized";
 
-  const allData = challenges.data ?? [];
-  const hasLocked = allData.some((c) => c.locked);
-  const visible = allData.filter(
-    (c) =>
-      (filter === "all" || c.category_id === filter) &&
-      (availability === "all" ||
-        (availability === "locked" ? c.locked : !c.locked)),
-  );
   const solvedCount = allData.filter((c) => c.solved).length;
 
   // Each chip carries its solved/total progress so competitors can see at a
@@ -123,7 +135,10 @@ export default function ChallengesPage() {
             key={chip.id}
             type="button"
             aria-pressed={filter === chip.id}
-            onClick={() => setFilter(chip.id)}
+            onClick={() => {
+              setFilter(chip.id);
+              grid.setPage(0);
+            }}
             className={cn(
               "rounded-full border px-3.5 py-1.5 text-sm font-medium capitalize transition-colors",
               filter === chip.id
@@ -147,7 +162,10 @@ export default function ChallengesPage() {
                 key={a}
                 type="button"
                 aria-pressed={availability === a}
-                onClick={() => setAvailability(a)}
+                onClick={() => {
+                  setAvailability(a);
+                  grid.setPage(0);
+                }}
                 className={cn(
                   "px-3 py-1.5 font-medium capitalize transition-colors",
                   availability === a
@@ -185,8 +203,9 @@ export default function ChallengesPage() {
       )}
 
       {challenges.data && allData.length > 0 && (
+        <>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {visible.map((ch) => (
+          {grid.rows.map((ch) => (
             <button
               key={ch.id}
               onClick={() => setOpen(ch)}
@@ -239,12 +258,14 @@ export default function ChallengesPage() {
               </div>
             </button>
           ))}
-          {visible.length === 0 && (
+          {grid.rows.length === 0 && (
             <p className="text-sm text-muted-foreground">
               No challenges in this category yet.
             </p>
           )}
         </div>
+        <TablePagination table={grid} noun="challenges" />
+        </>
       )}
 
       {managing && (

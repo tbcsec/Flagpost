@@ -8,6 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useConfirm } from "@/components/ui/confirm";
+import {
+  SortableTableHead,
+  TablePagination,
+} from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,6 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { relativeTime } from "@/lib/datetime";
+import { useDataTable } from "@/lib/hooks/use-data-table";
 import { useAccess } from "@/lib/hooks/use-permissions";
 import { useBanUser, useDeleteUser, useUsers } from "@/lib/hooks/use-users";
 import type { UserAccount } from "@/lib/types";
@@ -49,6 +54,22 @@ export default function AdminUsersPage() {
 
   const [dialog, setDialog] = useState<{ mode: "create" } | { mode: "edit"; user: UserAccount } | null>(null);
   const confirm = useConfirm();
+
+  // Sort + pagination (#16 #17) over the (backend-searched) directory. Search
+  // stays server-side (`?q=`) — this only orders/pages what came back. Above
+  // the early returns so the hook runs unconditionally.
+  const rows = users.data ?? [];
+  const table = useDataTable(rows, {
+    columns: {
+      name: (u: UserAccount) => u.display_name,
+      email: (u: UserAccount) => u.email,
+      // Booleans as strings so the column reads naturally either direction.
+      role: (u: UserAccount) => (u.is_administrator ? "Administrator" : "User"),
+      status: (u: UserAccount) => (u.is_active ? "Active" : "Banned"),
+      joined: { value: (u: UserAccount) => u.created_at, defaultDir: "desc" },
+    },
+  });
+  const dir = (key: string) => (table.sort?.key === key ? table.sort.dir : null);
 
   if (!access.ready) return <Skeleton className="h-64 w-full" />;
   if (!canView) {
@@ -97,8 +118,6 @@ export default function AdminUsersPage() {
     });
   }
 
-  const rows = users.data ?? [];
-
   return (
     <>
       <SectionHeader
@@ -129,16 +148,26 @@ export default function AdminUsersPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Joined</TableHead>
+                  <SortableTableHead active={dir("name")} onSort={() => table.toggleSort("name")}>
+                    Name
+                  </SortableTableHead>
+                  <SortableTableHead active={dir("email")} onSort={() => table.toggleSort("email")}>
+                    Email
+                  </SortableTableHead>
+                  <SortableTableHead active={dir("role")} onSort={() => table.toggleSort("role")}>
+                    Role
+                  </SortableTableHead>
+                  <SortableTableHead active={dir("status")} onSort={() => table.toggleSort("status")}>
+                    Status
+                  </SortableTableHead>
+                  <SortableTableHead active={dir("joined")} onSort={() => table.toggleSort("joined")}>
+                    Joined
+                  </SortableTableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((u) => {
+                {table.rows.map((u) => {
                   const isSelf = u.id === selfId;
                   return (
                     <TableRow key={u.id}>
@@ -191,6 +220,7 @@ export default function AdminUsersPage() {
                 })}
               </TableBody>
             </Table>
+            <TablePagination table={table} noun="accounts" className="mt-4" />
           </CardContent>
         </Card>
       )}

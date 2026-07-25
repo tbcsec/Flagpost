@@ -2,9 +2,17 @@
 semantics. Scoping, the depth guard, module gating and the executors are
 covered end-to-end in tests/test_automations.py."""
 
+from sqlalchemy import select
+
 import utils.automation_engine as engine
 from db import SessionLocal
+from models.announcement import Announcement
 from models.automation import AutomationRule
+from models.challenge import Challenge
+from models.competition import Competition, generate_invite_code
+from models.user import User
+from utils.automation_actions import enrich_payload
+from utils.automation_catalog import build_catalog
 from utils.automation_engine import evaluate_conditions
 from utils.event_bus import event_bus
 
@@ -116,3 +124,96 @@ async def test_run_rule_bumps_stats_even_when_an_action_fails(monkeypatch):
         reloaded = await db.get(AutomationRule, rule_id)
         assert reloaded.trigger_count == 1
         assert reloaded.last_triggered_at is not None
+
+
+# --- Friendly template fields (#27) ------------------------------------------
+
+
+async def test_enrich_payload_resolves_friendly_fields():
+    async with SessionLocal() as db:
+        comp = Competition(name="Enrich CTF", invite_code=generate_invite_code())
+        user = User(display_name="ada", password_hash="x")
+        db.add_all([comp, user])
+        await db.flush()
+        challenge = Challenge(competition_id=comp.id, title="Baby RSA")
+        db.add(challenge)
+        await db.commit()
+
+        payload = {
+            "competition_id": comp.id,
+            "user_id": user.id,
+            "challenge_id": challenge.id,
+            "points": 100,
+        }
+        enriched = await enrich_payload(db, payload)
+        assert enriched["user_name"] == "ada"
+        assert enriched["challenge_title"] == "Baby RSA"
+        assert enriched["competition_name"] == "Enrich CTF"
+        # Ids stay ids — webhooks and conditions need the raw values.
+        assert enriched["user_id"] == user.id
+        assert enriched["points"] == 100
+        # The input payload is never mutated.
+        assert "user_name" not in payload
+
+        # An id that no longer resolves falls back to the raw value, so an
+        # advertised placeholder never renders as a literal {user_name}.
+        broken = await enrich_payload(db, {"user_id": "gone"})
+        assert broken["user_name"] == "gone"
+
+
+async def test_run_rule_renders_friendly_fields_in_templates():
+    """End to end through run_rule (#27): a create_announcement body written
+    with {user_name}/{challenge_title} renders names, not UUIDs."""
+    async with SessionLocal() as db:
+        comp = Competition(name="Friendly CTF", invite_code=generate_invite_code())
+        user = User(display_name="grace", password_hash="x")
+        db.add_all([comp, user])
+        await db.flush()
+        challenge = Challenge(competition_id=comp.id, title="Warmup")
+        rule = AutomationRule(
+            name="FB",
+            trigger_type="challenge.solved",
+            conditions=[],
+            actions=[
+                {
+                    "type": "create_announcement",
+                    "title": "First blood!",
+                    "body": "{user_name} drew first blood on {challenge_title}.",
+                }
+            ],
+            competition_id=comp.id,
+            is_enabled=True,
+        )
+        db.add_all([challenge, rule])
+        await db.commit()
+
+        await engine.run_rule(
+            db,
+            rule,
+            "challenge.solved",
+            {
+                "competition_id": comp.id,
+                "user_id": user.id,
+                "challenge_id": challenge.id,
+            },
+        )
+
+    await event_bus.wait_for_background()
+
+    async with SessionLocal() as db:
+        announcement = (await db.scalars(select(Announcement))).first()
+        assert announcement is not None
+        assert announcement.body == "grace drew first blood on Warmup."
+
+
+def test_catalog_advertises_friendly_fields():
+    triggers = {t["event"]: t["fields"] for t in build_catalog()["triggers"]}
+    solved = triggers["challenge.solved"]
+    for derived in ("user_name", "team_name", "challenge_title", "competition_name"):
+        assert derived in solved
+    # The raw ids stay advertised alongside their friendly companions.
+    assert "user_id" in solved
+    assert "challenge_id" in solved
+    # A trigger with a different id vocabulary derives its own names.
+    assert "opener_user_name" in triggers["ticket.created"]
+    assert "ticket_subject" in triggers["ticket.created"]

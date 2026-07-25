@@ -6,5 +6,7 @@ version: 1.0.0
 required_core: true
 provides:
   routes: true
-  event_listeners: false
+  # The activity-room fan-out (§4.1, issue #18) listens for the curated
+  # ACTIVITY_EVENTS allowlist and pings the per-competition room.
+  event_listeners: true
 dependencies: []

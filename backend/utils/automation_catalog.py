@@ -36,6 +36,9 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "challenge.published": ["competition_id", "challenge_id", "user_id", "title"],
     "challenge.created": ["competition_id", "challenge_id", "user_id", "title"],
     "challenge.updated": ["competition_id", "challenge_id"],
+    "challenge.attempted": [
+        "competition_id", "challenge_id", "user_id", "team_id", "correct",
+    ],
     "challenge.guesses_reset": ["competition_id", "challenge_id", "user_id", "team_id"],
     "challenge.rated": ["competition_id", "challenge_id", "user_id", "rating"],
     "challenge.hint_requested": [
@@ -121,6 +124,9 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     "challenge.guesses_reset": "challenge_edit",
     "category.created": "challenge_edit",
     "category.deleted": "challenge_edit",
+    # Others' attempts (incl. failures) are staff analytics data, not
+    # member-visible play state — same gate as reading the analytics page.
+    "challenge.attempted": "view_competition_analytics",
     # Member-visible events (published challenges, solves, scoreboard-facing).
     "challenge.published": "challenge_view",
     "challenge.solved": "challenge_view",

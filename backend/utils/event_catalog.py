@@ -37,6 +37,11 @@ EVENT_TYPES: tuple[str, ...] = (
     "challenge.published",
     "challenge.deleted",
     "challenge.solved",
+    # Every *graded* flag submission, right or wrong (§13.2 logs the row; this
+    # is its event half). Wrong guesses previously emitted nothing, leaving
+    # attempt-counting surfaces (dashboard stats, challenge health, analytics)
+    # stale until the next solve. Bounded by the submission rate limit.
+    "challenge.attempted",
     "challenge.guesses_reset",
     "challenge.rated",
     "challenge.hint_requested",

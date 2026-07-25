@@ -88,6 +88,16 @@ def setup(app, event_bus, db_factory) -> None:
                     "is_internal": payload.get("is_internal", False),
                 },
             )
+        # Thread activity also bumps the staff queue (#18): without this, a
+        # reply never refreshes the support view until the ticket resolves.
+        # ticket_updated (not ticket_created) so no audio cue fires.
+        competition_id = payload.get("competition_id")
+        if competition_id:
+            await manager.broadcast(
+                "support",
+                competition_id,
+                {"type": "ticket_updated", "ticket_id": ticket_id},
+            )
 
     async def _broadcast_update(payload: dict) -> None:
         competition_id = payload.get("competition_id")

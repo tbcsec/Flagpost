@@ -1,0 +1,72 @@
+name: Bug report
+description: Report something that's broken or behaving incorrectly.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. The more reproducible this is, the faster it gets fixed.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you start
+      options:
+        - label: This is **not** a security vulnerability (those go through [private reporting](https://github.com/tbcsec/flagpost/security/advisories/new), never a public issue).
+          required: true
+        - label: I searched [existing issues](https://github.com/tbcsec/flagpost/issues) and this isn't a duplicate.
+          required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, and what you expected to happen instead.
+      placeholder: When I ..., I expected ..., but instead ...
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Exact steps, so someone else can see it too.
+      placeholder: |
+        1. Go to ...
+        2. Click ...
+        3. See error
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: The release tag (e.g. v1.1.0) or the git commit SHA you're running.
+      placeholder: v1.1.0 or 31e1e99
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How are you running it?
+      options:
+        - Docker — production stack (docker compose up)
+        - Docker — dev stack (docker-compose.dev.yml)
+        - Bare metal (uvicorn / npm run dev)
+        - The public demo (demo.flagpost.io)
+        - Other / not sure
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser (if it's a UI bug)
+      placeholder: Firefox 128, Chrome 126, Safari 17, ...
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / screenshots
+      description: Backend logs, browser console errors, or screenshots. **Redact any secrets** (tokens, passwords, flags).
+      render: shell
+    validations:
+      required: false

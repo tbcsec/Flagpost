@@ -14,6 +14,25 @@ up, the conventions the codebase follows, and how to get a change merged.
 - Be respectful; this project follows the
   [Code of Conduct](CODE_OF_CONDUCT.md).
 
+## Reporting bugs & requesting features
+
+- **Found a bug?** Open a
+  [bug report](https://github.com/tbcsec/flagpost/issues/new?template=bug_report.yml) —
+  the form asks for the version, repro steps, and how you're running it. Search
+  [existing issues](https://github.com/tbcsec/flagpost/issues) first.
+- **Want a feature?** A small, well-defined idea → open a
+  [feature request](https://github.com/tbcsec/flagpost/issues/new?template=feature_request.yml).
+  A large or open-ended idea → start a
+  [Discussion](https://github.com/tbcsec/flagpost/discussions) so the scope can be
+  shaped before it becomes a tracked issue.
+- **Question or need help?** Use
+  [Discussions](https://github.com/tbcsec/flagpost/discussions), not an issue.
+- **Security vulnerability?** Never a public issue — follow
+  [`SECURITY.md`](SECURITY.md).
+
+New issues start labelled `needs-triage`; a maintainer confirms, labels, and — if
+it's slated for a release — adds it to a milestone and the public roadmap.
+
 ## Getting set up
 
 The fastest way to a running stack is Docker (see the README). For iterating on

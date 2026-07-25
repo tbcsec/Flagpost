@@ -1,0 +1,10 @@
+# Force reporters down a template (no blank issues), and route the two things
+# that must NOT be public bug issues to the right place.
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/tbcsec/flagpost/security/advisories/new
+    about: Do NOT open a public issue for security problems — report it privately here (see SECURITY.md).
+  - name: 💬 Questions & ideas (Discussions)
+    url: https://github.com/tbcsec/flagpost/discussions
+    about: For questions, help, or open-ended ideas that aren't a concrete bug or feature yet.

@@ -260,6 +260,9 @@ async def test_new_notification_pushes_over_user_room(client):
         assert frame["notification_type"] == "ticket.created"
         assert frame["title"] == "New support ticket"
         assert frame["read"] is False
+        # Carries its competition so the bell hook can refresh that
+        # competition's ticket caches live (#18).
+        assert frame["competition_id"] == comp
 
 
 async def test_user_room_rejects_other_users(client):

@@ -198,6 +198,20 @@ async def submit_flag(
         )
     await db.commit()
 
+    # Every graded submission emits challenge.attempted (right or wrong) — the
+    # event half of "every attempt is logged" above, and what keeps attempt
+    # counters (dashboard stats, challenge health, analytics) live. Refusals
+    # before grading (rate limit, MC cap, locked) emit nothing.
+    await event_bus.emit(
+        "challenge.attempted",
+        {
+            "competition_id": competition_id,
+            "challenge_id": challenge_id,
+            "user_id": current_user.id,
+            "team_id": subject.team_id,
+            "correct": correct,
+        },
+    )
     if award:
         await event_bus.emit(
             "challenge.solved",

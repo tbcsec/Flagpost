@@ -109,6 +109,9 @@ def notification_frame(notification: Notification) -> dict:
     return {
         "type": "notification",
         "id": notification.id,
+        # Lets the bell hook target competition-scoped caches — e.g. a ticket
+        # notification refreshes the opener's ticket list live (#18).
+        "competition_id": notification.competition_id,
         "notification_type": notification.type,
         "title": notification.title,
         "body": notification.body,

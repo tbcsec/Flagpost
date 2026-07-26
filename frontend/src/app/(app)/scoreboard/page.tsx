@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
 import { NoCompetition } from "@/components/app/no-competition";
+import { RankBadge } from "@/components/scoreboard/rank-badge";
+import { TopChart } from "@/components/scoreboard/top-chart";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
@@ -38,24 +40,6 @@ import { cn } from "@/lib/utils";
 // Live scoreboard (Phase 7): REST initial load + WebSocket room updates. "You"
 // highlighting follows the scoring subject; the top three get a medal rank and
 // rows flash briefly when their points change on a live update.
-function RankBadge({ rank }: { rank: number }) {
-  if (rank > 3) return <span className="font-mono text-muted-foreground">{rank}</span>;
-  const style = {
-    1: "bg-warning text-warning-foreground",
-    2: "bg-secondary text-secondary-foreground",
-    3: "bg-muted text-muted-foreground",
-  }[rank as 1 | 2 | 3];
-  return (
-    <span
-      className={cn(
-        "inline-flex h-6 w-6 items-center justify-center rounded-full font-mono text-xs font-semibold",
-        style,
-      )}
-    >
-      {rank}
-    </span>
-  );
-}
 
 export default function ScoreboardPage() {
   const { competitionId, data: competition } = useActiveCompetition();
@@ -155,7 +139,6 @@ export default function ScoreboardPage() {
 
   const mySubjectId = isTeam ? myTeam.data?.id : userId;
   const top = shown.slice(0, 10);
-  const maxPoints = Math.max(1, ...top.map((e) => e.points));
   const live = board.socketStatus === "open";
 
   return (
@@ -254,25 +237,7 @@ export default function ScoreboardPage() {
       {top.length > 0 && (
         <Card>
           <CardContent className="pt-5">
-            <div className="flex h-40 items-end gap-2.5">
-              {top.map((e) => (
-                <div
-                  key={e.subject_id}
-                  className="flex h-full flex-1 flex-col items-center justify-end gap-1.5"
-                >
-                  <div
-                    className={cn(
-                      "w-full rounded-t transition-[height] duration-500",
-                      e.subject_id === mySubjectId ? "bg-primary" : "bg-secondary",
-                    )}
-                    style={{ height: `${Math.round((e.points / maxPoints) * 100)}%` }}
-                  />
-                  <span className="max-w-full truncate text-[10px] text-muted-foreground">
-                    {e.rank}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <TopChart entries={top} mySubjectId={mySubjectId} isTeam={isTeam} />
           </CardContent>
         </Card>
       )}

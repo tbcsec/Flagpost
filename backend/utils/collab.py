@@ -8,12 +8,17 @@ route — §7.6), and resolves the owning ``competition_id``. The CRDT transport
 it only asks this module "is this user allowed, and under which competition?"
 (§4.2).
 
-Two scopes today:
+Three scopes today:
 
 - ``team_challenge:<team_id>:<challenge_id>`` — a team's private scratchpad for
   a challenge. Authorized to **members of that team only** (no permission grant,
   no cross-team visibility, §4.2). The team and challenge must belong to the
   same competition.
+- ``user_challenge:<user_id>:<challenge_id>`` — a single competitor's private
+  scratchpad for a challenge, the individual-mode counterpart (#46). Authorized
+  to **that user alone** — not staff, not teammates — plus ``challenge_view`` on
+  the challenge's competition, the same gate as seeing the challenge at all. It
+  stays live: a solo competitor's own tabs/devices sync through the same relay.
 - ``ticket:<ticket_id>`` — staff internal notes on a support ticket. Authorized
   to holders of ``ticket_view_internal_notes`` (staff) — deliberately **not**
   the ticket opener, so a competitor never sees the staff note channel.
@@ -72,6 +77,23 @@ async def resolve_note(
             )
         )
         if member is None:
+            return None
+        return ResolvedNote(doc_key=doc_key, competition_id=challenge.competition_id)
+
+    if scope == "user_challenge" and len(parts) == 3:
+        _, user_id, challenge_id = parts
+        # Own notes only. Checked before any lookup so another user's doc key
+        # can't even be probed for existence.
+        if user_id != user.id:
+            return None
+        challenge = await db.get(Challenge, challenge_id)
+        if challenge is None:
+            return None
+        # Same gate as seeing the challenge (§7.6) — a personal pad on a
+        # competition you've left/were never in isn't yours to open.
+        if not await user_has_permission(
+            db, user.id, "challenge_view", challenge.competition_id
+        ):
             return None
         return ResolvedNote(doc_key=doc_key, competition_id=challenge.competition_id)
 

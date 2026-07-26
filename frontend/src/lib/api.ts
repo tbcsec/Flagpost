@@ -9,6 +9,7 @@
 import { useAuthStore } from "@/stores/auth";
 import type {
   Announcement,
+  AnnouncementCreate,
   AppNotification,
   NotificationPreferences,
   AuditLogPage,
@@ -712,7 +713,7 @@ export const announcementsApi = {
   // Initial load only — new announcements arrive over the announcements WS room.
   list: (competitionId: string) =>
     apiFetch<Announcement[]>(`/api/competitions/${competitionId}/announcements`),
-  create: (competitionId: string, input: { title: string; body: string }) =>
+  create: (competitionId: string, input: AnnouncementCreate) =>
     apiFetch<Announcement>(`/api/competitions/${competitionId}/announcements`, {
       method: "POST",
       body: JSON.stringify(input),

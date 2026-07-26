@@ -206,6 +206,7 @@ async def test_preferences_default_to_everything_in_app(client):
     assert prefs == {
         "inapp_tickets": True,
         "inapp_automations": True,
+        "inapp_announcements": True,
         "browser": False,
         "sound": True,
     }

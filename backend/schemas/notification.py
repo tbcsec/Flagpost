@@ -26,8 +26,10 @@ class NotificationPreferences(BaseModel):
     PUT is a complete replacement and a GET always returns every key resolved."""
 
     # In-app categories — gate whether a bell notification is created at all.
+    # (A `critical` announcement overrides `inapp_announcements` — §4.4, #40.)
     inapp_tickets: bool = True
     inapp_automations: bool = True
+    inapp_announcements: bool = True
     # Client-honored delivery hints for the in-app notifications that are made.
     browser: bool = False
     sound: bool = True

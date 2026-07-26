@@ -31,6 +31,11 @@ const IN_APP: { key: PrefKey; label: string; hint: string }[] = [
     label: "Automations & alerts",
     hint: "Notifications sent to you by competition automation rules.",
   },
+  {
+    key: "inapp_announcements",
+    label: "Announcements",
+    hint: "Organiser announcements. Urgent ones always come through, even with this off.",
+  },
 ];
 
 // Notification preferences (§4.4). In-app toggles gate whether a bell

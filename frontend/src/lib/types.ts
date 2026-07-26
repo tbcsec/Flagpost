@@ -333,6 +333,8 @@ export interface AppNotification {
 export interface NotificationPreferences {
   inapp_tickets: boolean;
   inapp_automations: boolean;
+  /** A `critical` announcement is delivered even when this is off (#40). */
+  inapp_announcements: boolean;
   browser: boolean;
   sound: boolean;
 }
@@ -700,12 +702,33 @@ export interface PublicInsights {
 }
 
 /** A broadcast announcement (Phase 8). */
+/** Urgency ladder (#40). `critical` overrides a muted in-app notification
+ *  category and doesn't auto-dismiss from the banner. */
+export type AnnouncementSeverity = "info" | "warning" | "critical";
+
+/** Who an announcement went to. "all" = the whole competition. */
+export type AnnouncementAudience = "all" | "teams" | "users";
+
 export interface Announcement {
   id: string;
   competition_id: string;
   title: string;
   body: string;
+  severity: AnnouncementSeverity;
+  audience_type: AnnouncementAudience;
+  /** Team or user ids, per `audience_type`; empty for "all". Only meaningful
+   *  to staff — a recipient only ever receives announcements meant for them. */
+  audience_ids: string[];
   created_at: string;
+}
+
+/** What the composer sends. `audience_ids` is ignored for "all". */
+export interface AnnouncementCreate {
+  title: string;
+  body: string;
+  severity: AnnouncementSeverity;
+  audience_type: AnnouncementAudience;
+  audience_ids: string[];
 }
 
 /** A hint as a competitor sees it (Phase 9): `body` is null until this subject

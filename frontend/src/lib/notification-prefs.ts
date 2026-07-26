@@ -11,6 +11,7 @@ import type { NotificationPreferences } from "@/lib/types";
 export const DEFAULT_PREFS: NotificationPreferences = {
   inapp_tickets: true,
   inapp_automations: true,
+  inapp_announcements: true,
   browser: false,
   sound: true,
 };

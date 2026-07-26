@@ -20,6 +20,7 @@ the two in lockstep.
 from __future__ import annotations
 
 from config import settings
+from models.announcement import SEVERITIES
 from utils.automation_actions import ACTIONS, DEMO_DISABLED_ACTIONS, FRIENDLY_FIELDS
 from utils.automation_engine import CONDITION_OPERATORS
 from utils.event_catalog import TRIGGERABLE_EVENTS
@@ -69,7 +70,10 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "competition.ended": ["competition_id", "name"],
     "team.created": ["competition_id", "team_id"],
     "team.member_joined": ["competition_id", "team_id", "user_id"],
-    "announcement.published": ["competition_id"],
+    "announcement.published": [
+        "competition_id", "announcement_id", "title", "body", "severity",
+        "audience_type",
+    ],
     "survey.submitted": ["competition_id", "user_id", "survey_id", "response_id"],
     "survey.opened": ["competition_id", "survey_id", "title"],
     "user.registered": ["user_id"],
@@ -250,6 +254,10 @@ ACTION_FIELDS: dict[str, list[dict]] = {
     "create_announcement": [
         _field("title", "Title", templateable=True),
         _field("body", "Body", "textarea", templateable=True),
+        _field(
+            "severity", "Severity", "select", required=False,
+            options=list(SEVERITIES),
+        ),
     ],
 }
 

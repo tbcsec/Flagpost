@@ -39,8 +39,9 @@ export function CollabNote({ docKey }: { docKey: string }) {
       immediatelyRender: false,
       extensions: [
         // Collaboration owns undo/redo (via the shared doc), so StarterKit's own
-        // history must be off or the two fight over the same keystrokes.
-        StarterKit.configure({ history: false }),
+        // undo/redo (TipTap 3's rename of `history`) must be off or the two
+        // fight over the same keystrokes.
+        StarterKit.configure({ undoRedo: false }),
         Collaboration.configure({ document: ydoc }),
       ],
       editorProps: {

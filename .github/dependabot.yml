@@ -2,6 +2,11 @@ version: 2
 
 # Automated dependency-update PRs, including security fixes. Grouped so a routine
 # bump week is one PR per ecosystem rather than a flood.
+#
+# The npm/pip groups take minor+patch only: one green mergeable PR a week.
+# Majors arrive as individual PRs so a breaking migration (Next 16, TipTap 3,
+# TypeScript 7, ...) can't hold every routine bump hostage inside a red group
+# (that's what happened to the original grouped PR #42).
 updates:
   - package-ecosystem: pip
     directory: /backend
@@ -11,6 +16,7 @@ updates:
     groups:
       backend-deps:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: npm
     directory: /frontend
@@ -20,6 +26,12 @@ updates:
     groups:
       frontend-deps:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      # eslint 10 is upstream-blocked (#15): eslint-plugin-react peer-caps at
+      # eslint 9 and calls removed APIs. Lift this when #15 closes.
+      - dependency-name: eslint
+        versions: [">=10"]
 
   - package-ecosystem: github-actions
     directory: /

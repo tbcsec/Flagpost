@@ -1,0 +1,78 @@
+name: Build release images
+
+# Version-tagged images for reproducible deploys: pushing a `v*` tag builds
+# ghcr.io/<owner>/flagpost-{backend,frontend}:vX.Y.Z (+ :latest), pinned to
+# that exact source.
+#
+# Unlike the demo images (demo-images.yml, which bake the demo's public origin
+# into the frontend), the release frontend is built in **same-origin mode**
+# (empty NEXT_PUBLIC_API_URL): every API call and WebSocket goes out relative
+# and resolves against whatever origin serves the page. That's what makes one
+# image work behind any single-origin proxy (the documented Caddy topology)
+# instead of being hard-wired to one operator's domain — see
+# frontend/src/lib/api.ts / ws.ts for the contract.
+#
+# workflow_dispatch exists to backfill an already-pushed tag: run it with the
+# tag selected as the ref (e.g. `gh workflow run release-images.yml --ref v1.1.0`).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-images-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Guard the dispatch path: only a tag ref may publish version-named images.
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      packages: write # required to push to GHCR with GITHUB_TOKEN
+    strategy:
+      matrix:
+        include:
+          - name: backend
+            context: ./backend
+            dockerfile: ./backend/Dockerfile
+          - name: frontend
+            context: ./frontend
+            dockerfile: ./frontend/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      # GHCR image paths must be lowercase.
+      - name: Resolve lowercase owner
+        id: owner
+        run: echo "value=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.name }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/flagpost-${{ matrix.name }}:${{ github.ref_name }}
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/flagpost-${{ matrix.name }}:latest
+          # Same-origin mode for the release frontend (empty NEXT_PUBLIC_API_URL
+          # overrides the Dockerfile's localhost default). Backend takes no args.
+          build-args: |
+            ${{ matrix.name == 'frontend' && 'NEXT_PUBLIC_API_URL=' || '' }}
+          cache-from: type=gha,scope=release-${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=release-${{ matrix.name }}

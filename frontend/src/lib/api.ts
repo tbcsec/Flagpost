@@ -78,6 +78,13 @@ import type {
   User,
 } from "@/lib/types";
 
+// Baked at build time. Three shapes:
+//  - absolute origin (dev default, demo images) — cross-origin API;
+//  - **empty string** — same-origin mode: every request goes out relative
+//    (`/api/...`) and resolves against the page's own origin, for deployments
+//    behind a single-origin proxy (Caddy). The versioned release images bake
+//    this, which is what makes one image reproducible on any host.
+// `??` (not `||`) keeps the deliberate "" from falling back to localhost.
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /** Absolutize a backend-relative path (e.g. a logo URL) to the API origin, so an

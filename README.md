@@ -205,8 +205,8 @@ docker compose -f docker-compose.dev.yml up --build
 # frontend → http://localhost:3000   ·   backend → http://localhost:8000/docs
 ```
 
-Or run each side directly (backend needs Python 3.12 + a venv; frontend needs
-Node 20+):
+Or run each side directly (backend needs Python 3.12+ and a venv; frontend needs
+Node 20+ — the shipped images run 3.14 and 26, which is what CI tests):
 
 ```bash
 # Backend

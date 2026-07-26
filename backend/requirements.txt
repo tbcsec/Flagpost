@@ -1,35 +1,35 @@
 # Runtime dependencies. Stack fixed by ARCHITECTURE.md §2.
-fastapi>=0.115,<1.0
-uvicorn[standard]>=0.34,<1.0
-pydantic-settings>=2.6,<3.0
-pydantic[email]>=2.9,<3.0
+fastapi>=0.140.0,<1.0
+uvicorn[standard]>=0.51.0,<1.0
+pydantic-settings>=2.14.2,<3.0
+pydantic[email]>=2.13.4,<3.0
 
 # Persistence — SQLAlchemy 2.x async + asyncpg + Alembic (§2)
-sqlalchemy[asyncio]>=2.0,<2.1
-asyncpg>=0.30,<0.31
-alembic>=1.14,<2.0
+sqlalchemy[asyncio]>=2.0.51,<2.1
+asyncpg>=0.31.0,<0.32
+alembic>=1.18.5,<2.0
 
 # Auth — JWT access tokens + argon2 password hashing (§7.7, ADR-0003)
-pyjwt>=2.10,<3.0
-pwdlib[argon2]>=0.2.1,<0.3
+pyjwt>=2.13.0,<3.0
+pwdlib[argon2]>=0.3.0,<0.4
 
 # Module loader manifests (§11.1)
-pyyaml>=6.0,<7.0
+pyyaml>=6.0.3,<7.0
 
 # Regex flag matching under a hard timeout (ADR-0018) — stdlib `re` can't be
 # interrupted and holds the GIL, so a catastrophic staff-authored pattern could
 # stall the whole event loop. `regex` releases the GIL and honours `timeout=`.
-regex>=2024.11,<2025.0
+regex>=2026.7.19,<2027.0
 
 # Object storage — MinIO/S3 for challenge files (§13.3); multipart for uploads
-minio>=7.2,<8.0
-python-multipart>=0.0.12,<0.1
+minio>=7.2.20,<8.0
+python-multipart>=0.0.32,<0.1
 
 # Submission rate limiting (§13.2) — Redis in production; lazily imported so the
 # test suite (in-memory limiter) and a redis-less dev run never need the client.
-redis>=5.2,<6.0
+redis>=8.0.1,<9.0
 
 # Automation engine actions (§5.3): outbound webhooks + templated email.
 # aiosmtplib is lazily imported — an install with SMTP unconfigured never loads it.
-httpx>=0.28,<0.29
-aiosmtplib>=3.0,<4.0
+httpx>=0.28.1,<0.29
+aiosmtplib>=5.1.2,<6.0

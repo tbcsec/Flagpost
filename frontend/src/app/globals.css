@@ -53,6 +53,27 @@
   --radius: 0.5rem;
 }
 
+/* Tell the browser which way each palette leans, so **native** UI renders to
+ * match (#49). Without this, Chromium draws every built-in control in light
+ * mode regardless of our tokens — which is why the date field's calendar glyph
+ * came out near-black on a dark ground. `color-scheme` fixes the whole family
+ * in one place (date/time pickers, native select popups, autofill, the default
+ * scrollbar) rather than us re-tinting each control by hand.
+ *
+ * Mirrors PaletteMode in lib/theme.ts — keep the two in step when adding a
+ * palette. Harbor is the unset default, hence the bare :root. */
+:root,
+[data-palette="harbor"],
+[data-palette="eclipse"],
+[data-palette="umbra"] {
+  color-scheme: dark;
+}
+
+[data-palette="daybreak"],
+[data-palette="sandstone"] {
+  color-scheme: light;
+}
+
 /* Categorical data-series colours for charts (#24 public points timeline).
  * Ten distinguishable hues at a consistent saturation/lightness, chosen to read
  * on both light and dark grounds — so, like the brand `--success` green, they're
@@ -315,6 +336,52 @@
   body {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
+  }
+
+  /* ---- Date/time picker indicator (#49) ---------------------------------
+   *
+   * `color-scheme` above already makes the native glyph render light-on-dark
+   * (or dark-on-light) instead of near-black on every palette. This second
+   * part is the alignment: Chromium gives the indicator its own margin, so it
+   * floated short of the field's right padding edge rather than sitting flush
+   * with the other inputs' content box. Zeroing the inline-end margin lines
+   * it up with the `px-3` the Input primitive uses.
+   *
+   * Kept to opacity/cursor beyond that — no colour override, so the glyph
+   * keeps following `color-scheme` and can't drift from a palette we add
+   * later. */
+  /* Chromium drops the indicator straight after the date text, so on a
+     full-width field it sits stranded mid-input instead of at the edge. Auto
+     margins are ignored on this pseudo-element, so pin it: the input becomes
+     the positioning context and the indicator is placed against the same
+     0.75rem the Input primitive uses for `px-3`. Verified in-browser — the
+     margin approach measurably does nothing here. */
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="month"],
+  input[type="time"],
+  input[type="week"] {
+    position: relative;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+  input[type="month"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator,
+  input[type="week"]::-webkit-calendar-picker-indicator {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    margin: 0;
+    cursor: pointer;
+    opacity: 0.65;
+    transition: opacity 150ms ease;
+  }
+
+  input::-webkit-calendar-picker-indicator:hover,
+  input:focus-visible::-webkit-calendar-picker-indicator {
+    opacity: 1;
   }
 
   /* ---- Themed scrollbars (#22) ------------------------------------------

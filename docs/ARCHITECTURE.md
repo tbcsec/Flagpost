@@ -256,6 +256,11 @@ This applies on both sides of the platform, using the same mechanism:
   presence/soft-lock/CRDT machinery doesn't need to know or care which side
   of the platform is using it, only that the resource's read/write
   permissions are checked per request the same as any other resource.
+- **Competitor-facing**: the same per-challenge scratchpad for a competitor
+  with no team (individual-mode play), private to that one user. It keeps the
+  CRDT transport rather than degrading to a plain textarea, so a solo
+  competitor's own tabs and devices stay in sync — "collaborative" editing
+  with a single author is still multi-client editing.
 
 Team-facing notes must be scoped strictly to the owning team — no cross-team
 visibility — and, unlike staff notes, should never be treated as an implicit
@@ -264,16 +269,19 @@ platform-provided collaboration feature that leaks structure the team hasn't
 already worked out itself.
 
 > **Status (Tier 3 Phase 7):** shipped as the required-core `collab` module. A
-> single `note/<doc_key>` WS room carries both sides; `doc_key` encodes the
-> resource (`team_challenge:<team_id>:<challenge_id>` or `ticket:<ticket_id>`)
-> and `utils/collab.resolve_note` decides read/write per request — team
-> membership for a scratchpad, `ticket_view_internal_notes` (staff, **not** the
-> opener) for a ticket note. The transport is a **dumb relay** with client-side
+> single `note/<doc_key>` WS room carries every side; `doc_key` encodes the
+> resource (`team_challenge:<team_id>:<challenge_id>`,
+> `user_challenge:<user_id>:<challenge_id>`, or `ticket:<ticket_id>`) and
+> `utils/collab.resolve_note` decides read/write per request — team membership
+> for a team scratchpad, **own-user plus `challenge_view`** for a personal one
+> (#46: not staff, not teammates), `ticket_view_internal_notes` (staff, **not**
+> the opener) for a ticket note. The transport is a **dumb relay** with client-side
 > snapshot persistence (**ADR-0014**): the server relays opaque Y.js update
 > frames and stores one full-state blob per doc (`collab_documents`), never
 > decoding the CRDT. Frontend: `<CollabNote>` (TipTap + `@tiptap/extension-collaboration`
-> over a Y.Doc) wired into the challenge dialog (team scratchpad) and the ticket
-> thread (staff notes). The soft-lock/"who's here" cue rides the existing
+> over a Y.Doc) wired into the challenge dialog (team scratchpad, or the personal
+> one when the competitor has no team) and the ticket thread (staff notes). The
+> soft-lock/"who's here" cue rides the existing
 > challenge/ticket presence indicators (§4.1); per-cursor awareness is not built.
 
 ### 4.3 What Should Be Real-Time on This Platform

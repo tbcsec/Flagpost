@@ -182,6 +182,141 @@ async def test_ticket_notes_staff_only_opener_rejected(client):
         assert await ws.expect_close() == 4403
 
 
+# --- Personal challenge scratchpad (#46, individual mode) -------------------
+
+
+async def _solo_competition_with_challenge(client) -> tuple[str, str]:
+    """A public individual-mode competition + a published challenge."""
+    admin = await admin_token(client)
+    comp = (
+        await client.post(
+            "/api/competitions",
+            json={
+                "name": "Solo CTF",
+                "participation_mode": "individual",
+                "visibility": "public",
+            },
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    chal = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges",
+            json={"title": "Solo chal", "points": 100, "flag": "flag{solo}"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    await client.post(
+        f"/api/competitions/{comp}/challenges/{chal}/publish", headers=_auth(admin)
+    )
+    return comp, chal
+
+
+async def _joined_solo(client, comp: str, email: str) -> tuple[str, str]:
+    """Register + self-serve join; returns (token, user_id)."""
+    token = await _register(client, email)
+    resp = await client.post(f"/api/competitions/{comp}/join", headers=_auth(token))
+    assert resp.status_code == 200, resp.text
+    user_id = (await client.get("/api/auth/me", headers=_auth(token))).json()["id"]
+    return token, user_id
+
+
+async def test_personal_scratchpad_persists_for_its_owner(client):
+    comp, chal = await _solo_competition_with_challenge(client)
+    token, user_id = await _joined_solo(client, comp, "solo@example.com")
+    doc = f"user_challenge:{user_id}:{chal}"
+
+    async with WsTestClient(main.app, f"/ws/note/{doc}") as ws:
+        await ws.send_json({"token": token})
+        assert (await ws.receive_json())["type"] == "auth_ok"
+        assert (await ws.receive_json()) == {"type": "note_snapshot", "update": None}
+        await ws.send_json({"type": "note_persist", "state": _b64(b"solo-notes")})
+
+    async with WsTestClient(main.app, f"/ws/note/{doc}") as ws:
+        await ws.send_json({"token": token})
+        assert (await ws.receive_json())["type"] == "auth_ok"
+        snap = await ws.receive_json()
+        assert base64.b64decode(snap["update"]) == b"solo-notes"
+
+
+async def test_personal_scratchpad_stays_live_across_own_tabs(client):
+    """The point of keeping the CRDT transport for a solo competitor: two of
+    *their own* tabs sync, rather than degrading to a plain textarea (#46)."""
+    comp, chal = await _solo_competition_with_challenge(client)
+    token, user_id = await _joined_solo(client, comp, "twotabs@example.com")
+    doc = f"user_challenge:{user_id}:{chal}"
+
+    async with WsTestClient(main.app, f"/ws/note/{doc}") as tab1:
+        await tab1.send_json({"token": token})
+        assert (await tab1.receive_json())["type"] == "auth_ok"
+        assert (await tab1.receive_json())["type"] == "note_snapshot"
+
+        async with WsTestClient(main.app, f"/ws/note/{doc}") as tab2:
+            await tab2.send_json({"token": token})
+            assert (await tab2.receive_json())["type"] == "auth_ok"
+            assert (await tab2.receive_json())["type"] == "note_snapshot"
+            await asyncio.sleep(0.05)  # let tab2's join land (see team test)
+
+            await tab1.send_json({"type": "note_update", "update": _b64(b"typed")})
+            relayed = await tab2.receive_json()
+            assert relayed["type"] == "note_update"
+            assert base64.b64decode(relayed["update"]) == b"typed"
+
+
+async def test_personal_scratchpad_is_private_to_its_owner(client):
+    """Not another competitor's, and not staff's — a personal pad is private the
+    same way a team pad is private to its team."""
+    comp, chal = await _solo_competition_with_challenge(client)
+    _owner_token, owner_id = await _joined_solo(client, comp, "owner@example.com")
+    nosy_token, _ = await _joined_solo(client, comp, "nosy@example.com")
+    admin = await admin_token(client)
+    doc = f"user_challenge:{owner_id}:{chal}"
+
+    for token in (nosy_token, admin):
+        async with WsTestClient(main.app, f"/ws/note/{doc}") as ws:
+            await ws.send_json({"token": token})
+            assert await ws.expect_close() == 4403
+
+
+async def test_personal_scratchpad_requires_competition_access(client):
+    """A user who was never in the competition can't open a pad on its
+    challenges, even keyed to their own id."""
+    comp, chal = await _solo_competition_with_challenge(client)
+    outsider = await _register(client, "outsider-solo@example.com")
+    outsider_id = (
+        await client.get("/api/auth/me", headers=_auth(outsider))
+    ).json()["id"]
+
+    async with WsTestClient(
+        main.app, f"/ws/note/user_challenge:{outsider_id}:{chal}"
+    ) as ws:
+        await ws.send_json({"token": outsider})
+        assert await ws.expect_close() == 4403
+
+
+async def test_personal_and_team_pads_are_separate_documents(client):
+    """A competitor on a team has both; they must not share state."""
+    comp, chal = await _competition_with_challenge(client)  # team mode
+    token, team_id, _ = await _make_team(client, comp, "both@example.com", "Both")
+    user_id = (await client.get("/api/auth/me", headers=_auth(token))).json()["id"]
+
+    async with WsTestClient(
+        main.app, f"/ws/note/team_challenge:{team_id}:{chal}"
+    ) as ws:
+        await ws.send_json({"token": token})
+        assert (await ws.receive_json())["type"] == "auth_ok"
+        assert (await ws.receive_json())["type"] == "note_snapshot"
+        await ws.send_json({"type": "note_persist", "state": _b64(b"team-state")})
+
+    async with WsTestClient(
+        main.app, f"/ws/note/user_challenge:{user_id}:{chal}"
+    ) as ws:
+        await ws.send_json({"token": token})
+        assert (await ws.receive_json())["type"] == "auth_ok"
+        # Own pad is still empty — the team's blob didn't bleed across.
+        assert (await ws.receive_json()) == {"type": "note_snapshot", "update": None}
+
+
 # --- Transport hygiene ------------------------------------------------------
 
 

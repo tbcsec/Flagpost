@@ -50,6 +50,7 @@ import { useSubmitFlag } from "@/lib/hooks/use-submissions";
 import { relativeTime } from "@/lib/datetime";
 import { richTextToPlain } from "@/lib/rich-text";
 import type { Challenge } from "@/lib/types";
+import { useAuthStore } from "@/stores/auth";
 import { toast } from "@/stores/toast";
 import { cn } from "@/lib/utils";
 
@@ -461,18 +462,45 @@ function ChallengeDialogBody({
 
       <ChallengeSolves competitionId={competitionId} challengeId={challenge.id} />
 
-      {myTeam.data && (
-        <section className="grid gap-2">
-          <div>
-            <h3 className="text-sm font-medium">Team notes</h3>
-            <p className="text-xs text-muted-foreground">
-              A shared scratchpad for {myTeam.data.name} — visible only to your team, live as you type.
-            </p>
-          </div>
-          <CollabNote docKey={`team_challenge:${myTeam.data.id}:${challenge.id}`} />
-        </section>
-      )}
+      <ChallengeNotes challenge={challenge} team={myTeam.data ?? null} />
     </>
+  );
+}
+
+/** The per-challenge scratchpad (§4.2). A team gets a shared pad; a competitor
+ *  without one gets a private pad of their own (#46) rather than nothing —
+ *  individual-mode play needs somewhere to keep findings just as much. Both are
+ *  live: the personal pad syncs a competitor's own tabs/devices through the same
+ *  relay. Staff without a team see the personal pad too (their own notes). */
+function ChallengeNotes({
+  challenge,
+  team,
+}: {
+  challenge: Challenge;
+  team: { id: string; name: string } | null;
+}) {
+  const userId = useAuthStore((s) => s.user?.id);
+  if (!team && !userId) return null;
+
+  const shared = team !== null;
+  return (
+    <section className="grid gap-2">
+      <div>
+        <h3 className="text-sm font-medium">{shared ? "Team notes" : "My notes"}</h3>
+        <p className="text-xs text-muted-foreground">
+          {shared
+            ? `A shared scratchpad for ${team.name} — visible only to your team, live as you type.`
+            : "A private scratchpad for this challenge — only you can see it, and it stays in sync across your devices."}
+        </p>
+      </div>
+      <CollabNote
+        docKey={
+          shared
+            ? `team_challenge:${team.id}:${challenge.id}`
+            : `user_challenge:${userId}:${challenge.id}`
+        }
+      />
+    </section>
   );
 }
 

@@ -300,7 +300,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="grid gap-3 border-t border-border pt-3.5">
-          <div className="flex items-center gap-2">
+          {/* min-w-0: as a grid item this row defaults to `min-width: auto`, so
+              it would refuse to shrink below its content and push "Sign out"
+              out of the rail — the `truncate` below can't engage without it (#48). */}
+          <div className="flex min-w-0 items-center gap-2">
             <Link href="/profile" title="Profile & notification settings" className="flex min-w-0 flex-1 items-center gap-2">
               <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-secondary text-[13px] font-semibold text-secondary-foreground">
                 {initials}
@@ -310,14 +313,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <span className="block truncate text-[13px] font-medium leading-tight">
                     {user?.display_name ?? "—"}
                   </span>
-                  <span className="block text-[11px] leading-tight text-muted-foreground">
+                  {/* Truncate like the display name above it: a long email must
+                      not push "Sign out" out of the rail (#48). The title gives
+                      the full value back on hover. */}
+                  <span
+                    className="block truncate text-[11px] leading-tight text-muted-foreground"
+                    title={user?.email ?? undefined}
+                  >
                     {user?.email ?? ""}
                   </span>
                 </span>
               )}
             </Link>
             {navExpanded && (
-              <Button variant="ghost" size="sm" onClick={() => logout.mutate()} disabled={logout.isPending}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => logout.mutate()}
+                disabled={logout.isPending}
+                // Never give up width to the identity block beside it.
+                className="flex-shrink-0"
+              >
                 Sign out
               </Button>
             )}

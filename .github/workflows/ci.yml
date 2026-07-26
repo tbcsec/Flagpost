@@ -106,3 +106,55 @@ jobs:
         run: npm run test
       - name: Production build
         run: npm run build
+
+  # Guards the failure mode that broke main after #41: two PRs that are each
+  # green can still break main together, when one adds a lint rule and the
+  # other adds a violation of it.
+  #
+  # GitHub *does* build the merge result for `pull_request` — but it computes
+  # that merge ref when the PR is pushed and never recomputes it as the base
+  # moves. #41's run therefore tested itself merged into a main that predated
+  # #37's eslint upgrade, so the rule that would have caught it didn't exist
+  # yet in that checkout.
+  #
+  # This job merges `origin/main` **as of the moment it runs**, so re-running
+  # it answers "would this break main right now?" — unlike the jobs above,
+  # whose answer is frozen at push time. Re-run it before merging (or push to
+  # the branch) if main has moved since the last run.
+  merge-result:
+    name: Merge result vs. current main
+    runs-on: ubuntu-latest
+    # Only meaningful for PRs; on a push to main the merge result *is* main.
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so the merge base can actually be found.
+          fetch-depth: 0
+      - name: Merge current main into this branch
+        run: |
+          git config user.name "ci"
+          git config user.email "ci@flagpost.invalid"
+          git fetch origin main
+          echo "Merging origin/main ($(git rev-parse --short origin/main)) into the PR head."
+          if ! git merge --no-edit origin/main; then
+            echo "::error::This branch conflicts with current main — update it before merging."
+            exit 1
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+      # Lint + build only: this job exists to catch cross-PR *tooling* drift
+      # (a new rule meeting a new violation), which is what `npm run build`
+      # surfaces. The full suites already ran on the branch above.
+      - name: Lint the merge result
+        working-directory: frontend
+        run: npx eslint .
+      - name: Build the merge result
+        working-directory: frontend
+        run: npm run build

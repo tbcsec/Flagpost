@@ -24,6 +24,12 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
+      # TipTap packages peer-pin each other to the same major, so a lone
+      # @tiptap/* bump can never install (ERESOLVE — see #63/#64/#65). First
+      # matching group wins, so this routes the whole family — majors included —
+      # into one lockstep PR that CI can actually judge.
+      tiptap:
+        patterns: ["@tiptap/*"]
       frontend-deps:
         patterns: ["*"]
         update-types: ["minor", "patch"]

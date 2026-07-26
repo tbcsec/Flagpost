@@ -2,7 +2,7 @@
 # The dev image (hot reload) is Dockerfile.dev, used by docker-compose.dev.yml.
 
 # --- build stage ---------------------------------------------------------------
-FROM node:20-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 
 # Install from the lockfile for reproducible builds.
@@ -20,7 +20,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # --- runtime stage -------------------------------------------------------------
-FROM node:20-alpine AS runner
+FROM node:26-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

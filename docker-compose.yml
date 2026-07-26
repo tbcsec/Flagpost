@@ -76,7 +76,9 @@ services:
       # data, shows a "resets hourly" banner, and disables outbound actions
       # (webhooks/email). Never enable on a real deployment. Reset the instance by
       # recreating the stack on a schedule (`docker compose down -v && up -d`).
-      DEMO_MODE: ${DEMO_MODE:-}
+      # `false`, not empty: pydantic rejects "" as a bool, so an unset
+      # DEMO_MODE would crash-loop the backend on a fresh `docker compose up`.
+      DEMO_MODE: ${DEMO_MODE:-false}
     expose:
       - "8000"          # internal only; reached via Caddy /api and /ws
     volumes:

@@ -181,6 +181,21 @@ in-process). To run **without Docker**: build & serve the frontend with
 `npm run build && npm run start`, and run the backend with `alembic upgrade head`
 then `uvicorn main:app` (no `--reload`) behind your own TLS-terminating proxy.
 
+### 📌 Versioned images (pull instead of build)
+
+Every release tag publishes **pinned, reproducible images** to GHCR:
+
+```
+ghcr.io/tbcsec/flagpost-backend:v1.1.0    (also :latest)
+ghcr.io/tbcsec/flagpost-frontend:v1.1.0   (also :latest)
+```
+
+The release frontend is built in **same-origin mode** — API calls and
+WebSockets resolve against whatever origin serves the page — so one image works
+behind any single-origin proxy with no baked-in domain and no `PUBLIC_ORIGIN`
+rebuild. Point the compose `frontend`/`backend` services at these images (a
+two-line override) to upgrade by tag instead of rebuilding from source.
+
 ## 🛠️ Local development
 
 The dev stack mounts source and runs hot-reloading dev servers:

@@ -10,6 +10,18 @@ import { useAuthStore } from "@/stores/auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+/** The ws(s):// base for room sockets. An **empty** NEXT_PUBLIC_API_URL means
+ *  same-origin mode (the versioned release images bake this): the API is
+ *  reached with relative paths behind a single-origin proxy, so the socket
+ *  base derives from the page's own origin at connect time. Relative URLs in
+ *  `new WebSocket()` aren't reliable across browsers, hence the explicit
+ *  derivation rather than letting `""` fall through. */
+function wsBase(): string {
+  const base =
+    API_URL || (typeof window !== "undefined" ? window.location.origin : "");
+  return base.replace(/^http/, "ws");
+}
+
 export type RoomSocketStatus = "connecting" | "open" | "closed";
 
 export interface RoomSocketHandle {
@@ -40,7 +52,7 @@ export function openRoomSocket(
   roomId: string,
   { onMessage, onStatus, mode }: RoomSocketOptions,
 ): RoomSocketHandle {
-  const url = `${API_URL.replace(/^http/, "ws")}/ws/${roomType}/${roomId}`;
+  const url = `${wsBase()}/ws/${roomType}/${roomId}`;
   let ws: WebSocket | null = null;
   let attempt = 0;
   let closed = false;

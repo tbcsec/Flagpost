@@ -55,12 +55,10 @@ export function usePresence(
   const isAuthenticated = useAuthStore((s) => s.status === "authenticated");
   const selfId = useAuthStore((s) => s.user?.id);
   const [members, setMembers] = useState<PresenceMember[]>([]);
+  const active = enabled && isAuthenticated && Boolean(roomId);
 
   useEffect(() => {
-    if (!enabled || !isAuthenticated || !roomId) {
-      setMembers([]);
-      return;
-    }
+    if (!enabled || !isAuthenticated || !roomId) return;
     const socket = openRoomSocket(roomType, roomId, {
       mode,
       onMessage: (data) => {
@@ -78,5 +76,8 @@ export function usePresence(
     return () => socket.close();
   }, [roomType, roomId, mode, enabled, isAuthenticated]);
 
-  return summarizePresence(members, selfId);
+  // While there's no room to be in, the set is empty by derivation — any stale
+  // members from a previous room are cleared on reconnect by the onStatus
+  // callback above, so they're never rendered.
+  return summarizePresence(active ? members : [], selfId);
 }

@@ -122,10 +122,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // also restores the saved per-user palette override — the shell no longer
   // touches <html data-palette> itself.
 
-  // Close the mobile drawer whenever the route changes.
-  React.useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
+  // Close the mobile drawer whenever the route changes — adjust-during-render
+  // (compare against the last seen pathname) instead of a set-state effect.
+  const [drawerPath, setDrawerPath] = React.useState(pathname);
+  if (drawerPath !== pathname) {
+    setDrawerPath(pathname);
+    if (mobileOpen) setMobileOpen(false);
+  }
 
   // Escape closes the mobile drawer (keyboard users can't reach the backdrop).
   React.useEffect(() => {

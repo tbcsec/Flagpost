@@ -227,6 +227,7 @@ export default function AdminUsersPage() {
 
       {dialog && (
         <UserFormDialog
+          key={dialog.mode === "edit" ? dialog.user.id : "create"}
           mode={dialog.mode}
           user={dialog.mode === "edit" ? dialog.user : undefined}
           open={Boolean(dialog)}

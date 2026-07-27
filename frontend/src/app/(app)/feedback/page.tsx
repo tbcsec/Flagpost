@@ -216,6 +216,7 @@ function EditorLoader({
   if (!survey) return null;
   return (
     <SurveyEditorDialog
+      key={survey.id}
       competitionId={competitionId}
       survey={survey}
       open
@@ -237,6 +238,7 @@ function ResponderLoader({
   if (!survey) return null;
   return (
     <SurveyResponseDialog
+      key={survey.id}
       competitionId={competitionId}
       survey={survey}
       open

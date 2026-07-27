@@ -62,10 +62,9 @@ export function EntityCombobox({
     return match.slice(0, 50); // cap the rendered list
   }, [options, query]);
 
-  // Keep the highlighted option in range as the filtered list shrinks/grows.
-  React.useEffect(() => {
-    setActiveIndex((i) => Math.min(i, Math.max(0, filtered.length - 1)));
-  }, [filtered.length]);
+  // Keep the highlighted option in range as the filtered list shrinks/grows —
+  // derived by clamping at read time, so there's no state to re-sync.
+  const active = Math.min(activeIndex, Math.max(0, filtered.length - 1));
 
   React.useEffect(() => {
     if (!open) return;
@@ -93,18 +92,18 @@ export function EntityCombobox({
         setOpen(true);
         return;
       }
-      setActiveIndex((i) => Math.min(i + 1, filtered.length - 1));
+      setActiveIndex(Math.min(active + 1, filtered.length - 1));
       return;
     }
     if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActiveIndex((i) => Math.max(i - 1, 0));
+      setActiveIndex(Math.max(active - 1, 0));
       return;
     }
     if (e.key === "Enter") {
-      if (open && filtered[activeIndex]) {
+      if (open && filtered[active]) {
         e.preventDefault();
-        choose(filtered[activeIndex].value);
+        choose(filtered[active].value);
       }
     }
   }
@@ -118,7 +117,7 @@ export function EntityCombobox({
         aria-controls={listId}
         aria-autocomplete="list"
         aria-activedescendant={
-          open && filtered[activeIndex] ? optionId(activeIndex) : undefined
+          open && filtered[active] ? optionId(active) : undefined
         }
         value={displayValue}
         disabled={disabled}
@@ -174,7 +173,7 @@ export function EntityCombobox({
                 onMouseEnter={() => setActiveIndex(i)}
                 className={cn(
                   "flex cursor-pointer flex-col items-start px-3 py-1.5 text-left text-sm",
-                  i === activeIndex ? "bg-accent" : "hover:bg-accent",
+                  i === active ? "bg-accent" : "hover:bg-accent",
                   o.value === value && "bg-accent/60",
                 )}
               >

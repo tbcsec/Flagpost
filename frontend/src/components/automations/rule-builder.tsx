@@ -78,12 +78,16 @@ export function RuleBuilder({
   );
 
   // Reseed whenever the dialog opens (or the rule being edited changes), so a
-  // reused dialog never shows the previous rule's state.
-  React.useEffect(() => {
+  // reused dialog never shows the previous rule's state. Adjust-during-render
+  // (compare the last seeded open/rule pair) — self-contained, so the six call
+  // sites don't each need a remount key.
+  const [seeded, setSeeded] = React.useState({ open, initial });
+  if (seeded.open !== open || seeded.initial !== initial) {
+    setSeeded({ open, initial });
     if (open) {
       setState(initial ? fromRule(initial, catalog) : blankRule(catalog, personal));
     }
-  }, [open, initial, catalog, personal]);
+  }
 
   // Name pickers for team_id/user_id condition values (only when scoped to a
   // competition). Teams + the participant roster of that competition.

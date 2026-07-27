@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -46,9 +46,13 @@ export function NotificationPreferencesCard() {
   const update = useUpdateNotificationPreferences();
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
 
-  useEffect(() => {
-    if (data) setPrefs(data);
-  }, [data]);
+  // Re-baseline the editable copy whenever the server data changes (initial
+  // load, and the refetch after a save) — adjust-during-render, not an effect.
+  const [seeded, setSeeded] = useState<NotificationPreferences | null>(null);
+  if (data && data !== seeded) {
+    setSeeded(data);
+    setPrefs(data);
+  }
 
   const dirty =
     prefs != null &&

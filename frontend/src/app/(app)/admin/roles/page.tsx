@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
 import { Badge } from "@/components/ui/badge";
@@ -50,13 +50,10 @@ export default function AdminRolesPage() {
     { open: false, cloneFrom: null },
   );
 
-  const selected = roles.data?.find((r) => r.id === selectedId) ?? null;
-  // Default the selection to the first role once loaded.
-  useEffect(() => {
-    if (!selectedId && roles.data && roles.data.length > 0) {
-      setSelectedId(roles.data[0].id);
-    }
-  }, [selectedId, roles.data]);
+  // No explicit selection (or a deleted role) falls back to the first role —
+  // derived, so there's no select-first effect to keep in sync.
+  const selected =
+    roles.data?.find((r) => r.id === selectedId) ?? roles.data?.[0] ?? null;
 
   if (access.ready && !access.has("manage_roles")) {
     return (
@@ -88,7 +85,7 @@ export default function AdminRolesPage() {
                 onClick={() => setSelectedId(role.id)}
                 className={cn(
                   "grid gap-1 rounded-lg border p-3.5 text-left transition-colors",
-                  selectedId === role.id ? "border-primary ring-1 ring-primary" : "border-border hover:border-primary/40",
+                  selected?.id === role.id ? "border-primary ring-1 ring-primary" : "border-border hover:border-primary/40",
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -121,6 +118,7 @@ export default function AdminRolesPage() {
       <AssignmentsCard roles={roles.data ?? []} />
 
       <RoleDialog
+        key={dialog.open ? dialog.cloneFrom?.id ?? "new" : "closed"}
         state={dialog}
         onClose={() => setDialog({ open: false, cloneFrom: null })}
         onCreated={(id) => {
@@ -278,16 +276,12 @@ function RoleDialog({
 }) {
   const create = useCreateRole();
   const cloning = state.cloneFrom;
-  const [name, setName] = useState("");
-  const [scope, setScope] = useState<"global" | "competition">("competition");
-
-  // Seed the fields whenever the dialog opens.
-  useEffect(() => {
-    if (state.open) {
-      setName(cloning ? `${cloning.name} copy` : "");
-      setScope(cloning ? cloning.scope : "competition");
-    }
-  }, [state.open, cloning]);
+  // Seeded on mount — the call site keys this dialog by open-state + clone
+  // source, so every open (new or clone) remounts it with fresh fields.
+  const [name, setName] = useState(cloning ? `${cloning.name} copy` : "");
+  const [scope, setScope] = useState<"global" | "competition">(
+    cloning ? cloning.scope : "competition",
+  );
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();

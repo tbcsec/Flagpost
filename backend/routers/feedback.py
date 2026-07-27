@@ -397,16 +397,14 @@ def _validate_answer(question: SurveyQuestion, value: str) -> None:
         )
 
 
-@router.post(
-    "/{survey_id}/responses", status_code=status.HTTP_201_CREATED, response_model=None
-)
+@router.post("/{survey_id}/responses", status_code=status.HTTP_204_NO_CONTENT)
 async def submit_response(
     competition_id: str,
     survey_id: str,
     body: ResponseSubmit,
     current_user: User = Depends(require_permission("feedback_submit")),
     db: AsyncSession = Depends(get_db),
-) -> Response:
+) -> None:
     await _guard(db, competition_id)
     survey = await _survey_or_404(db, competition_id, survey_id)
     if not survey.is_open:
@@ -453,7 +451,6 @@ async def submit_response(
             "response_id": response.id,
         },
     )
-    return Response(status_code=status.HTTP_201_CREATED)
 
 
 # --- results + export (feedback_view_responses) ------------------------------

@@ -231,7 +231,7 @@ async def test_submit_validates_required_range_and_options(client):
         ]},
         headers=_auth(ada),
     )
-    assert ok.status_code == 201, ok.text
+    assert ok.status_code == 204, ok.text
     # Second submission by the same user is refused (one per user).
     dup = await client.post(base, json={"answers": [{"question_id": rating, "value": "3"}]}, headers=_auth(ada))
     assert dup.status_code == 409
@@ -285,7 +285,7 @@ async def test_submit_emits_survey_submitted_and_triggers_a_rule(client):
         json={"answers": [{"question_id": q, "value": "5"}]},
         headers=_auth(ada),
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 204
     await event_bus.wait_for_background()
 
     async with SessionLocal() as session:
@@ -325,7 +325,7 @@ async def test_results_aggregate_by_type(client):
             ]},
             headers=_auth(token),
         )
-        assert r.status_code == 201, r.text
+        assert r.status_code == 204, r.text
 
     await submit("a@example.com", "5", "web", "loved it")
     await submit("b@example.com", "3", "web", "")

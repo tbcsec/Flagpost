@@ -24,6 +24,15 @@ export function RouteProgress() {
     }
   }, []);
 
+  // Declared before `start` so it can be a real dependency there (rather than
+  // referenced before declaration behind a lint-disable).
+  const finish = React.useCallback(() => {
+    clearTimers();
+    // If the bar never showed (instant nav within the start delay), stay hidden.
+    setProgress((p) => (p <= 0 ? 0 : 100));
+    timers.current.push(setTimeout(() => setProgress(0), 240));
+  }, [clearTimers]);
+
   const start = React.useCallback(() => {
     clearTimers();
     // Delay before showing so a fast navigation doesn't blink a bar.
@@ -39,15 +48,7 @@ export function RouteProgress() {
     );
     // Never trickle forever if a navigation is cancelled.
     timers.current.push(setTimeout(() => finish(), 10_000));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clearTimers]);
-
-  const finish = React.useCallback(() => {
-    clearTimers();
-    // If the bar never showed (instant nav within the start delay), stay hidden.
-    setProgress((p) => (p <= 0 ? 0 : 100));
-    timers.current.push(setTimeout(() => setProgress(0), 240));
-  }, [clearTimers]);
+  }, [clearTimers, finish]);
 
   // Start on any left-click of an internal, same-origin link (Next <Link> renders
   // a plain <a>). Modified clicks and new-tab links open elsewhere — ignore them.
@@ -81,11 +82,14 @@ export function RouteProgress() {
     return () => document.removeEventListener("click", onClick, true);
   }, [pathname, start]);
 
-  // A committed pathname change means the navigation finished.
+  // A committed pathname change means the navigation finished. Finish on the
+  // next frame rather than synchronously in the effect body: it's a genuine
+  // react-to-external-event (the router committed), and deferring keeps the
+  // 100%-then-fade paint from being coalesced into the route's own render.
   React.useEffect(() => {
-    finish();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname]);
+    const raf = requestAnimationFrame(() => finish());
+    return () => cancelAnimationFrame(raf);
+  }, [pathname, finish]);
 
   React.useEffect(() => clearTimers, [clearTimers]);
 

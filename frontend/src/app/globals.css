@@ -481,3 +481,29 @@
     animation: fp-fade-in 150ms ease-out;
   }
 }
+
+/* ---- Rich-text / collab editor lists (#79) --------------------------------
+ *
+ * TipTap's bulletList/orderedList toggle correctly inserts real <ul>/<ol>
+ * markup, but Tailwind v4's Preflight resets `list-style: none` and zeroes
+ * list margin/padding globally, and this project doesn't depend on
+ * `@tailwindcss/typography` — so the `prose-sm` class already on the editor
+ * content (rich-text-editor.tsx, collab-note.tsx) compiles to nothing. Net
+ * effect: a toggled list has no bullet/number, no indent, and no vertical
+ * rhythm, reading as a plain paragraph. Scoped to TipTap's own
+ * `.ProseMirror` root (added to every editor instance) rather than pulling in
+ * the full typography plugin, which would restyle headings/code/etc. too. */
+.ProseMirror ul {
+  list-style: disc;
+  padding-left: 1.5rem;
+}
+.ProseMirror ol {
+  list-style: decimal;
+  padding-left: 1.5rem;
+}
+.ProseMirror li {
+  margin: 0.25rem 0;
+}
+.ProseMirror li > p {
+  margin: 0;
+}

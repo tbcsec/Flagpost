@@ -36,12 +36,10 @@ export function SurveyResponseDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  // Starts empty on mount: the loader renders this dialog only while open and
+  // keys it by survey id, so every open is a fresh, blank response form.
   const [values, setValues] = React.useState<Record<string, string>>({});
   const submit = useSubmitResponse(competitionId, survey.id);
-
-  React.useEffect(() => {
-    if (open) setValues({});
-  }, [open, survey.id]);
 
   const missingRequired = survey.questions.some(
     (q) => q.required && !(values[q.id] ?? "").trim(),

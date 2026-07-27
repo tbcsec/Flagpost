@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
 import { BackupPanel } from "@/components/admin/backup-panel";
@@ -16,6 +16,7 @@ import {
   useOperationalSettings,
   useUpdateOperationalSettings,
 } from "@/lib/hooks/use-site-settings";
+import type { OperationalSettings } from "@/lib/types";
 import { toast } from "@/stores/toast";
 
 // Admin → Site settings. The operational (non-theming) site config: the public
@@ -26,31 +27,56 @@ export default function AdminSettingsPage() {
   const access = useAccess();
   const canManage = access.has("manage_site_settings");
   const settings = useOperationalSettings();
-  const update = useUpdateOperationalSettings();
-
-  const [registrationOpen, setRegistrationOpen] = useState(true);
-  const [host, setHost] = useState("");
-  const [port, setPort] = useState("587");
-  const [from, setFrom] = useState("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [starttls, setStarttls] = useState(true);
-  const [autoDelete, setAutoDelete] = useState(true);
-  const [retentionDays, setRetentionDays] = useState("30");
-
   const data = settings.data;
-  useEffect(() => {
-    if (!data) return;
-    setRegistrationOpen(data.registration_open);
-    setHost(data.smtp_host ?? "");
-    setPort(String(data.smtp_port));
-    setFrom(data.smtp_from);
-    setUsername(data.smtp_username ?? "");
-    setStarttls(data.smtp_starttls);
-    setPassword("");
-    setAutoDelete(data.archive_auto_delete);
-    setRetentionDays(String(data.archive_retention_days));
-  }, [data]);
+
+  if (!access.ready) return <Skeleton className="h-64 w-full" />;
+  if (!canManage) {
+    return (
+      <>
+        <SectionHeader title="Admin — Site settings" subtitle="Global — platform-wide" />
+        <EmptyState title="No access" description="You need the manage-site-settings permission to change site settings." />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <SectionHeader title="Admin — Site settings" subtitle="Global — registration policy & outbound email" />
+
+      {settings.isLoading || !data ? (
+        <Skeleton className="h-64 w-full" />
+      ) : (
+        // Keyed by the row's save timestamp: a successful save refetches and
+        // remounts the form seeded with the canonical server values (and a
+        // cleared write-only password field) — the old sync-on-data effect,
+        // without the effect.
+        <SettingsForm key={data.updated_at ?? "initial"} data={data} />
+      )}
+
+      <div className="mt-8 grid gap-1">
+        <h2 className="text-lg font-semibold">Backup — export &amp; import</h2>
+        <p className="text-sm text-muted-foreground">
+          Move the platform&apos;s data between installs, or keep an off-site backup.
+        </p>
+      </div>
+      <div className="mt-4">
+        <BackupPanel />
+      </div>
+    </>
+  );
+}
+
+function SettingsForm({ data }: { data: OperationalSettings }) {
+  const update = useUpdateOperationalSettings();
+  const [registrationOpen, setRegistrationOpen] = useState(data.registration_open);
+  const [host, setHost] = useState(data.smtp_host ?? "");
+  const [port, setPort] = useState(String(data.smtp_port));
+  const [from, setFrom] = useState(data.smtp_from);
+  const [username, setUsername] = useState(data.smtp_username ?? "");
+  const [password, setPassword] = useState("");
+  const [starttls, setStarttls] = useState(data.smtp_starttls);
+  const [autoDelete, setAutoDelete] = useState(data.archive_auto_delete);
+  const [retentionDays, setRetentionDays] = useState(String(data.archive_retention_days));
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -75,24 +101,8 @@ export default function AdminSettingsPage() {
     );
   }
 
-  if (!access.ready) return <Skeleton className="h-64 w-full" />;
-  if (!canManage) {
-    return (
-      <>
-        <SectionHeader title="Admin — Site settings" subtitle="Global — platform-wide" />
-        <EmptyState title="No access" description="You need the manage-site-settings permission to change site settings." />
-      </>
-    );
-  }
-
   return (
-    <>
-      <SectionHeader title="Admin — Site settings" subtitle="Global — registration policy & outbound email" />
-
-      {settings.isLoading || !data ? (
-        <Skeleton className="h-64 w-full" />
-      ) : (
-        <form onSubmit={onSubmit} className="grid max-w-2xl gap-5">
+    <form onSubmit={onSubmit} className="grid max-w-2xl gap-5">
           <Card>
             <CardHeader>
               <CardTitle>Registration</CardTitle>
@@ -221,18 +231,6 @@ export default function AdminSettingsPage() {
               </span>
             )}
           </div>
-        </form>
-      )}
-
-      <div className="mt-8 grid gap-1">
-        <h2 className="text-lg font-semibold">Backup — export &amp; import</h2>
-        <p className="text-sm text-muted-foreground">
-          Move the platform&apos;s data between installs, or keep an off-site backup.
-        </p>
-      </div>
-      <div className="mt-4">
-        <BackupPanel />
-      </div>
-    </>
+    </form>
   );
 }

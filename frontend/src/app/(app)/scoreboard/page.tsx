@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
 import { NoCompetition } from "@/components/app/no-competition";
@@ -92,20 +92,31 @@ export default function ScoreboardPage() {
 
   // Flash a row whose points changed since the last live update. A colour
   // transition (not a looping pulse) fades the highlight out on its own.
-  const prevPoints = useRef<Record<string, number>>({});
-  const [flashing, setFlashing] = useState<Set<string>>(new Set());
+  // Change detection is the adjust-during-render pattern (compare against the
+  // last seen points held in state); only the timed clear stays an effect.
+  const [flash, setFlash] = useState<{
+    points: Record<string, number>;
+    ids: Set<string>;
+  }>({ points: {}, ids: new Set() });
+  if (entries.some((e) => flash.points[e.subject_id] !== e.points)) {
+    const changed = entries
+      .filter(
+        (e) =>
+          flash.points[e.subject_id] !== undefined &&
+          flash.points[e.subject_id] !== e.points,
+      )
+      .map((e) => e.subject_id);
+    setFlash({
+      points: Object.fromEntries(entries.map((e) => [e.subject_id, e.points])),
+      ids: new Set(changed),
+    });
+  }
+  const flashing = flash.ids;
   useEffect(() => {
-    const changed: string[] = [];
-    for (const e of entries) {
-      const prev = prevPoints.current[e.subject_id];
-      if (prev !== undefined && prev !== e.points) changed.push(e.subject_id);
-      prevPoints.current[e.subject_id] = e.points;
-    }
-    if (changed.length === 0) return;
-    setFlashing(new Set(changed));
-    const t = setTimeout(() => setFlashing(new Set()), 1200);
+    if (flashing.size === 0) return;
+    const t = setTimeout(() => setFlash((f) => ({ ...f, ids: new Set() })), 1200);
     return () => clearTimeout(t);
-  }, [entries]);
+  }, [flashing]);
 
   // Bracket filter is client-side (each entry already carries its bracket), so
   // it stays live over the WS; ranks are renumbered within the division.

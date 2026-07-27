@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -33,18 +33,12 @@ export function UserFormDialog({
 }) {
   const create = useCreateUser();
   const update = useUpdateUser();
-  const [email, setEmail] = useState("");
-  const [displayName, setDisplayName] = useState("");
+  // Seeded on mount: the call site renders this dialog only while open and
+  // keys it by the target account, so opening (or switching target) always
+  // remounts with fresh fields.
+  const [email, setEmail] = useState(user?.email ?? "");
+  const [displayName, setDisplayName] = useState(user?.display_name ?? "");
   const [password, setPassword] = useState("");
-
-  // Reset the form to the target each time the dialog opens.
-  useEffect(() => {
-    if (open) {
-      setEmail(user?.email ?? "");
-      setDisplayName(user?.display_name ?? "");
-      setPassword("");
-    }
-  }, [open, user]);
 
   const pending = create.isPending || update.isPending;
   const error = (create.error ?? update.error) as Error | null;

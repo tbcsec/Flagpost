@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -34,21 +34,13 @@ export function AwardDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const create = useCreateAward(competitionId);
+  // Starts blank on mount: the call site keys this dialog by open-state, so
+  // every open remounts it as a fresh award form.
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [points, setPoints] = useState("0");
   const [query, setQuery] = useState("");
-
-  useEffect(() => {
-    if (open) {
-      setSelected(new Set());
-      setTitle("");
-      setDescription("");
-      setPoints("0");
-      setQuery("");
-    }
-  }, [open]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

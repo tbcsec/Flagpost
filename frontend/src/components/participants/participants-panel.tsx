@@ -161,6 +161,7 @@ export function ParticipantsPanel({ competitionId }: { competitionId: string }) 
 
       {canAward && (
         <AwardDialog
+          key={awardOpen ? "open" : "closed"}
           competitionId={competitionId}
           roster={roster}
           open={awardOpen}

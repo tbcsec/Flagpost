@@ -51,21 +51,14 @@ export function SurveyEditorDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  // Seeded on mount: the loader renders this dialog only while open and keys
+  // it by survey id, so opening (or switching survey) remounts with fresh
+  // fields. Refetches of the same survey deliberately don't clobber edits.
   const [title, setTitle] = React.useState(survey.title);
   const [description, setDescription] = React.useState(survey.description ?? "");
   const [isOpen, setIsOpen] = React.useState(survey.is_open);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [adding, setAdding] = React.useState(false);
-
-  React.useEffect(() => {
-    if (open) {
-      setTitle(survey.title);
-      setDescription(survey.description ?? "");
-      setIsOpen(survey.is_open);
-      setEditingId(null);
-      setAdding(false);
-    }
-  }, [open, survey.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateSurvey = useUpdateSurvey(competitionId);
   const addQuestion = useAddQuestion(competitionId, survey.id);

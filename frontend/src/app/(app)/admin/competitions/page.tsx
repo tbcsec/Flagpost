@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { CreateCompetitionDialog } from "@/components/competitions/create-competition-dialog";
 import { SectionHeader } from "@/components/app/section-header";
@@ -182,7 +182,7 @@ export default function AdminCompetitionsPage() {
         </CardContent>
       </Card>
 
-      <CloneDialog source={cloning} onClose={() => setCloning(null)} />
+      <CloneDialog key={cloning?.id ?? "closed"} source={cloning} onClose={() => setCloning(null)} />
       <DeleteDialog target={deleting} onClose={() => setDeleting(null)} />
     </>
   );
@@ -228,13 +228,10 @@ function DeleteDialog({ target, onClose }: { target: Competition | null; onClose
 
 function CloneDialog({ source, onClose }: { source: Competition | null; onClose: () => void }) {
   const clone = useCloneCompetition();
-  const [name, setName] = useState("");
-
-  // Suggest a name when the dialog opens; the admin renames it so there's no
-  // "Test", "Test - 1", "Test - 2" pile-up.
-  useEffect(() => {
-    if (source) setName(`${source.name} (copy)`);
-  }, [source]);
+  // Seeded on mount — the call site keys this dialog by the source competition,
+  // so a new clone target remounts it and the suggested name reseeds. The
+  // admin renames it so there's no "Test", "Test - 1", "Test - 2" pile-up.
+  const [name, setName] = useState(source ? `${source.name} (copy)` : "");
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();

@@ -6,12 +6,12 @@
 // simple fields stay plain form submits (§4.2).
 
 import Collaboration from "@tiptap/extension-collaboration";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import * as React from "react";
 import * as Y from "yjs";
 
-import { Button } from "@/components/ui/button";
+import { ToolbarButton } from "@/components/ui/editor-toolbar-button";
 import { bindCollabDoc } from "@/lib/collab";
 import { cn } from "@/lib/utils";
 import type { RoomSocketStatus } from "@/lib/ws";
@@ -56,49 +56,43 @@ export function CollabNote({ docKey }: { docKey: string }) {
 
   React.useEffect(() => () => editor?.destroy(), [editor]);
 
-  if (!editor) return null;
+  // TipTap 3's useEditor no longer re-renders the host component on editor
+  // transactions (v2 did; the compat flag is marked legacy), so toolbar active
+  // states must be derived via useEditorState — it re-renders exactly when the
+  // selected flags change.
+  const active = useEditorState({
+    editor,
+    selector: ({ editor: e }) => ({
+      bold: !!e?.isActive("bold"),
+      italic: !!e?.isActive("italic"),
+      codeBlock: !!e?.isActive("codeBlock"),
+      bulletList: !!e?.isActive("bulletList"),
+    }),
+  });
 
-  const ToolbarButton = ({
-    active,
-    onClick,
-    label,
-  }: {
-    active: boolean;
-    onClick: () => void;
-    label: string;
-  }) => (
-    <Button
-      type="button"
-      variant={active ? "secondary" : "ghost"}
-      size="sm"
-      onClick={onClick}
-      className={cn("h-7 px-2 text-xs", active && "font-semibold")}
-    >
-      {label}
-    </Button>
-  );
+  if (!editor) return null;
 
   return (
     <div>
       <div className="flex flex-wrap items-center gap-1 rounded-t-md border border-input bg-muted/40 p-1">
         <ToolbarButton
           label="B"
-          active={editor.isActive("bold")}
+          active={active?.bold ?? false}
           onClick={() => editor.chain().focus().toggleBold().run()}
         />
         <ToolbarButton
           label="I"
-          active={editor.isActive("italic")}
+          active={active?.italic ?? false}
           onClick={() => editor.chain().focus().toggleItalic().run()}
         />
         <ToolbarButton
           label="Code"
-          active={editor.isActive("codeBlock")}
+          active={active?.codeBlock ?? false}
           onClick={() => editor.chain().focus().toggleCodeBlock().run()}
         />
         <ToolbarButton
           label="• List"
-          active={editor.isActive("bulletList")}
+          active={active?.bulletList ?? false}
           onClick={() => editor.chain().focus().toggleBulletList().run()}
         />
         <span className="ml-auto pr-1">

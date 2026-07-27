@@ -1,11 +1,10 @@
 "use client";
 
-import { EditorContent, useEditor } from "@tiptap/react";
+import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect } from "react";
 
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { ToolbarButton } from "@/components/ui/editor-toolbar-button";
 import type { RichTextDoc } from "@/lib/types";
 
 // Rich-text primitive (TipTap, §2) emitting a ProseMirror JSON doc — the same
@@ -35,54 +34,49 @@ export function RichTextEditor({
   // Tear down on unmount to avoid leaking the editor instance across pages.
   useEffect(() => () => editor?.destroy(), [editor]);
 
-  if (!editor) return null;
+  // TipTap 3's useEditor no longer re-renders the host component on editor
+  // transactions (v2 did; the compat flag is marked legacy), so toolbar active
+  // states must be derived via useEditorState — it re-renders exactly when the
+  // selected flags change.
+  const active = useEditorState({
+    editor,
+    selector: ({ editor: e }) => ({
+      bold: !!e?.isActive("bold"),
+      italic: !!e?.isActive("italic"),
+      codeBlock: !!e?.isActive("codeBlock"),
+      bulletList: !!e?.isActive("bulletList"),
+      heading2: !!e?.isActive("heading", { level: 2 }),
+    }),
+  });
 
-  const ToolbarButton = ({
-    active,
-    onClick,
-    label,
-  }: {
-    active: boolean;
-    onClick: () => void;
-    label: string;
-  }) => (
-    <Button
-      type="button"
-      variant={active ? "secondary" : "ghost"}
-      size="sm"
-      onClick={onClick}
-      className={cn("h-7 px-2 text-xs", active && "font-semibold")}
-    >
-      {label}
-    </Button>
-  );
+  if (!editor) return null;
 
   return (
     <div>
       <div className="flex flex-wrap gap-1 rounded-t-md border border-input bg-muted/40 p-1">
         <ToolbarButton
           label="B"
-          active={editor.isActive("bold")}
+          active={active?.bold ?? false}
           onClick={() => editor.chain().focus().toggleBold().run()}
         />
         <ToolbarButton
           label="I"
-          active={editor.isActive("italic")}
+          active={active?.italic ?? false}
           onClick={() => editor.chain().focus().toggleItalic().run()}
         />
         <ToolbarButton
           label="Code"
-          active={editor.isActive("codeBlock")}
+          active={active?.codeBlock ?? false}
           onClick={() => editor.chain().focus().toggleCodeBlock().run()}
         />
         <ToolbarButton
           label="• List"
-          active={editor.isActive("bulletList")}
+          active={active?.bulletList ?? false}
           onClick={() => editor.chain().focus().toggleBulletList().run()}
         />
         <ToolbarButton
           label="H2"
-          active={editor.isActive("heading", { level: 2 })}
+          active={active?.heading2 ?? false}
           onClick={() =>
             editor.chain().focus().toggleHeading({ level: 2 }).run()
           }

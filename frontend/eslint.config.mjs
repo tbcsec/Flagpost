@@ -25,17 +25,15 @@ const eslintConfig = [
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
-      // react-hooks v7 (bundled by eslint-config-next 16) adds the React
-      // Compiler-era rules as errors. The codebase predates them and carries
-      // ~27 hits of deliberate pre-compiler idioms (latest-ref, sync-state-in
-      // -effect, render-scoped subcomponents). Warn — visible in editors and
-      // lint output, not a CI gate — while they're burned down incrementally.
-      // rules-of-hooks / exhaustive-deps stay errors, as ever.
-      "react-hooks/refs": "warn",
-      "react-hooks/set-state-in-effect": "warn",
-      "react-hooks/static-components": "warn",
-      "react-hooks/immutability": "warn",
-      "react-hooks/preserve-manual-memoization": "warn",
+      // react-hooks v7 (eslint-config-next 16) React Compiler-era rules, held at
+      // error so a new pre-compiler idiom can't slip in (the codebase's original
+      // hits were burned down in #38). Explicit rather than inherited so the CI
+      // gate is unambiguous.
+      "react-hooks/refs": "error",
+      "react-hooks/set-state-in-effect": "error",
+      "react-hooks/static-components": "error",
+      "react-hooks/immutability": "error",
+      "react-hooks/preserve-manual-memoization": "error",
     },
   },
 

@@ -64,11 +64,16 @@ export default function AdminAppearancePage() {
   }, [palette, accent]);
 
   // On leaving without saving, restore what the viewer actually sees (their own
-  // palette override, if any, over the saved site default).
+  // palette override, if any, over the saved site default). The unmount cleanup
+  // needs the *latest* saved settings + override, but must run only on unmount —
+  // so mirror them into refs from an effect (refs are written outside render)
+  // and read those in the mount-only cleanup.
   const savedRef = useRef(saved);
-  savedRef.current = saved;
   const overrideRef = useRef(paletteOverride);
-  overrideRef.current = paletteOverride;
+  useEffect(() => {
+    savedRef.current = saved;
+    overrideRef.current = paletteOverride;
+  });
   useEffect(() => {
     return () => {
       const s = savedRef.current;

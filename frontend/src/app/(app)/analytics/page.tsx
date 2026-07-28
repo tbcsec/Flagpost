@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
+import { SubmissionsBrowser } from "@/components/analytics/submissions-browser";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -18,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs } from "@/components/ui/tabs";
 import { analyticsInsights } from "@/lib/analytics-insights";
 import { relativeTime } from "@/lib/datetime";
 import { useChallengeAnalytics, useTeamAnalytics } from "@/lib/hooks/use-analytics";
@@ -30,14 +32,25 @@ import type {
   TeamAnalytics,
 } from "@/lib/types";
 
+type Tab = "overview" | "submissions";
+
+const TABS: { value: Tab; label: string }[] = [
+  { value: "overview", label: "Overview" },
+  { value: "submissions", label: "Submissions" },
+];
+
 // Challenge & team analytics (ROADMAP #23) — read-only reporting off the
 // submissions / hints / tickets data scoring already records. Staff-gated
 // (view_competition_analytics); the `analytics` optional module can be disabled.
+// The Submissions tab (ROADMAP #76) is a separate, narrower-gated
+// (view_submissions) raw-payload browser for dispute resolution.
 export default function AnalyticsPage() {
   const { data: competition } = useActiveCompetition();
   const access = useAccess();
   const canView = access.has("view_competition_analytics");
+  const canViewSubmissions = access.has("view_submissions");
   const enabled = Boolean(competition) && canView;
+  const [tab, setTab] = React.useState<Tab>("overview");
 
   const challenges = useChallengeAnalytics(competition?.id ?? "", enabled);
   const teams = useTeamAnalytics(competition?.id ?? "", enabled);
@@ -92,162 +105,174 @@ export default function AnalyticsPage() {
         </div>
       ) : (
         <div className="grid gap-6">
-          <Overview report={challenges.data} />
-          <Insights
-            challenges={challenges.data.challenges}
-            teams={teams.data?.teams ?? []}
-          />
+          {canViewSubmissions && (
+            <Tabs tabs={TABS} value={tab} onValueChange={(v) => setTab(v as Tab)} />
+          )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Per-challenge</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <TableSearchInput
-                value={challengeTable.query}
-                onChange={challengeTable.setQuery}
-                placeholder="Search challenges…"
-                className="mb-4"
-              />
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <Sortable table={challengeTable} k="title">Challenge</Sortable>
-                    <Sortable table={challengeTable} k="category">Category</Sortable>
-                    <Sortable table={challengeTable} k="points" right>Points</Sortable>
-                    <Sortable table={challengeTable} k="solves" right>Solves</Sortable>
-                    <Sortable table={challengeTable} k="completion" right>Completion</Sortable>
-                    <Sortable table={challengeTable} k="avg_time" right>Avg. time</Sortable>
-                    <Sortable table={challengeTable} k="attempts" right>Attempts</Sortable>
-                    <Sortable table={challengeTable} k="hints" right>Hints</Sortable>
-                    <Sortable table={challengeTable} k="tickets" right>Tickets</Sortable>
-                    <Sortable table={challengeTable} k="rating" right>Rating</Sortable>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {challengeTable.rows.map((c) => (
-                    <TableRow key={c.challenge_id}>
-                      <TableCell className="font-medium">
-                        {c.title}
-                        {c.state !== "published" && (
-                          <Badge variant="muted" className="ml-2">
-                            {c.state}
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {c.category ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-right font-mono">{c.points}</TableCell>
-                      <TableCell className="text-right font-mono">{c.solve_count}</TableCell>
-                      <TableCell className="text-right font-mono">
-                        {formatPercent(c.completion_rate)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        {formatDuration(c.avg_solve_time_seconds)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        {c.attempt_count}
-                        {c.fail_count > 0 && (
-                          <span className="text-muted-foreground"> ({c.fail_count} failed)</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right font-mono">{c.hints_used}</TableCell>
-                      <TableCell className="text-right font-mono">{c.ticket_count}</TableCell>
-                      <TableCell className="text-right font-mono">
-                        {c.avg_rating != null ? (
-                          <>
-                            <span className="text-primary">★</span> {c.avg_rating.toFixed(1)}
-                            <span className="text-muted-foreground"> ({c.rating_count})</span>
-                          </>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {challengeTable.rows.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={10} className="text-center text-muted-foreground">
-                        {challengeTable.query
-                          ? "No challenges match your search."
-                          : "No challenges yet."}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-              <TablePagination table={challengeTable} noun="challenges" className="mt-4" />
-            </CardContent>
-          </Card>
+          <div className={tab === "submissions" && canViewSubmissions ? "hidden" : "grid gap-6"}>
+            <Overview report={challenges.data} />
+            <Insights
+              challenges={challenges.data.challenges}
+              teams={teams.data?.teams ?? []}
+            />
 
-          <Card>
-            <CardHeader>
-              <CardTitle>{challenges.data.mode === "team" ? "Teams" : "Competitors"}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <TableSearchInput
-                value={teamTable.query}
-                onChange={teamTable.setQuery}
-                placeholder={
-                  challenges.data.mode === "team" ? "Search teams…" : "Search competitors…"
-                }
-                className="mb-4"
-              />
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <Sortable table={teamTable} k="rank" right>#</Sortable>
-                    <Sortable table={teamTable} k="name">
-                      {challenges.data.mode === "team" ? "Team" : "Competitor"}
-                    </Sortable>
-                    <Sortable table={teamTable} k="points" right>Points</Sortable>
-                    <Sortable table={teamTable} k="solves" right>Solves</Sortable>
-                    <Sortable table={teamTable} k="first_bloods" right>First bloods</Sortable>
-                    <Sortable table={teamTable} k="tickets" right>Tickets</Sortable>
-                    <Sortable table={teamTable} k="last_solve" right>Last solve</Sortable>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {teamTable.rows.map((t) => (
-                    <TableRow key={t.subject_id}>
-                      <TableCell className="text-right font-mono text-muted-foreground">
-                        {t.rank}
-                      </TableCell>
-                      <TableCell className="font-medium">{t.name}</TableCell>
-                      <TableCell className="text-right font-mono">{t.points}</TableCell>
-                      <TableCell className="text-right font-mono">{t.solve_count}</TableCell>
-                      <TableCell className="text-right font-mono">
-                        {t.first_bloods > 0 ? (
-                          <span className="text-success">{t.first_bloods}</span>
-                        ) : (
-                          t.first_bloods
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right font-mono">{t.ticket_count}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {t.last_solve_at ? relativeTime(t.last_solve_at) : "—"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {teams.data && teamTable.rows.length === 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Per-challenge</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <TableSearchInput
+                  value={challengeTable.query}
+                  onChange={challengeTable.setQuery}
+                  placeholder="Search challenges…"
+                  className="mb-4"
+                />
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground">
-                        {teamTable.query
-                          ? "Nobody matches your search."
-                          : "No participants yet."}
-                      </TableCell>
+                      <Sortable table={challengeTable} k="title">Challenge</Sortable>
+                      <Sortable table={challengeTable} k="category">Category</Sortable>
+                      <Sortable table={challengeTable} k="points" right>Points</Sortable>
+                      <Sortable table={challengeTable} k="solves" right>Solves</Sortable>
+                      <Sortable table={challengeTable} k="completion" right>Completion</Sortable>
+                      <Sortable table={challengeTable} k="avg_time" right>Avg. time</Sortable>
+                      <Sortable table={challengeTable} k="attempts" right>Attempts</Sortable>
+                      <Sortable table={challengeTable} k="hints" right>Hints</Sortable>
+                      <Sortable table={challengeTable} k="tickets" right>Tickets</Sortable>
+                      <Sortable table={challengeTable} k="rating" right>Rating</Sortable>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-              <TablePagination
-                table={teamTable}
-                noun={challenges.data.mode === "team" ? "teams" : "competitors"}
-                className="mt-4"
-              />
-            </CardContent>
-          </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {challengeTable.rows.map((c) => (
+                      <TableRow key={c.challenge_id}>
+                        <TableCell className="font-medium">
+                          {c.title}
+                          {c.state !== "published" && (
+                            <Badge variant="muted" className="ml-2">
+                              {c.state}
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {c.category ?? "—"}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">{c.points}</TableCell>
+                        <TableCell className="text-right font-mono">{c.solve_count}</TableCell>
+                        <TableCell className="text-right font-mono">
+                          {formatPercent(c.completion_rate)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          {formatDuration(c.avg_solve_time_seconds)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          {c.attempt_count}
+                          {c.fail_count > 0 && (
+                            <span className="text-muted-foreground"> ({c.fail_count} failed)</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">{c.hints_used}</TableCell>
+                        <TableCell className="text-right font-mono">{c.ticket_count}</TableCell>
+                        <TableCell className="text-right font-mono">
+                          {c.avg_rating != null ? (
+                            <>
+                              <span className="text-primary">★</span> {c.avg_rating.toFixed(1)}
+                              <span className="text-muted-foreground"> ({c.rating_count})</span>
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {challengeTable.rows.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={10} className="text-center text-muted-foreground">
+                          {challengeTable.query
+                            ? "No challenges match your search."
+                            : "No challenges yet."}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+                <TablePagination table={challengeTable} noun="challenges" className="mt-4" />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>{challenges.data.mode === "team" ? "Teams" : "Competitors"}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <TableSearchInput
+                  value={teamTable.query}
+                  onChange={teamTable.setQuery}
+                  placeholder={
+                    challenges.data.mode === "team" ? "Search teams…" : "Search competitors…"
+                  }
+                  className="mb-4"
+                />
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <Sortable table={teamTable} k="rank" right>#</Sortable>
+                      <Sortable table={teamTable} k="name">
+                        {challenges.data.mode === "team" ? "Team" : "Competitor"}
+                      </Sortable>
+                      <Sortable table={teamTable} k="points" right>Points</Sortable>
+                      <Sortable table={teamTable} k="solves" right>Solves</Sortable>
+                      <Sortable table={teamTable} k="first_bloods" right>First bloods</Sortable>
+                      <Sortable table={teamTable} k="tickets" right>Tickets</Sortable>
+                      <Sortable table={teamTable} k="last_solve" right>Last solve</Sortable>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {teamTable.rows.map((t) => (
+                      <TableRow key={t.subject_id}>
+                        <TableCell className="text-right font-mono text-muted-foreground">
+                          {t.rank}
+                        </TableCell>
+                        <TableCell className="font-medium">{t.name}</TableCell>
+                        <TableCell className="text-right font-mono">{t.points}</TableCell>
+                        <TableCell className="text-right font-mono">{t.solve_count}</TableCell>
+                        <TableCell className="text-right font-mono">
+                          {t.first_bloods > 0 ? (
+                            <span className="text-success">{t.first_bloods}</span>
+                          ) : (
+                            t.first_bloods
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">{t.ticket_count}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {t.last_solve_at ? relativeTime(t.last_solve_at) : "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {teams.data && teamTable.rows.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground">
+                          {teamTable.query
+                            ? "Nobody matches your search."
+                            : "No participants yet."}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+                <TablePagination
+                  table={teamTable}
+                  noun={challenges.data.mode === "team" ? "teams" : "competitors"}
+                  className="mt-4"
+                />
+              </CardContent>
+            </Card>
+          </div>
+
+          {canViewSubmissions && (
+            <div className={tab === "submissions" ? "" : "hidden"}>
+              <SubmissionsBrowser competitionId={competition?.id ?? ""} mode={challenges.data.mode} />
+            </div>
+          )}
         </div>
       )}
     </>

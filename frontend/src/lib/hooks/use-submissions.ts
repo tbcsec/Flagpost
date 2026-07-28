@@ -1,11 +1,18 @@
 "use client";
 
-// One hook module per domain (ARCHITECTURE.md §8). Flag submission (Phase 6).
+// One hook module per domain (ARCHITECTURE.md §8). Flag submission (Phase 6) +
+// the staff submissions browser (ROADMAP #76) — a filterable, paginated read
+// over raw submission attempts, separate from use-analytics.ts's aggregates.
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import { submissionsApi } from "@/lib/api";
-import type { SubmitResult } from "@/lib/types";
+import type { SubmissionQuery, SubmitResult } from "@/lib/types";
 
 /** Submit a flag for a challenge. On a correct solve, the challenge list/detail
  *  are invalidated so solve state + counts refresh. RBAC, rate limiting and
@@ -22,5 +29,31 @@ export function useSubmitFlag(competitionId: string, challengeId: string) {
         });
       }
     },
+  });
+}
+
+/** Staff submissions browser (ROADMAP #76): a filterable, paginated read over
+ *  raw submission attempts, for dispute resolution. Gated `view_submissions`
+ *  server-side; `enabled` lets the caller skip fetching before access is known. */
+export function useSubmissionBrowser(
+  competitionId: string,
+  query: SubmissionQuery,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ["submissions", competitionId, query],
+    queryFn: () => submissionsApi.browse(competitionId, query),
+    enabled: enabled && Boolean(competitionId),
+    // Keep the previous page visible while the next loads — smooth paging.
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Export the filtered rows as a CSV download — for taking a dispute outside
+ *  the platform. Triggers a browser download rather than returning data. */
+export function useExportSubmissions(competitionId: string) {
+  return useMutation({
+    mutationFn: (query: SubmissionQuery) =>
+      submissionsApi.exportCsv(competitionId, query),
   });
 }

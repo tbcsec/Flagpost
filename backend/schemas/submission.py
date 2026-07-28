@@ -6,7 +6,10 @@ whether it was correct, whether they'd already solved it, the points awarded,
 and whether they took first blood.
 """
 
-from pydantic import BaseModel, Field
+from datetime import datetime
+from enum import Enum
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SubmitFlagRequest(BaseModel):
@@ -24,3 +27,41 @@ class SubmitResult(BaseModel):
     # Guesses left for the subject on a multiple-choice challenge under the
     # competition-wide cap (null = no cap, not multiple-choice, or already solved).
     attempts_remaining: int | None = None
+
+
+class SubmissionCorrectness(str, Enum):
+    """Three mutually-exclusive buckets over the ``is_correct``/``is_duplicate``
+    columns (§13.2) for the staff submissions browser (ROADMAP #76). "duplicate"
+    keeps its existing meaning here — a correct flag the subject had already
+    solved — not "this exact payload string was tried before"."""
+
+    CORRECT = "correct"
+    INCORRECT = "incorrect"
+    DUPLICATE = "duplicate"
+
+
+class SubmissionOut(BaseModel):
+    """One raw submission attempt, for the judge/admin dispute-resolution
+    browser. The exact submitted payload and timestamp — never redacted, unlike
+    the competitor-facing ``SubmitResult``, since this surface is staff-only."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    challenge_id: str
+    user_id: str
+    team_id: str | None
+    value: str
+    correctness: SubmissionCorrectness
+    points_awarded: int
+    created_at: datetime
+
+
+class SubmissionPage(BaseModel):
+    """One page of submission-browser results plus the total match count for
+    pagination, mirroring ``AuditLogPage``."""
+
+    items: list[SubmissionOut]
+    total: int
+    limit: int
+    offset: int

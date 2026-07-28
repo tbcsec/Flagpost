@@ -9,14 +9,30 @@ below (a slug, or a ``#RRGGBB`` hex for a custom accent) block attribute/CSS
 injection regardless of what the frontend offers.
 """
 
+import re
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # A palette id is a lowercase slug (matches `data-palette="<id>"`).
 PALETTE_PATTERN = r"^[a-z][a-z0-9-]{1,31}$"
 # An accent is either a preset slug or a #RRGGBB custom hex.
 ACCENT_PATTERN = r"^([a-z][a-z0-9-]{1,31}|#[0-9a-fA-F]{6})$"
+
+# A bare domain: labels of 1-63 chars (no leading/trailing hyphen), at least one
+# dot. Deliberately rejects "@", a "://" scheme, and a "*." wildcard so a
+# malformed entry is caught at save time rather than silently never matching.
+_DOMAIN_LABEL = r"(?!-)[a-z0-9-]{1,63}(?<!-)"
+DOMAIN_PATTERN = re.compile(rf"^{_DOMAIN_LABEL}(\.{_DOMAIN_LABEL})+$")
+MAX_ALLOWED_DOMAINS = 50
+MAX_DOMAIN_LENGTH = 253
+
+
+def _validate_domain(raw: str) -> str:
+    domain = raw.strip().lower()
+    if not domain or len(domain) > MAX_DOMAIN_LENGTH or not DOMAIN_PATTERN.match(domain):
+        raise ValueError(f"Not a valid domain: {raw!r}")
+    return domain
 
 
 class SiteSettingsOut(BaseModel):
@@ -45,6 +61,10 @@ class SiteSettingsOut(BaseModel):
     # disclose — a retention window, not infrastructure detail.
     archive_auto_delete: bool = True
     archive_retention_days: int = 30
+    # Whether public registration currently requires an email (the domain
+    # allowlist is enabled). The allowlist itself is never public — only this
+    # policy bit, which the register page needs to mark the field required.
+    email_required: bool = False
 
 
 class SiteSettingsUpdate(BaseModel):
@@ -76,6 +96,10 @@ class OperationalSettingsOut(BaseModel):
     smtp_password_set: bool
     archive_auto_delete: bool
     archive_retention_days: int
+    # Email-domain allowlist for public registration (#56). Admin-only surface —
+    # the domain list itself is never exposed on the public SiteSettingsOut.
+    email_domain_allowlist_enabled: bool
+    allowed_email_domains: list[str]
     updated_at: datetime | None
 
 
@@ -105,3 +129,20 @@ class OperationalSettingsUpdate(BaseModel):
     # Archived-competition retention (#26): 1 day to 10 years.
     archive_auto_delete: bool = True
     archive_retention_days: int = Field(default=30, ge=1, le=3650)
+    # Email-domain allowlist for public registration (#56). Domains are
+    # normalized (lowercased, deduped) and format-validated; a malformed entry
+    # rejects the whole save (422) rather than being silently dropped.
+    email_domain_allowlist_enabled: bool = False
+    allowed_email_domains: list[str] = Field(default_factory=list)
+
+    @field_validator("allowed_email_domains")
+    @classmethod
+    def _validate_allowed_email_domains(cls, domains: list[str]) -> list[str]:
+        if len(domains) > MAX_ALLOWED_DOMAINS:
+            raise ValueError(f"At most {MAX_ALLOWED_DOMAINS} domains are allowed")
+        deduped: list[str] = []
+        for raw in domains:
+            domain = _validate_domain(raw)
+            if domain not in deduped:
+                deduped.append(domain)
+        return deduped

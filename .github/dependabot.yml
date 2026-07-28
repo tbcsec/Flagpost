@@ -38,6 +38,12 @@ updates:
       # eslint 9 and calls removed APIs. Lift this when #15 closes.
       - dependency-name: eslint
         versions: [">=10"]
+      # typescript 7 (the Go "tsgo" rewrite) is upstream-blocked (#91):
+      # typescript-eslint refuses to load under TS 7.0 (their #10940 targets
+      # >=7.1) and tsc regresses on our CSS side-effect imports. Lift when #91
+      # closes.
+      - dependency-name: typescript
+        versions: [">=7"]
 
   - package-ecosystem: github-actions
     directory: /

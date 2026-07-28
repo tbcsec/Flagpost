@@ -57,6 +57,28 @@ export interface Competition {
   max_team_size: number | null;
   /** Paused = gameplay halted; competitors can't submit flags. */
   paused: boolean;
+  /** Per-competition rules/CoC override (#57); null = site-wide rules apply. */
+  rules_override: RichTextDoc | null;
+  /** Informational-only override: shown at join, never gating. */
+  rules_display_only: boolean;
+}
+
+/** The effective rules document for a competition + the caller's standing
+ *  (GET /competitions/{id}/rules). `required` is the server's verdict for the
+ *  in-app re-acceptance gate (membership included); the join flows decide from
+ *  the raw facts. */
+export interface CompetitionRules {
+  rules: RichTextDoc | null;
+  display_only: boolean;
+  accepted: boolean;
+  exempt: boolean;
+  required: boolean;
+}
+
+/** Site-wide rules authoring shape (Admin → Site settings). */
+export interface RulesSettings {
+  rules_text: RichTextDoc | null;
+  rules_display_only: boolean;
 }
 
 /** Aggregate ratings for one challenge (staff — Feedback page). */
@@ -420,6 +442,8 @@ export interface CompetitionCreate {
   brackets?: string[];
   max_team_size?: number | null;
   paused?: boolean;
+  rules_override?: RichTextDoc | null;
+  rules_display_only?: boolean;
 }
 
 export type CompetitionUpdate = Partial<CompetitionCreate>;

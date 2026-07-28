@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import get_current_user
 from auth.identity import display_name_taken, email_taken, find_by_identifier
+from auth.registration_policy import domain_allowed
 from auth.setup import instance_needs_setup
 from auth.security import (
     create_access_token,
@@ -103,6 +104,20 @@ async def register(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Registration is closed. Contact an administrator for an account.",
         )
+
+    # Email-domain allowlist (#56): public registration only — admin-created
+    # accounts and later email edits are unaffected. Enabling it makes email
+    # mandatory. The rejection is deliberately generic in both the
+    # missing-email and domain-mismatch cases, so it never discloses which
+    # domains (or that a domain policy exists at all) are allowed.
+    if site is not None and site.email_domain_allowlist_enabled:
+        if not body.email or not domain_allowed(
+            body.email, site.allowed_email_domains or []
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Registration is not permitted with that email address.",
+            )
 
     # Display name is the login identifier — must be unique (case-insensitively).
     if await display_name_taken(db, body.display_name):

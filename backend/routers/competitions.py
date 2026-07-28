@@ -17,7 +17,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import get_current_user, require_permission
@@ -28,6 +28,7 @@ from auth.membership import (
 )
 from db import get_db, utcnow
 from models.competition import Competition
+from models.rules_acceptance import RulesAcceptance
 from models.user import User
 from schemas.competition import (
     CompetitionCloneRequest,
@@ -42,6 +43,11 @@ from storage.base import ObjectStorage
 from utils.competition_clone import clone_competition
 from utils.event_bus import event_bus
 from utils.retention import delete_competition_tree
+from utils.rules import (
+    accept_rules,
+    effective_rules,
+    require_rules_accepted,
+)
 
 router = APIRouter(prefix="/api/competitions", tags=["competitions"])
 
@@ -95,6 +101,8 @@ async def _join(
     db: AsyncSession, competition: Competition, user: User
 ) -> Competition:
     """Grant the Participant role (idempotently) and emit the join event once."""
+    # Rules gate (#57): mandatory effective rules must be accepted first.
+    await require_rules_accepted(db, competition, user)
     newly_joined = await ensure_participant_role(db, competition.id, user.id)
     await db.commit()
     if newly_joined:
@@ -120,6 +128,14 @@ async def join_by_code(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Invalid invite code"
         )
+    # Accept-with-join (#57): the code path can't pre-fetch a private
+    # competition's rules (the id is unknown and existence undisclosed), so the
+    # first attempt 403s with the document and the retry carries acceptance.
+    # A valid invite code is the authorization to accept.
+    if body.accept_rules:
+        doc, _display_only = await effective_rules(db, competition)
+        if doc is not None:
+            await accept_rules(db, competition.id, current_user.id)
     return await _join(db, competition, current_user)
 
 
@@ -170,6 +186,8 @@ async def create_competition(
         brackets=body.brackets or None,
         max_team_size=body.max_team_size,
         paused=body.paused,
+        rules_override=body.rules_override,
+        rules_display_only=body.rules_display_only,
     )
     db.add(competition)
     await db.commit()
@@ -239,8 +257,24 @@ async def update_competition(
 
     # PATCH semantics: apply only the fields the caller actually sent.
     changes = body.model_dump(exclude_unset=True)
+    # Rules re-acceptance (#57, owner decision): adding or changing a non-null
+    # override supersedes what members agreed to, so their acceptance rows are
+    # deleted wholesale — every participant re-accepts the new text (the admin
+    # UI warns before saving). Clearing the override (back to the global rules
+    # they may have already accepted) doesn't reset.
+    reset_acceptances = (
+        "rules_override" in changes
+        and changes["rules_override"] is not None
+        and changes["rules_override"] != competition.rules_override
+    )
     for field, value in changes.items():
         setattr(competition, field, value)
+    if reset_acceptances:
+        await db.execute(
+            delete(RulesAcceptance).where(
+                RulesAcceptance.competition_id == competition.id
+            )
+        )
     await db.commit()
     await db.refresh(competition)
 

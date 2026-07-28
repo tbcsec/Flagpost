@@ -62,8 +62,12 @@ def setup(app, event_bus, db_factory) -> None:
     from routers.brackets import router as brackets_router
     from routers.competitions import router
     from routers.participants import router as participants_router
+    from routers.rules import router as rules_router
 
     app.include_router(router)
+    # Rules / code-of-conduct read + accept (#57) — join-adjacent, so it lives
+    # with the tenancy root rather than any one feature module.
+    app.include_router(rules_router)
     # The individual-mode participant roster (the counterpart to teams); lives
     # with the competitions module since it reads competition membership (§7.5).
     app.include_router(participants_router)

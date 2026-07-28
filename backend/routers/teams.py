@@ -39,6 +39,7 @@ from schemas.team import (
     TeamUpdate,
 )
 from utils.event_bus import event_bus
+from utils.rules import require_rules_accepted
 
 router = APIRouter(
     prefix="/api/competitions/{competition_id}/teams", tags=["teams"]
@@ -190,7 +191,11 @@ async def create_team(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MyTeamOut:
-    await _get_team_competition(db, competition_id)
+    competition = await _get_team_competition(db, competition_id)
+    # Rules gate (#57): creating a team grants the Participant role just like
+    # joining one, so it's the fourth join site (owner-confirmed) — without it,
+    # "Create a team" on a public competition would bypass the rules entirely.
+    await require_rules_accepted(db, competition, current_user)
 
     if await _membership_of(db, competition_id, current_user.id) is not None:
         raise HTTPException(
@@ -260,7 +265,11 @@ async def join_team(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TeamJoinResult:
-    await _get_team_competition(db, competition_id)
+    competition = await _get_team_competition(db, competition_id)
+    # Rules gate (#57), deliberately ahead of the approval branch below: filing
+    # a join *request* is the join moment for approval-required teams (owner
+    # decision), so acceptance is required before an application exists.
+    await require_rules_accepted(db, competition, current_user)
 
     if await _membership_of(db, competition_id, current_user.id) is not None:
         raise HTTPException(
@@ -279,7 +288,6 @@ async def join_team(
             status_code=status.HTTP_404_NOT_FOUND, detail="Invalid invite code"
         )
 
-    competition = await db.get(Competition, competition_id)
     await _assert_not_full(db, competition, team.id)
 
     # Approval-required teams: file (or reuse) a pending application instead.

@@ -802,6 +802,9 @@ export interface SiteSettings {
   // show the exact deletion date to edit_competition holders.
   archive_auto_delete: boolean;
   archive_retention_days: number;
+  // Whether public registration currently requires an email (the email-domain
+  // allowlist, #56, is enabled). The domain list itself is never public.
+  email_required: boolean;
 }
 
 // Admin shape adds the last-updated timestamp.
@@ -821,6 +824,9 @@ export interface OperationalSettings {
   /** Archived-competition retention (#26). */
   archive_auto_delete: boolean;
   archive_retention_days: number;
+  /** Email-domain allowlist for public registration (#56). Admin-only. */
+  email_domain_allowlist_enabled: boolean;
+  allowed_email_domains: string[];
   updated_at: string | null;
 }
 
@@ -861,6 +867,8 @@ export interface OperationalSettingsUpdate {
   smtp_password?: string | null;
   archive_auto_delete: boolean;
   archive_retention_days: number;
+  email_domain_allowlist_enabled: boolean;
+  allowed_email_domains: string[];
 }
 
 // RBAC admin (§7.4). Roles are data: a permission-key array + scope.

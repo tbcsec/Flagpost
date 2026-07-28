@@ -87,6 +87,10 @@ PERMISSIONS: tuple[Permission, ...] = (
         "view_competition_analytics", "Analytics", Scope.COMPETITION
     ),
     Permission("view_global_analytics", "Analytics", Scope.GLOBAL),
+    # Raw submission payloads are more sensitive than aggregate stats (ROADMAP
+    # #76 submissions browser), so it's a separate grant Judge/Admin hold by
+    # default rather than folded into view_competition_analytics.
+    Permission("view_submissions", "Analytics", Scope.COMPETITION),
     # Dashboard
     Permission("customize_dashboard", "Dashboard", Scope.COMPETITION),
     Permission("manage_dashboard_widgets", "Dashboard", Scope.COMPETITION),
@@ -146,6 +150,7 @@ JUDGE_PERMISSIONS: list[str] = [
     "feedback_view_responses",
     "feedback_submit",
     "view_competition_analytics",
+    "view_submissions",
     "customize_dashboard",
     # Automations (§5): a Judge runs their competition's rules — "full
     # operational control" (§7.3). Reaches existing installs via the startup

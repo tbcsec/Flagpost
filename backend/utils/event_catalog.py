@@ -25,6 +25,9 @@ EVENT_TYPES: tuple[str, ...] = (
     "competition.started",
     "competition.ended",
     "competition.member_joined",
+    # A user accepted the competition's effective rules / code of conduct (#57)
+    # — recorded so organisers can audit who agreed, and when.
+    "competition.rules_accepted",
     # Emitted by the scheduler as a competition nears its end_at (§5.2) — a
     # time-based trigger, unlike the mutation events around it.
     "competition.time_remaining",

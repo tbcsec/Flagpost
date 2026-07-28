@@ -27,6 +27,7 @@ from models.mc_guess_reset import MCGuessReset
 from models.notification import Notification
 from models.password_reset import PasswordResetToken
 from models.role import Role, RoleAssignment
+from models.rules_acceptance import RulesAcceptance
 from models.score_adjustment import ScoreAdjustment
 from models.site_settings import SiteSettings
 from models.submission import Submission
@@ -55,6 +56,7 @@ __all__ = [
     "PasswordResetToken",
     "Role",
     "RoleAssignment",
+    "RulesAcceptance",
     "ScoreAdjustment",
     "Survey",
     "SurveyAnswer",

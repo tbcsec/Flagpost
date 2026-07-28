@@ -122,6 +122,7 @@ Event names are `<entity>.<verb>`, past tense, e.g.:
 competition.created         competition.updated        competition.started
 competition.ended           competition.member_joined  competition.time_remaining
 competition.archived        competition.unarchived     competition.deleted
+competition.rules_accepted
 team.created                team.member_joined         team.member_left
 team.deleted
 challenge.created           challenge.updated          challenge.published

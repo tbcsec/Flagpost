@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { RulesAcceptModal } from "@/components/competitions/rules-accept-modal";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
 import {
@@ -21,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useAcceptRules, useFetchRules } from "@/lib/hooks/use-rules";
 import {
   useCreateTeam,
   useJoinRequests,
@@ -31,6 +33,8 @@ import {
   useTeams,
   useUpdateMyTeam,
 } from "@/lib/hooks/use-teams";
+import { rulesPromptMode } from "@/lib/rules-prompt";
+import type { RichTextDoc } from "@/lib/types";
 import { useAuthStore } from "@/stores/auth";
 import { toast } from "@/stores/toast";
 
@@ -304,12 +308,59 @@ function JoinRequests({
 function JoinOrCreate({ competitionId }: { competitionId: string }) {
   const create = useCreateTeam(competitionId);
   const join = useJoinTeam(competitionId);
+  const fetchRules = useFetchRules();
+  const acceptRules = useAcceptRules();
   const [name, setName] = useState("");
   const [approvalRequired, setApprovalRequired] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
+  const [prompt, setPrompt] = useState<{
+    mode: "accept" | "display";
+    rules: RichTextDoc | null;
+    proceed: () => void;
+  } | null>(null);
+
+  // Rules gate (#57): creating a team joins the competition just like joining
+  // one, so both forms prompt for the rules first. If the pre-check itself
+  // fails, fire anyway — the server gate still protects.
+  async function gated(proceed: () => void) {
+    const state = await fetchRules(competitionId).catch(() => null);
+    const mode = state ? rulesPromptMode(state) : null;
+    if (mode) setPrompt({ mode, rules: state!.rules, proceed });
+    else proceed();
+  }
+
+  function onPromptConfirm() {
+    if (!prompt) return;
+    if (prompt.mode === "display") {
+      setPrompt(null);
+      prompt.proceed();
+    } else {
+      acceptRules.mutate(competitionId, {
+        onSuccess: () => {
+          setPrompt(null);
+          prompt.proceed();
+        },
+        onError: (err) =>
+          toast("Couldn't record acceptance", {
+            description: (err as Error).message,
+            variant: "destructive",
+          }),
+      });
+    }
+  }
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
+      {prompt && (
+        <RulesAcceptModal
+          open
+          mode={prompt.mode}
+          rules={prompt.rules}
+          pending={acceptRules.isPending}
+          onConfirm={onPromptConfirm}
+          onCancel={() => setPrompt(null)}
+        />
+      )}
       <Card>
         <CardHeader>
           <CardTitle>Create a team</CardTitle>
@@ -320,9 +371,11 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
             className="space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
-              create.mutate(
-                { name, approval_required: approvalRequired },
-                { onSuccess: () => toast(`Created ${name}`, { variant: "success" }) },
+              gated(() =>
+                create.mutate(
+                  { name, approval_required: approvalRequired },
+                  { onSuccess: () => toast(`Created ${name}`, { variant: "success" }) },
+                ),
               );
             }}
           >
@@ -367,17 +420,19 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
             className="space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
-              join.mutate(
-                { invite_code: inviteCode },
-                {
-                  onSuccess: (res) =>
-                    toast(
-                      res.pending
-                        ? "Request sent — awaiting captain approval"
-                        : "Joined team",
-                      { variant: "success" },
-                    ),
-                },
+              gated(() =>
+                join.mutate(
+                  { invite_code: inviteCode },
+                  {
+                    onSuccess: (res) =>
+                      toast(
+                        res.pending
+                          ? "Request sent — awaiting captain approval"
+                          : "Joined team",
+                        { variant: "success" },
+                      ),
+                  },
+                ),
               );
             }}
           >

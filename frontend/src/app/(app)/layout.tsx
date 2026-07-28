@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 
 import { AppShell } from "@/components/app/app-shell";
+import { RulesGate } from "@/components/competitions/rules-gate";
 import { useAuthStore } from "@/stores/auth";
 
 // The authenticated surface. Everything under (app) renders inside the shell
@@ -25,5 +26,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  return <AppShell>{children}</AppShell>;
+  return (
+    <AppShell>
+      {/* Blocking re-acceptance prompt when the active competition's rules
+          changed out from under a member (#57). */}
+      <RulesGate />
+      {children}
+    </AppShell>
+  );
 }

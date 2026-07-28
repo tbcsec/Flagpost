@@ -64,7 +64,16 @@ export function useJoinCompetition() {
 export function useJoinByCode() {
   const onJoined = useOnJoined();
   return useMutation({
-    mutationFn: (inviteCode: string) => competitionsApi.joinByCode(inviteCode),
+    // acceptRules retries a rules-gate rejection with acceptance attached
+    // (#57) — the code path can't pre-fetch the rules, so the first attempt's
+    // 403 carries the document and the confirmed retry accepts-and-joins.
+    mutationFn: ({
+      inviteCode,
+      acceptRules = false,
+    }: {
+      inviteCode: string;
+      acceptRules?: boolean;
+    }) => competitionsApi.joinByCode(inviteCode, acceptRules),
     onSuccess: onJoined,
   });
 }

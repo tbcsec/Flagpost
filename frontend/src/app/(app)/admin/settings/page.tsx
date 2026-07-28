@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
 import { BackupPanel } from "@/components/admin/backup-panel";
+import { RulesSettingsPanel } from "@/components/admin/rules-settings-panel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -52,6 +53,16 @@ export default function AdminSettingsPage() {
         // without the effect.
         <SettingsForm key={data.updated_at ?? "initial"} data={data} />
       )}
+
+      <div className="mt-8 grid gap-1">
+        <h2 className="text-lg font-semibold">Rules / code of conduct</h2>
+        <p className="text-sm text-muted-foreground">
+          The site-wide document users accept before joining a competition.
+        </p>
+      </div>
+      <div className="mt-4 max-w-2xl">
+        <RulesSettingsPanel />
+      </div>
 
       <div className="mt-8 grid gap-1">
         <h2 className="text-lg font-semibold">Backup — export &amp; import</h2>

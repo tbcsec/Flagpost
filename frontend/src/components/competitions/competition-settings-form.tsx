@@ -3,13 +3,17 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { Select } from "@/components/ui/select";
 import { useUpdateCompetition } from "@/lib/hooks/use-competitions";
+import { richTextToPlain } from "@/lib/rich-text";
 import type {
   Competition,
   ParticipationMode,
+  RichTextDoc,
   Visibility,
 } from "@/lib/types";
 import { toast } from "@/stores/toast";
@@ -21,7 +25,7 @@ const fromInput = (v: string) => (v ? new Date(`${v}Z`).toISOString() : null);
 
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-export type SettingsSection = "general" | "schedule" | "challenges";
+export type SettingsSection = "general" | "schedule" | "challenges" | "rules";
 
 // Feature component. Edits go through the domain hook; RBAC is enforced
 // server-side (a non-organiser's PATCH 403s, surfaced inline). One form + one
@@ -35,6 +39,7 @@ export function CompetitionSettingsForm({
   section: SettingsSection;
 }) {
   const update = useUpdateCompetition(competition.id);
+  const confirm = useConfirm();
   const [form, setForm] = useState({
     name: competition.name,
     description: competition.description,
@@ -53,14 +58,38 @@ export function CompetitionSettingsForm({
     brackets: competition.brackets ?? [],
     max_team_size: competition.max_team_size ? String(competition.max_team_size) : "",
     paused: competition.paused,
+    rules_override: (competition.rules_override ?? {}) as RichTextDoc,
+    rules_display_only: competition.rules_display_only,
   });
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // A visually-empty editor doc means "no override" (fall back to the
+    // site-wide rules) — send null, not an empty node tree.
+    const rulesDoc = richTextToPlain(form.rules_override).trim()
+      ? form.rules_override
+      : null;
+    const overrideChanged =
+      JSON.stringify(rulesDoc) !==
+      JSON.stringify(competition.rules_override ?? null);
+    // Owner decision (#57): adding/changing an override resets every
+    // participant's acceptance — warn the staff member before committing.
+    if (
+      overrideChanged &&
+      rulesDoc &&
+      !(await confirm({
+        title: "Update the competition rules?",
+        description:
+          "Saving a new or changed rules override clears all existing acceptances — every participant will be prompted to accept the rules again before they can continue.",
+        confirmLabel: "Save and re-prompt",
+      }))
+    ) {
+      return;
+    }
     update.mutate(
       {
         name: form.name,
@@ -81,6 +110,8 @@ export function CompetitionSettingsForm({
         brackets: form.brackets,
         max_team_size: form.max_team_size ? Number(form.max_team_size) : null,
         paused: form.paused,
+        rules_override: rulesDoc,
+        rules_display_only: form.rules_display_only,
       },
       { onSuccess: () => toast("Changes saved", { variant: "success" }) },
     );
@@ -272,6 +303,45 @@ export function CompetitionSettingsForm({
               onChange={(e) => set("registration_closes_at", e.target.value)}
             />
           </div>
+        </div>
+      )}
+
+      {section === "rules" && (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Rules / code of conduct override</Label>
+            <p className="text-xs text-muted-foreground">
+              Supersedes the site-wide rules for this competition. Leave empty
+              to use the site-wide document (Admin → Site settings). Unless
+              display-only is on, users must accept the effective rules before
+              they can join{competition.participation_mode === "team" ? " or create/join a team" : ""}.
+            </p>
+            <RichTextEditor
+              value={form.rules_override}
+              onChange={(doc) => set("rules_override", doc)}
+            />
+          </div>
+          <label className="flex items-start gap-2.5 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-border"
+              style={{ accentColor: "hsl(var(--primary))" }}
+              checked={form.rules_display_only}
+              onChange={(e) => set("rules_display_only", e.target.checked)}
+            />
+            <span>
+              Display only
+              <span className="ml-1 text-xs text-muted-foreground">
+                — show the rules at join without requiring an explicit
+                &ldquo;I accept&rdquo; (nothing blocks the join).
+              </span>
+            </span>
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Saving a new or changed override prompts every participant to
+            accept the rules again. Staff with competition-edit access never
+            see the prompt.
+          </p>
         </div>
       )}
 

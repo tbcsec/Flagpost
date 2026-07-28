@@ -20,6 +20,7 @@ const TABS: { value: Tab; label: string }[] = [
   { value: "general", label: "General" },
   { value: "schedule", label: "Schedule" },
   { value: "challenges", label: "Challenges" },
+  { value: "rules", label: "Rules" },
   { value: "modules", label: "Modules" },
 ];
 

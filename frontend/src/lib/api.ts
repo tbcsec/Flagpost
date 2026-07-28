@@ -20,6 +20,8 @@ import type {
   AutomationRuleInput,
   ChallengeAnalyticsReport,
   TeamAnalyticsReport,
+  SubmissionPage,
+  SubmissionQuery,
   QuestionInput,
   SurveyDetail,
   SurveyQuestion,
@@ -515,11 +517,35 @@ export const ratingsApi = {
     ),
 };
 
+function queryString(query: object): string {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(
+    query as Record<string, string | number | undefined>,
+  )) {
+    if (value !== undefined && value !== null && value !== "") {
+      qs.set(key, String(value));
+    }
+  }
+  const suffix = qs.toString();
+  return suffix ? `?${suffix}` : "";
+}
+
 export const submissionsApi = {
   submit: (competitionId: string, challengeId: string, flag: string) =>
     apiFetch<SubmitResult>(
       `/api/competitions/${competitionId}/challenges/${challengeId}/submit`,
       { method: "POST", body: JSON.stringify({ flag }) },
+    ),
+  // Staff submissions browser (ROADMAP #76) — raw payload + exact timestamp
+  // per attempt, for dispute resolution. Gated view_submissions server-side.
+  browse: (competitionId: string, query: SubmissionQuery) =>
+    apiFetch<SubmissionPage>(
+      `/api/competitions/${competitionId}/analytics/submissions${queryString(query)}`,
+    ),
+  exportCsv: (competitionId: string, query: SubmissionQuery) =>
+    downloadFile(
+      `/api/competitions/${competitionId}/analytics/submissions/export${queryString(query)}`,
+      `submissions-${competitionId}.csv`,
     ),
 };
 

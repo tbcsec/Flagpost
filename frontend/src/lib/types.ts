@@ -368,6 +368,40 @@ export interface AuditLogQuery {
   offset?: number;
 }
 
+/** One raw flag-submission attempt (staff-only submissions browser, ROADMAP
+ *  #76) — the exact payload and timestamp, for dispute resolution. */
+export type SubmissionCorrectness = "correct" | "incorrect" | "duplicate";
+
+export interface SubmissionEntry {
+  id: string;
+  challenge_id: string;
+  user_id: string;
+  team_id: string | null;
+  value: string;
+  correctness: SubmissionCorrectness;
+  points_awarded: number;
+  created_at: string;
+}
+
+export interface SubmissionPage {
+  items: SubmissionEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface SubmissionQuery {
+  challenge_id?: string;
+  user_id?: string;
+  team_id?: string;
+  correctness?: SubmissionCorrectness;
+  q?: string;
+  since?: string;
+  until?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export interface CompetitionCreate {
   name: string;
   description?: string;

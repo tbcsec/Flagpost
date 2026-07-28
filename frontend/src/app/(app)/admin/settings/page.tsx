@@ -77,6 +77,10 @@ function SettingsForm({ data }: { data: OperationalSettings }) {
   const [starttls, setStarttls] = useState(data.smtp_starttls);
   const [autoDelete, setAutoDelete] = useState(data.archive_auto_delete);
   const [retentionDays, setRetentionDays] = useState(String(data.archive_retention_days));
+  const [allowlistEnabled, setAllowlistEnabled] = useState(
+    data.email_domain_allowlist_enabled,
+  );
+  const [allowedDomains, setAllowedDomains] = useState(data.allowed_email_domains);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -92,6 +96,8 @@ function SettingsForm({ data }: { data: OperationalSettings }) {
         ...(password ? { smtp_password: password } : {}),
         archive_auto_delete: autoDelete,
         archive_retention_days: Math.min(3650, Math.max(1, Number(retentionDays) || 30)),
+        email_domain_allowlist_enabled: allowlistEnabled,
+        allowed_email_domains: allowedDomains,
       },
       {
         onSuccess: () => toast("Settings saved", { variant: "success" }),
@@ -124,6 +130,35 @@ function SettingsForm({ data }: { data: OperationalSettings }) {
                   <option value="closed">Closed — invite / admin-created only</option>
                 </Select>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Email domain allowlist</CardTitle>
+              <CardDescription>
+                Restrict public sign-up to specific email domains. A rejected sign-up sees a
+                generic error — it never learns which domains are allowed. Applies to public
+                registration only; admin-created accounts and existing users&apos; emails are
+                unaffected. Enabling this makes email mandatory at registration.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="allowlist">Restrict sign-up by email domain</Label>
+                <Select
+                  id="allowlist"
+                  value={allowlistEnabled ? "on" : "off"}
+                  onChange={(e) => setAllowlistEnabled(e.target.value === "on")}
+                  className="max-w-xs"
+                >
+                  <option value="off">Off — any email may register</option>
+                  <option value="on">On — only allowed domains may register</option>
+                </Select>
+              </div>
+              {allowlistEnabled && (
+                <DomainListEditor values={allowedDomains} onChange={setAllowedDomains} />
+              )}
             </CardContent>
           </Card>
 
@@ -232,5 +267,72 @@ function SettingsForm({ data }: { data: OperationalSettings }) {
             )}
           </div>
     </form>
+  );
+}
+
+// Tag-input pattern matching VocabEditor (competition-settings-form.tsx) for
+// consistency across the admin UI — a small local component since that one
+// isn't exported/shared.
+function DomainListEditor({
+  values,
+  onChange,
+}: {
+  values: string[];
+  onChange: (values: string[]) => void;
+}) {
+  const [draft, setDraft] = useState("");
+
+  function add() {
+    const v = draft.trim().toLowerCase();
+    if (v && !values.includes(v)) onChange([...values, v]);
+    setDraft("");
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label>Allowed domains</Label>
+      <p className="text-xs text-muted-foreground">
+        Subdomains are automatically allowed (e.g. an entry for{" "}
+        <span className="font-mono">example.com</span> also allows{" "}
+        <span className="font-mono">mail.example.com</span>).
+      </p>
+      {values.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {values.map((v) => (
+            <span
+              key={v}
+              className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-0.5 text-xs"
+            >
+              {v}
+              <button
+                type="button"
+                onClick={() => onChange(values.filter((x) => x !== v))}
+                className="text-muted-foreground hover:text-destructive"
+                aria-label={`Remove ${v}`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="example.com"
+          maxLength={253}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              add();
+            }
+          }}
+        />
+        <Button type="button" variant="outline" onClick={add} disabled={!draft.trim()}>
+          Add
+        </Button>
+      </div>
+    </div>
   );
 }

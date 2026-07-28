@@ -26,6 +26,7 @@ export default function RegisterPage() {
   const brand = settings ?? FALLBACK_SETTINGS;
   const platformName = brand.platform_name;
   const registrationOpen = brand.registration_open;
+  const emailRequired = brand.email_required;
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -78,16 +79,19 @@ export default function RegisterPage() {
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Email (optional)</Label>
+              <Label htmlFor="email">{emailRequired ? "Email" : "Email (optional)"}</Label>
               <Input
                 id="email"
                 type="email"
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                required={emailRequired}
               />
               <p className="text-xs text-muted-foreground">
-                Optional — you can also sign in with it.
+                {emailRequired
+                  ? "Required to register. You can also sign in with it."
+                  : "Optional — you can also sign in with it."}
               </p>
             </div>
             <div className="space-y-2">

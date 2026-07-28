@@ -67,6 +67,9 @@ async def read_site_settings(db: AsyncSession = Depends(get_db)) -> SiteSettings
     settings = await get_or_create_settings(db)
     # demo_mode is config-driven, not stored — annotate the row for serialization.
     settings.demo_mode = app_config.demo_mode
+    # email_required mirrors the allowlist flag; the domain list itself stays
+    # admin-only (see OperationalSettingsOut).
+    settings.email_required = settings.email_domain_allowlist_enabled
     return settings
 
 
@@ -265,6 +268,8 @@ def _operational_out(settings: SiteSettings) -> OperationalSettingsOut:
         smtp_password_set=bool(settings.smtp_password),
         archive_auto_delete=settings.archive_auto_delete,
         archive_retention_days=settings.archive_retention_days,
+        email_domain_allowlist_enabled=settings.email_domain_allowlist_enabled,
+        allowed_email_domains=settings.allowed_email_domains or [],
         updated_at=settings.updated_at,
     )
 
@@ -299,6 +304,8 @@ async def update_operational_settings(
     # purge_after clocks — it only governs future archive actions.
     settings.archive_auto_delete = body.archive_auto_delete
     settings.archive_retention_days = body.archive_retention_days
+    settings.email_domain_allowlist_enabled = body.email_domain_allowlist_enabled
+    settings.allowed_email_domains = body.allowed_email_domains
     await db.commit()
     await db.refresh(settings)
 

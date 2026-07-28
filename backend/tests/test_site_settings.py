@@ -34,11 +34,13 @@ async def test_public_read_returns_defaults_without_auth(client):
         "demo_mode": False,
         "archive_auto_delete": True,
         "archive_retention_days": 30,
+        "email_required": False,
     }
     # Public shape only — no internal fields leak.
     assert "updated_at" not in body
     assert "smtp_host" not in body
     assert "logo_data" not in body
+    assert "allowed_email_domains" not in body
 
 
 async def test_admin_update_round_trips(client):
@@ -64,6 +66,7 @@ async def test_admin_update_round_trips(client):
         "demo_mode": False,
         "archive_auto_delete": True,
         "archive_retention_days": 30,
+        "email_required": False,
     }
 
 
@@ -263,6 +266,157 @@ async def test_logo_upload_rejects_non_image(client):
         headers=_auth(admin),
     )
     assert resp.status_code == 415
+
+
+# --- Email-domain allowlist for public registration (#56) ---
+
+
+async def test_allowlist_disabled_by_default_email_stays_optional(client):
+    # Allowlist off: registration behaves exactly as before — email optional,
+    # any domain accepted.
+    assert (
+        await client.get("/api/site-settings")
+    ).json()["email_required"] is False
+    resp = await client.post(
+        "/api/auth/register",
+        json={"display_name": "NoAllowlist", "password": "password123"},
+    )
+    assert resp.status_code == 201, resp.text
+
+
+async def test_enabling_allowlist_requires_email_and_makes_it_public(client):
+    admin = await admin_token(client)
+    resp = await client.put(
+        "/api/site-settings/operational",
+        json={
+            "registration_open": True,
+            "email_domain_allowlist_enabled": True,
+            "allowed_email_domains": ["Example.COM"],
+        },
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["email_domain_allowlist_enabled"] is True
+    # Normalized: lowercased.
+    assert body["allowed_email_domains"] == ["example.com"]
+
+    public = await client.get("/api/site-settings")
+    assert public.json()["email_required"] is True
+    # The domain list itself never appears on the public shape.
+    assert "allowed_email_domains" not in public.json()
+
+    # Missing email while enabled → rejected, generic message.
+    missing = await client.post(
+        "/api/auth/register",
+        json={"display_name": "NoEmailAtAll", "password": "password123"},
+    )
+    assert missing.status_code == 403
+    assert "not permitted" in missing.json()["detail"].lower()
+
+    # Non-matching domain → rejected with the *same* generic message (never
+    # discloses the allowlist).
+    mismatch = await client.post(
+        "/api/auth/register",
+        json={
+            "display_name": "WrongDomain",
+            "password": "password123",
+            "email": "person@other.com",
+        },
+    )
+    assert mismatch.status_code == 403
+    assert mismatch.json()["detail"] == missing.json()["detail"]
+
+    # Exact domain match → allowed.
+    exact = await client.post(
+        "/api/auth/register",
+        json={
+            "display_name": "ExactMatch",
+            "password": "password123",
+            "email": "person@example.com",
+        },
+    )
+    assert exact.status_code == 201, exact.text
+
+    # Subdomain match → allowed too.
+    sub = await client.post(
+        "/api/auth/register",
+        json={
+            "display_name": "SubMatch",
+            "password": "password123",
+            "email": "person@mail.example.com",
+        },
+    )
+    assert sub.status_code == 201, sub.text
+
+
+async def test_allowlist_rejects_malformed_domains_on_save(client):
+    admin = await admin_token(client)
+    for bad_domain in ("@example.com", "http://example.com", "*.example.com", "no-dot"):
+        resp = await client.put(
+            "/api/site-settings/operational",
+            json={
+                "registration_open": True,
+                "email_domain_allowlist_enabled": True,
+                "allowed_email_domains": [bad_domain],
+            },
+            headers=_auth(admin),
+        )
+        assert resp.status_code == 422, (bad_domain, resp.text)
+
+
+async def test_allowlist_caps_domain_count(client):
+    admin = await admin_token(client)
+    resp = await client.put(
+        "/api/site-settings/operational",
+        json={
+            "registration_open": True,
+            "email_domain_allowlist_enabled": True,
+            "allowed_email_domains": [f"d{i}.com" for i in range(51)],
+        },
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 422
+
+
+async def test_allowlist_dedupes_domains(client):
+    admin = await admin_token(client)
+    resp = await client.put(
+        "/api/site-settings/operational",
+        json={
+            "registration_open": True,
+            "email_domain_allowlist_enabled": True,
+            "allowed_email_domains": ["example.com", "EXAMPLE.com", "example.com"],
+        },
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["allowed_email_domains"] == ["example.com"]
+
+
+async def test_allowlist_does_not_affect_admin_created_accounts(client):
+    """The allowlist is public-registration-only — admin-minted accounts
+    (Admin → Users) are exempt regardless of the setting."""
+    admin = await admin_token(client)
+    await client.put(
+        "/api/site-settings/operational",
+        json={
+            "registration_open": True,
+            "email_domain_allowlist_enabled": True,
+            "allowed_email_domains": ["example.com"],
+        },
+        headers=_auth(admin),
+    )
+    resp = await client.post(
+        "/api/users",
+        json={
+            "display_name": "AdminMinted",
+            "password": "password123",
+            "email": "person@not-allowed.com",
+        },
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 201, resp.text
 
 
 async def test_show_wordmark_round_trips(client):

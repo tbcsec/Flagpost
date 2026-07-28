@@ -34,6 +34,7 @@ export const FALLBACK_SETTINGS: SiteSettings = {
   demo_mode: false,
   archive_auto_delete: true,
   archive_retention_days: 30,
+  email_required: false,
 };
 
 /** Rewrite the backend-relative `logo_url` to the API origin so an `<img src>`

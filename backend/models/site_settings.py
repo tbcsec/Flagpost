@@ -14,7 +14,7 @@ fixed sentinel so a second row can't be created by accident.
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, Integer, LargeBinary, String
+from sqlalchemy import JSON, Boolean, Integer, LargeBinary, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base, TimestampMixin, UtcDateTime, ensure_aware_utc, utcnow
@@ -100,6 +100,15 @@ class SiteSettings(Base, TimestampMixin):
     archive_retention_days: Mapped[int] = mapped_column(
         Integer, nullable=False, default=30, server_default="30"
     )
+    # Email-domain allowlist for public self-serve registration only (#56). When
+    # on, POST /register requires an email whose domain (or a subdomain of one)
+    # appears in allowed_email_domains; admin-created accounts and later email
+    # edits are unaffected. A null/empty list with the flag on locks registration
+    # to nobody — that's the admin's call, not validated away here.
+    email_domain_allowlist_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    allowed_email_domains: Mapped[list | None] = mapped_column(JSON, nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, onupdate=utcnow, nullable=True
     )

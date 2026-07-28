@@ -23,6 +23,7 @@ from config import settings as app_config
 from db import get_db, utcnow
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 from models.user import User
+from schemas.rules import RulesSettingsOut, RulesSettingsUpdate
 from schemas.site_settings import (
     BackupExportRequest,
     BackupImportRequest,
@@ -254,6 +255,49 @@ async def read_logo(db: AsyncSession = Depends(get_db)) -> Response:
             # Neutralise any script/network in a directly-opened SVG logo.
             "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
         },
+    )
+
+
+# --- Rules / code of conduct (issue #57) --------------------------------------
+# The site-wide rules document users must accept before joining a competition
+# (unless a per-competition override supersedes it, or display-only is on).
+# Follows the /operational sub-resource precedent: manage_site_settings-gated
+# GET/PUT, emitting site.settings_updated with a section marker. Editing the
+# global text does NOT reset acceptances (owner decision, v1) — only a
+# per-competition override change does (see update_competition).
+
+
+@router.get("/rules", response_model=RulesSettingsOut)
+async def read_rules_settings(
+    _user: User = Depends(require_permission("manage_site_settings")),
+    db: AsyncSession = Depends(get_db),
+) -> RulesSettingsOut:
+    settings = await get_or_create_settings(db)
+    return RulesSettingsOut(
+        rules_text=settings.rules_text,
+        rules_display_only=settings.rules_display_only,
+    )
+
+
+@router.put("/rules", response_model=RulesSettingsOut)
+async def update_rules_settings(
+    body: RulesSettingsUpdate,
+    current_user: User = Depends(require_permission("manage_site_settings")),
+    db: AsyncSession = Depends(get_db),
+) -> RulesSettingsOut:
+    settings = await get_or_create_settings(db)
+    settings.rules_text = body.rules_text
+    settings.rules_display_only = body.rules_display_only
+    await db.commit()
+    await db.refresh(settings)
+
+    await event_bus.emit(
+        "site.settings_updated",
+        {"user_id": current_user.id, "section": "rules"},
+    )
+    return RulesSettingsOut(
+        rules_text=settings.rules_text,
+        rules_display_only=settings.rules_display_only,
     )
 
 

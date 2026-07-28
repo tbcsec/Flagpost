@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
+import { RulesAcceptModal } from "@/components/competitions/rules-accept-modal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,7 +13,21 @@ import {
   useJoinByCode,
   useJoinCompetition,
 } from "@/lib/hooks/use-competitions";
+import { useAcceptRules, useFetchRules } from "@/lib/hooks/use-rules";
+import { rulesGateRejection, rulesPromptMode } from "@/lib/rules-prompt";
+import type { RichTextDoc } from "@/lib/types";
 import { toast } from "@/stores/toast";
+
+// A pending rules prompt (#57) in front of a join. Acceptance is recorded
+// either through the accept endpoint (public join — the competition is
+// visible, so its id is known) or by retrying the code join with
+// accept_rules=true (private competitions stay undisclosed pre-code).
+type RulesPrompt = {
+  mode: "accept" | "display";
+  rules: RichTextDoc | null;
+  acceptVia: { kind: "api"; competitionId: string } | { kind: "join" };
+  proceed: () => void;
+};
 
 // Lobby — where a competitor who isn't in any competition lands. Joining is now
 // fully wired: self-serve for public competitions (the list below) and by
@@ -23,7 +38,10 @@ export default function LobbyPage() {
   const { data: competitions } = useCompetitions();
   const join = useJoinCompetition();
   const joinByCode = useJoinByCode();
+  const fetchRules = useFetchRules();
+  const acceptRules = useAcceptRules();
   const [code, setCode] = useState("");
+  const [prompt, setPrompt] = useState<RulesPrompt | null>(null);
 
   // Public and not archived — an archived competition is closed to new joiners.
   const publicComps = (competitions ?? []).filter(
@@ -35,21 +53,117 @@ export default function LobbyPage() {
     router.push("/");
   }
 
+  function joinError(err: unknown) {
+    toast("Couldn't join", {
+      description: (err as Error).message,
+      variant: "destructive",
+    });
+  }
+
   function onJoinByCode(e: React.FormEvent) {
     e.preventDefault();
-    joinByCode.mutate(code, {
-      onSuccess: (comp) => {
-        setCode("");
-        onJoined(comp.name);
+    fireCodeJoin(false);
+  }
+
+  function fireCodeJoin(withAcceptance: boolean) {
+    joinByCode.mutate(
+      { inviteCode: code, acceptRules: withAcceptance },
+      {
+        onSuccess: async (comp) => {
+          setCode("");
+          setPrompt(null);
+          toast(`Joined ${comp.name}`, { variant: "success" });
+          // Display-only rules can't be shown pre-join on the code path (the
+          // competition is undisclosed until the code resolves) — show them
+          // now, and move on after Continue.
+          const state = await fetchRules(comp.id).catch(() => null);
+          if (state && rulesPromptMode(state) === "display") {
+            setPrompt({
+              mode: "display",
+              rules: state.rules,
+              acceptVia: { kind: "api", competitionId: comp.id },
+              proceed: () => router.push("/"),
+            });
+          } else {
+            router.push("/");
+          }
+        },
+        onError: (err) => {
+          const gate = rulesGateRejection(err);
+          if (gate) {
+            // Mandatory rules: prompt, then retry the join carrying acceptance.
+            setPrompt({
+              mode: "accept",
+              rules: gate.rules,
+              acceptVia: { kind: "join" },
+              proceed: () => fireCodeJoin(true),
+            });
+          } else {
+            joinError(err);
+          }
+        },
       },
-      onError: (err) =>
-        toast("Couldn't join", { description: (err as Error).message, variant: "destructive" }),
-    });
+    );
+  }
+
+  async function onPublicJoin(compId: string, name: string) {
+    const fire = () =>
+      join.mutate(compId, {
+        onSuccess: () => {
+          setPrompt(null);
+          onJoined(name);
+        },
+        onError: joinError,
+      });
+    // Pre-check the rules so the prompt appears before the join attempt; if
+    // the check itself fails, fire anyway — the server gate still protects.
+    const state = await fetchRules(compId).catch(() => null);
+    const mode = state ? rulesPromptMode(state) : null;
+    if (mode) {
+      setPrompt({
+        mode,
+        rules: state!.rules,
+        acceptVia: { kind: "api", competitionId: compId },
+        proceed: fire,
+      });
+    } else {
+      fire();
+    }
+  }
+
+  function onPromptConfirm() {
+    if (!prompt) return;
+    if (prompt.mode === "display") {
+      setPrompt(null);
+      prompt.proceed();
+    } else if (prompt.acceptVia.kind === "api") {
+      acceptRules.mutate(prompt.acceptVia.competitionId, {
+        onSuccess: () => {
+          setPrompt(null);
+          prompt.proceed();
+        },
+        onError: joinError,
+      });
+    } else {
+      // Acceptance travels with the retried code join; success closes the prompt.
+      prompt.proceed();
+    }
   }
 
   return (
     <>
       <SectionHeader title="Lobby" subtitle="You're not currently part of any competition." />
+
+      {prompt && (
+        <RulesAcceptModal
+          open
+          mode={prompt.mode}
+          rules={prompt.rules}
+          pending={acceptRules.isPending || joinByCode.isPending || join.isPending}
+          onConfirm={onPromptConfirm}
+          onCancel={() => setPrompt(null)}
+        />
+      )}
 
       <Card>
         <CardHeader>
@@ -93,16 +207,7 @@ export default function LobbyPage() {
                 <Button
                   size="sm"
                   disabled={join.isPending}
-                  onClick={() =>
-                    join.mutate(c.id, {
-                      onSuccess: () => onJoined(c.name),
-                      onError: (err) =>
-                        toast("Couldn't join", {
-                          description: (err as Error).message,
-                          variant: "destructive",
-                        }),
-                    })
-                  }
+                  onClick={() => onPublicJoin(c.id, c.name)}
                 >
                   Join
                 </Button>

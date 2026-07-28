@@ -1,7 +1,7 @@
 """Pydantic schemas for the competition entity (kept separate from models)."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -34,6 +34,11 @@ class CompetitionCreate(BaseModel):
     max_team_size: int | None = Field(default=None, ge=1, le=1000)
     # Halt gameplay (competitors can't submit flags); staff still can.
     paused: bool = False
+    # Per-competition rules / code-of-conduct override (#57); null = use the
+    # site-wide document. Rich-text (ProseMirror JSON), like a challenge
+    # description.
+    rules_override: dict[str, Any] | None = None
+    rules_display_only: bool = False
 
 
 class CompetitionUpdate(BaseModel):
@@ -58,6 +63,10 @@ class CompetitionUpdate(BaseModel):
     brackets: list[str] | None = Field(default=None, max_length=20)
     max_team_size: int | None = Field(default=None, ge=1, le=1000)
     paused: bool | None = None
+    # Explicit null clears the override (falls back to the site-wide rules);
+    # a new/changed non-null value forces re-acceptance (see the router).
+    rules_override: dict[str, Any] | None = None
+    rules_display_only: bool | None = None
 
 
 class CompetitionOut(BaseModel):
@@ -90,6 +99,8 @@ class CompetitionOut(BaseModel):
     brackets: list[str] = Field(default_factory=list)
     max_team_size: int | None = None
     paused: bool = False
+    rules_override: dict[str, Any] | None = None
+    rules_display_only: bool = False
 
     @field_validator("challenge_tags", "difficulty_tiers", "brackets", mode="before")
     @classmethod
@@ -98,9 +109,17 @@ class CompetitionOut(BaseModel):
 
 
 class CompetitionJoinRequest(BaseModel):
-    """Join a competition by its invite code (any visibility)."""
+    """Join a competition by its invite code (any visibility).
+
+    ``accept_rules`` lets the joiner accept the competition's rules in the same
+    request: the code path can't pre-fetch the rules (the competition id isn't
+    known until the code resolves, and a private competition's existence isn't
+    disclosed), so the flow is join → 403 carrying the rules document → re-join
+    with ``accept_rules=true``. The valid invite code is the authorization.
+    """
 
     invite_code: str = Field(min_length=1, max_length=100)
+    accept_rules: bool = False
 
 
 class CompetitionCloneRequest(BaseModel):

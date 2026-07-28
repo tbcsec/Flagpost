@@ -121,6 +121,18 @@ class Competition(Base, TimestampMixin):
     ctftime_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"
     )
+    # Per-competition rules / code-of-conduct override (issue #57): a rich-text
+    # (ProseMirror JSON) document that supersedes the site-wide rules_text for
+    # this competition. Null = fall back to the global document. Adding or
+    # changing a non-null override deletes the competition's acceptance rows so
+    # every participant re-accepts the more specific text (owner decision).
+    rules_override: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Display-only flag for the override document (meaningful when
+    # rules_override is set): shown at join but never gating. The global
+    # document carries its own flag on site_settings.
+    rules_display_only: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
     # Internal dedup for the scheduler's competition.started/ended events — fired
     # once each when the schedule boundary is crossed.
     started_event_fired: Mapped[bool] = mapped_column(

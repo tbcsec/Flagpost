@@ -40,6 +40,7 @@ import type {
   ChallengeUpdate,
   Competition,
   CompetitionCreate,
+  CompetitionRules,
   CompetitionUpdate,
   HelloResponse,
   Hint,
@@ -60,6 +61,7 @@ import type {
   SetupRequest,
   SetupStatus,
   RoleAssignment,
+  RulesSettings,
   PublicCompetition,
   PublicInsights,
   PublicScoreboard,
@@ -99,6 +101,10 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** The server's structured `detail` payload, when it sent one that isn't a
+     *  plain string (e.g. the rules-gate rejection carries the rules document
+     *  and competition id). Undefined for string details and non-JSON bodies. */
+    public detail?: unknown,
   ) {
     super(message);
     this.name = "ApiError";
@@ -191,7 +197,8 @@ async function apiFetch<T>(
   }
 
   if (!res.ok) {
-    throw new ApiError(res.status, await extractError(res));
+    const { message, detail } = await extractError(res);
+    throw new ApiError(res.status, message, detail);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -210,28 +217,47 @@ const STATUS_MESSAGES: Record<number, string> = {
   429: "Too many attempts — please wait a moment and try again.",
 };
 
-async function extractError(res: Response): Promise<string> {
+async function extractError(
+  res: Response,
+): Promise<{ message: string; detail?: unknown }> {
   // Prefer the server's own reason — it's the most specific (e.g. "Incorrect
   // email or password", "A team with that name already exists").
   try {
     const body = await res.json();
     if (typeof body?.detail === "string" && body.detail.trim()) {
-      return body.detail;
+      return { message: body.detail };
     }
     // FastAPI validation errors (422) arrive as an array under `detail`.
     if (Array.isArray(body?.detail) && body.detail[0]?.msg) {
-      return `Invalid input: ${body.detail[0].msg}`;
+      return { message: `Invalid input: ${body.detail[0].msg}` };
+    }
+    // Structured detail objects: keep the payload for callers that understand
+    // it (e.g. the rules gate), and surface its embedded message when present.
+    if (body?.detail && typeof body.detail === "object") {
+      const msg = (body.detail as { message?: unknown }).message;
+      return {
+        message:
+          typeof msg === "string" && msg.trim()
+            ? msg
+            : STATUS_MESSAGES[res.status] ??
+              `The request failed (error ${res.status}). Please try again.`,
+        detail: body.detail,
+      };
     }
   } catch {
     /* non-JSON body — fall through to a status-based message */
   }
   if (res.status >= 500) {
-    return "The Flagpost service ran into a problem. Please try again — if it keeps happening, contact an administrator.";
+    return {
+      message:
+        "The Flagpost service ran into a problem. Please try again — if it keeps happening, contact an administrator.",
+    };
   }
-  return (
-    STATUS_MESSAGES[res.status] ??
-    `The request failed (error ${res.status}). Please try again.`
-  );
+  return {
+    message:
+      STATUS_MESSAGES[res.status] ??
+      `The request failed (error ${res.status}). Please try again.`,
+  };
 }
 
 // --- Typed endpoint helpers (consumed only by hooks) ------------------------
@@ -315,11 +341,25 @@ export const competitionsApi = {
   join: (id: string) =>
     apiFetch<Competition>(`/api/competitions/${id}/join`, { method: "POST" }),
   // Join any competition by invite code — the only way into a private one.
-  joinByCode: (invite_code: string) =>
+  // `accept_rules` accepts the competition's rules in the same request: the
+  // code path can't pre-fetch them (the id is unknown until the code resolves),
+  // so a rules rejection is retried with acceptance attached.
+  joinByCode: (invite_code: string, accept_rules = false) =>
     apiFetch<Competition>("/api/competitions/join", {
       method: "POST",
-      body: JSON.stringify({ invite_code }),
+      body: JSON.stringify({ invite_code, accept_rules }),
     }),
+};
+
+export const rulesApi = {
+  // The effective rules document + the caller's standing for one competition.
+  get: (competitionId: string) =>
+    apiFetch<CompetitionRules>(`/api/competitions/${competitionId}/rules`),
+  accept: (competitionId: string) =>
+    apiFetch<CompetitionRules>(
+      `/api/competitions/${competitionId}/rules/accept`,
+      { method: "POST" },
+    ),
 };
 
 export const teamsApi = {
@@ -690,6 +730,13 @@ export const siteSettingsApi = {
     show_wordmark: boolean;
   }) =>
     apiFetch<SiteSettingsAdmin>("/api/site-settings", {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  // Site-wide rules / code of conduct authoring — admin-only.
+  rules: () => apiFetch<RulesSettings>("/api/site-settings/rules"),
+  updateRules: (input: RulesSettings) =>
+    apiFetch<RulesSettings>("/api/site-settings/rules", {
       method: "PUT",
       body: JSON.stringify(input),
     }),

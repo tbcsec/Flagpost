@@ -55,6 +55,10 @@ async def clone_competition(
         ctftime_enabled=source.ctftime_enabled,
         brackets=source.brackets,
         max_team_size=source.max_team_size,
+        # Rules override travels as config (#57); acceptances are per-user run
+        # state and stay behind, like scores — the clone's joiners re-accept.
+        rules_override=source.rules_override,
+        rules_display_only=source.rules_display_only,
         invite_code=generate_invite_code(),
         # Schedule is intentionally left unset — the admin sets fresh dates so
         # two competitions don't accidentally run on the same window.

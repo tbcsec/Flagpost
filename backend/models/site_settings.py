@@ -109,6 +109,17 @@ class SiteSettings(Base, TimestampMixin):
         Boolean, nullable=False, default=False, server_default="0"
     )
     allowed_email_domains: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Site-wide rules / code of conduct (issue #57): a rich-text (ProseMirror
+    # JSON) document shown to users before they join any competition. Null = no
+    # rules configured, no gate anywhere. A competition's ``rules_override``
+    # supersedes this for that competition.
+    rules_text: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # When true the rules are informational only — shown at join, but no forced
+    # "I accept" and no join gate. Travels with this (global) document; an
+    # override carries its own flag on the competition row.
+    rules_display_only: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
     updated_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, onupdate=utcnow, nullable=True
     )

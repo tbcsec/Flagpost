@@ -54,6 +54,19 @@ export default function LobbyPage() {
   }
 
   function joinError(err: unknown) {
+    // The email-verification gate (#74) is a 403 with a fixed message — route
+    // to the profile page (verify banner + resend button) instead of a
+    // dead-end toast. Duck-typed (status/message) rather than an ApiError
+    // import — components reach the API only through hooks (ARCHITECTURE.md §8).
+    const e = err as { status?: unknown; message?: unknown };
+    if (e.status === 403 && typeof e.message === "string" && e.message.includes("Verify your email")) {
+      toast("Couldn't join", {
+        description: `${e.message} — see your Profile page.`,
+        variant: "destructive",
+      });
+      router.push("/profile");
+      return;
+    }
     toast("Couldn't join", {
       description: (err as Error).message,
       variant: "destructive",

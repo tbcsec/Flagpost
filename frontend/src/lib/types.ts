@@ -11,6 +11,9 @@ export interface User {
   email: string | null;
   display_name: string;
   created_at: string;
+  // Email verification (#74): null = unverified (or the account is exempt /
+  // predates the gate). Drives the profile "verify your email" banner.
+  email_verified_at: string | null;
 }
 
 export interface TokenResponse {
@@ -827,8 +830,12 @@ export interface SiteSettings {
   archive_auto_delete: boolean;
   archive_retention_days: number;
   // Whether public registration currently requires an email (the email-domain
-  // allowlist, #56, is enabled). The domain list itself is never public.
+  // allowlist, #56, or email verification, #74, is enabled). Neither policy's
+  // internals are public.
   email_required: boolean;
+  // Whether an unverified account is blocked from joining a competition
+  // (#74). Public so the join button / profile banner can explain a 403.
+  email_verification_enabled: boolean;
 }
 
 // Admin shape adds the last-updated timestamp.
@@ -851,6 +858,8 @@ export interface OperationalSettings {
   /** Email-domain allowlist for public registration (#56). Admin-only. */
   email_domain_allowlist_enabled: boolean;
   allowed_email_domains: string[];
+  /** Email verification gate (#74). Enabling it requires SMTP configured. */
+  email_verification_enabled: boolean;
   updated_at: string | null;
 }
 
@@ -893,6 +902,7 @@ export interface OperationalSettingsUpdate {
   archive_retention_days: number;
   email_domain_allowlist_enabled: boolean;
   allowed_email_domains: string[];
+  email_verification_enabled: boolean;
 }
 
 // RBAC admin (§7.4). Roles are data: a permission-key array + scope.

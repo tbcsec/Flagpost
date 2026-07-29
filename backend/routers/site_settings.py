@@ -35,7 +35,7 @@ from schemas.site_settings import (
 )
 from storage import get_storage
 from storage.base import ObjectStorage
-from utils import backup
+from utils import backup, mailer
 from utils.event_bus import event_bus
 
 router = APIRouter(prefix="/api/site-settings", tags=["site-settings"])
@@ -68,9 +68,11 @@ async def read_site_settings(db: AsyncSession = Depends(get_db)) -> SiteSettings
     settings = await get_or_create_settings(db)
     # demo_mode is config-driven, not stored — annotate the row for serialization.
     settings.demo_mode = app_config.demo_mode
-    # email_required mirrors the allowlist flag; the domain list itself stays
-    # admin-only (see OperationalSettingsOut).
-    settings.email_required = settings.email_domain_allowlist_enabled
+    # email_required mirrors the allowlist + verification flags; the domain
+    # list itself stays admin-only (see OperationalSettingsOut).
+    settings.email_required = (
+        settings.email_domain_allowlist_enabled or settings.email_verification_enabled
+    )
     return settings
 
 
@@ -314,6 +316,7 @@ def _operational_out(settings: SiteSettings) -> OperationalSettingsOut:
         archive_retention_days=settings.archive_retention_days,
         email_domain_allowlist_enabled=settings.email_domain_allowlist_enabled,
         allowed_email_domains=settings.allowed_email_domains or [],
+        email_verification_enabled=settings.email_verification_enabled,
         updated_at=settings.updated_at,
     )
 
@@ -334,6 +337,14 @@ async def update_operational_settings(
     current_user: User = Depends(require_permission("manage_site_settings")),
     db: AsyncSession = Depends(get_db),
 ) -> OperationalSettingsOut:
+    # Email verification (#74) needs somewhere to deliver the confirmation
+    # link — refuse to turn it on without SMTP (this write's host, or the env
+    # fallback), rather than silently no-op every send.
+    if body.email_verification_enabled and not mailer.is_configured(body.smtp_host):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Configure SMTP before enabling email verification",
+        )
     settings = await get_or_create_settings(db)
     settings.registration_open = body.registration_open
     settings.smtp_host = body.smtp_host or None
@@ -350,6 +361,7 @@ async def update_operational_settings(
     settings.archive_retention_days = body.archive_retention_days
     settings.email_domain_allowlist_enabled = body.email_domain_allowlist_enabled
     settings.allowed_email_domains = body.allowed_email_domains
+    settings.email_verification_enabled = body.email_verification_enabled
     await db.commit()
     await db.refresh(settings)
 

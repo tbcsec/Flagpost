@@ -36,6 +36,14 @@ export function useResetPassword() {
   return useMutation({ mutationFn: authApi.resetPassword });
 }
 
+export function useVerifyEmail() {
+  return useMutation({ mutationFn: authApi.verifyEmail });
+}
+
+export function useResendVerification() {
+  return useMutation({ mutationFn: authApi.resendVerification });
+}
+
 export function useLogout() {
   const clearSession = useAuthStore((s) => s.clearSession);
   const queryClient = useQueryClient();

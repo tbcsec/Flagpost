@@ -56,6 +56,14 @@ async def _effective_smtp():
     return None
 
 
+def is_configured(row_smtp_host: str | None) -> bool:
+    """Whether SMTP would be considered configured for sending, given a
+    (possibly not-yet-committed) row host — mirrors ``_effective_smtp``'s
+    row-overrides-env precedence without a DB round-trip, so a settings write
+    can check "would this send, or silently no-op" before committing."""
+    return bool(row_smtp_host or settings.smtp_host)
+
+
 async def send_email(to: list[str], subject: str, body: str) -> bool:
     """Send a plain-text email. Returns True if handed to the SMTP server."""
     smtp = await _effective_smtp()

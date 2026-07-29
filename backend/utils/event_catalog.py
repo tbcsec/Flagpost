@@ -53,6 +53,7 @@ EVENT_TYPES: tuple[str, ...] = (
     "category.deleted",
     "user.registered",
     "user.password_changed",
+    "user.email_verified",
     "user.created",
     "user.updated",
     "user.banned",

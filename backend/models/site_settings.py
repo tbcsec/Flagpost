@@ -109,6 +109,13 @@ class SiteSettings(Base, TimestampMixin):
         Boolean, nullable=False, default=False, server_default="0"
     )
     allowed_email_domains: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Email verification gate (issue #74): when on, a self-registered account
+    # must confirm its email (mailed link) before it can join a competition.
+    # Enabling it requires SMTP to already be configured (checked at the
+    # settings-write layer, not here). Admin-created accounts are exempt.
+    email_verification_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
     # Site-wide rules / code of conduct (issue #57): a rich-text (ProseMirror
     # JSON) document shown to users before they join any competition. Null = no
     # rules configured, no gate anywhere. A competition's ``rules_override``

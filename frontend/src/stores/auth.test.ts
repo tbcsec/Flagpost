@@ -8,6 +8,7 @@ const user: User = {
   email: "a@example.com",
   display_name: "Ada",
   created_at: new Date().toISOString(),
+  email_verified_at: null,
 };
 
 beforeEach(() => {

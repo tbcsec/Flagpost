@@ -308,6 +308,14 @@ export const authApi = {
       { method: "POST", body: JSON.stringify(input) },
       { auth: false },
     ),
+  verifyEmail: (input: { token: string }) =>
+    apiFetch<void>(
+      "/api/auth/verify-email",
+      { method: "POST", body: JSON.stringify(input) },
+      { auth: false },
+    ),
+  resendVerification: () =>
+    apiFetch<void>("/api/auth/resend-verification", { method: "POST" }),
   /** Restore a session from the refresh cookie on app load. */
   restore: () => refreshOnce(),
 };

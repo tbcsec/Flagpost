@@ -140,6 +140,9 @@ async def create_user(
         email=body.email,
         display_name=body.display_name,
         password_hash=hash_password(body.password),
+        # Admin-created accounts are exempt from email verification (#74) — an
+        # administrator minting the account is itself the vouching step.
+        email_verified_at=utcnow(),
     )
     db.add(user)
     await db.commit()

@@ -62,9 +62,15 @@ class SiteSettingsOut(BaseModel):
     archive_auto_delete: bool = True
     archive_retention_days: int = 30
     # Whether public registration currently requires an email (the domain
-    # allowlist is enabled). The allowlist itself is never public — only this
-    # policy bit, which the register page needs to mark the field required.
+    # allowlist is enabled, or email verification is enabled — either makes an
+    # address mandatory). The allowlist/verification internals stay admin-only —
+    # only this policy bit, which the register page needs to mark the field
+    # required.
     email_required: bool = False
+    # Whether an unverified account is blocked from joining a competition
+    # (issue #74). Public so the join button / profile banner can explain a
+    # 403 without a round-trip to admin-only settings.
+    email_verification_enabled: bool = False
 
 
 class SiteSettingsUpdate(BaseModel):
@@ -100,6 +106,9 @@ class OperationalSettingsOut(BaseModel):
     # the domain list itself is never exposed on the public SiteSettingsOut.
     email_domain_allowlist_enabled: bool
     allowed_email_domains: list[str]
+    # Email verification gate (#74): requires SMTP to be configured (checked at
+    # the write layer — see routers.site_settings.update_operational_settings).
+    email_verification_enabled: bool
     updated_at: datetime | None
 
 
@@ -134,6 +143,10 @@ class OperationalSettingsUpdate(BaseModel):
     # rejects the whole save (422) rather than being silently dropped.
     email_domain_allowlist_enabled: bool = False
     allowed_email_domains: list[str] = Field(default_factory=list)
+    # Email verification gate (#74). Turning this on 400s at the router layer
+    # unless SMTP is configured (this write's smtp_host, or the env fallback) —
+    # there'd be no way to deliver the confirmation link otherwise.
+    email_verification_enabled: bool = False
 
     @field_validator("allowed_email_domains")
     @classmethod

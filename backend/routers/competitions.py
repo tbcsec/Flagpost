@@ -101,6 +101,21 @@ async def _join(
     db: AsyncSession, competition: Competition, user: User
 ) -> Competition:
     """Grant the Participant role (idempotently) and emit the join event once."""
+    # Email verification gate (#74): join-only — an existing member is never
+    # re-gated by an idempotent re-join (e.g. the setting flipping on
+    # mid-event), and admin-created accounts are exempt (stamped verified at
+    # creation).
+    already_member = competition.id in await member_competition_ids(db, user.id)
+    site = await get_or_create_settings(db)
+    if (
+        not already_member
+        and site.email_verification_enabled
+        and (user.email is None or user.email_verified_at is None)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Verify your email address before joining a competition",
+        )
     # Rules gate (#57): mandatory effective rules must be accepted first.
     await require_rules_accepted(db, competition, user)
     newly_joined = await ensure_participant_role(db, competition.id, user.id)

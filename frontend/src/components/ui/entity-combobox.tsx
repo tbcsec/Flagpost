@@ -29,6 +29,8 @@ export function EntityCombobox({
   placeholder,
   disabled,
   emptyText = "No matches",
+  freeText = false,
+  className,
 }: {
   options: ComboOption[];
   value: string;
@@ -37,6 +39,12 @@ export function EntityCombobox({
   placeholder?: string;
   disabled?: boolean;
   emptyText?: string;
+  // Free-text mode: the value is whatever's typed (not required to match an
+  // option) — options are shown as suggestions only. Used for the automation
+  // condition field picker, where the catalog's fields are suggestions but
+  // arbitrary field paths are still valid input.
+  freeText?: boolean;
+  className?: string;
 }) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
@@ -48,11 +56,13 @@ export function EntityCombobox({
 
   const selected = options.find((o) => o.value === value);
   // Closed: show the selected label (or the raw id if unresolved). Open: show
-  // what's being typed to filter.
-  const displayValue = open ? query : selected?.label ?? value;
+  // what's being typed to filter. Free-text mode has no separate "resolved
+  // label" — the value itself is always what's displayed/typed.
+  const displayValue = freeText ? value : open ? query : (selected?.label ?? value);
 
+  const filterQuery = freeText ? value : query;
   const filtered = React.useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = filterQuery.trim().toLowerCase();
     const match = q
       ? options.filter(
           (o) =>
@@ -60,7 +70,7 @@ export function EntityCombobox({
         )
       : options;
     return match.slice(0, 50); // cap the rendered list
-  }, [options, query]);
+  }, [options, filterQuery]);
 
   // Keep the highlighted option in range as the filtered list shrinks/grows —
   // derived by clamping at read time, so there's no state to re-sync.
@@ -78,7 +88,7 @@ export function EntityCombobox({
   function choose(v: string) {
     onChange(v);
     setOpen(false);
-    setQuery("");
+    if (!freeText) setQuery("");
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -104,6 +114,10 @@ export function EntityCombobox({
       if (open && filtered[active]) {
         e.preventDefault();
         choose(filtered[active].value);
+      } else if (open && freeText) {
+        // Free-text with no matching suggestion — the typed value is already
+        // committed via onChange, so Enter just dismisses the suggestion list.
+        setOpen(false);
       }
     }
   }
@@ -125,16 +139,20 @@ export function EntityCombobox({
         autoComplete="off"
         onFocus={() => {
           setOpen(true);
-          setQuery("");
+          if (!freeText) setQuery("");
           setActiveIndex(0);
         }}
         onChange={(e) => {
           setOpen(true);
-          setQuery(e.target.value);
+          if (freeText) {
+            onChange(e.target.value);
+          } else {
+            setQuery(e.target.value);
+          }
           setActiveIndex(0);
         }}
         onKeyDown={onKeyDown}
-        className={value && !open ? "pr-8" : undefined}
+        className={cn(value && !open ? "pr-8" : undefined, className)}
       />
       {value && !open && !disabled && (
         <button

@@ -149,12 +149,6 @@ export function RuleBuilder({
           />
         </div>
 
-        <datalist id="trigger-fields">
-          {triggerFields.map((f) => (
-            <option key={f} value={f} />
-          ))}
-        </datalist>
-
         <ol>
           {/* 1 — Trigger */}
           <Step index={1} label="When this happens">
@@ -182,13 +176,17 @@ export function RuleBuilder({
                   const op = catalog.operators.find((o) => o.value === c.operator);
                   return (
                     <div key={i} className="flex flex-wrap items-center gap-2">
-                      <Input
-                        list="trigger-fields"
-                        value={c.field}
-                        onChange={(e) => updateCondition(i, { field: e.target.value })}
-                        placeholder="field"
-                        className="h-9 w-36"
-                      />
+                      <div className="w-36">
+                        <EntityCombobox
+                          freeText
+                          options={triggerFields.map((f) => ({ value: f, label: f }))}
+                          value={c.field}
+                          onChange={(v) => updateCondition(i, { field: v })}
+                          placeholder="field"
+                          emptyText="No suggested fields"
+                          className="h-9"
+                        />
+                      </div>
                       <Select
                         value={c.operator}
                         onChange={(e) => updateCondition(i, { operator: e.target.value })}

@@ -131,6 +131,7 @@ challenge.guesses_reset     challenge.rated            challenge.hint_requested
 hint.released
 category.created            category.deleted
 user.registered              user.password_changed
+user.email_verified
 user.created                 user.updated               user.banned
 user.unbanned                user.deleted
 role.created                 role.updated               role.deleted

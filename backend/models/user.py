@@ -45,6 +45,12 @@ class User(Base, TimestampMixin):
     # utils/notifications.DEFAULT_PREFS. Null = all defaults (a missing key
     # always resolves to its default), so an unset user opts into everything.
     notification_prefs: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Email verification (issue #74): null = unverified. Set by the
+    # /auth/verify-email token flow, or stamped at creation time for
+    # admin-created accounts (Admin -> Users), which are exempt from the gate.
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 # Case-insensitive uniqueness for the login identifier: "Alice" and "alice" can't

@@ -15,6 +15,7 @@ from models.collab import CollabDocument
 from models.competition import Competition
 from models.competition_module import CompetitionModule
 from models.dashboard_layout import DashboardLayout
+from models.email_verification import EmailVerificationToken
 from models.feedback import (
     ChallengeRating,
     Survey,
@@ -49,6 +50,7 @@ __all__ = [
     "Competition",
     "CompetitionModule",
     "DashboardLayout",
+    "EmailVerificationToken",
     "Hint",
     "HintReveal",
     "MCGuessReset",

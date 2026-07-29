@@ -670,8 +670,10 @@ dumb relay + client snapshot), ADR-0011 (site-wide theming only —
 per-competition deferred), ADR-0015 (username-primary identity, optional
 email), ADR-0016 (export/import backup), ADR-0017 (first-run setup wizard,
 supersedes the seeded admin of ADR-0010), ADR-0018 (regex-flag ReDoS
-containment), ADR-0019 (per-install JWT secret — never a repo-public default).
-There is **no seeded default admin** in production: a fresh install ships with
+containment), ADR-0019 (per-install JWT secret — never a repo-public default),
+ADR-0020 (secret storage: hash what is only verified, encrypt what must be
+retrieved — facility tracked in #109). There is **no seeded default admin** in
+production: a fresh install ships with
 **no** administrator and is *unconfigured* until an operator completes the
 **first-run setup wizard** (`/setup`, ADR-0017), which creates the owner account
 (no hard-coded creds) + initial branding. `auth.setup.instance_needs_setup`

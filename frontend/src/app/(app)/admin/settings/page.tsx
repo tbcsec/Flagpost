@@ -92,6 +92,9 @@ function SettingsForm({ data }: { data: OperationalSettings }) {
     data.email_domain_allowlist_enabled,
   );
   const [allowedDomains, setAllowedDomains] = useState(data.allowed_email_domains);
+  const [verificationEnabled, setVerificationEnabled] = useState(
+    data.email_verification_enabled,
+  );
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -109,6 +112,7 @@ function SettingsForm({ data }: { data: OperationalSettings }) {
         archive_retention_days: Math.min(3650, Math.max(1, Number(retentionDays) || 30)),
         email_domain_allowlist_enabled: allowlistEnabled,
         allowed_email_domains: allowedDomains,
+        email_verification_enabled: verificationEnabled,
       },
       {
         onSuccess: () => toast("Settings saved", { variant: "success" }),
@@ -170,6 +174,32 @@ function SettingsForm({ data }: { data: OperationalSettings }) {
               {allowlistEnabled && (
                 <DomainListEditor values={allowedDomains} onChange={setAllowedDomains} />
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Email verification</CardTitle>
+              <CardDescription>
+                Require a self-registered account to confirm its email (a link sent via the SMTP
+                server below) before it can join a competition. Requires SMTP to be configured.
+                Admin-created accounts (Admin → Users) are exempt, and turning this on never
+                affects members who already joined.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-2">
+                <Label htmlFor="verify">Require email verification to join</Label>
+                <Select
+                  id="verify"
+                  value={verificationEnabled ? "on" : "off"}
+                  onChange={(e) => setVerificationEnabled(e.target.value === "on")}
+                  className="max-w-xs"
+                >
+                  <option value="off">Off — anyone who registers can join</option>
+                  <option value="on">On — must verify email first</option>
+                </Select>
+              </div>
             </CardContent>
           </Card>
 

@@ -8,18 +8,71 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useChangePassword } from "@/lib/hooks/use-users";
+import { useSiteSettings } from "@/lib/hooks/use-site-settings";
+import { useChangePassword, useResendVerification } from "@/lib/hooks/use-users";
 import { useAuthStore } from "@/stores/auth";
 import { toast } from "@/stores/toast";
+
+// Email verification (#74): shown only when the site requires it and this
+// account hasn't confirmed its address yet. There's no self-service
+// add/change-email flow (a separate issue) — an email-less account is told to
+// contact an administrator rather than offered a dead-end resend button.
+function VerifyEmailBanner({ user }: { user: { email: string | null } }) {
+  const resend = useResendVerification();
+  return (
+    <Card className="border-warning/50">
+      <CardHeader>
+        <CardTitle>Verify your email</CardTitle>
+        <CardDescription>
+          This instance requires a verified email before you can join a competition.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {user.email ? (
+          <div className="flex items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={resend.isPending || resend.isSuccess}
+              onClick={() =>
+                resend.mutate(undefined, {
+                  onSuccess: () => toast("Verification email sent", { variant: "success" }),
+                  onError: (err) =>
+                    toast("Couldn't send it", {
+                      description: (err as Error).message,
+                      variant: "destructive",
+                    }),
+                })
+              }
+            >
+              {resend.isPending
+                ? "Sending…"
+                : resend.isSuccess
+                  ? "Sent — check your inbox"
+                  : "Resend verification email"}
+            </Button>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Your account has no email address on file. Contact an administrator to have one added.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 // Profile. Changing your password IS wired (POST /api/auth/change-password).
 // Editing display name / email needs a user-update endpoint that doesn't exist
 // yet — shown read-only. Notification preferences are wired (§4.4).
 export default function ProfilePage() {
   const user = useAuthStore((s) => s.user);
+  const { data: settings } = useSiteSettings();
   const changePassword = useChangePassword();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
+  const needsVerification =
+    !!settings?.email_verification_enabled && !!user && !user.email_verified_at;
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -38,6 +91,8 @@ export default function ProfilePage() {
   return (
     <>
       <SectionHeader title="Profile" subtitle="Your account and notification preferences" />
+
+      {needsVerification && <VerifyEmailBanner user={user!} />}
 
       <Card>
         <CardHeader>

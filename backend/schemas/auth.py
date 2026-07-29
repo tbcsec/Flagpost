@@ -37,6 +37,10 @@ class ResetPasswordRequest(BaseModel):
     new_password: str = Field(min_length=8, max_length=256)
 
 
+class VerifyEmailRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=256)
+
+
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -44,6 +48,9 @@ class UserOut(BaseModel):
     email: EmailStr | None
     display_name: str
     created_at: datetime
+    # Email verification (#74): null = unverified (or the feature has never
+    # applied to this account, e.g. it was admin-created or predates the gate).
+    email_verified_at: datetime | None = None
 
 
 class PermissionsOut(BaseModel):

@@ -29,9 +29,12 @@ from auth.security import (
 from config import settings
 from auth.membership import effective_permissions
 from db import ensure_aware_utc, get_db, utcnow
+from models.email_verification import EmailVerificationToken
 from models.password_reset import PasswordResetToken
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 from models.user import RefreshSession, User
+from ratelimit import get_rate_limiter
+from ratelimit.base import RateLimiter
 from utils import mailer
 from schemas.auth import (
     ChangePasswordRequest,
@@ -42,6 +45,7 @@ from schemas.auth import (
     ResetPasswordRequest,
     TokenResponse,
     UserOut,
+    VerifyEmailRequest,
 )
 from utils.event_bus import event_bus
 
@@ -82,6 +86,43 @@ async def _issue_session(db: AsyncSession, user: User, response: Response) -> st
     return create_access_token(user.id)
 
 
+async def _send_verification_email(db: AsyncSession, user: User) -> None:
+    """Mint a fresh 24h verification token and mail the confirmation link,
+    replacing any tokens the user already had outstanding."""
+    import secrets
+    from datetime import timedelta
+
+    for existing in (
+        await db.execute(
+            select(EmailVerificationToken).where(
+                EmailVerificationToken.user_id == user.id
+            )
+        )
+    ).scalars().all():
+        await db.delete(existing)
+
+    raw = secrets.token_urlsafe(32)
+    db.add(
+        EmailVerificationToken(
+            user_id=user.id,
+            token_hash=_hash_token(raw),
+            expires_at=utcnow() + timedelta(hours=24),
+        )
+    )
+    await db.commit()
+
+    origins = settings.cors_origin_list
+    base = origins[0] if origins else ""
+    link = f"{base}/verify-email?token={raw}"
+    await mailer.send_email(
+        [str(user.email)],
+        "Verify your email address",
+        f"Confirm your email address to finish setting up your Flagpost account.\n\n"
+        f"Use this link within the next 24 hours:\n{link}\n\n"
+        f"If you didn't create this account, you can ignore this email.",
+    )
+
+
 @router.post(
     "/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED
 )
@@ -119,6 +160,15 @@ async def register(
                 detail="Registration is not permitted with that email address.",
             )
 
+    # Email verification (#74): when the gate is on, an email is required —
+    # there's nothing to verify without one, and joining a competition would
+    # otherwise be permanently blocked with no way to add an address.
+    if site is not None and site.email_verification_enabled and not body.email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An email address is required to verify your account",
+        )
+
     # Display name is the login identifier — must be unique (case-insensitively).
     if await display_name_taken(db, body.display_name):
         raise HTTPException(
@@ -148,6 +198,12 @@ async def register(
     await event_bus.emit(
         "user.registered", {"user_id": user.id, "email": user.email}
     )
+
+    # Email verification (#74): mint + mail a confirmation link. The account
+    # exists immediately (login works), but stays unverified — the competition
+    # join gate is where the unverified state actually bites.
+    if site is not None and site.email_verification_enabled and user.email:
+        await _send_verification_email(db, user)
 
     access_token = await _issue_session(db, user, response)
     return TokenResponse(access_token=access_token, user=UserOut.model_validate(user))
@@ -386,4 +442,78 @@ async def reset_password(
         session.revoked_at = utcnow()
     await db.commit()
     await event_bus.emit("user.password_changed", {"user_id": user.id})
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- email verification (issue #74) -------------------------------------------
+
+
+@router.post("/verify-email", status_code=status.HTTP_204_NO_CONTENT)
+async def verify_email(
+    body: VerifyEmailRequest, db: AsyncSession = Depends(get_db)
+) -> Response:
+    """Confirm an account's email from a valid, unexpired verification token.
+    Generic 400 on either an invalid or expired token — no enumeration."""
+    token = await db.scalar(
+        select(EmailVerificationToken).where(
+            EmailVerificationToken.token_hash == _hash_token(body.token)
+        )
+    )
+    if token is None or ensure_aware_utc(token.expires_at) < utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This verification link is invalid or has expired",
+        )
+    user = await db.get(User, token.user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Account not found"
+        )
+    user.email_verified_at = utcnow()
+    for t in (
+        await db.execute(
+            select(EmailVerificationToken).where(
+                EmailVerificationToken.user_id == user.id
+            )
+        )
+    ).scalars().all():
+        await db.delete(t)
+    await db.commit()
+    await event_bus.emit("user.email_verified", {"user_id": user.id})
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/resend-verification", status_code=status.HTTP_204_NO_CONTENT)
+async def resend_verification(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
+) -> Response:
+    """Re-send the verification email to the caller's own address. Rate-limited
+    to 1/60s per user to guard against mail-bombing an inbox."""
+    site = await db.get(SiteSettings, SITE_SETTINGS_ID)
+    if site is None or not site.email_verification_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email verification isn't enabled on this instance",
+        )
+    if not current_user.email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Add an email address to your account first",
+        )
+    if current_user.email_verified_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account is already verified",
+        )
+    allowed = await rate_limiter.hit(
+        f"resend-verification:{current_user.id}", limit=1, window_seconds=60
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Please wait before requesting another verification email",
+        )
+    await _send_verification_email(db, current_user)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

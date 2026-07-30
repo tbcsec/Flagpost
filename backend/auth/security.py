@@ -10,6 +10,10 @@
   cookie; only its SHA-256 hash is stored (``RefreshSession``), so the DB
   never holds a usable token. Rotated on every refresh and revocable on
   logout.
+- API token (issue #75): a separate, long-lived opaque token (``flp_`` prefix)
+  for programmatic REST access — administrator-minted, authenticates as its
+  holder. REST only, not accepted at the WebSocket handshake. Same
+  hash-at-rest treatment as a refresh token.
 """
 
 from __future__ import annotations
@@ -78,3 +82,23 @@ def refresh_expiry() -> datetime:
     return datetime.now(timezone.utc) + timedelta(
         days=settings.refresh_token_ttl_days
     )
+
+
+# --- Personal API tokens (issue #75) ----------------------------------------
+#
+# A distinct opaque-token format, disambiguated from a JWT access token by a
+# recognizable ``flp_`` prefix (a JWT is three dot-separated base64 segments;
+# this can't collide) so ``auth/deps.get_current_user`` can branch on it — and
+# so a leaked token is obviously identifiable/greppable in logs. Same
+# hash-at-rest treatment as a refresh token.
+
+API_TOKEN_PREFIX = "flp_"
+
+
+def generate_api_token() -> str:
+    """A high-entropy opaque token (the raw value shown once, at mint time)."""
+    return API_TOKEN_PREFIX + secrets.token_urlsafe(40)
+
+
+def hash_api_token(raw: str) -> str:
+    return hashlib.sha256(raw.encode()).hexdigest()

@@ -16,12 +16,51 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.permissions import Scope, is_known, scope_of
-from auth.security import decode_access_token
-from db import get_db
+from auth.security import API_TOKEN_PREFIX, decode_access_token, hash_api_token
+from db import get_db, utcnow
+from models.api_token import ApiToken
 from models.role import Role, RoleAssignment
 from models.user import User
 
 _bearer = HTTPBearer(auto_error=False)
+
+
+async def _resolve_api_token(raw: str, db: AsyncSession) -> User:
+    """Resolve a ``flp_``-prefixed personal API token (issue #75) to its holder.
+
+    Authenticates the request as the token's holder with that user's full
+    effective permission set — no separate scope model in v1.
+    """
+    token = await db.scalar(
+        select(ApiToken).where(ApiToken.token_hash == hash_api_token(raw))
+    )
+    if token is None or token.revoked_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or revoked API token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if token.expires_at < utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API token has expired",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    user = await db.get(User, token.user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User no longer exists",
+        )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="This account has been disabled",
+        )
+    # Best-effort admin visibility — never blocks the request on a write failure.
+    token.last_used_at = utcnow()
+    await db.commit()
+    return user
 
 
 async def get_current_user(
@@ -34,6 +73,8 @@ async def get_current_user(
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    if creds.credentials.startswith(API_TOKEN_PREFIX):
+        return await _resolve_api_token(creds.credentials, db)
     try:
         payload = decode_access_token(creds.credentials)
     except jwt.PyJWTError:

@@ -592,7 +592,10 @@ Support Tickets           ticket_view, ticket_respond, ticket_assign,
 Announcements             announcement_create, announcement_delete
 Feedback                  feedback_manage, feedback_view_responses,
                           feedback_submit
-Users & Roles             manage_users, manage_roles, view_all_users
+Users & Roles             manage_users, manage_roles, view_all_users,
+                          manage_api_tokens  (minting/revoking personal API
+                          tokens, issue #75 — a token's own holder can still
+                          view/revoke it without this, §7.7)
 Site Settings             manage_site_settings  (global — the site-wide
                           theme/branding an administrator sets, §9)
 Analytics                 view_competition_analytics, view_global_analytics
@@ -748,6 +751,14 @@ maintaining two auth schemes:
 - **WebSocket**: the same access token, sent as the first frame after
   connect per §4.1 — not a second, WS-specific token type. One issuance
   and refresh path to reason about, not two.
+
+**Personal API tokens** (issue #75) are a deliberate, narrow exception: a
+long-lived, `flp_`-prefixed opaque token an administrator (`manage_api_tokens`)
+mints for a chosen user, for programmatic REST access without capturing a
+browser session. It authenticates as its holder with that holder's full
+effective permission set — no separate scope model — and is **REST only**,
+never accepted at the WebSocket handshake. Only its SHA-256 hash is stored
+(mirrors `RefreshSession`); the raw value is shown once, at mint time.
 
 Password auth is the baseline (hashed with a modern KDF, never reversible)
 and the **only** authentication method for initial release — no SSO

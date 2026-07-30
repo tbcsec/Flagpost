@@ -457,15 +457,16 @@ export const usersApi = {
 };
 
 export const apiTokensApi = {
-  // Admin (manage_api_tokens): mint for a chosen user, list every token, revoke any.
+  // Oversight (manage_api_tokens): list every token, revoke any — never mint.
   list: () => apiFetch<ApiToken[]>("/api/api-tokens"),
-  create: (input: { user_id: string; description: string; expires_in_days: number }) =>
+  revoke: (id: string) => apiFetch<void>(`/api/api-tokens/${id}`, { method: "DELETE" }),
+  // Self-service (any authenticated user, own account only). The create body
+  // carries no user id: the holder is always the caller.
+  create: (input: { description: string; expires_in_days: number }) =>
     apiFetch<ApiTokenCreated>("/api/api-tokens", {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  revoke: (id: string) => apiFetch<void>(`/api/api-tokens/${id}`, { method: "DELETE" }),
-  // Self-service (any authenticated user, own tokens only).
   listMine: () => apiFetch<ApiToken[]>("/api/api-tokens/me"),
   revokeMine: (id: string) =>
     apiFetch<void>(`/api/api-tokens/me/${id}`, { method: "DELETE" }),

@@ -1,7 +1,8 @@
 "use client";
 
 // One hook module per domain (ARCHITECTURE.md §8). Personal API tokens (#75):
-// admin mint/list/revoke-any (Admin → Users) + self list/revoke-own (Profile).
+// self mint/list/revoke-own (Profile) + admin list/revoke-any oversight
+// (Admin → Users). Minting is self-only, so there is no "create for user X".
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -26,6 +27,7 @@ export function useMyApiTokens() {
   });
 }
 
+/** Mint a token for your own account (the only way one is created). */
 export function useCreateApiToken() {
   const qc = useQueryClient();
   return useMutation({

@@ -198,7 +198,7 @@ SPECS: tuple[Spec, ...] = (
     # call) — unlike refresh_sessions, which are excluded as point-in-time
     # session state rather than durable account configuration.
     Spec("api_tokens", ApiToken, "users",
-         remaps=(("user_id", "user", True), ("created_by_user_id", "user", False)),
+         remaps=(("user_id", "user", True),),
          natural_key=_nk_api_token),
     Spec("roles", Role, "roles", id_map="role", natural_key=_nk_role),
     Spec("competitions", Competition, "competitions", id_map="competition",

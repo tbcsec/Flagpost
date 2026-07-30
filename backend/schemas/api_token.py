@@ -2,6 +2,10 @@
 
 ``ApiTokenOut`` never carries the raw token or its hash — only
 ``ApiTokenCreated`` (the mint response) does, and only once.
+
+Note the deliberate absence of a ``user_id`` on ``ApiTokenCreate``: the holder
+is always the authenticated caller, so there is no field through which anyone
+could mint a token belonging to another account.
 """
 
 from datetime import datetime
@@ -10,9 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ApiTokenCreate(BaseModel):
-    user_id: str
     description: str = Field(min_length=1, max_length=200)
-    # No upper bound (owner call, issue #75) — any admin-chosen duration is
+    # No upper bound (owner call, issue #75) — any self-chosen duration is
     # acceptable. The router guards the datetime arithmetic against overflow.
     expires_in_days: int = Field(gt=0)
 
@@ -22,10 +25,10 @@ class ApiTokenOut(BaseModel):
 
     id: str
     user_id: str
+    # Resolved for the admin oversight list, where tokens from every account are
+    # shown together; on the holder's own list it is always their own name.
     user_display_name: str
     description: str
-    created_by_user_id: str | None
-    created_by_display_name: str | None
     created_at: datetime
     expires_at: datetime
     last_used_at: datetime | None

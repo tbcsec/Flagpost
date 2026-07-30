@@ -136,6 +136,7 @@ user.created                 user.updated               user.banned
 user.unbanned                user.deleted
 role.created                 role.updated               role.deleted
 role.assigned                role.unassigned
+api_token.created            api_token.revoked
 ticket.created               ticket.assigned            ticket.resolved
 ticket.message_posted
 survey.submitted             survey.opened
@@ -753,12 +754,21 @@ maintaining two auth schemes:
   and refresh path to reason about, not two.
 
 **Personal API tokens** (issue #75) are a deliberate, narrow exception: a
-long-lived, `flp_`-prefixed opaque token an administrator (`manage_api_tokens`)
-mints for a chosen user, for programmatic REST access without capturing a
-browser session. It authenticates as its holder with that holder's full
-effective permission set — no separate scope model — and is **REST only**,
+long-lived, `flp_`-prefixed opaque token for programmatic REST access without
+capturing a browser session. It authenticates as its owner with that owner's
+full effective permission set — no separate scope model — and is **REST only**,
 never accepted at the WebSocket handshake. Only its SHA-256 hash is stored
-(mirrors `RefreshSession`); the raw value is shown once, at mint time.
+(mirrors `RefreshSession`, and follows ADR-0020: hash what is only verified);
+the raw value is shown once, at mint time.
+
+Minting is **self-only**: a user creates a token for their own account from
+`/profile`, and the create route has no holder field at all. This is a
+structural property, not a check — since there is no way to express "a token
+for someone else", no permission can become a route to impersonating another
+account. `manage_api_tokens` is correspondingly an *oversight* grant: list
+every token and revoke any of them, so a leaked credential can be killed by
+somebody other than its holder. Revocation only removes access, so the
+permission cannot be used to gain any.
 
 Password auth is the baseline (hashed with a modern KDF, never reversible)
 and the **only** authentication method for initial release — no SSO

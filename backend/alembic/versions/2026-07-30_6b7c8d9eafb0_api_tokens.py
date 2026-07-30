@@ -23,20 +23,21 @@ def upgrade() -> None:
         sa.Column("user_id", sa.String(), nullable=False),
         sa.Column("token_hash", sa.String(), nullable=False),
         sa.Column("description", sa.String(), nullable=False),
-        sa.Column("created_by_user_id", sa.String(), nullable=True),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("last_used_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("revoked_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(
-            ["created_by_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("token_hash", name="uq_api_tokens_token_hash"),
     )
     op.create_index("ix_api_tokens_user_id", "api_tokens", ["user_id"])
-    op.create_index("ix_api_tokens_token_hash", "api_tokens", ["token_hash"])
+    # A single UNIQUE index rather than a unique constraint plus a plain index,
+    # so this matches the schema the test suite builds from Base.metadata (the
+    # column is declared `unique=True, index=True`). The suite never runs
+    # migrations (ADR-0006), so a divergence here would be invisible in CI.
+    op.create_index(
+        "ix_api_tokens_token_hash", "api_tokens", ["token_hash"], unique=True
+    )
 
 
 def downgrade() -> None:

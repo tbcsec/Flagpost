@@ -33,6 +33,7 @@ from sqlalchemy.orm import undefer
 
 from db import UtcDateTime, utcnow
 from models.announcement import Announcement
+from models.api_token import ApiToken
 from models.attachment import Attachment
 from models.audit_log import AuditLogEntry
 from models.automation import Achievement, AutomationRule
@@ -146,6 +147,14 @@ async def _nk_role(db: AsyncSession, row: dict) -> str | None:
     return await db.scalar(select(Role.id).where(Role.name == row["name"]))
 
 
+async def _nk_api_token(db: AsyncSession, row: dict) -> str | None:
+    # The raw token never round-trips (only its hash does), so the hash itself
+    # is the natural key — an identical row already present is the same token.
+    return await db.scalar(
+        select(ApiToken.id).where(ApiToken.token_hash == row.get("token_hash"))
+    )
+
+
 async def _nk_competition(db: AsyncSession, row: dict) -> str | None:
     return await db.scalar(select(Competition.id).where(Competition.name == row["name"]))
 
@@ -185,6 +194,12 @@ _COMP = ("competition_id", "competition", True)
 SPECS: tuple[Spec, ...] = (
     Spec("site_settings", SiteSettings, "site_settings", singleton=True),
     Spec("users", User, "users", id_map="user", natural_key=_nk_user),
+    # Personal API tokens (issue #75) travel with the "users" section (owner
+    # call) — unlike refresh_sessions, which are excluded as point-in-time
+    # session state rather than durable account configuration.
+    Spec("api_tokens", ApiToken, "users",
+         remaps=(("user_id", "user", True), ("created_by_user_id", "user", False)),
+         natural_key=_nk_api_token),
     Spec("roles", Role, "roles", id_map="role", natural_key=_nk_role),
     Spec("competitions", Competition, "competitions", id_map="competition",
          natural_key=_nk_competition, regenerate=("invite_code",)),

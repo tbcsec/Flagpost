@@ -9,15 +9,21 @@ acts as another account.
 any of them.
 """
 
+import hashlib
 from datetime import timedelta
 
 from db import SessionLocal, utcnow
 from models.api_token import ApiToken
+from models.password_reset import PasswordResetToken
 from tests.conftest import admin_token
 
 
 def _auth(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
+
+
+def _sha256(raw: str) -> str:
+    return hashlib.sha256(raw.encode()).hexdigest()
 
 
 async def _register(client, name="Regular User", password="password123") -> dict:
@@ -265,6 +271,99 @@ async def test_non_admin_cannot_list_all(client):
     user_token = await _login(client, reg["user"]["display_name"], "password123")
     resp = await client.get("/api/api-tokens", headers=_auth(user_token))
     assert resp.status_code == 403, resp.text
+
+
+# --- credential lifecycle: which paths kill a token -------------------------
+
+
+async def test_voluntary_password_change_keeps_tokens(client):
+    """Proving the current password is routine hygiene, not account recovery —
+    it must not break a CI credential."""
+    reg = await _register(client)
+    user_token = await _login(client, reg["user"]["display_name"], "password123")
+    created = await _mint(client, user_token)
+
+    resp = await client.post(
+        "/api/auth/change-password",
+        json={"current_password": "password123", "new_password": "newpassword456"},
+        headers=_auth(user_token),
+    )
+    assert resp.status_code == 204, resp.text
+
+    still_works = await client.get("/api/auth/me", headers=_auth(created["token"]))
+    assert still_works.status_code == 200, still_works.text
+
+
+async def test_password_reset_revokes_tokens(client):
+    """Recovering an account without the old password is the compromise path:
+    every credential it holds dies with it."""
+    reg = await _register(client)
+    user_token = await _login(client, reg["user"]["display_name"], "password123")
+    created = await _mint(client, user_token)
+
+    # Mint a reset token directly — the email path is covered elsewhere.
+    raw = "reset-token-for-api-token-test"
+    async with SessionLocal() as db:
+        db.add(
+            PasswordResetToken(
+                user_id=reg["user"]["id"],
+                token_hash=_sha256(raw),
+                expires_at=utcnow() + timedelta(hours=1),
+            )
+        )
+        await db.commit()
+
+    resp = await client.post(
+        "/api/auth/reset-password",
+        json={"token": raw, "new_password": "brandnewpassword"},
+    )
+    assert resp.status_code == 204, resp.text
+
+    dead = await client.get("/api/auth/me", headers=_auth(created["token"]))
+    assert dead.status_code == 401, dead.text
+
+
+async def test_ban_revokes_tokens_and_unban_does_not_resurrect_them(client):
+    """Banning must revoke, not merely suspend: otherwise unbanning silently
+    re-arms every credential the account held."""
+    admin = await admin_token(client)
+    reg = await _register(client)
+    user_token = await _login(client, reg["user"]["display_name"], "password123")
+    created = await _mint(client, user_token)
+
+    banned = await client.post(
+        f"/api/users/{reg['user']['id']}/ban", headers=_auth(admin)
+    )
+    assert banned.status_code == 200, banned.text
+    assert (
+        await client.get("/api/auth/me", headers=_auth(created["token"]))
+    ).status_code == 401
+
+    unbanned = await client.post(
+        f"/api/users/{reg['user']['id']}/unban", headers=_auth(admin)
+    )
+    assert unbanned.status_code == 200, unbanned.text
+
+    # The account works again, but the token stays dead.
+    resurrected = await client.get("/api/auth/me", headers=_auth(created["token"]))
+    assert resurrected.status_code == 401, resurrected.text
+
+
+async def test_admin_setting_a_password_revokes_tokens(client):
+    admin = await admin_token(client)
+    reg = await _register(client)
+    user_token = await _login(client, reg["user"]["display_name"], "password123")
+    created = await _mint(client, user_token)
+
+    resp = await client.patch(
+        f"/api/users/{reg['user']['id']}",
+        json={"password": "adminsetpassword"},
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 200, resp.text
+
+    dead = await client.get("/api/auth/me", headers=_auth(created["token"]))
+    assert dead.status_code == 401, dead.text
 
 
 async def test_non_admin_cannot_revoke_someone_elses_token(client):

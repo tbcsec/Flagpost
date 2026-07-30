@@ -1,6 +1,7 @@
 """Platform export / import (ADR-0016): round-trip fidelity, additive skip-existing
 import, restore-after-delete, and section selection + the endpoint auth gate."""
 
+import json
 from datetime import timedelta
 
 import pytest
@@ -110,49 +111,33 @@ async def test_section_selection_limits_export(client):
     assert doc["sections"] == ["users"]
 
 
-async def test_api_tokens_travel_with_users_section(client):
-    # Issue #75, owner call: unlike refresh_sessions (excluded), personal API
-    # tokens travel with the platform backup's "users" section.
+async def test_api_tokens_never_leave_in_a_backup(client):
+    """Personal API tokens (#75) are excluded like refresh_sessions.
+
+    Only the SHA-256 is stored, but that hash is exactly what authentication
+    compares against — exporting it would let the original raw token be
+    re-armed on whatever install the document is imported into, bound to
+    whichever local account matched by natural key.
+    """
     _, _, user_id = await _seed()
     async with SessionLocal() as db:
-        token = ApiToken(
-            user_id=user_id,
-            token_hash=hash_api_token(generate_api_token()),
-            description="Backed-up token",
-            expires_at=utcnow() + timedelta(days=30),
+        db.add(
+            ApiToken(
+                user_id=user_id,
+                token_hash=hash_api_token(generate_api_token()),
+                description="Should not be exported",
+                expires_at=utcnow() + timedelta(days=30),
+            )
         )
-        db.add(token)
         await db.commit()
-        token_id = token.id
 
     storage = InMemoryStorage()
     async with SessionLocal() as db:
         doc = await backup.export_data(db, storage, ["users"])
-    assert any(t["description"] == "Backed-up token" for t in doc["data"]["api_tokens"])
 
-    # Delete it, then restore from the export — it comes back re-linked to the
-    # (still-present, so matched-not-duplicated) user.
-    async with SessionLocal() as db:
-        await db.delete(await db.get(ApiToken, token_id))
-        await db.commit()
-
-    async with SessionLocal() as db:
-        result = await backup.import_data(db, storage, doc, ["users"])
-    assert result["api_tokens"]["created"] == 1
-
-    async with SessionLocal() as db:
-        restored = await db.scalar(
-            select(ApiToken).where(ApiToken.description == "Backed-up token")
-        )
-        assert restored is not None
-        assert restored.user_id == user_id
-
-    # Re-importing the same document again is additive-idempotent (matched by
-    # token_hash), not a duplicate.
-    async with SessionLocal() as db:
-        result_again = await backup.import_data(db, storage, doc, ["users"])
-    assert result_again["api_tokens"]["created"] == 0
-    assert result_again["api_tokens"]["skipped"] == 1
+    assert "api_tokens" not in doc["data"]
+    # And no token hash leaks into the document by any other route.
+    assert "Should not be exported" not in json.dumps(doc)
 
 
 async def test_import_rejects_foreign_document(client):

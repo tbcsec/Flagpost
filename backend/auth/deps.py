@@ -9,6 +9,8 @@ change, so route code never enumerates roles.
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -57,10 +59,34 @@ async def _resolve_api_token(raw: str, db: AsyncSession) -> User:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="This account has been disabled",
         )
-    # Best-effort admin visibility — never blocks the request on a write failure.
-    token.last_used_at = utcnow()
-    await db.commit()
+    await _touch_last_used(db, token)
     return user
+
+
+# How stale the recorded "last used" may be. This is admin visibility, rendered
+# as a relative date ("2 hours ago"), so minute-level precision buys nothing and
+# writing on every request would cost a great deal: an UPDATE plus a commit on
+# the hottest path in the app, a dead row version per request, and — because
+# concurrent calls bearing the same token contend on the same row — needless
+# serialisation of a parallel script's requests.
+_LAST_USED_RESOLUTION = timedelta(minutes=5)
+
+
+async def _touch_last_used(db: AsyncSession, token: ApiToken) -> None:
+    """Record that ``token`` was used, at most once per resolution window.
+
+    Genuinely best-effort: a failure here must never turn an otherwise-valid
+    authenticated request into a 500, so the commit is guarded and the session
+    rolled back on error, leaving the request to proceed with a stale timestamp.
+    """
+    now = utcnow()
+    if token.last_used_at is not None and now - token.last_used_at < _LAST_USED_RESOLUTION:
+        return
+    token.last_used_at = now
+    try:
+        await db.commit()
+    except Exception:  # noqa: BLE001 — bookkeeping must not fail the request
+        await db.rollback()
 
 
 async def get_current_user(

@@ -28,6 +28,7 @@ from db import get_db, utcnow
 from models.role import Role, RoleAssignment
 from models.user import RefreshSession, User
 from schemas.user import UserAccountOut, UserCreate, UserUpdate
+from utils.api_tokens import emit_revoked, revoke_user_api_tokens
 from utils.event_bus import event_bus
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -174,14 +175,20 @@ async def update_user(
                 detail="That display name is already taken",
             )
         user.display_name = body.display_name
+    revoked_tokens: list[str] = []
     if body.password is not None:
         user.password_hash = hash_password(body.password)
-        # A reset forces re-login everywhere.
+        # A reset forces re-login everywhere. An administrator setting someone
+        # else's password means lockout or compromise, not routine rotation, so
+        # their API tokens die with their sessions (#75) — otherwise a leaked
+        # token would outlive the very intervention meant to contain it.
         await _revoke_sessions(db, user.id)
+        revoked_tokens = await revoke_user_api_tokens(db, user.id)
     await db.commit()
     await event_bus.emit(
         "user.updated", {"user_id": user.id, "actor_user_id": current_user.id}
     )
+    await emit_revoked(revoked_tokens, user_id=user.id, actor_id=current_user.id)
     return await _out(db, user)
 
 
@@ -199,10 +206,16 @@ async def ban_user(
     await _guard_not_last_admin(db, user, "ban")
     user.is_active = False
     await _revoke_sessions(db, user.id)
+    # Revoke rather than merely suspend: the is_active check alone would let
+    # every previously-issued token spring back to life on unban (#75), so an
+    # admin who banned a compromised account and later restored it would
+    # silently re-arm the attacker's credential.
+    revoked_tokens = await revoke_user_api_tokens(db, user.id)
     await db.commit()
     await event_bus.emit(
         "user.banned", {"user_id": user.id, "actor_user_id": current_user.id}
     )
+    await emit_revoked(revoked_tokens, user_id=user.id, actor_id=current_user.id)
     return await _out(db, user)
 
 

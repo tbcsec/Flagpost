@@ -79,6 +79,9 @@ PERMISSIONS: tuple[Permission, ...] = (
     Permission("manage_users", "Users & Roles", Scope.GLOBAL),
     Permission("manage_roles", "Users & Roles", Scope.GLOBAL),
     Permission("view_all_users", "Users & Roles", Scope.GLOBAL),
+    # Minting/revoking personal API tokens (issue #75) — admin-only; a token's
+    # own holder can still view/revoke it without this permission (self-service).
+    Permission("manage_api_tokens", "Users & Roles", Scope.GLOBAL),
     # Site Settings — the site-wide theme/branding an administrator sets for the
     # whole install (§9, site-wide theming). Global-scoped, Administrator-only.
     Permission("manage_site_settings", "Site Settings", Scope.GLOBAL),

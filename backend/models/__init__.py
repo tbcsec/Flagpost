@@ -6,6 +6,7 @@ Add new model modules to the imports below as domains are built.
 """
 
 from models.announcement import Announcement
+from models.api_token import ApiToken
 from models.attachment import Attachment
 from models.audit_log import AuditLogEntry
 from models.automation import Achievement, AutomationRule
@@ -39,6 +40,7 @@ from models.user import RefreshSession, User
 __all__ = [
     "Achievement",
     "Announcement",
+    "ApiToken",
     "Attachment",
     "AuditLogEntry",
     "AutomationRule",

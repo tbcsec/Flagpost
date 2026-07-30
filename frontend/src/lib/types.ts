@@ -546,6 +546,25 @@ export interface UserAccount {
   created_at: string;
 }
 
+/** A personal API token (issue #75) — never carries the raw value or its hash. */
+export interface ApiToken {
+  id: string;
+  user_id: string;
+  user_display_name: string;
+  description: string;
+  created_by_user_id: string | null;
+  created_by_display_name: string | null;
+  created_at: string;
+  expires_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
+/** The mint response — carries the raw token once, never shown again. */
+export interface ApiTokenCreated extends ApiToken {
+  token: string;
+}
+
 /** A loaded module's per-competition state (Admin → Plugins, §11.3). */
 export interface ModuleState {
   id: string;

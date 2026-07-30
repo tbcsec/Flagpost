@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { SectionHeader } from "@/components/app/section-header";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,11 +27,16 @@ import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { toast } from "@/stores/toast";
 
-// Admin → Appearance (§9 site-wide theming). Sets the platform name, the default
-// palette (surface colours) and the accent (action colours) for the whole
-// install. Palette selection live-previews on <html> so the admin sees the whole
-// surface recolour before saving; the mark never takes the accent (LOGO-SPEC §7).
-export default function AdminAppearancePage() {
+// Admin → Site settings → Appearance (§9 site-wide theming). Sets the platform
+// name, the default palette (surface colours) and the accent (action colours)
+// for the whole install. Palette selection live-previews on <html> so the admin
+// sees the whole surface recolour before saving; the mark never takes the accent
+// (LOGO-SPEC §7).
+//
+// `active` is whether the Appearance tab is the one on screen. The settings page
+// keeps every panel mounted so unsaved edits survive tab switches, so this panel
+// can't use unmount to end its live preview — see the two effects below.
+export function AppearancePanel({ active }: { active: boolean }) {
   const { data, isLoading } = useSiteSettings();
   const update = useUpdateSiteSettings();
   const uploadLogo = useUploadLogo();
@@ -58,16 +62,23 @@ export default function AdminAppearancePage() {
     }
   }, [data]);
 
-  // Live preview: apply the *being-configured* default palette + accent directly.
+  // Live preview: apply the *being-configured* palette + accent directly — but
+  // only while this tab is on screen, so an unsaved preview never bleeds across
+  // the rest of the admin UI. Re-applies when the tab is re-entered, since
+  // `active` is a dependency.
   useEffect(() => {
-    applyTheme(document.documentElement, { palette, accent });
-  }, [palette, accent]);
+    if (active) applyTheme(document.documentElement, { palette, accent });
+  }, [active, palette, accent]);
 
-  // On leaving without saving, restore what the viewer actually sees (their own
-  // palette override, if any, over the saved site default). The unmount cleanup
-  // needs the *latest* saved settings + override, but must run only on unmount —
-  // so mirror them into refs from an effect (refs are written outside render)
-  // and read those in the mount-only cleanup.
+  // On leaving without saving — switching tabs *or* navigating away — restore
+  // what the viewer actually sees (their own palette override, if any, over the
+  // saved site default). The cleanup needs the *latest* saved settings and
+  // override, but must not re-run on every keystroke, so those are mirrored into
+  // refs from an effect (refs are written outside render) and read here.
+  //
+  // Keyed on `active` alone, deliberately: including palette/accent would make
+  // the cleanup fire on every preview change, restoring then instantly
+  // re-applying — a visible flicker on each click.
   const savedRef = useRef(saved);
   const overrideRef = useRef(paletteOverride);
   useEffect(() => {
@@ -75,6 +86,7 @@ export default function AdminAppearancePage() {
     overrideRef.current = paletteOverride;
   });
   useEffect(() => {
+    if (!active) return;
     return () => {
       const s = savedRef.current;
       applyTheme(document.documentElement, {
@@ -82,7 +94,7 @@ export default function AdminAppearancePage() {
         accent: s.accent,
       });
     };
-  }, []);
+  }, [active]);
 
   const dirty =
     platformName !== saved.platform_name ||
@@ -139,24 +151,12 @@ export default function AdminAppearancePage() {
     });
   }
 
-  if (isLoading) {
-    return (
-      <>
-        <SectionHeader title="Admin — Appearance" subtitle="Global — platform-wide, not scoped to a competition" />
-        <SkeletonCards count={3} />
-      </>
-    );
-  }
+  if (isLoading) return <SkeletonCards count={3} />;
 
   const customActive = isCustomAccent(accent);
 
   return (
-    <>
-      <SectionHeader
-        title="Admin — Appearance"
-        subtitle="Global — platform-wide, not scoped to a competition"
-      />
-
+    <div className="grid gap-5">
       <Card>
         <CardHeader>
           <CardTitle>Appearance</CardTitle>
@@ -328,7 +328,7 @@ export default function AdminAppearancePage() {
           <span className="text-xs text-muted-foreground">Previewing — save to apply site-wide.</span>
         )}
       </div>
-    </>
+    </div>
   );
 }
 

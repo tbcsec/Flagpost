@@ -14,7 +14,7 @@
  *
  * Palettes switch via a `data-palette` attribute on <html>. Each named palette
  * is a full set of surface/text/border channels; the site-wide default is set
- * by an administrator (Admin → Appearance, §9 site-wide theming) and a user can
+ * by an administrator (Admin → Site settings → Appearance, §9 site-wide theming) and a user can
  * override it for themselves. Shipped presets:
  *   dark  — harbor (default, blue-slate), eclipse (near-black violet-neutral),
  *           umbra (warm graphite)

@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
+import { AppearancePanel } from "@/components/admin/appearance-panel";
 import { BackupPanel } from "@/components/admin/backup-panel";
 import { RulesSettingsPanel } from "@/components/admin/rules-settings-panel";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs } from "@/components/ui/tabs";
 import { useAccess } from "@/lib/hooks/use-permissions";
 import {
   useOperationalSettings,
@@ -20,15 +22,46 @@ import {
 import type { OperationalSettings } from "@/lib/types";
 import { toast } from "@/stores/toast";
 
-// Admin → Site settings. The operational (non-theming) site config: the public
-// registration policy and the SMTP server the send_email automation action uses.
-// Theming lives on Admin → Appearance; AI/SSO are deferred. Gated on
+// Admin → Site settings. Every site-wide (non-competition) setting, grouped into
+// tabs (#104): registration + retention, outbound email, the rules document,
+// backup, theming, and the deferred AI placeholder. Gated on
 // manage_site_settings.
+//
+// Following the Competition Settings precedent, panels stay **mounted** and are
+// toggled with `hidden` rather than conditionally rendered, so an unsaved edit
+// in one tab survives a look at another.
+type Tab = "general" | "email" | "rules" | "backup" | "appearance" | "ai";
+
+/** The two tabs that are views of the one settings form. */
+type FormSection = Extract<Tab, "general" | "email">;
+
+const TABS: { value: Tab; label: string }[] = [
+  { value: "general", label: "General" },
+  { value: "email", label: "Email" },
+  { value: "rules", label: "Rules" },
+  { value: "backup", label: "Backup" },
+  { value: "appearance", label: "Appearance" },
+  { value: "ai", label: "AI" },
+];
+
+function isFormSection(tab: Tab): tab is FormSection {
+  return tab === "general" || tab === "email";
+}
+
 export default function AdminSettingsPage() {
   const access = useAccess();
   const canManage = access.has("manage_site_settings");
   const settings = useOperationalSettings();
   const data = settings.data;
+  const [tab, setTab] = useState<Tab>("general");
+  // Derived once and reused, so the panel's visibility and the `active` it is
+  // told about can never disagree — the theme preview writes to <html>, and a
+  // drift between the two would leak an unsaved palette across the whole UI.
+  const showAppearance = tab === "appearance";
+  // The form spans two tabs, so the section is just whichever of them is
+  // showing. On a non-form tab the whole form is hidden, so the fallback is
+  // never seen.
+  const formSection: FormSection = isFormSection(tab) ? tab : "general";
 
   if (!access.ready) return <Skeleton className="h-64 w-full" />;
   if (!canManage) {
@@ -42,42 +75,83 @@ export default function AdminSettingsPage() {
 
   return (
     <>
-      <SectionHeader title="Admin — Site settings" subtitle="Global — registration policy & outbound email" />
+      <SectionHeader
+        title="Admin — Site settings"
+        subtitle="Global — platform-wide, not scoped to a competition"
+      />
 
-      {settings.isLoading || !data ? (
-        <Skeleton className="h-64 w-full" />
-      ) : (
-        // Keyed by the row's save timestamp: a successful save refetches and
-        // remounts the form seeded with the canonical server values (and a
-        // cleared write-only password field) — the old sync-on-data effect,
-        // without the effect.
-        <SettingsForm key={data.updated_at ?? "initial"} data={data} />
-      )}
+      <Tabs tabs={TABS} value={tab} onValueChange={(v) => setTab(v as Tab)} />
 
-      <div className="mt-8 grid gap-1">
-        <h2 className="text-lg font-semibold">Rules / code of conduct</h2>
-        <p className="text-sm text-muted-foreground">
-          The site-wide document users accept before joining a competition.
-        </p>
-      </div>
-      <div className="mt-4 max-w-2xl">
-        <RulesSettingsPanel />
-      </div>
+      <div className="mt-6">
+        <div className={isFormSection(tab) ? "" : "hidden"}>
+          {settings.isLoading || !data ? (
+            <Skeleton className="h-64 w-full" />
+          ) : (
+            // Keyed by the row's save timestamp: a successful save refetches and
+            // remounts the form seeded with the canonical server values (and a
+            // cleared write-only password field) — the old sync-on-data effect,
+            // without the effect.
+            <SettingsForm
+              key={data.updated_at ?? "initial"}
+              data={data}
+              section={formSection}
+              onShowSection={setTab}
+            />
+          )}
+        </div>
 
-      <div className="mt-8 grid gap-1">
-        <h2 className="text-lg font-semibold">Backup — export &amp; import</h2>
-        <p className="text-sm text-muted-foreground">
-          Move the platform&apos;s data between installs, or keep an off-site backup.
-        </p>
-      </div>
-      <div className="mt-4">
-        <BackupPanel />
+        <div className={tab === "rules" ? "max-w-2xl" : "hidden"}>
+          <h2 className="text-lg font-semibold">Rules / code of conduct</h2>
+          <p className="mb-4 mt-1 text-sm text-muted-foreground">
+            The site-wide document users accept before joining a competition.
+          </p>
+          <RulesSettingsPanel />
+        </div>
+
+        <div className={tab === "backup" ? "" : "hidden"}>
+          <h2 className="text-lg font-semibold">Backup — export &amp; import</h2>
+          <p className="mb-4 mt-1 text-sm text-muted-foreground">
+            Move the platform&apos;s data between installs, or keep an off-site backup.
+          </p>
+          <BackupPanel />
+        </div>
+
+        <div className={showAppearance ? "" : "hidden"}>
+          {/* Told whether it's on screen so its live theme preview stops when
+              the admin looks at another tab — the panel stays mounted, so it
+              can't rely on unmount to clean up. */}
+          <AppearancePanel active={showAppearance} />
+        </div>
+
+        <div className={tab === "ai" ? "" : "hidden"}>
+          <Card className="max-w-2xl opacity-70">
+            <CardHeader>
+              <CardTitle>AI assistant</CardTitle>
+              <CardDescription>Deferred past MVP — not configurable yet.</CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
       </div>
     </>
   );
 }
 
-function SettingsForm({ data }: { data: OperationalSettings }) {
+// One form, one PUT, two views of it. Both sections stay mounted (toggled with
+// `hidden`) rather than being conditionally rendered, for two reasons: card-local
+// state like DomainListEditor's draft survives a tab switch, and — the important
+// one — the browser only applies constraint validation to *mounted* controls, so
+// unmounting would let an invalid From address or port typed on the tab you
+// aren't looking at go to the server unchecked. `smtp_from` in particular is only
+// format-checked here; the API validates its length, not that it's an address.
+function SettingsForm({
+  data,
+  section,
+  onShowSection,
+}: {
+  data: OperationalSettings;
+  section: FormSection;
+  onShowSection: (section: FormSection) => void;
+}) {
   const update = useUpdateOperationalSettings();
   const [registrationOpen, setRegistrationOpen] = useState(data.registration_open);
   const [host, setHost] = useState(data.smtp_host ?? "");
@@ -96,8 +170,30 @@ function SettingsForm({ data }: { data: OperationalSettings }) {
     data.email_verification_enabled,
   );
 
-  function onSubmit(e: React.FormEvent) {
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const form = e.currentTarget;
+
+    // Validation is driven from here (the form carries `noValidate`) rather than
+    // left to the browser. Both sections stay mounted, so the control blocking
+    // submit may sit on the tab the admin *isn't* looking at — and the browser
+    // refuses to submit on an invalid field it can't focus, without showing its
+    // message, so Save would simply look inert. Taking over lets us reveal the
+    // offending section first and then point at the field.
+    if (!form.checkValidity()) {
+      const invalid = form.querySelector<HTMLElement>(":invalid");
+      const owner = invalid?.closest<HTMLElement>("[data-section]")?.dataset.section;
+      if ((owner === "general" || owner === "email") && owner !== section) {
+        onShowSection(owner);
+        // Next tick, so the section has been un-hidden and the browser can
+        // focus the field to show its validation bubble.
+        setTimeout(() => form.reportValidity(), 0);
+      } else {
+        form.reportValidity();
+      }
+      return;
+    }
+
     update.mutate(
       {
         registration_open: registrationOpen,
@@ -122,191 +218,198 @@ function SettingsForm({ data }: { data: OperationalSettings }) {
     );
   }
 
+  // `noValidate`: onSubmit runs the same constraint checks itself, so it can
+  // reveal a field on the other tab rather than let the browser silently refuse
+  // to submit on a control it can't focus (see onSubmit).
   return (
-    <form onSubmit={onSubmit} className="grid max-w-2xl gap-5">
-          <Card>
-            <CardHeader>
-              <CardTitle>Registration</CardTitle>
-              <CardDescription>
-                Whether anyone can sign up. When closed, only an administrator can create accounts
-                (Admin → Users).
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+    <form onSubmit={onSubmit} noValidate className="grid max-w-2xl gap-5">
+      <div
+        data-section="general"
+        className={section === "general" ? "grid gap-5" : "hidden"}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle>Registration</CardTitle>
+            <CardDescription>
+              Whether anyone can sign up. When closed, only an administrator can create accounts
+              (Admin → Users).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-2">
+              <Label htmlFor="reg">Public sign-up</Label>
+              <Select
+                id="reg"
+                value={registrationOpen ? "open" : "closed"}
+                onChange={(e) => setRegistrationOpen(e.target.value === "open")}
+                className="max-w-xs"
+              >
+                <option value="open">Open — anyone can register</option>
+                <option value="closed">Closed — invite / admin-created only</option>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Data retention</CardTitle>
+            <CardDescription>
+              When on, an <em>archived</em> competition is permanently deleted — database
+              records and stored files — once it has stayed archived for the retention
+              period. The archive dialog shows the exact deletion date; unarchiving cancels
+              the clock. Competitions archived before enabling this are never auto-deleted.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="autodel">Auto-delete archived competitions</Label>
+              <Select
+                id="autodel"
+                value={autoDelete ? "on" : "off"}
+                onChange={(e) => setAutoDelete(e.target.value === "on")}
+                className="max-w-xs"
+              >
+                <option value="on">On — delete after the retention period</option>
+                <option value="off">Off — keep archives forever</option>
+              </Select>
+            </div>
+            {autoDelete && (
               <div className="grid gap-2">
-                <Label htmlFor="reg">Public sign-up</Label>
-                <Select
-                  id="reg"
-                  value={registrationOpen ? "open" : "closed"}
-                  onChange={(e) => setRegistrationOpen(e.target.value === "open")}
-                  className="max-w-xs"
-                >
-                  <option value="open">Open — anyone can register</option>
-                  <option value="closed">Closed — invite / admin-created only</option>
-                </Select>
+                <Label htmlFor="retention">Retention period (days)</Label>
+                <Input
+                  id="retention"
+                  type="number"
+                  min={1}
+                  max={3650}
+                  value={retentionDays}
+                  onChange={(e) => setRetentionDays(e.target.value)}
+                  className="max-w-32"
+                />
               </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Email domain allowlist</CardTitle>
-              <CardDescription>
-                Restrict public sign-up to specific email domains. A rejected sign-up sees a
-                generic error — it never learns which domains are allowed. Applies to public
-                registration only; admin-created accounts and existing users&apos; emails are
-                unaffected. Enabling this makes email mandatory at registration.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="allowlist">Restrict sign-up by email domain</Label>
-                <Select
-                  id="allowlist"
-                  value={allowlistEnabled ? "on" : "off"}
-                  onChange={(e) => setAllowlistEnabled(e.target.value === "on")}
-                  className="max-w-xs"
-                >
-                  <option value="off">Off — any email may register</option>
-                  <option value="on">On — only allowed domains may register</option>
-                </Select>
-              </div>
-              {allowlistEnabled && (
-                <DomainListEditor values={allowedDomains} onChange={setAllowedDomains} />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Email verification</CardTitle>
-              <CardDescription>
-                Require a self-registered account to confirm its email (a link sent via the SMTP
-                server below) before it can join a competition. Requires SMTP to be configured.
-                Admin-created accounts (Admin → Users) are exempt, and turning this on never
-                affects members who already joined.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-2">
-                <Label htmlFor="verify">Require email verification to join</Label>
-                <Select
-                  id="verify"
-                  value={verificationEnabled ? "on" : "off"}
-                  onChange={(e) => setVerificationEnabled(e.target.value === "on")}
-                  className="max-w-xs"
-                >
-                  <option value="off">Off — anyone who registers can join</option>
-                  <option value="on">On — must verify email first</option>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>SMTP (outbound email)</CardTitle>
-              <CardDescription>
-                Used by the automation <span className="font-mono text-xs">send_email</span> action.
-                Leave the host blank to disable email (the action becomes a no-op).
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-2 grid gap-2">
-                  <Label htmlFor="host">Host</Label>
-                  <Input id="host" value={host} onChange={(e) => setHost(e.target.value)} placeholder="smtp.example.com" />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="port">Port</Label>
-                  <Input id="port" type="number" min={1} max={65535} value={port} onChange={(e) => setPort(e.target.value)} />
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="from">From address</Label>
-                <Input id="from" type="email" value={from} onChange={(e) => setFrom(e.target.value)} placeholder="ctf@example.com" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="user">Username</Label>
-                  <Input id="user" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="pass">Password</Label>
-                  <Input
-                    id="pass"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    autoComplete="new-password"
-                    placeholder={data.smtp_password_set ? "•••••••• (unchanged)" : "Not set"}
-                  />
-                </div>
-              </div>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={starttls} onChange={(e) => setStarttls(e.target.checked)} />
-                Use STARTTLS
-              </label>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Data retention</CardTitle>
-              <CardDescription>
-                When on, an <em>archived</em> competition is permanently deleted — database
-                records and stored files — once it has stayed archived for the retention
-                period. The archive dialog shows the exact deletion date; unarchiving cancels
-                the clock. Competitions archived before enabling this are never auto-deleted.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="autodel">Auto-delete archived competitions</Label>
-                <Select
-                  id="autodel"
-                  value={autoDelete ? "on" : "off"}
-                  onChange={(e) => setAutoDelete(e.target.value === "on")}
-                  className="max-w-xs"
-                >
-                  <option value="on">On — delete after the retention period</option>
-                  <option value="off">Off — keep archives forever</option>
-                </Select>
-              </div>
-              {autoDelete && (
-                <div className="grid gap-2">
-                  <Label htmlFor="retention">Retention period (days)</Label>
-                  <Input
-                    id="retention"
-                    type="number"
-                    min={1}
-                    max={3650}
-                    value={retentionDays}
-                    onChange={(e) => setRetentionDays(e.target.value)}
-                    className="max-w-32"
-                  />
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="opacity-70">
-            <CardHeader>
-              <CardTitle>AI assistant</CardTitle>
-              <CardDescription>Deferred past MVP — not configurable yet.</CardDescription>
-            </CardHeader>
-          </Card>
-
-          <div className="flex items-center gap-3">
-            <Button type="submit" className="w-fit" disabled={update.isPending}>
-              {update.isPending ? "Saving…" : "Save changes"}
-            </Button>
-            {data.updated_at && (
-              <span className="text-xs text-muted-foreground">
-                Last saved {new Date(data.updated_at).toLocaleString()}
-              </span>
             )}
-          </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div
+        data-section="email"
+        className={section === "email" ? "grid gap-5" : "hidden"}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle>Email domain allowlist</CardTitle>
+            <CardDescription>
+              Restrict public sign-up to specific email domains. A rejected sign-up sees a
+              generic error — it never learns which domains are allowed. Applies to public
+              registration only; admin-created accounts and existing users&apos; emails are
+              unaffected. Enabling this makes email mandatory at registration.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="allowlist">Restrict sign-up by email domain</Label>
+              <Select
+                id="allowlist"
+                value={allowlistEnabled ? "on" : "off"}
+                onChange={(e) => setAllowlistEnabled(e.target.value === "on")}
+                className="max-w-xs"
+              >
+                <option value="off">Off — any email may register</option>
+                <option value="on">On — only allowed domains may register</option>
+              </Select>
+            </div>
+            {allowlistEnabled && (
+              <DomainListEditor values={allowedDomains} onChange={setAllowedDomains} />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Email verification</CardTitle>
+            <CardDescription>
+              Require a self-registered account to confirm its email (a link sent via the SMTP
+              server below) before it can join a competition. Requires SMTP to be configured.
+              Admin-created accounts (Admin → Users) are exempt, and turning this on never
+              affects members who already joined.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-2">
+              <Label htmlFor="verify">Require email verification to join</Label>
+              <Select
+                id="verify"
+                value={verificationEnabled ? "on" : "off"}
+                onChange={(e) => setVerificationEnabled(e.target.value === "on")}
+                className="max-w-xs"
+              >
+                <option value="off">Off — anyone who registers can join</option>
+                <option value="on">On — must verify email first</option>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>SMTP (outbound email)</CardTitle>
+            <CardDescription>
+              Used by the automation <span className="font-mono text-xs">send_email</span> action.
+              Leave the host blank to disable email (the action becomes a no-op).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2 grid gap-2">
+                <Label htmlFor="host">Host</Label>
+                <Input id="host" value={host} onChange={(e) => setHost(e.target.value)} placeholder="smtp.example.com" />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="port">Port</Label>
+                <Input id="port" type="number" min={1} max={65535} value={port} onChange={(e) => setPort(e.target.value)} />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="from">From address</Label>
+              <Input id="from" type="email" value={from} onChange={(e) => setFrom(e.target.value)} placeholder="ctf@example.com" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2">
+                <Label htmlFor="user">Username</Label>
+                <Input id="user" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="pass">Password</Label>
+                <Input
+                  id="pass"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="new-password"
+                  placeholder={data.smtp_password_set ? "•••••••• (unchanged)" : "Not set"}
+                />
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={starttls} onChange={(e) => setStarttls(e.target.checked)} />
+              Use STARTTLS
+            </label>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Save submits the whole payload, whichever section is on screen. */}
+      <div className="flex items-center gap-3">
+        <Button type="submit" className="w-fit" disabled={update.isPending}>
+          {update.isPending ? "Saving…" : "Save changes"}
+        </Button>
+        {data.updated_at && (
+          <span className="text-xs text-muted-foreground">
+            Last saved {new Date(data.updated_at).toLocaleString()}
+          </span>
+        )}
+      </div>
     </form>
   );
 }

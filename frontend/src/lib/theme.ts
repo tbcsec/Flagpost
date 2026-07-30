@@ -1,6 +1,6 @@
 // Theme registry + colour math for site-wide theming (ARCHITECTURE.md §9).
 //
-// Source of visual truth for the palettes/accents the Admin → Appearance page
+// Source of visual truth for the palettes/accents the Admin → Site settings → Appearance page
 // offers and the ThemeApplier applies. A PALETTE owns surface colours (defined
 // as full token sets in globals.css, keyed by `data-palette`); the ACCENT owns
 // action colours — one hue written only into `--primary` / `--ring` (+ their

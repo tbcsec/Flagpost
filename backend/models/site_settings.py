@@ -45,7 +45,7 @@ class SiteSettings(Base, TimestampMixin):
     accent: Mapped[str] = mapped_column(
         String, nullable=False, default=DEFAULT_ACCENT
     )
-    # --- Branding (Admin → Appearance) ---
+    # --- Branding (Admin → Site settings → Appearance) ---
     # A custom organisation logo that replaces the built-in Flagpost mark in the
     # lockup (sidebar / login / register). Stored as a blob **in the DB**, not in
     # object storage, so branding works on the infra-free stack and pre-auth

@@ -194,7 +194,7 @@ function SetupWizard() {
           <>
             <CardHeader>
               <CardTitle>Branding</CardTitle>
-              <CardDescription>Name and colours for your platform. You can add a logo later on Admin → Appearance.</CardDescription>
+              <CardDescription>Name and colours for your platform. You can add a logo later on Admin → Site settings → Appearance.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-5">
               <div className="grid gap-2">

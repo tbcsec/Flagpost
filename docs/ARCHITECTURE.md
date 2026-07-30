@@ -855,7 +855,7 @@ This makes a few features possible without touching component code:
   custom hex is safe here in a way a custom background is not. The token layer
   supports scoping this per-organisation/per-competition, but the **current
   build scope is site-wide only** — one platform theme an administrator sets
-  for the whole install (Admin → Appearance), persisted in a **site-settings
+  for the whole install (Admin → Site settings → Appearance), persisted in a **site-settings
   singleton** and read publicly so login/register brand themselves before auth.
   A user may override just the *palette* for themselves (topbar menu, stored in
   `localStorage`); the accent and platform name stay site-wide. The

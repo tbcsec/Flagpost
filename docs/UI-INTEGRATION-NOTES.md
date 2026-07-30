@@ -45,7 +45,7 @@ was deleted. The tables below are kept current.
   `components/app/section-header.tsx` (`SectionHeader`; the handoff's
   `NotWiredNote` "Preview" banner was removed once every section was wired).
 - Theming is site-wide (Tier 2 Phase 4, §9): an admin sets the default palette +
-  accent (Admin → Appearance), stored in a SiteSettings singleton and read
+  accent (Admin → Site settings → Appearance), stored in a SiteSettings singleton and read
   publicly. `ThemeApplier` (mounted above every page) applies palette + accent to
   `<html>`; a user can override just the *palette* for themselves via the topbar
   palette menu (`paletteOverride` on the auth store). Shipped palettes: Harbor,
@@ -88,7 +88,7 @@ code.
 | Dashboard | **Wired** (Tier 2 Phase 1 + Tier 3 Phase 6) — widget-registration architecture (§10.1) off `dashboard` module endpoints: manager stats/recent-solves/challenge-health/support-queue, participant standing/solves, announcements. Managers (`customize_dashboard`) get an **edit mode** (§10.2–10.5): drag-reorder, per-widget size-cycle, show/hide, save / cancel / reset-to-default, persisted per-user in `dashboard_layouts` (`use-dashboard`, `DashboardGrid`) |
 | Support tickets | **Wired** (Tier 2 Phase 2) — `tickets` module: competitor create/reply, staff assign/resolve/internal-notes, ownership scoping; live thread + staff-queue WS rooms with the §4.4 audio cue (`use-tickets`) |
 | Presence indicators | **Wired** (Tier 2 Phase 3, §4.1) — WS presence with debounced clear: "N others viewing" on the challenge dialog (new presence-only `challenge` room) and "a judge is looking at this ticket" on the ticket thread (`usePresence` + `PresenceIndicator`) |
-| Admin → Appearance (site-wide theming + branding) | **Wired** (Tier 2 Phase 4 §9; **custom logo** added Tier 3 Phase 9) — platform name + palette + accent (preset or custom hex) with live preview, plus a **custom org logo** (upload/replace/remove) and a `show_wordmark` toggle; `manage_site_settings`-gated `site_settings` module. Logo bytes live in the DB (a `deferred` blob on the singleton) and stream from a public `GET /site-settings/logo` (nosniff + sandbox CSP); the public read carries `logo_url` + `show_wordmark`, so login/register/sidebar brand from it (`Lockup` gained `logoUrl`/`showWordmark`; `use-site-settings` absolutizes `logo_url`). A **mandatory** "Powered by Flagpost" footer (`PoweredByFooter`) renders on every page so attribution survives a full rebrand (`use-site-settings`, `lib/theme.ts`) |
+| Admin → Site settings → Appearance (site-wide theming + branding) | **Wired** (Tier 2 Phase 4 §9; **custom logo** added Tier 3 Phase 9) — platform name + palette + accent (preset or custom hex) with live preview, plus a **custom org logo** (upload/replace/remove) and a `show_wordmark` toggle; `manage_site_settings`-gated `site_settings` module. Logo bytes live in the DB (a `deferred` blob on the singleton) and stream from a public `GET /site-settings/logo` (nosniff + sandbox CSP); the public read carries `logo_url` + `show_wordmark`, so login/register/sidebar brand from it (`Lockup` gained `logoUrl`/`showWordmark`; `use-site-settings` absolutizes `logo_url`). A **mandatory** "Powered by Flagpost" footer (`PoweredByFooter`) renders on every page so attribution survives a full rebrand (`use-site-settings`, `lib/theme.ts`) |
 | Admin → Roles (custom role editor) | **Wired** (Tier 2 Phase 5, §7.4) — `roles` module gated on `manage_roles`: list + permission catalog, create/clone/edit/delete custom roles, assign(by-email)/unassign; system roles read-only, last-admin guard (`use-roles`) |
 | Admin → Site settings (operational) | **Wired** (Tier 3 Phase 9) — registration policy (`registration_open`; closed → `/register` 403 + hidden link) and SMTP config for the `send_email` action (`GET`/`PUT /site-settings/operational`, `manage_site_settings`; password write-only). The mailer resolves SMTP from the DB (env fallback). AI/SSO deferred (`use-site-settings`). Plus **platform export / import** (`BackupPanel`, ADR-0016): section-checkbox export → JSON download, additive import from a file → per-table created/skipped summary; `POST /site-settings/export`+`/import`, `manage_site_settings`-gated |
 | Admin → Dashboard (site overview) | **Wired** (Tier 3 Phase 9, §6.3) — cross-competition oversight gated on `view_global_analytics`: platform totals (accounts / competitions / teams / challenges / solves) + a per-competition **health** table (status / participants / challenges / solves / open tickets) off `GET /api/admin/overview` (`use-admin-overview`) |
@@ -110,7 +110,7 @@ real backend, or the underlying feature deferred with the placeholder UI removed
   shipped as a fixed layout made the drag-and-drop customization layer additive,
   exactly as intended (§10.2) — it's now built for the manager dashboard.
 - **Admin → Site settings — AI / SSO / integrations** — deferred; the theming
-  half moved to Admin → Appearance, and the operational half (registration policy
+  half moved to Admin → Site settings → Appearance, and the operational half (registration policy
   + SMTP) is now wired (see the wired table). AI and SSO stay off the roadmap.
 
 ## Deliberately not carried over from the mock
@@ -134,7 +134,7 @@ real backend, or the underlying feature deferred with the placeholder UI removed
   first-blood toast.
 - **Persisted theme** — the per-user palette override is saved to `localStorage`
   (a no-flash inline script re-applies it before first paint); the site-wide
-  default + accent are set by an admin on Admin → Appearance (Tier 2 Phase 4).
+  default + accent are set by an admin on Admin → Site settings → Appearance (Tier 2 Phase 4).
 - **Responsive shell** — the sidebar becomes an off-canvas drawer under `md`
   (hamburger in the topbar).
 - **Timestamps** read as UTC via `lib/datetime` (the backend also now serializes

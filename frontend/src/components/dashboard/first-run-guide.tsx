@@ -23,9 +23,10 @@ const STEPS = [
     description: "Share the join link or invite code so players can register and form teams.",
   },
   {
-    href: "/admin/appearance",
+    href: "/admin/settings",
     title: "Brand your event",
-    description: "Set the platform name, palette, and accent under Admin → Appearance.",
+    description:
+      "Set the platform name, palette, and accent under Admin → Site settings → Appearance.",
   },
 ];
 

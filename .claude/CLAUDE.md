@@ -98,7 +98,7 @@ What's built:
   foreground), preset or custom hex, never touching `--success`/the logo
   (LOGO-SPEC §7). `lib/theme.ts` (registry + colour math) + a `ThemeApplier`
   (palette = per-user override ?? site default; no-flash inline script) + the
-  topbar palette menu + the wired Admin → Appearance page. System roles now
+  topbar palette menu + the wired Admin → Site settings → Appearance tab. System roles now
   **re-sync from the permission catalog on every startup** (`seed_system_roles`)
   so a newly-added permission reaches an already-migrated Administrator.
 - **Tier 2 Phase 5** — **custom role editor** (§7.4), a required-core `roles`
@@ -333,7 +333,7 @@ What's built:
     in their name. Frontend: `Lockup` gained `logoUrl`/`showWordmark` (sidebar +
     login + register), `use-site-settings` absolutizes `logo_url` to the API origin
     (`apiAssetUrl`) via a query `select`, `useUploadLogo`/`useDeleteLogo`, and the
-    Admin → Appearance Logo section. A **mandatory, non-configurable
+    Admin → Site settings → Appearance Logo section. A **mandatory, non-configurable
     `PoweredByFooter`** ("Powered by Flagpost" → the GitHub repo, built-in mark) on
     every page (app shell + auth screens) keeps attribution even under a full
     rebrand. Reuses `site.settings_updated`; no new event.

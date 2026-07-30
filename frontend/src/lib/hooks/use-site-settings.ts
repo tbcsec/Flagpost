@@ -71,7 +71,7 @@ export function useUpdateSiteSettings() {
   });
 }
 
-/** Upload a custom org logo (Admin → Appearance). */
+/** Upload a custom org logo (Admin → Site settings → Appearance). */
 export function useUploadLogo() {
   const queryClient = useQueryClient();
   return useMutation({

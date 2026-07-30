@@ -56,7 +56,7 @@ export interface LockupProps {
   /** The wordmark text — the site's platform name (§9). Defaults to "Flagpost".
    *  The built-in mark never changes; only the name is white-labelled. */
   label?: string;
-  /** A custom org logo that replaces the built-in mark (Admin → Appearance). When
+  /** A custom org logo that replaces the built-in mark (Admin → Site settings → Appearance). When
    *  set, this image is shown instead of the Flagpost flag mark. */
   logoUrl?: string | null;
   /** Whether the wordmark text renders beside the mark/logo. Orgs whose logo

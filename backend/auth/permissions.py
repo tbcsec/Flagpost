@@ -79,6 +79,13 @@ PERMISSIONS: tuple[Permission, ...] = (
     Permission("manage_users", "Users & Roles", Scope.GLOBAL),
     Permission("manage_roles", "Users & Roles", Scope.GLOBAL),
     Permission("view_all_users", "Users & Roles", Scope.GLOBAL),
+    # Oversight of personal API tokens (issue #75): list every token on the
+    # platform and revoke any of them, so a leaked credential can be killed by
+    # someone other than its holder. Deliberately NOT an issuance grant —
+    # minting is self-only (routers/api_tokens.py), so this permission can never
+    # become a route to acting as another account. Holders manage their own
+    # tokens from /profile without it.
+    Permission("manage_api_tokens", "Users & Roles", Scope.GLOBAL),
     # Site Settings — the site-wide theme/branding an administrator sets for the
     # whole install (§9, site-wide theming). Global-scoped, Administrator-only.
     Permission("manage_site_settings", "Site Settings", Scope.GLOBAL),

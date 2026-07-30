@@ -13,9 +13,17 @@ already exists), and how to detect an already-present row (``natural_key``). New
 ids are minted on create and cross-references rewritten through the id maps, so a
 document restores cleanly into a different install.
 
-Excluded by design: ``refresh_sessions`` (secrets), and the transient/derived
-``notifications`` / ``collab_documents`` / ``dashboard_layouts`` — none belong in
-a portable backup.
+Excluded by design: ``refresh_sessions`` and ``api_tokens`` (live bearer
+credentials), and the transient/derived ``notifications`` / ``collab_documents``
+/ ``dashboard_layouts`` — none belong in a portable backup.
+
+The credential exclusion is the load-bearing one. Only a token's SHA-256 is
+stored, but that hash is exactly what authentication compares against: exporting
+it and importing elsewhere would re-arm the original raw token on the target
+install, bound by natural key to whichever local account matches — grafting a
+working credential the receiving operator never issued and cannot trace. Import
+is additive and cross-install by design (ADR-0016), so credentials must not ride
+along. Tokens are per-install and cheap to re-issue from /profile.
 """
 
 from __future__ import annotations

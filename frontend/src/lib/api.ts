@@ -51,6 +51,8 @@ import type {
   ModuleState,
   MyTeam,
   Participant,
+  ApiToken,
+  ApiTokenCreated,
   UserAccount,
   Permissions,
   PermissionEntry,
@@ -452,6 +454,22 @@ export const usersApi = {
   unban: (id: string) =>
     apiFetch<UserAccount>(`/api/users/${id}/unban`, { method: "POST" }),
   remove: (id: string) => apiFetch<void>(`/api/users/${id}`, { method: "DELETE" }),
+};
+
+export const apiTokensApi = {
+  // Oversight (manage_api_tokens): list every token, revoke any — never mint.
+  list: () => apiFetch<ApiToken[]>("/api/api-tokens"),
+  revoke: (id: string) => apiFetch<void>(`/api/api-tokens/${id}`, { method: "DELETE" }),
+  // Self-service (any authenticated user, own account only). The create body
+  // carries no user id: the holder is always the caller.
+  create: (input: { description: string; expires_in_days: number }) =>
+    apiFetch<ApiTokenCreated>("/api/api-tokens", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  listMine: () => apiFetch<ApiToken[]>("/api/api-tokens/me"),
+  revokeMine: (id: string) =>
+    apiFetch<void>(`/api/api-tokens/me/${id}`, { method: "DELETE" }),
 };
 
 export const adminApi = {

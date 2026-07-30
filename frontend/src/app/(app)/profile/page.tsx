@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
+import { MyApiTokensCard } from "@/components/profile/api-tokens-card";
 import { NotificationPreferencesCard } from "@/components/profile/notification-preferences";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -155,6 +156,7 @@ export default function ProfilePage() {
       </Card>
 
       <NotificationPreferencesCard />
+      <MyApiTokensCard />
     </>
   );
 }

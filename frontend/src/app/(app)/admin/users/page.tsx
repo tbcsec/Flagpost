@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
+import { ApiTokensPanel } from "@/components/admin/api-tokens-panel";
 import { UserFormDialog } from "@/components/admin/user-form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -235,6 +236,7 @@ export default function AdminUsersPage() {
         />
       )}
 
+      {access.has("manage_api_tokens") && <ApiTokensPanel />}
     </>
   );
 }

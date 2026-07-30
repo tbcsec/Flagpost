@@ -59,6 +59,9 @@ EVENT_TYPES: tuple[str, ...] = (
     "user.banned",
     "user.unbanned",
     "user.deleted",
+    # Personal API tokens (issue #75) — administrator mint/revoke.
+    "api_token.created",
+    "api_token.revoked",
     "role.created",
     "role.updated",
     "role.deleted",

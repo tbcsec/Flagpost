@@ -1,0 +1,44 @@
+"""personal API tokens
+
+Revision ID: 6b7c8d9eafb0
+Revises: 5a6b7c8d9eaf
+Create Date: 2026-07-30
+"""
+
+from __future__ import annotations
+
+import sqlalchemy as sa
+from alembic import op
+
+revision = "6b7c8d9eafb0"
+down_revision = "5a6b7c8d9eaf"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    op.create_table(
+        "api_tokens",
+        sa.Column("id", sa.String(), nullable=False),
+        sa.Column("user_id", sa.String(), nullable=False),
+        sa.Column("token_hash", sa.String(), nullable=False),
+        sa.Column("description", sa.String(), nullable=False),
+        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("last_used_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("revoked_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_api_tokens_user_id", "api_tokens", ["user_id"])
+    # A single UNIQUE index rather than a unique constraint plus a plain index,
+    # so this matches the schema the test suite builds from Base.metadata (the
+    # column is declared `unique=True, index=True`). The suite never runs
+    # migrations (ADR-0006), so a divergence here would be invisible in CI.
+    op.create_index(
+        "ix_api_tokens_token_hash", "api_tokens", ["token_hash"], unique=True
+    )
+
+
+def downgrade() -> None:
+    op.drop_table("api_tokens")

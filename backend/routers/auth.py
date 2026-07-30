@@ -47,6 +47,7 @@ from schemas.auth import (
     UserOut,
     VerifyEmailRequest,
 )
+from utils.api_tokens import emit_revoked, revoke_user_api_tokens
 from utils.event_bus import event_bus
 
 logger = logging.getLogger("auth")
@@ -327,6 +328,14 @@ async def change_password(
     This is what lets the seeded default admin rotate its well-known password
     (ADR-0010). All of the user's refresh sessions are revoked, so a password
     change logs them out everywhere and any leaked refresh token dies.
+
+    Personal API tokens (#75) deliberately **survive** this. Proving the current
+    password makes it routine hygiene rather than account recovery, and killing
+    a CI credential on every password rotation would be a surprise rather than a
+    safeguard (GitHub and GitLab draw the line in the same place). The
+    compromise paths do revoke them — a forgotten-password reset, an
+    administrator setting the password, a ban — and a holder can revoke any of
+    their own tokens from /profile at any time.
     """
     if not verify_password(body.current_password, current_user.password_hash):
         raise HTTPException(
@@ -405,7 +414,13 @@ async def reset_password(
     body: ResetPasswordRequest, db: AsyncSession = Depends(get_db)
 ) -> Response:
     """Set a new password from a valid, unexpired reset token, then revoke every
-    refresh session (a reset logs the user out everywhere)."""
+    refresh session **and** every personal API token.
+
+    Unlike a voluntary change-password (which proves the current password and
+    leaves API tokens alone), reaching this route means the account was
+    recovered without knowing the old password — the compromise assumption — so
+    every credential the account holds dies with it (#75).
+    """
     token = await db.scalar(
         select(PasswordResetToken).where(
             PasswordResetToken.token_hash == _hash_token(body.token)
@@ -440,8 +455,11 @@ async def reset_password(
         )
     ).scalars().all():
         session.revoked_at = utcnow()
+    revoked_tokens = await revoke_user_api_tokens(db, user.id)
     await db.commit()
     await event_bus.emit("user.password_changed", {"user_id": user.id})
+    # Self-service recovery: the account holder is the actor.
+    await emit_revoked(revoked_tokens, user_id=user.id, actor_id=user.id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

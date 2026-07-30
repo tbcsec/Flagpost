@@ -1,11 +1,15 @@
 """Platform export / import (ADR-0016): round-trip fidelity, additive skip-existing
 import, restore-after-delete, and section selection + the endpoint auth gate."""
 
+import json
+from datetime import timedelta
+
 import pytest
 from sqlalchemy import func, select
 
-from auth.security import hash_password
-from db import SessionLocal
+from auth.security import generate_api_token, hash_api_token, hash_password
+from db import SessionLocal, utcnow
+from models.api_token import ApiToken
 from models.challenge import Category, Challenge
 from models.competition import Competition
 from models.submission import Submission
@@ -105,6 +109,35 @@ async def test_section_selection_limits_export(client):
     assert "users" in doc["data"]
     assert "competitions" not in doc["data"]
     assert doc["sections"] == ["users"]
+
+
+async def test_api_tokens_never_leave_in_a_backup(client):
+    """Personal API tokens (#75) are excluded like refresh_sessions.
+
+    Only the SHA-256 is stored, but that hash is exactly what authentication
+    compares against — exporting it would let the original raw token be
+    re-armed on whatever install the document is imported into, bound to
+    whichever local account matched by natural key.
+    """
+    _, _, user_id = await _seed()
+    async with SessionLocal() as db:
+        db.add(
+            ApiToken(
+                user_id=user_id,
+                token_hash=hash_api_token(generate_api_token()),
+                description="Should not be exported",
+                expires_at=utcnow() + timedelta(days=30),
+            )
+        )
+        await db.commit()
+
+    storage = InMemoryStorage()
+    async with SessionLocal() as db:
+        doc = await backup.export_data(db, storage, ["users"])
+
+    assert "api_tokens" not in doc["data"]
+    # And no token hash leaks into the document by any other route.
+    assert "Should not be exported" not in json.dumps(doc)
 
 
 async def test_import_rejects_foreign_document(client):

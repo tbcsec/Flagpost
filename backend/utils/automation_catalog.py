@@ -84,6 +84,8 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "user.banned": ["user_id", "actor_user_id"],
     "user.unbanned": ["user_id", "actor_user_id"],
     "user.deleted": ["user_id", "actor_user_id"],
+    "api_token.created": ["api_token_id", "user_id", "created_by_user_id"],
+    "api_token.revoked": ["api_token_id", "user_id"],
 }
 
 # The permission that governs *observing* each trigger event (§5.1 trigger
@@ -108,6 +110,8 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     "user.banned": "manage_users",
     "user.unbanned": "manage_users",
     "user.deleted": "manage_users",
+    "api_token.created": "manage_api_tokens",
+    "api_token.revoked": "manage_api_tokens",
     "site.settings_updated": "manage_site_settings",
     # Competition-lifecycle / staff events.
     "competition.created": "edit_competition",

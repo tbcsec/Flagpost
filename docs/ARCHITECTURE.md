@@ -136,6 +136,7 @@ user.created                 user.updated               user.banned
 user.unbanned                user.deleted
 role.created                 role.updated               role.deleted
 role.assigned                role.unassigned
+api_token.created            api_token.revoked
 ticket.created               ticket.assigned            ticket.resolved
 ticket.message_posted
 survey.submitted             survey.opened
@@ -592,7 +593,10 @@ Support Tickets           ticket_view, ticket_respond, ticket_assign,
 Announcements             announcement_create, announcement_delete
 Feedback                  feedback_manage, feedback_view_responses,
                           feedback_submit
-Users & Roles             manage_users, manage_roles, view_all_users
+Users & Roles             manage_users, manage_roles, view_all_users,
+                          manage_api_tokens  (minting/revoking personal API
+                          tokens, issue #75 — a token's own holder can still
+                          view/revoke it without this, §7.7)
 Site Settings             manage_site_settings  (global — the site-wide
                           theme/branding an administrator sets, §9)
 Analytics                 view_competition_analytics, view_global_analytics
@@ -748,6 +752,23 @@ maintaining two auth schemes:
 - **WebSocket**: the same access token, sent as the first frame after
   connect per §4.1 — not a second, WS-specific token type. One issuance
   and refresh path to reason about, not two.
+
+**Personal API tokens** (issue #75) are a deliberate, narrow exception: a
+long-lived, `flp_`-prefixed opaque token for programmatic REST access without
+capturing a browser session. It authenticates as its owner with that owner's
+full effective permission set — no separate scope model — and is **REST only**,
+never accepted at the WebSocket handshake. Only its SHA-256 hash is stored
+(mirrors `RefreshSession`, and follows ADR-0020: hash what is only verified);
+the raw value is shown once, at mint time.
+
+Minting is **self-only**: a user creates a token for their own account from
+`/profile`, and the create route has no holder field at all. This is a
+structural property, not a check — since there is no way to express "a token
+for someone else", no permission can become a route to impersonating another
+account. `manage_api_tokens` is correspondingly an *oversight* grant: list
+every token and revoke any of them, so a leaked credential can be killed by
+somebody other than its holder. Revocation only removes access, so the
+permission cannot be used to gain any.
 
 Password auth is the baseline (hashed with a modern KDF, never reversible)
 and the **only** authentication method for initial release — no SSO

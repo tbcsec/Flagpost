@@ -1,5 +1,5 @@
 # Runtime dependencies. Stack fixed by ARCHITECTURE.md §2.
-fastapi>=0.140.7,<1.0
+fastapi>=0.140.13,<1.0
 uvicorn[standard]>=0.51.0,<1.0
 pydantic-settings>=2.14.2,<3.0
 pydantic[email]>=2.13.4,<3.0

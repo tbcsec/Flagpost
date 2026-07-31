@@ -35,6 +35,7 @@ from models.site_settings import SiteSettings
 from models.submission import Submission
 from models.team import Team, TeamApplication, TeamMembership
 from models.ticket import Ticket, TicketMessage
+from models.ticket_attachment import TicketAttachment
 from models.user import RefreshSession, User
 
 __all__ = [
@@ -73,6 +74,7 @@ __all__ = [
     "TeamApplication",
     "TeamMembership",
     "Ticket",
+    "TicketAttachment",
     "TicketMessage",
     "User",
 ]

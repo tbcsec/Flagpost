@@ -22,9 +22,11 @@ def setup(app, event_bus, db_factory) -> None:
     from models.competition import Competition
     from models.ticket import Ticket
     from realtime import manager, register_room_type
+    from routers.ticket_attachments import router as ticket_attachments_router
     from routers.tickets import router as tickets_router
 
     app.include_router(tickets_router)
+    app.include_router(ticket_attachments_router)
 
     async def authorize_ticket(db, user, ticket_id: str) -> bool:
         ticket = await db.get(Ticket, ticket_id)
@@ -107,6 +109,19 @@ def setup(app, event_bus, db_factory) -> None:
             await manager.broadcast("ticket", ticket_id, frame)
         if competition_id:
             await manager.broadcast("support", competition_id, frame)
+
+    @event_bus.on("ticket.attachment_added", owner="tickets")
+    @event_bus.on("ticket.attachment_deleted", owner="tickets")
+    async def on_attachment(event_name: str, payload: dict) -> None:
+        # Reuses the ticket_updated frame, so the thread refetches (and picks up
+        # the new image) without a client-side WS change. Not ticket_message —
+        # attaching shouldn't fire the §4.4 audio cue a second time on top of
+        # the message that carried it.
+        ticket_id = payload.get("ticket_id")
+        if ticket_id:
+            await manager.broadcast(
+                "ticket", ticket_id, {"type": "ticket_updated", "ticket_id": ticket_id}
+            )
 
     @event_bus.on("ticket.assigned", owner="tickets")
     async def on_assigned(event_name: str, payload: dict) -> None:

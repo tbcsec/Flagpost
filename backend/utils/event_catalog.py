@@ -71,6 +71,9 @@ EVENT_TYPES: tuple[str, ...] = (
     "ticket.assigned",
     "ticket.resolved",
     "ticket.message_posted",
+    # Screenshots on a ticket thread (issue #80).
+    "ticket.attachment_added",
+    "ticket.attachment_deleted",
     "survey.submitted",
     "survey.opened",
     "announcement.published",

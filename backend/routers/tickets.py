@@ -29,9 +29,11 @@ from models.challenge import Challenge
 from models.competition import Competition
 from models.team import Team, TeamMembership
 from models.ticket import Ticket, TicketMessage
+from models.ticket_attachment import TicketAttachment
 from models.user import User
 from schemas.ticket import (
     TicketAssign,
+    TicketAttachmentOut,
     TicketCreate,
     TicketDetail,
     TicketMessageOut,
@@ -221,6 +223,26 @@ async def _ticket_detail(
     )
     if not show_internal:
         msg_stmt = msg_stmt.where(TicketMessage.is_internal.is_(False))
+    rows = (await db.execute(msg_stmt)).all()
+
+    # One query for the whole thread's attachments, grouped in Python — a
+    # per-message query would be N+1 on a long ticket. Messages the viewer
+    # can't see were already dropped above, so their images never get grouped.
+    by_message: dict[str, list[TicketAttachmentOut]] = {}
+    if rows:
+        attachment_rows = await db.scalars(
+            select(TicketAttachment)
+            .where(
+                TicketAttachment.competition_id == competition_id,
+                TicketAttachment.message_id.in_([m.id for m, _ in rows]),
+            )
+            .order_by(TicketAttachment.created_at)
+        )
+        for a in attachment_rows:
+            by_message.setdefault(a.message_id, []).append(
+                TicketAttachmentOut.model_validate(a, from_attributes=True)
+            )
+
     messages = [
         TicketMessageOut(
             id=m.id,
@@ -229,8 +251,9 @@ async def _ticket_detail(
             body=m.body,
             is_internal=m.is_internal,
             created_at=m.created_at,
+            attachments=by_message.get(m.id, []),
         )
-        for m, name in (await db.execute(msg_stmt)).all()
+        for m, name in rows
     ]
     return TicketDetail(**summary.model_dump(), messages=messages)
 

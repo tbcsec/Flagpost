@@ -79,6 +79,7 @@ import type {
   TeamJoinResult,
   TeamUpdate,
   Ticket,
+  TicketAttachment,
   TicketDetail,
   TokenResponse,
   User,
@@ -151,12 +152,15 @@ function refreshOnce(): Promise<boolean> {
 interface RequestOptions {
   auth?: boolean;
   retryOn401?: boolean;
+  /** How to read the response body. `blob` is for binary endpoints (e.g. a
+   *  ticket screenshot) that still want the auth + refresh handling below. */
+  parse?: "json" | "blob";
 }
 
 async function apiFetch<T>(
   path: string,
   init: RequestInit = {},
-  { auth = true, retryOn401 = true }: RequestOptions = {},
+  { auth = true, retryOn401 = true, parse = "json" }: RequestOptions = {},
 ): Promise<T> {
   const headers = new Headers(init.headers);
   if (auth) {
@@ -194,7 +198,7 @@ async function apiFetch<T>(
   if (res.status === 401 && retryOn401 && auth) {
     const refreshed = await refreshOnce();
     if (refreshed) {
-      return apiFetch<T>(path, init, { auth, retryOn401: false });
+      return apiFetch<T>(path, init, { auth, retryOn401: false, parse });
     }
   }
 
@@ -203,6 +207,7 @@ async function apiFetch<T>(
     throw new ApiError(res.status, message, detail);
   }
   if (res.status === 204) return undefined as T;
+  if (parse === "blob") return (await res.blob()) as T;
   return res.json() as Promise<T>;
 }
 
@@ -692,6 +697,31 @@ export const ticketsApi = {
     apiFetch<TicketDetail>(`${ticketsApi.base(competitionId)}/${ticketId}/resolve`, {
       method: "POST",
     }),
+};
+
+// Ticket screenshots (issue #80). Bytes are streamed through the API rather
+// than a presigned storage URL, so the inline preview is same-origin and works
+// under the production CSP (`img-src 'self' … blob:`).
+export const ticketAttachmentsApi = {
+  upload: (competitionId: string, ticketId: string, messageId: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiFetch<TicketAttachment>(
+      `${ticketsApi.base(competitionId)}/${ticketId}/messages/${messageId}/attachments`,
+      { method: "POST", body: form },
+    );
+  },
+  content: (competitionId: string, ticketId: string, attachmentId: string) =>
+    apiFetch<Blob>(
+      `${ticketsApi.base(competitionId)}/${ticketId}/attachments/${attachmentId}/content`,
+      {},
+      { parse: "blob" },
+    ),
+  remove: (competitionId: string, ticketId: string, attachmentId: string) =>
+    apiFetch<void>(
+      `${ticketsApi.base(competitionId)}/${ticketId}/attachments/${attachmentId}`,
+      { method: "DELETE" },
+    ),
 };
 
 export const dashboardApi = {

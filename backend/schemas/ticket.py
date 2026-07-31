@@ -22,6 +22,19 @@ class TicketAssign(BaseModel):
     assignee_user_id: str | None = None
 
 
+class TicketAttachmentOut(BaseModel):
+    """An attached screenshot. ``object_key`` is internal and never serialized
+    (same convention as ``AttachmentOut``); the bytes come from the
+    ``/content`` route."""
+
+    id: str
+    filename: str
+    content_type: str
+    size_bytes: int
+    uploader_user_id: str
+    created_at: datetime
+
+
 class TicketMessageOut(BaseModel):
     id: str
     author_user_id: str
@@ -29,6 +42,9 @@ class TicketMessageOut(BaseModel):
     body: str
     is_internal: bool
     created_at: datetime
+    # Nested under the message on purpose: the thread's internal-note filter
+    # then hides a staff note's images along with its body (issue #80).
+    attachments: list[TicketAttachmentOut] = []
 
 
 class TicketOut(BaseModel):

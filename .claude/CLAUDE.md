@@ -662,6 +662,33 @@ What's built:
   - **Test-suite hardening**: `conftest` drains `event_bus.wait_for_background()`
     before `drop_all` so fire-and-forget automation tasks (ADR-0012) can't leak
     across the per-test schema and flake unrelated tests.
+  - **Support-ticket attachments** (#80, §13.3) — screenshots on a ticket thread.
+    `TicketAttachment` (migration `7c8d9eafb0c1`) hangs off the **message**, not
+    just the ticket, so an image on a staff **internal note** inherits that
+    message's visibility (the thread's internal filter hides it, and the byte
+    route re-checks — a guessed id can't leak one). Object storage like challenge
+    attachments (a growing per-ticket collection, not a singleton blob), keyed
+    `<competition_id>/tickets/<ticket_id>/…`. Owner limits: PNG/JPEG/WebP only
+    (no GIF/SVG), ≤2.5 MB each, **5 per ticket** shared across all messages and
+    authors, deletable by the uploader or staff (a delete frees a slot). Type is
+    **derived by magic-byte sniff** (`utils/image_sniff`), never the client's
+    `Content-Type`. Three routes in `routers/ticket_attachments.py` (mounted by
+    the tickets plugin): upload (author-of-the-message only), `/content`, delete.
+    **Bytes stream through the API rather than a presigned URL** — the production
+    CSP is `img-src 'self' data: blob:`, so a cross-origin storage URL can't load
+    in an `<img>`; the frontend fetches with its Bearer token and renders a
+    `blob:` URL (challenge attachments dodge this only because they
+    `window.open()`). New §3.2 `ticket.attachment_added`/`_deleted` (both
+    triggers, `ticket_view`-governed) reusing the `ticket_updated` WS frame.
+    `apiFetch` gained a `parse: "blob"` option; the backup engine's attachment
+    special-casing generalised into a `Spec.object_key_for` callable so both
+    object-backed tables round-trip. Frontend: `ScreenshotPicker` (staged files,
+    removable pre-post) + `TicketAttachments` (thumbnails → lightbox) +
+    `useUploadTicketAttachment`/`useDeleteTicketAttachment`/`useAttachmentImage`.
+    **Attachments need MinIO** — `get_storage()` has no local-filesystem
+    backend, so the zero-infra SQLite preview stack needs
+    `docker compose -f docker-compose.dev.yml up -d minio` (config defaults to
+    `localhost:9000`) before uploads work.
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0012 (event-dispatch sync-critical vs background, supersedes

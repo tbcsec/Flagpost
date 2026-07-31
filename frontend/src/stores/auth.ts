@@ -26,6 +26,9 @@ interface AuthState {
   activeCompetitionId: string | null;
   paletteOverride: string | null;
   setSession: (accessToken: string, user: User) => void;
+  /** Refresh just the cached user (e.g. after a self-service email change),
+   *  leaving the access token untouched — setSession would demand one. */
+  setUser: (user: User) => void;
   clearSession: () => void;
   setActiveCompetition: (competitionId: string | null) => void;
   setPaletteOverride: (palette: string | null) => void;
@@ -41,6 +44,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   paletteOverride: null,
   setSession: (accessToken, user) =>
     set({ accessToken, user, status: "authenticated" }),
+  setUser: (user) => set({ user }),
   clearSession: () =>
     set({ accessToken: null, user: null, status: "anonymous" }),
   setActiveCompetition: (competitionId) =>

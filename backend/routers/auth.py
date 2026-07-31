@@ -37,6 +37,7 @@ from ratelimit import get_rate_limiter
 from ratelimit.base import RateLimiter
 from utils import mailer
 from schemas.auth import (
+    ChangeEmailRequest,
     ChangePasswordRequest,
     ForgotPasswordRequest,
     LoginRequest,
@@ -371,6 +372,144 @@ def _hash_token(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+async def _drop_tokens(db: AsyncSession, model, user_id: str) -> None:
+    """Delete every outstanding token of ``model`` for a user."""
+    for token in (
+        await db.execute(select(model).where(model.user_id == user_id))
+    ).scalars().all():
+        await db.delete(token)
+
+
+@router.post("/change-email", response_model=UserOut)
+async def change_email(
+    body: ChangeEmailRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
+) -> UserOut:
+    """Add, change or clear the caller's own email address (#106).
+
+    Own-user, so no catalog permission — the same posture as ``change-password``
+    and the notification preferences. The **current password is required**: the
+    address is where password-reset links go, so a stolen session alone must not
+    be enough to repoint it and take the account permanently.
+
+    Refresh sessions are deliberately **not** revoked (unlike a password change).
+    The password check already blocks the threat above, and revoking would log
+    the legitimate owner out of a routine edit — GitHub and GitLab draw the line
+    in the same place. The control that actually helps a victim is the
+    notification to the *previous* address, sent below.
+
+    Outstanding password-reset **and** verification tokens are dropped, so a link
+    already sitting in the old inbox can't be redeemed after the switch.
+    """
+    # Limit attempts *before* checking the password: this endpoint takes an
+    # arbitrary password guess, so an unthrottled version is a brute-force
+    # oracle for anyone holding a stolen session.
+    if not await rate_limiter.hit(
+        f"change-email:{current_user.id}", limit=5, window_seconds=300
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many attempts — please wait a few minutes and try again",
+        )
+    if not verify_password(body.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+
+    site = await db.get(SiteSettings, SITE_SETTINGS_ID)
+    verification_on = bool(site and site.email_verification_enabled)
+    previous_email = current_user.email
+
+    if body.new_email is None:
+        if verification_on:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This instance requires a verified email, so it can't be removed",
+            )
+        if previous_email is None:
+            return UserOut.model_validate(current_user)  # already clear — no-op
+        current_user.email = None
+        current_user.email_verified_at = None
+    else:
+        new_email = str(body.new_email).strip()
+        # Resubmitting the same address (any casing) is a no-op: re-running the
+        # invalidation would pointlessly kill live reset links, and a fresh
+        # verification mail is what /resend-verification is for.
+        if previous_email is not None and previous_email.lower() == new_email.lower():
+            return UserOut.model_validate(current_user)
+
+        if site and site.email_domain_allowlist_enabled:
+            if not domain_allowed(new_email, site.allowed_email_domains or []):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="That email domain isn't allowed on this instance",
+                )
+        if await email_taken(db, new_email, exclude_id=current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="That email is already registered",
+            )
+        current_user.email = new_email
+        # Any change re-opens verification — otherwise verifying a real address
+        # and then swapping to another would be a trivial bypass of the gate.
+        current_user.email_verified_at = None
+
+    await _drop_tokens(db, PasswordResetToken, current_user.id)
+    await _drop_tokens(db, EmailVerificationToken, current_user.id)
+    await db.commit()
+
+    # Delivery is best-effort from here. ``send_email`` only no-ops when SMTP is
+    # *unconfigured* — a configured-but-unreachable host raises — and the change
+    # is already committed, so letting that propagate would return 500 for a
+    # change that did happen, and skip the event below. Both mails are
+    # recoverable by the user (/resend-verification, or reading the new inbox),
+    # so log and carry on.
+    if current_user.email and verification_on:
+        try:
+            await _send_verification_email(db, current_user)
+        except Exception:  # noqa: BLE001 — delivery must not fail a done change
+            logger.warning(
+                "email changed for %s but the verification mail failed",
+                current_user.id,
+                exc_info=True,
+            )
+
+    # Tell the old address, so the real owner learns of a change they didn't
+    # make. Skipped on a first-time set — there's nowhere to send it.
+    if previous_email:
+        try:
+            await mailer.send_email(
+                [previous_email],
+                "Your email address was changed",
+                (
+                    "The email address on your Flagpost account was just "
+                    + (
+                        f"changed to {current_user.email}."
+                        if current_user.email
+                        else "removed."
+                    )
+                    + "\n\nIf this wasn't you, someone may have access to your "
+                    "account — reset your password immediately and contact an "
+                    "administrator."
+                ),
+            )
+        except Exception:  # noqa: BLE001 — as above
+            logger.warning(
+                "could not notify the previous address for %s",
+                current_user.id,
+                exc_info=True,
+            )
+
+    await event_bus.emit(
+        "user.updated",
+        {"user_id": current_user.id, "actor_user_id": current_user.id},
+    )
+    return UserOut.model_validate(current_user)
+
+
 @router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT)
 async def forgot_password(
     body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)
@@ -438,14 +577,7 @@ async def reset_password(
         )
     user.password_hash = hash_password(body.new_password)
     # Invalidate the token(s) + every session.
-    for t in (
-        await db.execute(
-            select(PasswordResetToken).where(
-                PasswordResetToken.user_id == user.id
-            )
-        )
-    ).scalars().all():
-        await db.delete(t)
+    await _drop_tokens(db, PasswordResetToken, user.id)
     for session in (
         await db.execute(
             select(RefreshSession).where(

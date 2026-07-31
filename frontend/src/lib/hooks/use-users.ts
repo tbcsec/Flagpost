@@ -44,6 +44,17 @@ export function useResendVerification() {
   return useMutation({ mutationFn: authApi.resendVerification });
 }
 
+/** Add / change / clear your own email (#106). The endpoint returns the updated
+ *  user, so push it into the store — the profile page derives the "verify your
+ *  email" banner from `user.email_verified_at`, which any change resets. */
+export function useChangeEmail() {
+  const setUser = useAuthStore((s) => s.setUser);
+  return useMutation({
+    mutationFn: authApi.changeEmail,
+    onSuccess: (user) => setUser(user),
+  });
+}
+
 export function useLogout() {
   const clearSession = useAuthStore((s) => s.clearSession);
   const queryClient = useQueryClient();

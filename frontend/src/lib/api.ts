@@ -323,6 +323,14 @@ export const authApi = {
     ),
   resendVerification: () =>
     apiFetch<void>("/api/auth/resend-verification", { method: "POST" }),
+  // Self-service add / change / clear of your own address (#106). Returns the
+  // updated UserOut — the same shape the auth store already holds, so the
+  // caller can drop it straight in.
+  changeEmail: (input: { current_password: string; new_email: string | null }) =>
+    apiFetch<User>("/api/auth/change-email", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   /** Restore a session from the refresh cookie on app load. */
   restore: () => refreshOnce(),
 };

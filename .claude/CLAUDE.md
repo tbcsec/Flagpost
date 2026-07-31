@@ -689,6 +689,28 @@ What's built:
     backend, so the zero-infra SQLite preview stack needs
     `docker compose -f docker-compose.dev.yml up -d minio` (config defaults to
     `localhost:9000`) before uploads work.
+  - **Self-service add / change / clear email** (#106, split out of #74) — the
+    `/profile` **Email card** + `POST /api/auth/change-email`, an own-user route
+    (no catalog permission, like `change-password`). Closes the ADR-0015 dead end
+    where an email-less account couldn't reset its password *or* pass the #74
+    verification gate without an admin editing the record. Requires the
+    **current password** (the address is where reset links go, so a stolen
+    session alone mustn't repoint it) and is **rate-limited 5/5min per user** —
+    it takes an arbitrary password guess, so unthrottled it'd be a brute-force
+    oracle. Owner calls: a change **clears `email_verified_at`** and re-triggers
+    verification (otherwise verify-then-swap trivially bypasses the gate);
+    **clearing is refused while verification is on**; the **#56 domain allowlist
+    applies** to self-service changes too; outstanding **password-reset *and*
+    verification tokens are dropped** so a link in the old inbox dies. Refresh
+    sessions deliberately **survive** (GitHub/GitLab draw the line at password
+    changes) — the control that protects a victim is the **notice mailed to the
+    previous address**. Resubmitting the same address (any casing) is a **no-op**;
+    `/resend-verification` is the resend path. Returns the shared **`UserOut`**
+    (same shape the auth store holds → new `setUser` action, no mapping). Post-
+    commit mail is **best-effort** (`mailer.send_email` only no-ops when SMTP is
+    *unconfigured*; a configured-but-unreachable host **raises**, which would
+    otherwise 500 a change that already committed and skip its event). Reuses
+    `user.updated`; no migration.
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0012 (event-dispatch sync-critical vs background, supersedes

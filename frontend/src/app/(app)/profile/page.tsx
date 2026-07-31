@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
 import { MyApiTokensCard } from "@/components/profile/api-tokens-card";
+import { EmailCard } from "@/components/profile/email-card";
 import { NotificationPreferencesCard } from "@/components/profile/notification-preferences";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,9 +16,9 @@ import { useAuthStore } from "@/stores/auth";
 import { toast } from "@/stores/toast";
 
 // Email verification (#74): shown only when the site requires it and this
-// account hasn't confirmed its address yet. There's no self-service
-// add/change-email flow (a separate issue) — an email-less account is told to
-// contact an administrator rather than offered a dead-end resend button.
+// account hasn't confirmed its address yet. An email-less account is pointed at
+// the Email card below rather than offered a resend button with nothing to send
+// to — since #106 that's a self-service fix, not an admin request.
 function VerifyEmailBanner({ user }: { user: { email: string | null } }) {
   const resend = useResendVerification();
   return (
@@ -55,7 +56,9 @@ function VerifyEmailBanner({ user }: { user: { email: string | null } }) {
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">
-            Your account has no email address on file. Contact an administrator to have one added.
+            Your account has no email address on file. Add one under{" "}
+            <span className="font-medium text-foreground">Email</span> below, and
+            we&apos;ll send you a verification link.
           </p>
         )}
       </CardContent>
@@ -63,9 +66,10 @@ function VerifyEmailBanner({ user }: { user: { email: string | null } }) {
   );
 }
 
-// Profile. Changing your password IS wired (POST /api/auth/change-password).
-// Editing display name / email needs a user-update endpoint that doesn't exist
-// yet — shown read-only. Notification preferences are wired (§4.4).
+// Profile. Password (POST /api/auth/change-password), email (#106, its own
+// card), notification preferences (§4.4) and personal API tokens (#75) are all
+// wired. The display name is still read-only — renaming has no endpoint yet,
+// and it's the primary login identifier (ADR-0015), so it isn't a free edit.
 export default function ProfilePage() {
   const user = useAuthStore((s) => s.user);
   const { data: settings } = useSiteSettings();
@@ -104,18 +108,9 @@ export default function ProfilePage() {
           <form onSubmit={onSubmit} className="grid max-w-md gap-4">
             <div className="grid gap-2">
               <Label htmlFor="pdn">Display name</Label>
-              {/* Editing name/email has no endpoint yet — shown read-only. */}
+              {/* Renaming has no endpoint yet — read-only. Email moved to its
+                  own card below, where it's editable (#106). */}
               <Input id="pdn" defaultValue={user?.display_name ?? ""} disabled />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="pem">Email (optional)</Label>
-              <Input
-                id="pem"
-                type="email"
-                defaultValue={user?.email ?? ""}
-                placeholder="No email set"
-                disabled
-              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="pcur">Current password</Label>
@@ -155,6 +150,7 @@ export default function ProfilePage() {
         </CardContent>
       </Card>
 
+      <EmailCard />
       <NotificationPreferencesCard />
       <MyApiTokensCard />
     </>

@@ -28,6 +28,16 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(min_length=8, max_length=256)
 
 
+class ChangeEmailRequest(BaseModel):
+    # The current password re-authenticates the change (#106): the address
+    # governs where password-reset links go, so a stolen session alone must not
+    # be enough to repoint it.
+    current_password: str = Field(min_length=1, max_length=256)
+    # None clears the address — permitted only while email verification is off
+    # (email is optional per ADR-0015, but a verification gate needs one).
+    new_email: EmailStr | None = None
+
+
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 

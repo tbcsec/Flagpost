@@ -93,7 +93,8 @@ const ADMIN_SUBNAV: { href: string; label: string }[] = [
   { href: "/admin/roles", label: "Roles" },
   { href: "/admin/events", label: "Event log" },
   { href: "/admin/automations", label: "Automations" },
-  // Appearance is a tab under Site settings (#104), not its own page.
+  // Appearance (#104) and Auth providers (#58) are tabs under Site settings,
+  // not their own pages.
   { href: "/admin/settings", label: "Site settings" },
 ];
 

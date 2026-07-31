@@ -29,8 +29,8 @@ gets expensive to fix later; get it right and every later tier is faster
 to build, not slower.
 
 1. **Auth & RBAC** — registration, login, session handling (local
-   password auth per Architecture §7.7 — no SSO at this stage, see
-   Explicitly Deferred below), and the role and permission model from
+   password auth per Architecture §7.7; OIDC arrived later in v1.2.0,
+   see Explicitly Deferred below), and the role and permission model from
    Architecture §7: the three built-in roles (Administrator, Judge,
    Participant), per-competition role assignment, and the categorized
    permission list, even if the custom-role editor UI (§7.4) waits until
@@ -242,11 +242,13 @@ Real parts of the long-term vision, intentionally not in this roadmap:
 - **AI integration** (Architecture §12) — both the administrator and
   competitor assistants. Needs real usage data and a settled event/data
   layer to be useful rather than decorative.
-- **SSO / external identity providers** (Architecture §7.7) — LDAP, SAML,
-  OAuth. Local password auth is the only login method through public
-  release; the auth module contract in §7.7 is built to make SSO a
-  bolt-on later rather than a refactor, but the providers themselves
-  aren't built until there's real demand for a specific one.
+- **SSO / external identity providers** (Architecture §7.7) — **partially
+  lifted.** OIDC/OAuth2 shipped in v1.2.0 (#58, ADR-0021): the prediction
+  here held, and it plugged into the §7.7 contract as a bolt-on rather than
+  a refactor. **SAML (#100) and LDAP (#101) stay deferred** — SAML is the
+  same browser-redirect shape and should be cheap on top of the OIDC
+  framework; LDAP is a credential *bind*, not a redirect flow, so it needs
+  its own seam (ADR-0021 leaves room for one).
 - **Plugin marketplace & third-party modules** (Architecture §11) — the
   marketplace listing/discovery experience and the isolation story for
   untrusted third-party modules (Architecture §15). The manifest-driven

@@ -1,8 +1,16 @@
 # ADR-0003: JWT access + refresh tokens, shared across REST and WebSocket
 
-**Status:** Accepted
+**Status:** Accepted (extended in part by
+[ADR-0021](0021-oidc-identity-provider-framework.md))
 **Date:** 2026-07-17
 **Architecture reference:** `ARCHITECTURE.md` §4.1, §7.7
+
+> **Extended (2026-07-31).** The "SSO providers (§7.7, deferred)" note below is
+> no longer deferred for OIDC: ADR-0021 adds an OIDC provider framework. It
+> **extends rather than supersedes** this ADR — the prediction here held, and an
+> OIDC login issues a session through the same contract described below rather
+> than introducing a second auth path. SAML (#100) and LDAP (#101) remain
+> deferred.
 
 ## Context
 

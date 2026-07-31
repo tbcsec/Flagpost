@@ -711,6 +711,38 @@ What's built:
     *unconfigured*; a configured-but-unreachable host **raises**, which would
     otherwise 500 a change that already committed and skip its event). Reuses
     `user.updated`; no migration.
+  - **OIDC / OAuth2 external identity** (#58, **ADR-0021**) — the last v1.2.0
+    feature, and the first thing to come *off* the "don't build yet" list.
+    The **`sso` required-core module** owns site-wide `OidcProvider` rows (each
+    independently `enabled`) — auth is a property of the install, not of a
+    competition, and `competition_modules` has no site-scoped equivalent.
+    Standard authorization-code flow with **mandatory PKCE + state + nonce**;
+    `utils/oidc.py` does discovery, cached JWKS (refetch-once on `kid` miss),
+    token exchange and ID-token validation (**asymmetric algs only** — accepting
+    HS* alongside a published JWKS would let the public key sign tokens).
+    Identity resolution (`auth/oidc_identity.py`) is **sub-first**: match
+    `(provider_id, sub)`; on *first contact only*, fall back to an existing
+    local account by email **and only when the IdP asserts `email_verified`**;
+    otherwise **JIT-create holding Participant**. Local login survives as
+    **break-glass structurally** — a JIT user gets a random undisclosed password
+    hash, so the local form cannot work for them, while the ADR-0017 owner still
+    gets in when the IdP is down. `client_secret` is **encrypted at rest** via
+    the new **`utils/crypto.EncryptedString`** (ADR-0020; keyed by the ADR-0019
+    derive-and-persist pattern — built here rather than waiting for #109, which
+    shrinks to adopting it for the SMTP password). Admin CRUD is gated on a new
+    **`manage_auth_providers`** (deliberately *not* `manage_site_settings` —
+    who can log in is higher-stakes), surfaced as the **Auth tab** on Admin →
+    Site settings; that page now admits either permission and hides tabs the
+    holder lacks. New §3.2 `auth_provider.created/updated/deleted` +
+    `identity.linked/unlinked`. **`PUBLIC_BASE_URL`** is required behind a
+    TLS-terminating proxy: uvicorn runs without `--proxy-headers`, so a
+    request-derived `redirect_uri` would say `http://` and the IdP would reject
+    the mismatch. **`OIDC_ALLOW_INSECURE_ISSUERS`** (default off) disables the
+    https requirement *and* the SSRF blocklist so a localhost mock IdP works in
+    dev — never set it in production. Excluded from backup (client secret is a
+    credential, and per-install-encrypted anyway). Migration `8d9eafb0c1d2`.
+    SAML (#100) / LDAP (#101) still deferred; **#118** tracks restricting *which*
+    external identities may sign in (the #56 allowlist does not apply here).
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0012 (event-dispatch sync-critical vs background, supersedes
@@ -721,7 +753,9 @@ email), ADR-0016 (export/import backup), ADR-0017 (first-run setup wizard,
 supersedes the seeded admin of ADR-0010), ADR-0018 (regex-flag ReDoS
 containment), ADR-0019 (per-install JWT secret — never a repo-public default),
 ADR-0020 (secret storage: hash what is only verified, encrypt what must be
-retrieved — facility tracked in #109). There is **no seeded default admin** in
+retrieved — facility now built as `utils/crypto.EncryptedString`, #58/#109),
+ADR-0021 (OIDC identity framework: sub-first linking, JIT-as-Participant,
+break-glass local login; leaves room for a non-redirect provider). There is **no seeded default admin** in
 production: a fresh install ships with
 **no** administrator and is *unconfigured* until an operator completes the
 **first-run setup wizard** (`/setup`, ADR-0017), which creates the owner account
@@ -811,8 +845,11 @@ section). If a task seems to need one of these, flag it and ask rather
 than quietly building a scoped-down version:
 
 - AI integration — administrator or competitor assistant.
-- SSO / LDAP / SAML — password auth only until after public launch
-  (`docs/adr/0003-jwt-access-refresh-auth.md`).
+- SAML (#100) / LDAP (#101) — **but OIDC/OAuth2 is built** (#58, ADR-0021),
+  so this is no longer "no external auth". SAML is the same redirect shape
+  and should extend the OIDC framework; LDAP is a credential *bind*, not a
+  redirect flow, and needs its own seam. Don't fold either into the OIDC
+  provider model without reading ADR-0021's provider-abstraction note.
 - Plugin marketplace / third-party modules — the module *mechanism* is
   used for required-core features starting in Tier 0, but the
   marketplace path (listing/discovery + untrusted-code sandboxing) stays

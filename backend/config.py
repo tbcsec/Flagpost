@@ -166,6 +166,25 @@ class Settings(BaseSettings):
     # MUST stay false for any real deployment — it seeds well-known credentials.
     demo_mode: bool = False
 
+    # The browser-facing origin this install is served on, e.g.
+    # "https://ctf.example.com". Only needed for OIDC (#58): the redirect_uri
+    # sent to an IdP must match the one registered there *exactly*, and it can't
+    # be inferred reliably — behind a TLS-terminating proxy the backend sees a
+    # plain-HTTP hop, so a request-derived URL would say "http://" and the IdP
+    # would reject it. Deriving it from config sidesteps that without requiring
+    # uvicorn --proxy-headers. Empty = fall back to the request (correct for a
+    # direct HTTP dev run).
+    public_base_url: str = ""
+
+    # OIDC (#58, ADR-0021). Issuers must normally be public https endpoints —
+    # the SSRF guard that enforces that also, correctly, blocks `localhost`,
+    # which makes a local mock IdP unusable. This opt-out exists so the feature
+    # can be exercised on a dev box; it disables BOTH the https requirement and
+    # the non-routable-address blocklist for issuer/token/JWKS fetches, so
+    # enabling it in production reopens exactly the SSRF hole ADR-0013 closed.
+    # Off by default and logged loudly whenever it takes effect.
+    oidc_allow_insecure_issuers: bool = False
+
     @model_validator(mode="after")
     def _harden_jwt_secret(self) -> "Settings":
         # Replace an unset / public-default secret with a real per-install one,

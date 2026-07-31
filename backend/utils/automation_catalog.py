@@ -94,6 +94,11 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "user.deleted": ["user_id", "actor_user_id"],
     "api_token.created": ["api_token_id", "user_id", "created_by_user_id"],
     "api_token.revoked": ["api_token_id", "user_id"],
+    "auth_provider.created": ["provider_id", "slug", "actor_user_id"],
+    "auth_provider.updated": ["provider_id", "slug", "changed_fields", "actor_user_id"],
+    "auth_provider.deleted": ["provider_id", "slug", "actor_user_id"],
+    "identity.linked": ["user_id", "provider_id", "provider_slug"],
+    "identity.unlinked": ["user_id", "provider_id", "provider_slug"],
 }
 
 # The permission that governs *observing* each trigger event (§5.1 trigger
@@ -120,6 +125,12 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     "user.deleted": "manage_users",
     "api_token.created": "manage_api_tokens",
     "api_token.revoked": "manage_api_tokens",
+    # Who can log in is admin-domain data, like roles and users.
+    "auth_provider.created": "manage_auth_providers",
+    "auth_provider.updated": "manage_auth_providers",
+    "auth_provider.deleted": "manage_auth_providers",
+    "identity.linked": "manage_users",
+    "identity.unlinked": "manage_users",
     "site.settings_updated": "manage_site_settings",
     # Competition-lifecycle / staff events.
     "competition.created": "edit_competition",

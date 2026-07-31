@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
@@ -17,7 +17,25 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
-import { useLogin } from "@/lib/hooks/use-users";
+import { useAuthProviders, useLogin } from "@/lib/hooks/use-users";
+import { useSearchParams } from "next/navigation";
+
+// The callback redirects here with a short code rather than the provider's own
+// message — a failure is usually a misconfiguration whose detail (endpoints,
+// client ids, internal hostnames) shouldn't be reflected to a browser. Server
+// logs carry the specifics.
+const SSO_ERRORS: Record<string, string> = {
+  invalid_state:
+    "That sign-in link has expired or was already used. Please try again.",
+  expired: "That sign-in attempt timed out. Please try again.",
+  invalid_token: "We couldn't verify the response from your identity provider.",
+  provider_unavailable:
+    "That identity provider isn't reachable right now. Try again, or sign in with a password.",
+  provider_denied: "Your identity provider declined the sign-in request.",
+  invalid_response: "Your identity provider sent an incomplete response.",
+  account_disabled: "That account has been disabled. Contact an administrator.",
+  default: "Single sign-on failed. Please try again, or sign in with a password.",
+};
 
 // Shown only on a demo instance (seeded by auth/demo.py). Password is "password".
 const DEMO_ACCOUNTS = [
@@ -26,11 +44,19 @@ const DEMO_ACCOUNTS = [
   { user: "participant", label: "Participant", desc: "solve challenges" },
 ];
 
-export default function LoginPage() {
+// Split from the default export purely so useSearchParams (reading the SSO
+// `?error=` code) sits inside a Suspense boundary. Without one, Next refuses to
+// statically prerender this route — `npm run build` fails rather than degrading,
+// so it's a build-time contract, not a runtime nicety.
+function LoginForm() {
   const router = useRouter();
   const login = useLogin();
   const { data: settings } = useSiteSettings();
+  const { data: providers } = useAuthProviders();
+  const searchParams = useSearchParams();
+  const ssoError = searchParams.get("error");
   const brand = settings ?? FALLBACK_SETTINGS;
+  const hasSso = (providers?.length ?? 0) > 0;
   const platformName = brand.platform_name;
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -60,6 +86,36 @@ export default function LoginPage() {
           <CardDescription>Access your competitions.</CardDescription>
         </CardHeader>
         <CardContent>
+          {ssoError && (
+            <p
+              role="alert"
+              className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              {SSO_ERRORS[ssoError] ?? SSO_ERRORS.default}
+            </p>
+          )}
+
+          {hasSso && (
+            <div className="mb-4 space-y-2">
+              {providers!.map((p) => (
+                // A full-page navigation, not fetch(): the IdP redirect chain
+                // has to happen in the address bar, not XHR.
+                <a
+                  key={p.slug}
+                  href={p.login_url}
+                  className="flex w-full items-center justify-center rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground transition-colors hover:border-primary/50 hover:bg-accent"
+                >
+                  Sign in with {p.name}
+                </a>
+              ))}
+              <div className="flex items-center gap-3 pt-2">
+                <span className="h-px flex-1 bg-border" />
+                <span className="text-xs text-muted-foreground">or</span>
+                <span className="h-px flex-1 bg-border" />
+              </div>
+            </div>
+          )}
+
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="identifier">Username or email</Label>
@@ -150,5 +206,13 @@ export default function LoginPage() {
       )}
       <PoweredByFooter />
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

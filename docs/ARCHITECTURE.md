@@ -137,6 +137,8 @@ user.unbanned                user.deleted
 role.created                 role.updated               role.deleted
 role.assigned                role.unassigned
 api_token.created            api_token.revoked
+auth_provider.created        auth_provider.updated      auth_provider.deleted
+identity.linked              identity.unlinked
 ticket.created               ticket.assigned            ticket.resolved
 ticket.message_posted        ticket.attachment_added    ticket.attachment_deleted
 survey.submitted             survey.opened
@@ -740,8 +742,8 @@ present. Local login accepts the **display name *or* the email** (matched
 case-insensitively; email first, then display name, so the match is
 deterministic). This keeps sign-up frictionless (no email required) and lets an
 account exist without one; assigning roles still works for email-less accounts
-because Admin → Roles resolves by display name or email (ADR-0015). SSO, when it
-ships, still plugs into the same session contract below.
+because Admin → Roles resolves by display name or email (ADR-0015). OIDC login
+(below) plugs into the same session contract.
 
 The same access token is reused for both transports rather than
 maintaining two auth schemes:
@@ -770,18 +772,44 @@ every token and revoke any of them, so a leaked credential can be killed by
 somebody other than its holder. Revocation only removes access, so the
 permission cannot be used to gain any.
 
-Password auth is the baseline (hashed with a modern KDF, never reversible)
-and the **only** authentication method for initial release — no SSO
-module ships until after public launch. This isn't a technical
-simplification so much as a scoping one: building the module contract
-correctly matters more upfront than building multiple auth backends against
-it. SSO (LDAP/SAML/OAuth) stays a **module**, not kernel, and is explicitly
-deferred (see `ROADMAP.md`); when it does ship, it plugs into the same
-"produces a `current_user` and a session" contract that password login
-already established, so adding a provider later doesn't touch the RBAC
-layer at all, only how the initial identity gets established. Getting that
-contract right during the local-auth build is the actual prerequisite for
-SSO being a clean bolt-on later rather than a refactor.
+Password auth is the baseline (hashed with a modern KDF, never reversible).
+It was the only method through initial release — a scoping decision, since
+getting the module contract right mattered more than building several auth
+backends against it. That contract held: **OIDC/OAuth2 shipped in v1.2.0**
+(#58, ADR-0021) as a bolt-on that touches no part of RBAC.
+
+**External identity (§7.7.1, ADR-0021).** The `sso` required-core module owns
+site-wide `OidcProvider` rows (each independently `enabled`), because
+authentication is a property of the install, not of a competition —
+`competition_modules` (§11.3) is per-competition and has no site-scoped
+equivalent. A login is the standard authorization-code flow with **mandatory
+PKCE and `state`**; the callback validates the ID token (signature via cached
+JWKS, plus `iss`/`aud`/`exp`/`nonce`) and then resolves identity:
+
+- **`(provider_id, sub)` matches** → existing linked user.
+- **First contact, and the IdP asserts `email_verified: true`** → link to the
+  local account with that address.
+- **Otherwise** → JIT-create a user holding **Participant only**, mirroring the
+  rule that public registration never grants above Participant.
+
+External identity answers *who you are*; RBAC (§7) alone decides what you may
+do. Group and role claims are deliberately ignored — honouring them would move
+permission assignment outside the platform's audit log.
+
+**Local login remains as break-glass, structurally.** A JIT-provisioned SSO
+user is stored with a random, never-disclosed password hash, so there is no
+password for them to know and the local form simply cannot work for them — no
+server-side restriction is needed. Accounts with a real password (notably the
+ADR-0017 first-run owner) keep working, which is exactly the account an operator
+needs when the IdP is misconfigured or down.
+
+The session itself is unchanged: the callback issues one through the same seam
+password login uses, so refresh, WebSocket auth and API tokens all behave
+identically regardless of how the user got in. Provider `client_secret`s are
+stored **encrypted** (`utils/crypto.EncryptedString`) rather than plaintext,
+per ADR-0020 — they must be retrieved to call the token endpoint. SAML (#100)
+and LDAP (#101) stay deferred; ADR-0021 notes that LDAP is a credential bind
+rather than a redirect flow and will need its own seam.
 
 ---
 

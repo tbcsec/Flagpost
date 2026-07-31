@@ -62,6 +62,13 @@ EVENT_TYPES: tuple[str, ...] = (
     # Personal API tokens (issue #75) — administrator mint/revoke.
     "api_token.created",
     "api_token.revoked",
+    # External identity providers (#58, ADR-0021).
+    "auth_provider.created",
+    "auth_provider.updated",
+    "auth_provider.deleted",
+    # An external identity was attached to (or detached from) a local account.
+    "identity.linked",
+    "identity.unlinked",
     "role.created",
     "role.updated",
     "role.deleted",

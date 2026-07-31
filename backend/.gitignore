@@ -1,3 +1,7 @@
 
 # Auto-generated per-install JWT secret (never commit)
 .jwt_secret
+
+# Auto-generated per-install key for encrypted-at-rest columns (ADR-0020).
+# Never commit — and back it up: without it, stored secrets can't be decrypted.
+.secret_key

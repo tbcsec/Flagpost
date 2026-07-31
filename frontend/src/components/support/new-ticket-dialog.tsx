@@ -12,11 +12,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { ScreenshotPicker } from "@/components/support/screenshot-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useChallenges } from "@/lib/hooks/use-challenges";
-import { useCreateTicket } from "@/lib/hooks/use-tickets";
+import { useCreateTicket, useUploadTicketAttachment } from "@/lib/hooks/use-tickets";
 import { toast } from "@/stores/toast";
 
 // A competitor opens a ticket, optionally tied to a challenge. RBAC
@@ -27,7 +28,9 @@ export function NewTicketDialog({ competitionId }: { competitionId: string }) {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [challengeId, setChallengeId] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
   const create = useCreateTicket(competitionId);
+  const upload = useUploadTicketAttachment(competitionId);
   const challenges = useChallenges(competitionId);
 
   function onSubmit(e: React.FormEvent) {
@@ -35,12 +38,36 @@ export function NewTicketDialog({ competitionId }: { competitionId: string }) {
     create.mutate(
       { subject, body, challenge_id: challengeId || null },
       {
-        onSuccess: () => {
+        onSuccess: async (ticket) => {
+          // The message has to exist before anything can attach to it, so the
+          // screenshots follow the ticket rather than riding along with it.
+          const messageId = ticket.messages[0]?.id;
+          // No message to attach to means the screenshots are lost — report it
+          // rather than closing on a bare success toast.
+          const failures: string[] = messageId ? [] : files.map((f) => f.name);
+          if (messageId) {
+            for (const file of files) {
+              try {
+                await upload.mutateAsync({ ticketId: ticket.id, messageId, file });
+              } catch {
+                failures.push(file.name);
+              }
+            }
+          }
           setSubject("");
           setBody("");
           setChallengeId("");
+          setFiles([]);
           setOpen(false);
-          toast("Ticket opened", { variant: "success" });
+          // The ticket itself did open — say so, but don't claim the
+          // screenshots made it if they didn't.
+          if (failures.length > 0) {
+            toast(`Ticket opened, but ${failures.join(", ")} couldn't be attached`, {
+              variant: "destructive",
+            });
+          } else {
+            toast("Ticket opened", { variant: "success" });
+          }
         },
       },
     );
@@ -51,7 +78,10 @@ export function NewTicketDialog({ competitionId }: { competitionId: string }) {
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) create.reset();
+        if (!next) {
+          create.reset();
+          setFiles([]);
+        }
       }}
     >
       <DialogTrigger asChild>
@@ -93,12 +123,20 @@ export function NewTicketDialog({ competitionId }: { competitionId: string }) {
               className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             />
           </div>
+          <div className="grid gap-2">
+            <Label>Screenshots (optional)</Label>
+            <ScreenshotPicker
+              files={files}
+              onChange={setFiles}
+              disabled={create.isPending || upload.isPending}
+            />
+          </div>
           {create.isError && (
             <p role="alert" className="text-sm text-destructive">{(create.error as Error).message}</p>
           )}
           <DialogFooter>
-            <Button type="submit" disabled={create.isPending}>
-              {create.isPending ? "Opening…" : "Open ticket"}
+            <Button type="submit" disabled={create.isPending || upload.isPending}>
+              {create.isPending || upload.isPending ? "Opening…" : "Open ticket"}
             </Button>
           </DialogFooter>
         </form>

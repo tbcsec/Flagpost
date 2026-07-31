@@ -138,7 +138,7 @@ role.created                 role.updated               role.deleted
 role.assigned                role.unassigned
 api_token.created            api_token.revoked
 ticket.created               ticket.assigned            ticket.resolved
-ticket.message_posted
+ticket.message_posted        ticket.attachment_added    ticket.attachment_deleted
 survey.submitted             survey.opened
 announcement.published
 site.settings_updated
@@ -1243,6 +1243,24 @@ enforced at the storage layer too, not just in the database:
 - Signed-URL issuance goes through the same permission check as viewing
   the challenge itself (`challenge_view`, §7.1), so file access can't
   become a side channel around RBAC.
+
+**Ticket attachments** (screenshots on a support thread, §4.4) share the
+bucket and the key-namespacing rule (`<competition_id>/tickets/<ticket_id>/…`)
+but *not* the signed-URL delivery, for two reasons:
+
+- They are rendered **inline** rather than downloaded, and the app's CSP
+  allows `img-src 'self' data: blob:` — a signed URL points at the storage
+  host, so an `<img>` using one would be blocked. Bytes are therefore
+  streamed through the API (`…/attachments/{id}/content`) and rendered from
+  a `blob:` URL, which also keeps the Bearer-token auth model intact.
+- Being user-supplied images, they are stored under a **sniffed** content
+  type (magic bytes, not the client's `Content-Type`) restricted to
+  PNG/JPEG/WebP, and served with `nosniff` plus a sandbox CSP — the same
+  defensive posture as the custom site logo.
+
+Access follows the thread, not a separate grant: the opener and staff can
+read a ticket's attachments, and an attachment on a staff **internal note**
+is hidden from the competitor exactly as the note body is.
 
 ---
 

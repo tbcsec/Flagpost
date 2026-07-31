@@ -3,9 +3,9 @@
 // One hook module per domain (ARCHITECTURE.md §8). Support tickets (§4.4).
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
-import { ticketsApi } from "@/lib/api";
+import { ticketAttachmentsApi, ticketsApi } from "@/lib/api";
 import { playTicketCue } from "@/lib/audio-cue";
 import type { TicketStatus } from "@/lib/types";
 import { openRoomSocket } from "@/lib/ws";
@@ -119,4 +119,93 @@ export function useResolveTicket(competitionId: string, ticketId: string) {
     mutationFn: () => ticketsApi.resolve(competitionId, ticketId),
     onSuccess: invalidate,
   });
+}
+
+/** Attach a screenshot to a message that was just posted (issue #80).
+ *
+ *  `ticketId` is a mutation variable rather than a hook parameter because the
+ *  new-ticket flow doesn't know it until `useCreateTicket` resolves — the
+ *  message has to exist before anything can hang off it. */
+export function useUploadTicketAttachment(competitionId: string) {
+  const invalidate = useInvalidate(competitionId);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      ticketId,
+      messageId,
+      file,
+    }: {
+      ticketId: string;
+      messageId: string;
+      file: File;
+    }) => ticketAttachmentsApi.upload(competitionId, ticketId, messageId, file),
+    onSuccess: (_data, { ticketId }) => {
+      queryClient.invalidateQueries({
+        queryKey: ticketKeys.detail(competitionId, ticketId),
+      });
+      invalidate();
+    },
+  });
+}
+
+export function useDeleteTicketAttachment(competitionId: string, ticketId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (attachmentId: string) =>
+      ticketAttachmentsApi.remove(competitionId, ticketId, attachmentId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ticketKeys.detail(competitionId, ticketId),
+      }),
+  });
+}
+
+/** Load an attachment's bytes as an object URL for `<img src>`.
+ *
+ *  The API needs a Bearer header, so the image can't be pointed at the URL
+ *  directly — we fetch it and hand the browser a `blob:` URL instead (which the
+ *  production CSP permits, unlike a cross-origin storage URL). The URL is
+ *  revoked when the component unmounts or the attachment changes, otherwise
+ *  every preview would leak its buffer for the life of the page. */
+export function useAttachmentImage(
+  competitionId: string,
+  ticketId: string,
+  attachmentId: string,
+) {
+  // One state object tagged with the id it belongs to, so switching attachments
+  // is handled by *ignoring* a stale result rather than resetting state from
+  // inside the effect (which would trigger a cascading render).
+  const [loaded, setLoaded] = useState<{
+    id: string;
+    url: string | null;
+    failed: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    let cancelled = false;
+
+    ticketAttachmentsApi
+      .content(competitionId, ticketId, attachmentId)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setLoaded({ id: attachmentId, url: objectUrl, failed: false });
+      })
+      .catch(() => {
+        if (!cancelled) setLoaded({ id: attachmentId, url: null, failed: true });
+      });
+
+    return () => {
+      cancelled = true;
+      // Deliberately not shared through the query cache: two components showing
+      // the same attachment (thumbnail + lightbox) would otherwise share one
+      // object URL, and the first to unmount would revoke it out from under the
+      // other. The response itself is HTTP-cached, so re-fetching is cheap.
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [competitionId, ticketId, attachmentId]);
+
+  const current = loaded?.id === attachmentId ? loaded : null;
+  return { url: current?.url ?? null, failed: current?.failed ?? false };
 }

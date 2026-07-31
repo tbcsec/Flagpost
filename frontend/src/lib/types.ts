@@ -145,6 +145,18 @@ export interface DashboardLayout {
 /** Support tickets (§4.4, ROADMAP #18). */
 export type TicketStatus = "open" | "resolved";
 
+/** A screenshot attached to a ticket message (issue #80). The bytes come from
+ *  the API's `/content` route, never a storage URL — the production CSP allows
+ *  `img-src 'self' … blob:` only, so a cross-origin MinIO URL wouldn't load. */
+export interface TicketAttachment {
+  id: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  uploader_user_id: string;
+  created_at: string;
+}
+
 export interface TicketMessage {
   id: string;
   author_user_id: string;
@@ -152,6 +164,7 @@ export interface TicketMessage {
   body: string;
   is_internal: boolean;
   created_at: string;
+  attachments: TicketAttachment[];
 }
 
 export interface Ticket {

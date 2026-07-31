@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db import ensure_aware_utc, utcnow
 from models.attachment import Attachment
 from models.competition import Competition
+from models.ticket_attachment import TicketAttachment
 from storage import get_storage
 from storage.base import ObjectStorage
 from utils.event_bus import event_bus
@@ -54,17 +55,23 @@ async def delete_competition_tree(
     observe a durable deletion.
     """
     competition_id = competition.id
-    object_keys = (
-        (
-            await db.execute(
+    # Both object-backed tables — challenge files and ticket screenshots (#80).
+    object_keys = [
+        *(
+            await db.scalars(
                 select(Attachment.object_key).where(
                     Attachment.competition_id == competition_id
                 )
             )
-        )
-        .scalars()
-        .all()
-    )
+        ).all(),
+        *(
+            await db.scalars(
+                select(TicketAttachment.object_key).where(
+                    TicketAttachment.competition_id == competition_id
+                )
+            )
+        ).all(),
+    ]
     for key in object_keys:
         try:
             storage.delete(key)

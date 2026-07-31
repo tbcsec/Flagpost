@@ -5,6 +5,8 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 
 import { PresenceIndicator } from "@/components/presence/presence-indicator";
+import { ScreenshotPicker } from "@/components/support/screenshot-picker";
+import { TicketAttachments } from "@/components/support/ticket-attachments";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,8 +22,10 @@ import {
   useReplyTicket,
   useResolveTicket,
   useTicket,
+  useUploadTicketAttachment,
 } from "@/lib/hooks/use-tickets";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/stores/auth";
 import { toast } from "@/stores/toast";
 
 // The staff notes pad pulls TipTap + Y.js — load it only when a staff viewer
@@ -50,17 +54,57 @@ export function TicketThread({
   // Who else is on this thread live (§4.1). A competitor sees "a judge is
   // looking"; staff see the other people currently on the ticket.
   const presence = usePresence("ticket", ticketId);
+  const upload = useUploadTicketAttachment(competitionId);
+  const userId = useAuthStore((s) => s.user?.id);
 
   const [body, setBody] = useState("");
   const [internal, setInternal] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
 
   const t = ticket.data;
+  // The 5-image cap is per ticket, so the picker has to count what's already on
+  // the thread — not just what's staged on this reply. A competitor's thread
+  // omits internal notes, so their count can undershoot; the server still
+  // enforces the real cap (and we'd rather undershoot than disclose that staff
+  // attached something to a note the competitor can't see).
+  const attachedCount =
+    t?.messages.reduce((n, m) => n + m.attachments.length, 0) ?? 0;
 
   function onReply(e: React.FormEvent) {
     e.preventDefault();
     reply.mutate(
       { body, is_internal: internal },
-      { onSuccess: () => { setBody(""); setInternal(false); } },
+      {
+        onSuccess: async (detail) => {
+          // The reply we just posted is our own most recent message — safer
+          // than taking the last message outright, which could be someone
+          // else's if they posted while this request was in flight.
+          const messageId = detail.messages
+            .filter((m) => m.author_user_id === userId)
+            .at(-1)?.id;
+          // If we somehow can't identify the message we just posted, the
+          // screenshots have nowhere to go — say so rather than dropping them
+          // silently behind a success message.
+          const failures: string[] = messageId ? [] : files.map((f) => f.name);
+          if (messageId) {
+            for (const file of files) {
+              try {
+                await upload.mutateAsync({ ticketId, messageId, file });
+              } catch {
+                failures.push(file.name);
+              }
+            }
+          }
+          setBody("");
+          setInternal(false);
+          setFiles([]);
+          if (failures.length > 0) {
+            toast(`Reply sent, but ${failures.join(", ")} couldn't be attached`, {
+              variant: "destructive",
+            });
+          }
+        },
+      },
     );
   }
 
@@ -93,7 +137,10 @@ export function TicketThread({
         </div>
       )}
 
-      <ul className="grid max-h-72 gap-3 overflow-y-auto pr-1">
+      {/* Taller than the original max-h-72: a message carrying screenshot
+          thumbnails is ~100px taller than a text-only one, and the old height
+          clipped the first image in the thread. */}
+      <ul className="grid max-h-96 gap-3 overflow-y-auto pr-1">
         {t?.messages.map((m) => (
           <li
             key={m.id}
@@ -112,6 +159,14 @@ export function TicketThread({
               </span>
             </div>
             <p className="mt-1 whitespace-pre-line text-sm text-foreground">{m.body}</p>
+            <TicketAttachments
+              competitionId={competitionId}
+              ticketId={ticketId}
+              attachments={m.attachments}
+              // Your own, or anyone's if you're staff (moderation) — the same
+              // rule the API enforces.
+              canDelete={(a) => isStaff || a.uploader_user_id === userId}
+            />
           </li>
         ))}
       </ul>
@@ -125,6 +180,12 @@ export function TicketThread({
           aria-label="Reply"
           placeholder="Write a reply…"
           className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        />
+        <ScreenshotPicker
+          files={files}
+          onChange={setFiles}
+          existingCount={attachedCount}
+          disabled={reply.isPending || upload.isPending}
         />
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-3">
@@ -160,8 +221,12 @@ export function TicketThread({
                 )}
               </>
             )}
-            <Button type="submit" size="sm" disabled={reply.isPending}>
-              {reply.isPending ? "Sending…" : "Send"}
+            <Button
+              type="submit"
+              size="sm"
+              disabled={reply.isPending || upload.isPending}
+            >
+              {reply.isPending || upload.isPending ? "Sending…" : "Send"}
             </Button>
           </div>
         </div>

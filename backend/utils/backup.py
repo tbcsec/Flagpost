@@ -62,6 +62,7 @@ from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 from models.submission import Submission
 from models.team import Team, TeamMembership
 from models.ticket import Ticket, TicketMessage
+from models.ticket_attachment import TicketAttachment
 from models.user import User
 from storage.base import ObjectStorage
 
@@ -138,6 +139,21 @@ class Spec:
     regenerate: tuple[str, ...] = ()
     singleton: bool = False
     keep_id: bool = False
+    # Set for tables whose rows point at an object-storage blob. The engine then
+    # carries the bytes in a ``_object_data`` side-car on export and re-puts them
+    # on import under a freshly-minted key built by this callable (the old key
+    # embeds ids that no longer exist in the destination install). Declaring it
+    # per-table keeps the object handling generic instead of special-casing table
+    # names in the export/import loops.
+    object_key_for: Callable[[dict], str] | None = None
+
+
+def _challenge_object_key(row: dict) -> str:
+    return f"{row['competition_id']}/{row['challenge_id']}/{uuid4().hex}_{row.get('filename', 'file')}"
+
+
+def _ticket_object_key(row: dict) -> str:
+    return f"{row['competition_id']}/tickets/{row['ticket_id']}/{uuid4().hex}_{row.get('filename', 'image')}"
 
 
 async def _nk_user(db: AsyncSession, row: dict) -> str | None:
@@ -204,7 +220,8 @@ SPECS: tuple[Spec, ...] = (
     Spec("hints", Hint, "competitions", id_map="hint",
          remaps=(_COMP, ("challenge_id", "challenge", True)), owned_by_competition=True),
     Spec("attachments", Attachment, "competitions",
-         remaps=(_COMP, ("challenge_id", "challenge", True)), owned_by_competition=True),
+         remaps=(_COMP, ("challenge_id", "challenge", True)), owned_by_competition=True,
+         object_key_for=_challenge_object_key),
     Spec("teams", Team, "competitions", id_map="team",
          remaps=(_COMP,), owned_by_competition=True, regenerate=("invite_code",)),
     Spec("team_memberships", TeamMembership, "competitions",
@@ -230,9 +247,14 @@ SPECS: tuple[Spec, ...] = (
          remaps=(_COMP, ("challenge_id", "challenge", False), ("opener_user_id", "user", True),
                  ("team_id", "team", False), ("assignee_user_id", "user", False)),
          owned_by_competition=True),
-    Spec("ticket_messages", TicketMessage, "competitions",
+    Spec("ticket_messages", TicketMessage, "competitions", id_map="ticket_message",
          remaps=(_COMP, ("ticket_id", "ticket", True), ("author_user_id", "user", True)),
          owned_by_competition=True),
+    Spec("ticket_attachments", TicketAttachment, "competitions",
+         remaps=(_COMP, ("ticket_id", "ticket", True),
+                 ("message_id", "ticket_message", True),
+                 ("uploader_user_id", "user", True)),
+         owned_by_competition=True, object_key_for=_ticket_object_key),
     Spec("hint_reveals", HintReveal, "competitions",
          remaps=(_COMP, ("hint_id", "hint", True), ("challenge_id", "challenge", True),
                  ("user_id", "user", True), ("team_id", "team", False)),
@@ -284,7 +306,7 @@ async def export_data(
         serialised: list[dict] = []
         for r in rows:
             d = serialize_row(r)
-            if spec.table == "attachments":
+            if spec.object_key_for is not None:
                 try:
                     d["_object_data"] = base64.b64encode(storage.get(r.object_key)).decode("ascii")
                 except Exception:  # noqa: BLE001 — a missing object shouldn't abort the export
@@ -365,14 +387,14 @@ async def import_data(
                 row["id"] = new_id
             for col in spec.regenerate:
                 row[col] = generate_invite_code()
-            if spec.table == "attachments" and object_data:
-                row["object_key"] = f"{row['competition_id']}/{row['challenge_id']}/{uuid4().hex}_{row.get('filename', 'file')}"
+            if spec.object_key_for is not None and object_data:
+                row["object_key"] = spec.object_key_for(row)
 
             obj = spec.model(**load_row(spec.model, row))
             db.add(obj)
             await db.flush()
 
-            if spec.table == "attachments" and object_data:
+            if spec.object_key_for is not None and object_data:
                 storage.put(row["object_key"], base64.b64decode(object_data), obj.content_type)
             if spec.id_map and old_id is not None:
                 state.maps[spec.id_map][old_id] = new_id

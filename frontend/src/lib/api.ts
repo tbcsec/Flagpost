@@ -8,6 +8,8 @@
 
 import { useAuthStore } from "@/stores/auth";
 import type {
+  AuthProvider,
+  AuthProviderPublic,
   Announcement,
   AnnouncementCreate,
   AppNotification,
@@ -323,6 +325,10 @@ export const authApi = {
     ),
   resendVerification: () =>
     apiFetch<void>("/api/auth/resend-verification", { method: "POST" }),
+  // Enabled external identity providers for the login page (#58). Public — the
+  // login screen renders before there's any session.
+  oidcProviders: () =>
+    apiFetch<AuthProviderPublic[]>("/api/auth/oidc/providers", {}, { auth: false }),
   // Self-service add / change / clear of your own address (#106). Returns the
   // updated UserOut — the same shape the auth store already holds, so the
   // caller can drop it straight in.
@@ -333,6 +339,45 @@ export const authApi = {
     }),
   /** Restore a session from the refresh cookie on app load. */
   restore: () => refreshOnce(),
+};
+
+// Admin CRUD for OIDC providers (#58). Gated on manage_auth_providers — a
+// higher-stakes grant than manage_site_settings, since it governs who can log
+// in at all. The client secret is write-only over this API.
+export const authProvidersApi = {
+  base: "/api/admin/oidc-providers",
+  list: () => apiFetch<AuthProvider[]>(authProvidersApi.base),
+  create: (input: {
+    name: string;
+    slug: string;
+    issuer: string;
+    client_id: string;
+    client_secret?: string | null;
+    scopes?: string;
+    enabled?: boolean;
+  }) =>
+    apiFetch<AuthProvider>(authProvidersApi.base, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  // Omit client_secret to leave the stored one untouched; "" clears it.
+  update: (
+    id: string,
+    input: Partial<{
+      name: string;
+      issuer: string;
+      client_id: string;
+      client_secret: string;
+      scopes: string;
+      enabled: boolean;
+    }>,
+  ) =>
+    apiFetch<AuthProvider>(`${authProvidersApi.base}/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
+  remove: (id: string) =>
+    apiFetch<void>(`${authProvidersApi.base}/${id}`, { method: "DELETE" }),
 };
 
 export const competitionsApi = {

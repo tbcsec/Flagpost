@@ -142,6 +142,30 @@ export interface DashboardLayout {
   entries: DashboardLayoutEntry[];
 }
 
+/** An external identity provider offered on the login page (#58, ADR-0021).
+ *  The public shape is deliberately minimal — just enough to draw a button. */
+export interface AuthProviderPublic {
+  slug: string;
+  name: string;
+}
+
+/** Admin view of a provider. The client secret is write-only: only whether one
+ *  is stored is ever returned. */
+export interface AuthProvider {
+  id: string;
+  name: string;
+  slug: string;
+  issuer: string;
+  client_id: string;
+  scopes: string;
+  enabled: boolean;
+  created_at: string;
+  client_secret_set: boolean;
+  /** The exact callback URL to register at the IdP. Server-computed, since it
+   *  depends on PUBLIC_BASE_URL — a mismatch is the commonest setup failure. */
+  redirect_uri: string;
+}
+
 /** Support tickets (§4.4, ROADMAP #18). */
 export type TicketStatus = "open" | "resolved";
 

@@ -89,6 +89,11 @@ PERMISSIONS: tuple[Permission, ...] = (
     # Site Settings — the site-wide theme/branding an administrator sets for the
     # whole install (§9, site-wide theming). Global-scoped, Administrator-only.
     Permission("manage_site_settings", "Site Settings", Scope.GLOBAL),
+    # External identity providers (#58, ADR-0021). Deliberately its own grant
+    # rather than folded into manage_site_settings: this surface decides who can
+    # log in at all, so a misconfiguration or a compromise here is materially
+    # worse than changing a palette or an SMTP host.
+    Permission("manage_auth_providers", "Site Settings", Scope.GLOBAL),
     # Analytics
     Permission(
         "view_competition_analytics", "Analytics", Scope.COMPETITION

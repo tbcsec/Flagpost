@@ -1,0 +1,12 @@
+id: sso
+name: External Identity (OIDC)
+version: 1.0.0
+# Required-core (§11.3): authentication is a property of the install, not of a
+# competition, so this is always mounted and has no per-competition toggle
+# (ADR-0021). The real on/off switch is per-provider — an OidcProvider row
+# carries its own `enabled` flag, and with no providers configured these routes
+# simply return an empty list.
+required_core: true
+provides:
+  routes: true
+  event_listeners: false

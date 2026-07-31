@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
 import { AppearancePanel } from "@/components/admin/appearance-panel";
+import { AuthProvidersPanel } from "@/components/admin/auth-providers-panel";
 import { BackupPanel } from "@/components/admin/backup-panel";
 import { RulesSettingsPanel } from "@/components/admin/rules-settings-panel";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,7 @@ import { toast } from "@/stores/toast";
 // Following the Competition Settings precedent, panels stay **mounted** and are
 // toggled with `hidden` rather than conditionally rendered, so an unsaved edit
 // in one tab survives a look at another.
-type Tab = "general" | "email" | "rules" | "backup" | "appearance" | "ai";
+type Tab = "general" | "email" | "auth" | "rules" | "backup" | "appearance" | "ai";
 
 /** The two tabs that are views of the one settings form. */
 type FormSection = Extract<Tab, "general" | "email">;
@@ -38,6 +39,7 @@ type FormSection = Extract<Tab, "general" | "email">;
 const TABS: { value: Tab; label: string }[] = [
   { value: "general", label: "General" },
   { value: "email", label: "Email" },
+  { value: "auth", label: "Auth" },
   { value: "rules", label: "Rules" },
   { value: "backup", label: "Backup" },
   { value: "appearance", label: "Appearance" },
@@ -51,9 +53,13 @@ function isFormSection(tab: Tab): tab is FormSection {
 export default function AdminSettingsPage() {
   const access = useAccess();
   const canManage = access.has("manage_site_settings");
+  // Auth providers are a different, higher-stakes grant (§7.1) — so the tab is
+  // hidden without it, and someone holding *only* it still gets into this page
+  // rather than being locked out of the feature by the site-settings gate.
+  const canManageAuth = access.has("manage_auth_providers");
   const settings = useOperationalSettings();
   const data = settings.data;
-  const [tab, setTab] = useState<Tab>("general");
+  const [tab, setTab] = useState<Tab>(canManage ? "general" : "auth");
   // Derived once and reused, so the panel's visibility and the `active` it is
   // told about can never disagree — the theme preview writes to <html>, and a
   // drift between the two would leak an unsaved palette across the whole UI.
@@ -64,7 +70,7 @@ export default function AdminSettingsPage() {
   const formSection: FormSection = isFormSection(tab) ? tab : "general";
 
   if (!access.ready) return <Skeleton className="h-64 w-full" />;
-  if (!canManage) {
+  if (!canManage && !canManageAuth) {
     return (
       <>
         <SectionHeader title="Admin — Site settings" subtitle="Global — platform-wide" />
@@ -73,6 +79,10 @@ export default function AdminSettingsPage() {
     );
   }
 
+  const visibleTabs = TABS.filter((t) =>
+    t.value === "auth" ? canManageAuth : canManage,
+  );
+
   return (
     <>
       <SectionHeader
@@ -80,10 +90,10 @@ export default function AdminSettingsPage() {
         subtitle="Global — platform-wide, not scoped to a competition"
       />
 
-      <Tabs tabs={TABS} value={tab} onValueChange={(v) => setTab(v as Tab)} />
+      <Tabs tabs={visibleTabs} value={tab} onValueChange={(v) => setTab(v as Tab)} />
 
       <div className="mt-6">
-        <div className={isFormSection(tab) ? "" : "hidden"}>
+        <div className={isFormSection(tab) && canManage ? "" : "hidden"}>
           {settings.isLoading || !data ? (
             <Skeleton className="h-64 w-full" />
           ) : (
@@ -99,6 +109,12 @@ export default function AdminSettingsPage() {
             />
           )}
         </div>
+
+        {canManageAuth && (
+          <div className={tab === "auth" ? "" : "hidden"}>
+            <AuthProvidersPanel />
+          </div>
+        )}
 
         <div className={tab === "rules" ? "max-w-2xl" : "hidden"}>
           <h2 className="text-lg font-semibold">Rules / code of conduct</h2>

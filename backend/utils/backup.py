@@ -17,6 +17,15 @@ Excluded by design: ``refresh_sessions`` and ``api_tokens`` (live bearer
 credentials), and the transient/derived ``notifications`` / ``collab_documents``
 / ``dashboard_layouts`` — none belong in a portable backup.
 
+Also excluded, for the same credential reason: ``oidc_providers``,
+``user_external_identities`` and ``oidc_login_states`` (#58). A provider row
+holds an OAuth **client secret**, which is a credential the operator was issued
+by their IdP — and it's encrypted with a per-install key (ADR-0020), so it would
+restore as undecryptable ciphertext on any other install anyway. The identity
+links are meaningless without their providers, and login states are in-flight
+requests measured in minutes. An operator restoring onto new infrastructure
+re-enters provider config, which is also the moment to rotate the secret.
+
 The credential exclusion is the load-bearing one. Only a token's SHA-256 is
 stored, but that hash is exactly what authentication compares against: exporting
 it and importing elsewhere would re-arm the original raw token on the target

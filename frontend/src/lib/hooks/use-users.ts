@@ -4,7 +4,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { authApi, usersApi } from "@/lib/api";
+import { apiAssetUrl, authApi, authProvidersApi, usersApi } from "@/lib/api";
 import type { TokenResponse } from "@/lib/types";
 import { useAuthStore } from "@/stores/auth";
 
@@ -111,4 +111,70 @@ export function useBanUser() {
 export function useDeleteUser() {
   const invalidate = useUsersInvalidate();
   return useMutation({ mutationFn: (id: string) => usersApi.remove(id), onSuccess: invalidate });
+}
+
+/** Exchange the httpOnly refresh cookie for an in-memory access token.
+ *  Used by the SSO callback page, which lands holding only the cookie the
+ *  backend set — the access token is deliberately never put in a URL. */
+export function useRestoreSession() {
+  return useMutation({ mutationFn: authApi.restore });
+}
+
+// --- external identity providers (#58, ADR-0021) ----------------------------
+
+/** Enabled providers for the login page. Public, so it runs before auth and
+ *  must not be gated on the auth store like the rest of this module. */
+export function useAuthProviders() {
+  return useQuery({
+    queryKey: ["auth-providers", "public"],
+    queryFn: authApi.oidcProviders,
+    // A provider list changes about as often as an admin edits it; don't
+    // refetch it on every focus of a login screen.
+    staleTime: 60_000,
+    retry: false,
+    // Absolutize the login URL here rather than in the component: the SSO flow
+    // is a full-page navigation to the *backend* origin, and components can't
+    // import the API client (§8). Same approach use-site-settings takes for the
+    // logo URL.
+    select: (providers) =>
+      providers.map((p) => ({
+        ...p,
+        login_url: apiAssetUrl(`/api/auth/oidc/${p.slug}/login`),
+      })),
+  });
+}
+
+const providerKeys = { admin: ["auth-providers", "admin"] as const };
+
+export function useAdminAuthProviders() {
+  const isAuthenticated = useAuthStore((s) => s.status === "authenticated");
+  return useQuery({
+    queryKey: providerKeys.admin,
+    queryFn: authProvidersApi.list,
+    enabled: isAuthenticated,
+  });
+}
+
+function useInvalidateProviders() {
+  const queryClient = useQueryClient();
+  return () => queryClient.invalidateQueries({ queryKey: ["auth-providers"] });
+}
+
+export function useCreateAuthProvider() {
+  const invalidate = useInvalidateProviders();
+  return useMutation({ mutationFn: authProvidersApi.create, onSuccess: invalidate });
+}
+
+export function useUpdateAuthProvider() {
+  const invalidate = useInvalidateProviders();
+  return useMutation({
+    mutationFn: ({ id, ...input }: { id: string } & Parameters<typeof authProvidersApi.update>[1]) =>
+      authProvidersApi.update(id, input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDeleteAuthProvider() {
+  const invalidate = useInvalidateProviders();
+  return useMutation({ mutationFn: authProvidersApi.remove, onSuccess: invalidate });
 }

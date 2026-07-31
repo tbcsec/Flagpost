@@ -27,6 +27,7 @@ from models.feedback import (
 from models.hint import Hint, HintReveal
 from models.mc_guess_reset import MCGuessReset
 from models.notification import Notification
+from models.oidc import OidcLoginState, OidcProvider, UserExternalIdentity
 from models.password_reset import PasswordResetToken
 from models.role import Role, RoleAssignment
 from models.rules_acceptance import RulesAcceptance
@@ -58,6 +59,8 @@ __all__ = [
     "HintReveal",
     "MCGuessReset",
     "Notification",
+    "OidcLoginState",
+    "OidcProvider",
     "PasswordResetToken",
     "Role",
     "RoleAssignment",
@@ -77,4 +80,5 @@ __all__ = [
     "TicketAttachment",
     "TicketMessage",
     "User",
+    "UserExternalIdentity",
 ]

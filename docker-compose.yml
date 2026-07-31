@@ -67,11 +67,21 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       CORS_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost:8080}
+      # Single-origin topology, so the browser-facing origin is the same one
+      # CORS uses. OIDC (#58) needs it explicitly: the redirect_uri handed to an
+      # identity provider must match what's registered there exactly, and behind
+      # Caddy's TLS the backend only sees a plain-HTTP hop.
+      PUBLIC_BASE_URL: ${PUBLIC_ORIGIN:-http://localhost:8080}
       # Set JWT_SECRET explicitly in real deployments (and always for multi-host).
       # Left unset, the app derives a strong secret and persists it to the volume
       # below, so sessions survive restarts and container recreation.
       JWT_SECRET: ${JWT_SECRET:-}
       JWT_SECRET_FILE: /data/.jwt_secret
+      # Encryption key for at-rest secrets (ADR-0020) — same derive-and-persist
+      # pattern as the JWT secret, on the same volume so it survives recreation.
+      # Losing it means stored provider secrets must be re-entered.
+      SECRET_ENCRYPTION_KEY: ${SECRET_ENCRYPTION_KEY:-}
+      SECRET_ENCRYPTION_KEY_FILE: /data/.secret_key
       # Demo instance (e.g. demo.flagpost.io): seeds public demo accounts + sample
       # data, shows a "resets hourly" banner, and disables outbound actions
       # (webhooks/email). Never enable on a real deployment. Reset the instance by

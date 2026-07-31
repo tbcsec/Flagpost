@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
@@ -44,7 +44,11 @@ const DEMO_ACCOUNTS = [
   { user: "participant", label: "Participant", desc: "solve challenges" },
 ];
 
-export default function LoginPage() {
+// Split from the default export purely so useSearchParams (reading the SSO
+// `?error=` code) sits inside a Suspense boundary. Without one, Next refuses to
+// statically prerender this route — `npm run build` fails rather than degrading,
+// so it's a build-time contract, not a runtime nicety.
+function LoginForm() {
   const router = useRouter();
   const login = useLogin();
   const { data: settings } = useSiteSettings();
@@ -202,5 +206,13 @@ export default function LoginPage() {
       )}
       <PoweredByFooter />
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

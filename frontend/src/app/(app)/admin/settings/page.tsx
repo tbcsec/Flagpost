@@ -176,7 +176,7 @@ function AdminSettingsInner() {
           <Card className="max-w-2xl opacity-70">
             <CardHeader>
               <CardTitle>AI assistant</CardTitle>
-              <CardDescription>Deferred past MVP — not configurable yet.</CardDescription>
+              <CardDescription>Not built yet — planned for a future release.</CardDescription>
             </CardHeader>
           </Card>
         </div>

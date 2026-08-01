@@ -46,7 +46,7 @@ python3 -m venv .venv
 .venv/bin/alembic upgrade head          # against a reachable Postgres
 .venv/bin/uvicorn main:app --reload
 
-# Frontend — requires Node 20+
+# Frontend — requires Node 20+ (CI and the shipped images run Node 26)
 cd frontend && npm install && npm run dev
 ```
 
@@ -54,14 +54,25 @@ The backend test suite is SQLite-backed and needs no infrastructure.
 
 ## Before you open a pull request
 
-Run the same checks CI does — all four must pass:
+Run the same checks CI does — all five must pass:
 
 ```bash
 cd backend  && .venv/bin/pytest                 # backend tests
-cd frontend && npm run test                     # frontend unit tests (vitest)
 cd frontend && npx tsc --noEmit                 # type-check
 cd frontend && npx eslint .                     # lint
+cd frontend && npm run test                     # frontend unit tests (vitest)
+cd frontend && npm run build                    # production build
 ```
+
+**Don't skip the build.** It's the only check that exercises prerendering, so
+it catches a class of failure the other four can't — a client hook used without
+a Suspense boundary, for instance, passes types, lint and tests and then fails
+in CI.
+
+CI additionally runs `alembic upgrade head` against a real PostgreSQL. The test
+suite builds its schema from the models rather than by running migrations
+(ADR-0006), so a broken migration is invisible locally — if your PR adds one,
+bring the stack up once (`docker compose up`) before pushing.
 
 If your change is observable in the UI, run it in the browser and confirm it
 works — don't rely on tests alone for user-facing behaviour.
@@ -89,7 +100,7 @@ some enforced by ESLint):
 
 1. Fork and branch from `main`.
 2. Keep the change focused; unrelated cleanups belong in their own PR.
-3. Make sure the four checks above pass locally.
+3. Make sure the five checks above pass locally.
 4. Open the PR with a clear description of *what* and *why*. Reference any issue
    it closes.
 5. A maintainer will review. Expect questions — the goal is a codebase that

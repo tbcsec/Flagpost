@@ -22,8 +22,9 @@ event — all from one self-hostable app. It's multi-tenant from the ground up (
 many competitions from a single install), real-time throughout (WebSockets, not
 polling), and ships as a one-command production stack.
 
-Password auth only for now; SSO/LDAP and an AI assistant are on the roadmap but
-deliberately not built yet.
+Sign-in is local (username + optional email) or **OIDC/OAuth2** — Google, Okta,
+Keycloak, Entra, or anything else with a discovery document. SAML, LDAP, and an
+AI assistant are on the roadmap but deliberately not built yet.
 
 ## ✨ Highlights
 
@@ -52,6 +53,10 @@ The things that set Flagpost apart — every one of them **built and working tod
 - **🔁 CTFd-compatible & fully portable.** Bulk challenge import/export in the
   **ctfcli YAML** format, plus a one-click, full-fidelity **platform backup**
   (export/import any section of your install).
+- **🔐 Bring your own identity provider.** Full **OIDC/OAuth2** single sign-on
+  (PKCE, sub-first account linking, just-in-time provisioning) alongside local
+  accounts — so an existing Google/Okta/Keycloak/Entra directory just works,
+  while local login stays as break-glass.
 - **🔒 Secure by default.** argon2 hashing, a per-install auto-derived JWT secret
   (no shipped credentials — a first-run setup wizard creates your owner account),
   SSRF-hardened webhooks, ReDoS-contained regex flags, and timing-safe auth.
@@ -94,6 +99,8 @@ The things that set Flagpost apart — every one of them **built and working tod
 - Team **or** individual mode, per competition
 - Public / private visibility & self-serve or invite-code join
 - Schedule, **pause**, archive, and one-click **clone**
+- **Rules / code of conduct** gate with recorded acceptance
+- Archive **retention policy** with automatic purge
 - Per-competition module toggles (turn features on/off)
 
 **Challenges**
@@ -109,7 +116,8 @@ The things that set Flagpost apart — every one of them **built and working tod
 - Live over WebSocket, **first-blood** markers
 - **Dynamic value convergence** (all solvers stay fair)
 - **Brackets / divisions**, scoreboard **freeze**
-- Public **spectator board** + **CTFtime feed**
+- Public **spectator board** (insight cards + live points
+  timeline) and a **CTFtime feed**
 - Manual judge awards & score adjustments
 
 </td>
@@ -120,20 +128,25 @@ The things that set Flagpost apart — every one of them **built and working tod
 - Team profiles; individual-mode roster with standing
 
 **Communicate & collaborate**
-- **Support tickets** with a live staff queue & audio cue
-- **Announcements** (live banner)
+- **Support tickets** with a live staff queue, audio cue
+  and **screenshot attachments**
+- **Announcements** — severity ladder + audience targeting
 - **Presence** — "N others viewing", "a judge is looking"
 - **Collaborative CRDT notes** on challenges & tickets
 
 **Automation, feedback & insight**
 - Visual **automation** rule builder (§ Highlights)
 - **Feedback surveys** + post-solve **challenge ratings**
-- **Challenge & team analytics**
+- **Challenge & team analytics** + judge insight cards
+- **Submissions browser** for dispute resolution (+ CSV)
 - Operational **dashboard** with drag-and-drop widgets
 
 **Administration**
+- **OIDC / OAuth2** providers alongside local accounts
 - **Users** directory + soft-ban / lifecycle
 - Data-driven **roles & permissions** editor
+- Personal **API tokens** with platform-wide oversight
+- **Email verification** & registration domain allowlist
 - Site-wide **theming & branding** (custom logo, palettes)
 - SMTP, registration policy, cross-competition **audit log**
 - Full **export / import** backup (incl. secrets)
@@ -171,7 +184,7 @@ configuration in `.env` (copy `.env.example`):
 | Variable | What it does |
 |---|---|
 | `SITE_ADDRESS` | Your domain, e.g. `ctf.example.com`. Caddy obtains & renews **TLS automatically**. Map ports `80` + `443`. |
-| `PUBLIC_ORIGIN` | The browser-facing origin, e.g. `https://ctf.example.com`. Baked into the frontend at build time — set it before `docker compose build`. |
+| `PUBLIC_ORIGIN` | The browser-facing origin, e.g. `https://ctf.example.com`. Baked into the frontend at build time — set it before `docker compose build`. Also what OIDC redirect URIs are built from, so it must be exact if you configure SSO. |
 | `JWT_SECRET` | A long random value (required for multi-host; otherwise the app derives and persists one). |
 | `POSTGRES_PASSWORD`, `MINIO_ROOT_USER/PASSWORD` | Real credentials. |
 | `MINIO_PUBLIC_ENDPOINT` | A browser-reachable MinIO host for signed attachment downloads. |
@@ -183,11 +196,12 @@ then `uvicorn main:app` (no `--reload`) behind your own TLS-terminating proxy.
 
 ### 📌 Versioned images (pull instead of build)
 
-Every release tag publishes **pinned, reproducible images** to GHCR:
+Every release tag publishes **pinned, reproducible images** to GHCR — pick a tag
+from [Releases](https://github.com/tbcsec/flagpost/releases):
 
 ```
-ghcr.io/tbcsec/flagpost-backend:v1.1.0    (also :latest)
-ghcr.io/tbcsec/flagpost-frontend:v1.1.0   (also :latest)
+ghcr.io/tbcsec/flagpost-backend:vX.Y.Z    (also :latest)
+ghcr.io/tbcsec/flagpost-frontend:vX.Y.Z   (also :latest)
 ```
 
 The release frontend is built in **same-origin mode** — API calls and
@@ -195,6 +209,11 @@ WebSockets resolve against whatever origin serves the page — so one image work
 behind any single-origin proxy with no baked-in domain and no `PUBLIC_ORIGIN`
 rebuild. Point the compose `frontend`/`backend` services at these images (a
 two-line override) to upgrade by tag instead of rebuilding from source.
+
+A release image reports its exact tag as the running version; a build from
+source reports the release it's based on with an `-src` suffix (e.g.
+`1.2.0-src`), since `main` starts accumulating the next version the moment a tag
+is cut.
 
 ## 🛠️ Local development
 
@@ -223,14 +242,20 @@ Run the checks CI runs before opening a PR:
 
 ```bash
 cd backend  && .venv/bin/pytest        # SQLite-backed, no infra needed
-cd frontend && npm run test            # vitest
 cd frontend && npx tsc --noEmit && npx eslint .
+cd frontend && npm run test            # vitest
+cd frontend && npm run build           # catches prerender-only failures
 ```
+
+CI also runs `alembic upgrade head` against a real PostgreSQL, because the test
+suite builds its schema from the models rather than by running migrations
+(ADR-0006) — so a broken migration only shows up there. Run the production stack
+once before shipping one.
 
 ## 🧱 Tech stack
 
 **Backend** — Python · FastAPI · SQLAlchemy 2 (async) · Alembic · PostgreSQL ·
-Redis · MinIO/S3 · JWT + argon2 · a first-class async event bus.
+Redis · MinIO/S3 · JWT + argon2 + OIDC · a first-class async event bus.
 **Frontend** — TypeScript · Next.js 15 (App Router) · React 19 · TanStack Query ·
 Zustand · Tailwind v4 · TipTap + Y.js (CRDT).
 **Realtime** — WebSockets throughout. **Deploy** — Docker Compose + Caddy.

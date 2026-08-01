@@ -600,8 +600,16 @@ Users & Roles             manage_users, manage_roles, view_all_users,
                           tokens, issue #75 — a token's own holder can still
                           view/revoke it without this, §7.7)
 Site Settings             manage_site_settings  (global — the site-wide
-                          theme/branding an administrator sets, §9)
-Analytics                 view_competition_analytics, view_global_analytics
+                          theme/branding an administrator sets, §9),
+                          manage_auth_providers  (global — external identity
+                          providers, issue #58/ADR-0021; deliberately separate
+                          from manage_site_settings, since who may sign in is
+                          higher-stakes than how the site looks, §7.7)
+Analytics                 view_competition_analytics, view_global_analytics,
+                          view_submissions  (raw submission payloads for
+                          dispute resolution, issue #76 — narrower than
+                          view_competition_analytics because individual
+                          attempts are more sensitive than aggregates)
 Dashboard                 customize_dashboard, manage_dashboard_widgets
 Automations               automation_view, automation_create,
                           automation_edit  (enforced since the automation
@@ -1123,6 +1131,24 @@ later. Modules split by **provenance and trust**, not by capability:
 - **Marketplace modules** are third-party, opt-in from the start, and need
   the stronger isolation story flagged in §15 before that ships.
 
+**What actually shipped**, against the prediction above. Nineteen modules load
+through §11.1; exactly **three are optional** (per-competition toggleable via
+`competition_modules`): `automations`, `feedback`, `analytics`. The other
+sixteen are required-core: `announcements`, `audit_log`, `challenges`,
+`collab`, `competitions`, `dashboard`, `hints`, `notifications`, `roles`,
+`scoring`, `setup`, `site_settings`, `sso`, `teams`, `tickets`, `users`.
+
+One prediction was wrong and is worth naming: this section listed **SSO
+providers as an optional/third-party module**, and it shipped **required-core**
+(`sso`, issue #58). The reason is the toggle mechanism, not the feature's
+importance — module state is *per-competition* (§11.3), and authentication is a
+property of the **install**, not of a competition. There is no site-scoped
+equivalent of `competition_modules` to hang it on, so an optional `sso` module
+would have meant "OIDC works in this competition but not that one", which is
+incoherent. Enablement lives on the provider rows instead (each `OidcProvider`
+carries its own `enabled` flag). Any future site-wide module — SAML (#100),
+LDAP (#101) — inherits the same shape.
+
 `VISION.md`'s Plugin Ecosystem section lists "Notifications" and
 "Collaboration tools" as example Core Plugins — worth reconciling
 explicitly rather than leaving it looking like a conflict with §4.4 and
@@ -1134,8 +1160,10 @@ relationship password auth has to SSO in §7.7. What `VISION.md` means by
 "Notifications" and "Collaboration tools" as *optional* Core Plugins is
 the layer on top of that baseline: additional delivery channels
 (email/push/Slack, once the automation engine's `notify` action ships)
-and full CRDT co-editing (§4.2, deferred per `ROADMAP.md`) — not the
-baseline itself going away.
+and full CRDT co-editing (§4.2) — not the baseline itself going away.
+Both have since shipped as required-core (the automation engine in Tier 3
+Phase 1, the `collab` module in Phase 7), which doesn't change the
+reconciliation: they're the layer, not the baseline.
 
 A module declares its **dependencies** in the manifest (e.g. Automations
 depends on the event bus already existing in the kernel) so the loader can
@@ -1155,6 +1183,10 @@ uses. (This is the same toggle already scoped in `ROADMAP.md` #7.)
 ---
 
 ## 12. AI Integration
+
+**Status: not built.** Scheduled for v1.4.0 as an optional `ai` module
+(issue #98) — the design below is the binding constraint set for it, not a
+description of existing code.
 
 Two distinct assistants, with different trust boundaries:
 
@@ -1290,6 +1322,32 @@ Access follows the thread, not a separate grant: the opener and staff can
 read a ticket's attachments, and an attachment on a staff **internal note**
 is hidden from the competitor exactly as the note body is.
 
+### 13.4 Outbound Network Calls
+
+A self-hosted install should be auditable in terms of what it sends where.
+There are exactly **three** categories of outbound call, and no others:
+
+- **Operator-configured integrations** — SMTP for mail, and the automation
+  engine's `webhook` / `send_email` actions (§5.3). These go wherever the
+  operator points them and are hardened per §5.4 / ADR-0013.
+- **Identity provider traffic** — OIDC discovery, JWKS and token-exchange
+  requests to a provider the operator configured (§7.7, ADR-0021). Subject to
+  the same SSRF blocklist unless `OIDC_ALLOW_INSECURE_ISSUERS` is set, which is
+  a dev-only escape hatch.
+- **The update check** — one `GET` per 24 hours to `updates.flagpost.io`
+  carrying **only the running version string**, doing double duty as the
+  administrator's new-release notice and as the project's sole adoption
+  signal. It has no identifier of any kind, so the aggregate is "check-ins per
+  day", not "distinct installs". Response bodies are size-capped and never
+  rendered — the returned version is regex-validated and only ever compared.
+  Suppressed in demo mode and while the instance still needs setup (so the
+  first call can never precede the setup wizard's disclosure); switched off
+  per-install in Admin → Site settings, or compiled out for air-gapped
+  deployments with `UPDATE_CHECK_URL=""`. See `PRIVACY.md`.
+
+Nothing else phones home. Competition data, users, and submissions never leave
+the install.
+
 ---
 
 ## 14. Suggested Repository Layout
@@ -1402,3 +1460,19 @@ Keep this section honest — update as decisions are made:
   **outbox** for at-least-once delivery across a crash/restart was deliberately
   *not* built — it remains an additive layer behind the same `background` lane
   if that requirement ever lands. ADR-0005's single-process scope is unchanged.
+- **Scoreboard scale-out** (issue #87). The board is recomputed from
+  submissions on every scoring event and broadcast in full to every subscriber
+  of the scoreboard room (§4.1). That is correct, easy to reason about, and
+  fine at the sizes the platform has been run at — but it's O(solves) work
+  fanned out O(spectators) wide, so a very large event would hit it first. The
+  shape of the fix is known (a cached read model updated incrementally, plus
+  delta or top-N broadcasts instead of whole-board frames); what's missing is a
+  real event big enough to calibrate against, so it stays deliberately unbuilt
+  rather than optimized speculatively.
+- **Horizontal scale.** The backend runs as a **single process by design** —
+  the WebSocket connection manager, presence sets, and the CRDT relay are all
+  in-process state (§4.1, ADR-0005, ADR-0014). Running replicas would need a
+  shared broker (Redis pub/sub is already a dependency) before any of that
+  works, and `JWT_SECRET` would have to be set explicitly so replicas accept
+  each other's tokens. Not a limitation that's been hit; recorded so it isn't
+  discovered mid-incident.

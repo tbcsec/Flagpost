@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { SectionHeader } from "@/components/app/section-header";
 import { AppearancePanel } from "@/components/admin/appearance-panel";
@@ -51,7 +52,19 @@ function isFormSection(tab: Tab): tab is FormSection {
   return tab === "general" || tab === "email";
 }
 
-export default function AdminSettingsPage() {
+/** The tab named in `?tab=`, or the first one this viewer may actually see.
+ *
+ *  Validated against the *visible* list rather than the full one, so a
+ *  hand-typed or stale `?tab=auth` can't strand someone without
+ *  `manage_auth_providers` on a tab that renders nothing. */
+function resolveTab(requested: string | null, visible: { value: Tab }[]): Tab {
+  const match = visible.find((t) => t.value === requested);
+  // `visible` is never empty here — the caller returns early when the viewer
+  // holds neither permission — but fall back rather than index blindly.
+  return match?.value ?? visible[0]?.value ?? "general";
+}
+
+function AdminSettingsInner() {
   const access = useAccess();
   const canManage = access.has("manage_site_settings");
   // Auth providers are a different, higher-stakes grant (§7.1) — so the tab is
@@ -60,15 +73,9 @@ export default function AdminSettingsPage() {
   const canManageAuth = access.has("manage_auth_providers");
   const settings = useOperationalSettings();
   const data = settings.data;
-  const [tab, setTab] = useState<Tab>(canManage ? "general" : "auth");
-  // Derived once and reused, so the panel's visibility and the `active` it is
-  // told about can never disagree — the theme preview writes to <html>, and a
-  // drift between the two would leak an unsaved palette across the whole UI.
-  const showAppearance = tab === "appearance";
-  // The form spans two tabs, so the section is just whichever of them is
-  // showing. On a non-form tab the whole form is hidden, so the fallback is
-  // never seen.
-  const formSection: FormSection = isFormSection(tab) ? tab : "general";
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   if (!access.ready) return <Skeleton className="h-64 w-full" />;
   if (!canManage && !canManageAuth) {
@@ -83,6 +90,31 @@ export default function AdminSettingsPage() {
   const visibleTabs = TABS.filter((t) =>
     t.value === "auth" ? canManageAuth : canManage,
   );
+
+  // Everything below is derived *after* the permission guards, which is the fix
+  // for #126. The tab used to be `useState(canManage ? "general" : "auth")`, and
+  // useState only reads its argument on the first render — at which point the
+  // permissions query hasn't resolved and every flag is conservatively false. So
+  // a refresh always initialised to "auth" and nothing reset it. Deriving the
+  // value here means it can't be computed from data that hasn't arrived yet.
+  const tab = resolveTab(searchParams.get("tab"), visibleTabs);
+
+  function setTab(next: Tab) {
+    // push, not replace: the URL is the state, so Back should undo a tab switch
+    // the way a user expects. scroll:false stops a long tab jumping to the top.
+    const query = new URLSearchParams(searchParams.toString());
+    query.set("tab", next);
+    router.push(`${pathname}?${query}`, { scroll: false });
+  }
+
+  // Derived once and reused, so the panel's visibility and the `active` it is
+  // told about can never disagree — the theme preview writes to <html>, and a
+  // drift between the two would leak an unsaved palette across the whole UI.
+  const showAppearance = tab === "appearance";
+  // The form spans two tabs, so the section is just whichever of them is
+  // showing. On a non-form tab the whole form is hidden, so the fallback is
+  // never seen.
+  const formSection: FormSection = isFormSection(tab) ? tab : "general";
 
   return (
     <>
@@ -188,6 +220,34 @@ function updateCheckStatus(data: OperationalSettings): string {
   return `Running version ${version} — up to date. Last checked ${checked}.${stale}`;
 }
 
+/** Call `reportValidity()` once `field` is on screen, or give up after ~20
+ *  frames. Polls visibility instead of racing a fixed timeout: the browser
+ *  silently declines to show a validation bubble on a control it can't focus,
+ *  so firing early makes Save look inert — the very thing this avoids. */
+function reportWhenVisible(
+  form: HTMLFormElement,
+  field: HTMLElement,
+  attempts = 20,
+): void {
+  // offsetParent is null while an ancestor is `display: none` — which is how
+  // the inactive tab panel is hidden.
+  if (field.offsetParent !== null || attempts === 0) {
+    form.reportValidity();
+    return;
+  }
+  requestAnimationFrame(() => reportWhenVisible(form, field, attempts - 1));
+}
+
+/** `useSearchParams` needs a Suspense boundary or Next refuses to prerender the
+ *  route — the build fails outright rather than degrading. */
+export default function AdminSettingsPage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+      <AdminSettingsInner />
+    </Suspense>
+  );
+}
+
 // One form, one PUT, two views of it. Both sections stay mounted (toggled with
 // `hidden`) rather than being conditionally rendered, for two reasons: card-local
 // state like DomainListEditor's draft survives a tab switch, and — the important
@@ -238,9 +298,13 @@ function SettingsForm({
       const owner = invalid?.closest<HTMLElement>("[data-section]")?.dataset.section;
       if ((owner === "general" || owner === "email") && owner !== section) {
         onShowSection(owner);
-        // Next tick, so the section has been un-hidden and the browser can
-        // focus the field to show its validation bubble.
-        setTimeout(() => form.reportValidity(), 0);
+        // Wait for the field to actually become visible rather than guessing a
+        // delay. Showing a section is a router navigation now (#126 put the tab
+        // in the URL), so it isn't guaranteed to land within one tick the way a
+        // setState was — and reportValidity() on a still-hidden control shows
+        // nothing at all, which is the exact failure this branch exists to
+        // avoid.
+        reportWhenVisible(form, invalid!);
       } else {
         form.reportValidity();
       }

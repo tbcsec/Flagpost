@@ -95,6 +95,34 @@ some enforced by ESLint):
 5. A maintainer will review. Expect questions — the goal is a codebase that
    stays coherent, not just code that works.
 
+## Cutting a release (maintainers)
+
+Releases are tags. Pushing a `v*` tag builds and publishes the versioned GHCR
+images, so the tag *is* the release artefact — there's nothing to build by hand.
+
+1. **Bump the source-build version.** In [`backend/config.py`](backend/config.py),
+   set `app_version` to the version you're about to tag, keeping the `-src`
+   suffix — e.g. `"1.3.0-src"` for `v1.3.0`. Commit it.
+2. Tag and push: `git tag v1.3.0 && git push origin v1.3.0`.
+3. Write the GitHub Release notes.
+
+Step 1 is easy to forget and matters more than it looks. Release *images* get
+their version baked from the tag automatically, but the README's headline
+quickstart is `git clone` + `docker compose up`, so most deployments run from
+source and report this default instead. Miss the bump and every one of them
+reports the previous release — silently, for as long as it takes someone to
+notice the numbers look wrong.
+
+You won't get that far: a check in `release-images.yml` compares the default
+against the tag and fails the release if they disagree, before any image is
+published. If it fires, fix the default, delete the tag, and re-tag.
+
+The `-src` marker is deliberate. A clone of `main` isn't the release — `main`
+starts accumulating the next version's work the moment you tag — so the value
+means "a source tree based on that release". It also keeps source builds
+distinguishable from release images in the adoption data (#111), which is worth
+knowing when deciding where to spend effort on packaging.
+
 ## Licensing of contributions
 
 Flagpost is licensed under the **GNU AGPL-3.0** (see [`LICENSE`](LICENSE)). By

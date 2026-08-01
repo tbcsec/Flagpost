@@ -921,7 +921,8 @@ export interface OperationalSettings {
   update_checks_enabled: boolean;
   last_update_check_at: string | null;
   last_update_check_status: string | null;
-  /** What this deployment runs ("dev" for a source build) vs. the newest the
+  /** What this deployment runs — a release like "1.2.0" from an image, or
+   *  "1.2.0-src" from a source build — vs. the newest the
    *  endpoint has reported. `update_available` folds in the dismissal. */
   current_version: string;
   latest_known_version: string | null;

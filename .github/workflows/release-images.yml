@@ -28,8 +28,35 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  # The version a *source* build reports lives in backend/config.py, and has to
+  # be bumped by hand when tagging (#111). Forgetting it is otherwise silent —
+  # every `git clone` deployment would report the previous release for months,
+  # and nothing would fail. This makes it a red build instead, and gates the
+  # images so a mismatched version can never ship.
+  version-check:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v7
+      - name: config.py default must match the tag
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          default=$(grep -oP 'app_version:\s*str\s*=\s*"\K[^"]+' backend/config.py)
+          echo "tag=$tag  config.py default=$default"
+          # The default carries a -src marker (it's a source tree based on that
+          # release, not the release itself); compare the version part only.
+          if [ "${default%-src}" != "$tag" ]; then
+            echo "::error file=backend/config.py::app_version default is '$default' but the tag is '$GITHUB_REF_NAME'. Set it to '${tag}-src' and re-tag."
+            exit 1
+          fi
+          case "$default" in
+            *-src) ;;
+            *) echo "::error file=backend/config.py::app_version default '$default' is missing the -src marker; source builds must stay distinguishable from release images."; exit 1 ;;
+          esac
+
   build:
     runs-on: ubuntu-latest
+    needs: version-check
     # Guard the dispatch path: only a tag ref may publish version-named images.
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:

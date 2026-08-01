@@ -131,7 +131,9 @@ def test_is_newer():
     assert is_newer("2.0.0", "1.99.99")
     assert not is_newer("1.1.0", "1.1.0")
     assert not is_newer("1.0.0", "1.1.0")
-    # A source build reports "dev" — never tell that operator they're stale.
+    # "dev" is unparseable, so it never claims an update. Source builds no
+    # longer report it — they carry the base release plus a -src marker — but an
+    # explicit APP_VERSION=dev must still be handled rather than crash.
     assert not is_newer("1.2.0", "dev")
     assert not is_newer("garbage", "1.0.0")
 
@@ -425,3 +427,27 @@ async def test_nothing_goes_out_before_setup_completes(client, endpoint):
 
     await run_check(SessionLocal)
     assert endpoint["calls"] == [], "must not phone home before setup is complete"
+
+
+def test_source_builds_are_versioned_and_get_notices(monkeypatch):
+    """The config default is the base release plus a `-src` marker, not "dev".
+
+    Two things follow, and both are the point of the change: a source build —
+    which the README's headline quickstart produces — now *does* get told about
+    a newer release, and it stays distinguishable from a release image in the
+    adoption data instead of vanishing into one opaque bucket.
+    """
+    from config import Settings
+
+    default = Settings.model_fields["app_version"].default
+    assert default.endswith("-src"), f"{default!r} must keep the -src marker"
+    assert parse_version(default) is not None, f"{default!r} must be comparable"
+
+    monkeypatch.setattr(app_settings, "app_version", default, raising=False)
+    base = default[: -len("-src")]
+    major, minor, patch = parse_version(base)
+
+    # A newer release reaches a source build...
+    assert is_newer(f"{major}.{minor + 1}.0", default) is True
+    # ...while the matching release image does not look like an upgrade.
+    assert is_newer(base, default) is False

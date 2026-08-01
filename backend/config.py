@@ -10,7 +10,7 @@ import os
 import secrets as _secrets
 from pathlib import Path
 
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Secrets that must never authenticate a real deployment: the repo ships these
@@ -72,6 +72,21 @@ def _resolve_jwt_secret(configured: str) -> str:
             _JWT_SECRET_FILE,
         )
         return _secrets.token_urlsafe(64)
+
+
+# The version a **source build** reports (#111). Release images override it via
+# the APP_VERSION env var, baked from the git tag by release-images.yml.
+#
+# It means "the release this source tree is based on", not "this is that
+# release" — `main` starts accumulating the next version's work the moment a tag
+# is cut. Hence the `-src` marker, which is honest about that *and* keeps source
+# builds distinguishable from release images in the adoption data. The suffix is
+# ignored for version ordering, so update notices still fire correctly.
+#
+# **Bump this when tagging a release.** A tag-push check in release-images.yml
+# fails the release if it disagrees with the tag, so a forgotten bump is a red
+# build rather than months of quietly wrong data.
+SOURCE_BUILD_VERSION = "1.2.0-src"
 
 
 class Settings(BaseSettings):
@@ -176,26 +191,23 @@ class Settings(BaseSettings):
     # direct HTTP dev run).
     public_base_url: str = ""
 
-    # This deployment's version (#111). It's the only thing the update check
-    # sends, and the backend is the single authority — the frontend displays
-    # whatever this reports rather than carrying its own copy that could
-    # disagree.
+    # This deployment's version (#111) — see SOURCE_BUILD_VERSION above for what
+    # the default means and when to bump it.
     #
-    # A release image overrides it via APP_VERSION, baked from the git tag by
-    # release-images.yml. This default is what a **source build** reports, and
-    # the README's headline quickstart is `git clone` + `docker compose up`, so
-    # it's what most deployments will send.
-    #
-    # It means "the release this source tree is based on", not "this is that
-    # release" — `main` starts accumulating the next version's work the moment a
-    # tag is cut. Hence the `-src` marker, which is honest about that *and*
-    # keeps source builds distinguishable from images in the adoption data. The
-    # suffix is ignored for ordering, so an update notice still fires correctly.
-    #
-    # **Bump this when tagging a release.** A tag-push check in
-    # release-images.yml fails the release if it disagrees with the tag, so a
-    # forgotten bump is a red build rather than months of quietly wrong data.
-    app_version: str = "1.2.0-src"
+    # An **empty** APP_VERSION falls back to the source default rather than being
+    # taken literally. That's load-bearing: the Dockerfile always sets the env
+    # var (there's no conditional ENV in a Dockerfile), so a source build would
+    # otherwise report "" — or, as it did before this was fixed, whatever
+    # literal the ARG defaulted to, silently shadowing the value below.
+    app_version: str = SOURCE_BUILD_VERSION
+
+    @field_validator("app_version", mode="before")
+    @classmethod
+    def _blank_app_version_means_source_build(cls, value: str | None) -> str:
+        # Stripped first: a stray newline or space from a shell heredoc or a
+        # quoted compose value is still "blank", and would otherwise be sent to
+        # the update endpoint and bucketed as an unparseable version.
+        return (str(value).strip() if value is not None else "") or SOURCE_BUILD_VERSION
 
     # Update check + anonymous adoption count (#111). One daily GET carrying
     # only `app_version`. Setting this to "" disables the feature outright, for

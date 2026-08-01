@@ -101,8 +101,8 @@ Releases are tags. Pushing a `v*` tag builds and publishes the versioned GHCR
 images, so the tag *is* the release artefact — there's nothing to build by hand.
 
 1. **Bump the source-build version.** In [`backend/config.py`](backend/config.py),
-   set `app_version` to the version you're about to tag, keeping the `-src`
-   suffix — e.g. `"1.3.0-src"` for `v1.3.0`. Commit it.
+   set `SOURCE_BUILD_VERSION` to the version you're about to tag, keeping the
+   `-src` suffix — e.g. `"1.3.0-src"` for `v1.3.0`. Commit it.
 2. Tag and push: `git tag v1.3.0 && git push origin v1.3.0`.
 3. Write the GitHub Release notes.
 

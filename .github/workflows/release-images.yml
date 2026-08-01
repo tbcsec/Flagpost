@@ -41,7 +41,7 @@ jobs:
       - name: config.py default must match the tag
         run: |
           tag="${GITHUB_REF_NAME#v}"
-          default=$(grep -oP 'app_version:\s*str\s*=\s*"\K[^"]+' backend/config.py)
+          default=$(grep -oP 'SOURCE_BUILD_VERSION\s*=\s*"\K[^"]+' backend/config.py)
           echo "tag=$tag  config.py default=$default"
           # The default carries a -src marker (it's a source tree based on that
           # release, not the release itself); compare the version part only.
@@ -51,8 +51,19 @@ jobs:
           fi
           case "$default" in
             *-src) ;;
-            *) echo "::error file=backend/config.py::app_version default '$default' is missing the -src marker; source builds must stay distinguishable from release images."; exit 1 ;;
+            *) echo "::error file=backend/config.py::SOURCE_BUILD_VERSION '$default' is missing the -src marker; source builds must stay distinguishable from release images."; exit 1 ;;
           esac
+      - name: Dockerfile must not bake a literal version
+        run: |
+          # A Dockerfile has no conditional ENV, so ARG APP_VERSION always sets
+          # the variable — and an env var beats the Python default. Any literal
+          # default here silently shadows SOURCE_BUILD_VERSION and every source
+          # build reports it instead. Empty is the only safe value.
+          arg=$(grep -oP '^ARG APP_VERSION=\K.*' backend/Dockerfile || echo "MISSING")
+          if [ -n "$arg" ]; then
+            echo "::error file=backend/Dockerfile::ARG APP_VERSION must default to empty (found '$arg'); a literal shadows config.SOURCE_BUILD_VERSION for every source build."
+            exit 1
+          fi
 
   build:
     runs-on: ubuntu-latest

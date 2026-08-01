@@ -5,6 +5,7 @@ falls back to local-dev defaults so `uvicorn main:app --reload` works against
 a locally-running Postgres without extra setup.
 """
 
+import ipaddress
 import logging
 import os
 import secrets as _secrets
@@ -24,6 +25,33 @@ _INSECURE_JWT_DEFAULTS = frozenset(
         "dev-insecure-secret-change-me-0000000000",
     }
 )
+# MinIO's vendor defaults. Same reasoning as the JWT secret above — these are
+# public knowledge — but the remedy has to differ: a JWT secret can be derived
+# per install, while these must match whatever the object-storage server was
+# started with, so the app cannot invent them. It refuses to run on them
+# instead, and only where it can tell that doing so would be exposed (see
+# _assert_object_storage_credentials).
+_INSECURE_MINIO_DEFAULTS = frozenset({"", "minioadmin"})
+
+
+def _endpoint_host(value: str) -> str:
+    """The bare hostname from ``host:port``, ``https://host/path`` or ``host``."""
+    remainder = value.split("://", 1)[-1].split("/", 1)[0]
+    if remainder.startswith("["):  # bracketed IPv6
+        return remainder[1 : remainder.find("]")] if "]" in remainder else remainder
+    return remainder.rsplit(":", 1)[0] if ":" in remainder else remainder
+
+
+def _is_loopback(host: str) -> bool:
+    host = host.strip().lower()
+    if host in {"", "localhost"} or host.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 # Persist a generated secret so tokens survive restarts without the operator
 # having to set JWT_SECRET. Defaults next to the code (deterministic regardless
 # of CWD); JWT_SECRET_FILE can point it at a mounted volume so the secret also
@@ -229,6 +257,64 @@ class Settings(BaseSettings):
         # Replace an unset / public-default secret with a real per-install one,
         # so no deployment ever runs on a forgeable auth root of trust.
         self.jwt_secret = _resolve_jwt_secret(self.jwt_secret)
+        return self
+
+    @model_validator(mode="after")
+    def _assert_object_storage_credentials(self) -> "Settings":
+        """Refuse to serve a real deployment on MinIO's published defaults.
+
+        The compose stack publishes the S3 API on the host — it has to, because
+        the browser fetches attachments straight from it via signed URLs — so
+        ``minioadmin``/``minioadmin`` there means anyone who can reach the box
+        has read/write on every challenge attachment and ticket screenshot, for
+        every competition, entirely outside RBAC. On a CTF platform that is the
+        competition itself: unreleased challenge binaries leak, or get replaced.
+
+        Two independent signals, because either alone has a blind spot:
+
+        - ``public_base_url`` — the variable an operator sets to deploy (README
+          → "Deploying to production"). Empty for a native run, ``localhost``
+          for the default compose, so local workflows are untouched. Misses the
+          operator who sets only ``SITE_ADDRESS``.
+        - ``minio_public_endpoint`` — set precisely when browsers must reach the
+          object store over the network, which is a direct statement that it is
+          exposed. Catches the case above, since remote attachment downloads do
+          not work without it.
+
+        Deliberately *not* inferred from the compose port mapping, which the app
+        cannot see. An install serving from ``minio:9000`` on the compose network
+        with no published port is safe and unaffected — that is how the demo
+        stack runs.
+
+        A hard failure rather than a warning: a warning scrolls past, and the
+        window between "operator deploys" and "someone finds an open MinIO" is
+        not one a log line closes.
+        """
+        if not (
+            self.minio_access_key in _INSECURE_MINIO_DEFAULTS
+            or self.minio_secret_key in _INSECURE_MINIO_DEFAULTS
+        ):
+            return self
+
+        exposed_by = None
+        if not _is_loopback(_endpoint_host(self.public_base_url)):
+            exposed_by = f"PUBLIC_BASE_URL={self.public_base_url!r}"
+        elif self.minio_public_endpoint and not _is_loopback(
+            _endpoint_host(self.minio_public_endpoint)
+        ):
+            exposed_by = f"MINIO_PUBLIC_ENDPOINT={self.minio_public_endpoint!r}"
+
+        if exposed_by is not None:
+            raise ValueError(
+                "Refusing to start: object storage is using MinIO's default "
+                f"credentials on a deployment that is reachable ({exposed_by}). "
+                "These are published defaults, not secrets — anyone who can "
+                "reach the S3 API would have full read/write on every challenge "
+                "attachment, including unreleased ones, outside RBAC entirely. "
+                "Set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD (compose passes "
+                "them to both MinIO and the backend) to values from e.g. "
+                "`openssl rand -hex 24`, then recreate the minio service."
+            )
         return self
 
     @property

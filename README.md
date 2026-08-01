@@ -186,8 +186,18 @@ configuration in `.env` (copy `.env.example`):
 | `SITE_ADDRESS` | Your domain, e.g. `ctf.example.com`. Caddy obtains & renews **TLS automatically**. Map ports `80` + `443`. |
 | `PUBLIC_ORIGIN` | The browser-facing origin, e.g. `https://ctf.example.com`. Baked into the frontend at build time — set it before `docker compose build`. Also what OIDC redirect URIs are built from, so it must be exact if you configure SSO. |
 | `JWT_SECRET` | A long random value (required for multi-host; otherwise the app derives and persists one). |
-| `POSTGRES_PASSWORD`, `MINIO_ROOT_USER/PASSWORD` | Real credentials. |
+| `POSTGRES_PASSWORD`, `MINIO_ROOT_USER/PASSWORD` | **Real credentials — generate with `openssl rand -hex 24`.** Compose falls back to well-known development values so a local run needs no config, but those are published defaults, not secrets. |
 | `MINIO_PUBLIC_ENDPOINT` | A browser-reachable MinIO host for signed attachment downloads. |
+
+> **The backend refuses to start** if it finds MinIO's default credentials on a
+> deployment that looks reachable — `PUBLIC_ORIGIN` naming a non-local host, or
+> `MINIO_PUBLIC_ENDPOINT` being set. Browsers fetch attachments straight from
+> the S3 API, so it has to be reachable, and default credentials there mean
+> world read/write on every challenge attachment — including unreleased ones —
+> outside RBAC entirely. Note that `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD`
+> *initialise* the MinIO server rather than reconfigure it: changing them after
+> first boot needs `docker compose up -d --force-recreate minio`, and a rotation
+> on a stack that already holds data has to be done inside MinIO too.
 
 The backend runs as a **single process by design** (the WebSocket layer is
 in-process). To run **without Docker**: build & serve the frontend with

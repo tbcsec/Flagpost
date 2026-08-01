@@ -27,12 +27,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy.exc import IntegrityError
+
 from auth.deps import require_permission, user_has_permission
 from config import settings
 from db import get_db
 from models.challenge import Challenge
 from models.competition import Competition
 from models.submission import Submission
+from models.team import Team
 from models.user import User
 from ratelimit import get_rate_limiter
 from ratelimit.base import RateLimiter
@@ -52,6 +55,24 @@ router = APIRouter(
     prefix="/api/competitions/{competition_id}/challenges/{challenge_id}",
     tags=["submissions"],
 )
+
+
+async def _lock_subject(db: AsyncSession, subject) -> None:
+    """Take a row lock on the scoring subject for the rest of this transaction.
+
+    Serialises concurrent submissions from the same team (or user) so a
+    check-then-insert sequence can't interleave with itself. The lock is on a row
+    that already exists and is never updated here, so it costs a row-level lock
+    and nothing else.
+
+    A no-op on SQLite, which has no ``FOR UPDATE`` — but SQLite serialises
+    writers globally, so the interleaving this prevents cannot occur there
+    either. Postgres is where it matters, and Postgres is production.
+    """
+    model, key = (Team, subject.team_id) if subject.kind == "team" else (User, subject.id)
+    if key is None:
+        return
+    await db.execute(select(model.id).where(model.id == key).with_for_update())
 
 
 def _flag_matches(challenge: Challenge, submitted: str) -> bool:
@@ -136,16 +157,22 @@ async def submit_flag(
     # unsolved MC challenge, further guesses are refused. Checked before grading so
     # the block can't be probed for correctness.
     limit = competition.mc_guess_limit
-    if (
-        challenge.flag_type == "multiple_choice"
-        and limit is not None
-        and not await subject_has_solved(db, challenge_id, subject)
-        and await subject_attempt_count(db, challenge_id, subject) >= limit
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No guesses remaining for this question",
-        )
+    if challenge.flag_type == "multiple_choice" and limit is not None:
+        # Serialise this subject's guesses before counting them. The count is a
+        # plain SELECT over committed rows, so without a lock a burst of
+        # concurrent guesses — one per option, at most ten, comfortably inside
+        # the submission rate limit — all read the same pre-burst count and all
+        # get graded. That defeats the cap on precisely the challenge type it
+        # exists for. Confined to multiple-choice, so static and regex flags
+        # take no extra lock on the hot path.
+        await _lock_subject(db, subject)
+        if not await subject_has_solved(
+            db, challenge_id, subject
+        ) and await subject_attempt_count(db, challenge_id, subject) >= limit:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No guesses remaining for this question",
+            )
 
     # Grade off the event-loop thread: a regex flag runs a bounded but
     # potentially heavy match (ADR-0018), and `regex` releases the GIL, so a
@@ -171,19 +198,42 @@ async def submit_flag(
         # then worth less, and *every* solver converges to that current value.
         points_awarded = challenge_value(challenge, prior_solves + 1)
 
-    # Every attempt is logged — success, failure, or duplicate (§13.2).
-    db.add(
-        Submission(
+    def _row(*, duplicate: bool, points: int) -> Submission:
+        # Every attempt is logged — success, failure, or duplicate (§13.2).
+        return Submission(
             competition_id=competition_id,
             challenge_id=challenge_id,
             user_id=current_user.id,
             team_id=subject.team_id,
             value=body.flag,
             is_correct=correct,
-            is_duplicate=correct and already_solved,
-            points_awarded=points_awarded,
+            is_duplicate=duplicate,
+            points_awarded=points,
         )
-    )
+
+    if award:
+        # Insert inside a SAVEPOINT so losing the race is recoverable. The
+        # partial unique index on (challenge, subject) is what actually enforces
+        # "first correct submission wins" — the read-then-write above can't,
+        # since both requests query before either commits. Catching this at the
+        # outer commit instead would leave the session unusable and turn a lost
+        # race into a 500.
+        try:
+            async with db.begin_nested():
+                db.add(_row(duplicate=False, points=points_awarded))
+                await db.flush()
+        except IntegrityError:
+            # Another submission for this subject got there first. Record what
+            # actually happened — a duplicate, worth nothing — rather than
+            # paying the flag out twice.
+            award = False
+            already_solved = True
+            is_first_blood = False
+            points_awarded = 0
+            db.add(_row(duplicate=True, points=0))
+    else:
+        db.add(_row(duplicate=correct and already_solved, points=points_awarded))
+
     if award and challenge.scoring_type == "dynamic":
         # Re-value the prior solvers to the new (lower) worth so the board stays
         # consistent — every solve of a dynamic challenge is worth the same now.

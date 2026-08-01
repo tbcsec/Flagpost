@@ -12,6 +12,15 @@ Any later correct submission by the same subject is logged with
 ``is_duplicate = True`` and ``points_awarded = 0`` — resubmitting a solved flag
 never re-awards points or re-emits ``challenge.solved`` (§13.2 idempotency).
 
+"First correct submission is authoritative" is enforced by a partial unique
+index, not only by the read-then-write in the submit route. Two concurrent
+submissions of the same correct flag each ran their own "has this subject
+solved it?" query, both saw nothing, and both inserted an awarded row — so a
+competitor who knew a flag could bank N times its points from one burst. The
+index makes at most one awarded row per (challenge, subject) a property of the
+schema; the route catches the resulting IntegrityError and records the loser as
+the duplicate it is.
+
 Tenant-scoped (§6.2, ``CompetitionScopedMixin``); ``team_id`` is denormalized
 alongside ``user_id`` so a team's solves are one indexed query without walking
 memberships (and it's the unit the scoreboard ranks in team-mode).
@@ -19,7 +28,7 @@ memberships (and it's the unit the scoreboard ranks in team-mode).
 
 from uuid import uuid4
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, and_, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base, CompetitionScopedMixin, TimestampMixin
@@ -54,3 +63,25 @@ class Submission(Base, CompetitionScopedMixin, TimestampMixin):
     points_awarded: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0
     )
+
+
+# At most one *awarded* row per (challenge, subject). COALESCE picks the credited
+# subject the same way the scoreboard does — the team in team-mode, the user in
+# individual-mode, where team_id is NULL. Partial, because duplicate and
+# incorrect attempts are deliberately unbounded: every attempt is logged (§13.2).
+#
+# Expressed with SQLAlchemy constructs rather than raw SQL so each dialect
+# renders its own boolean literal; a hand-written `is_correct = 1` would take
+# SQLite and be rejected by Postgres.
+_AWARDED_ROW = and_(
+    Submission.is_correct.is_(True), Submission.is_duplicate.is_(False)
+)
+
+Index(
+    "uq_submissions_awarded_subject",
+    Submission.challenge_id,
+    func.coalesce(Submission.team_id, Submission.user_id),
+    unique=True,
+    sqlite_where=_AWARDED_ROW,
+    postgresql_where=_AWARDED_ROW,
+)

@@ -430,16 +430,16 @@ async def test_nothing_goes_out_before_setup_completes(client, endpoint):
 
 
 def test_source_builds_are_versioned_and_get_notices(monkeypatch):
-    """The config default is the base release plus a `-src` marker, not "dev".
+    """The source default is the base release plus a `-src` marker, not "dev".
 
-    Two things follow, and both are the point of the change: a source build —
-    which the README's headline quickstart produces — now *does* get told about
-    a newer release, and it stays distinguishable from a release image in the
-    adoption data instead of vanishing into one opaque bucket.
+    Two things follow, and both are the point: a source build — which the
+    README's headline quickstart produces — now *does* get told about a newer
+    release, and it stays distinguishable from a release image in the adoption
+    data instead of vanishing into one opaque bucket.
     """
-    from config import Settings
+    from config import SOURCE_BUILD_VERSION
 
-    default = Settings.model_fields["app_version"].default
+    default = SOURCE_BUILD_VERSION
     assert default.endswith("-src"), f"{default!r} must keep the -src marker"
     assert parse_version(default) is not None, f"{default!r} must be comparable"
 
@@ -451,3 +451,51 @@ def test_source_builds_are_versioned_and_get_notices(monkeypatch):
     assert is_newer(f"{major}.{minor + 1}.0", default) is True
     # ...while the matching release image does not look like an upgrade.
     assert is_newer(base, default) is False
+
+
+def test_empty_app_version_falls_back_to_the_source_default():
+    """A Dockerfile can't set ENV conditionally, so a source-built image always
+    carries APP_VERSION — empty. Taken literally that would report "" (and an
+    ARG default of "dev" previously shadowed the config value outright, so every
+    `docker compose up --build` reported "dev"). Empty must mean "source build".
+    """
+    import os
+
+    from config import SOURCE_BUILD_VERSION, Settings
+
+    previous = os.environ.get("APP_VERSION")
+    try:
+        os.environ["APP_VERSION"] = ""
+        assert Settings().app_version == SOURCE_BUILD_VERSION
+        # Whitespace is blank too — a quoted compose value or a heredoc newline
+        # would otherwise be sent to the endpoint and bucketed as unparseable.
+        os.environ["APP_VERSION"] = "   "
+        assert Settings().app_version == SOURCE_BUILD_VERSION
+        # A real release image still wins, stray whitespace and all.
+        os.environ["APP_VERSION"] = " v9.9.9 \n"
+        assert Settings().app_version == "v9.9.9"
+    finally:
+        if previous is None:
+            os.environ.pop("APP_VERSION", None)
+        else:
+            os.environ["APP_VERSION"] = previous
+
+
+def test_dockerfile_does_not_shadow_the_source_version():
+    """Static guard on the mechanism, not just the value.
+
+    `ARG APP_VERSION=<literal>` becomes `ENV APP_VERSION=<literal>`, and
+    pydantic-settings ranks an env var above the Python default — so any literal
+    in the Dockerfile silently overrides SOURCE_BUILD_VERSION for every source
+    build. That shipped once; this stops it shipping twice.
+    """
+    import re
+    from pathlib import Path
+
+    dockerfile = Path(__file__).resolve().parents[1] / "Dockerfile"
+    match = re.search(r"^ARG APP_VERSION=(.*)$", dockerfile.read_text(), re.M)
+    assert match is not None, "Dockerfile must declare ARG APP_VERSION"
+    assert match.group(1).strip() == "", (
+        f"ARG APP_VERSION must default to empty, found {match.group(1)!r} — "
+        "a literal shadows config.SOURCE_BUILD_VERSION for every source build"
+    )

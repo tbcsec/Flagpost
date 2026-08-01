@@ -127,6 +127,37 @@ class SiteSettings(Base, TimestampMixin):
     rules_display_only: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"
     )
+    # Update check + anonymous adoption count (#111). One daily request to
+    # `update_check_url` sending only this deployment's version; the response
+    # drives the admin update notice, and the request itself — counted, never
+    # logged — is the project's adoption signal. On by default; this is the
+    # operator's off switch (there's also an env var, so an air-gapped install
+    # need never make the call at all).
+    update_checks_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="1"
+    )
+    # Last *successful* check. Drives the 24h cadence, and is shown beside the
+    # toggle so an admin can see the feature is alive (or isn't).
+    last_update_check_at: Mapped[datetime | None] = mapped_column(
+        UtcDateTime, nullable=True
+    )
+    # Last attempt, successful or not. Separate from the above so a failing
+    # endpoint backs off hourly instead of retrying on every scheduler tick.
+    last_update_attempt_at: Mapped[datetime | None] = mapped_column(
+        UtcDateTime, nullable=True
+    )
+    # "ok" | "unreachable" | "error" — shown to admins, never to competitors.
+    last_update_check_status: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
+    # Newest version the endpoint reported, compared against the running version
+    # to decide whether to show the notice.
+    latest_known_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The version an admin dismissed the notice for. The notice returns only once
+    # something newer than this ships, so a given release nags at most once.
+    dismissed_update_version: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
     updated_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, onupdate=utcnow, nullable=True
     )

@@ -79,6 +79,7 @@ async def complete_setup(
     settings.default_palette = body.default_palette
     settings.accent = body.accent
     settings.registration_open = body.registration_open
+    settings.update_checks_enabled = body.update_checks_enabled
     await db.commit()
 
     await event_bus.emit("user.created", {"user_id": admin.id, "email": admin.email})

@@ -852,6 +852,13 @@ export const siteSettingsApi = {
   // Operational settings — admin-only (registration policy + SMTP).
   operational: () =>
     apiFetch<OperationalSettings>("/api/site-settings/operational"),
+  // Hide the update notice until something newer than the current latest ships
+  // (#111). Returns the refreshed settings, so the caller can reuse the same
+  // cache entry rather than refetching.
+  dismissUpdateNotice: () =>
+    apiFetch<OperationalSettings>("/api/site-settings/update-notice/dismiss", {
+      method: "POST",
+    }),
   updateOperational: (input: OperationalSettingsUpdate) =>
     apiFetch<OperationalSettings>("/api/site-settings/operational", {
       method: "PUT",

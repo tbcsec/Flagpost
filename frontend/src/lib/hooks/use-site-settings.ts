@@ -125,12 +125,26 @@ export function useImportBackup() {
 
 const OPERATIONAL_KEY = ["site-settings", "operational"] as const;
 
-export function useOperationalSettings() {
+/** Admin-only operational settings. `enabled` exists because the update notice
+ *  (#111) mounts in the app shell for *everyone*: without a permission gate here
+ *  every competitor would fire a request at an admin endpoint and take a 403 on
+ *  each page load. Callers that already know the viewer is an admin can omit it. */
+export function useOperationalSettings(enabled = true) {
   const authed = useAuthStore((s) => s.status === "authenticated");
   return useQuery({
     queryKey: OPERATIONAL_KEY,
     queryFn: siteSettingsApi.operational,
-    enabled: authed,
+    enabled: authed && enabled,
+  });
+}
+
+/** Dismiss the update notice (#111). Writes the response straight into the
+ *  operational-settings cache, so the banner disappears without a refetch. */
+export function useDismissUpdateNotice() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: siteSettingsApi.dismissUpdateNotice,
+    onSuccess: (data) => queryClient.setQueryData(OPERATIONAL_KEY, data),
   });
 }
 

@@ -28,3 +28,7 @@ class SetupRequest(BaseModel):
     default_palette: str = Field(pattern=PALETTE_PATTERN)
     accent: str = Field(pattern=ACCENT_PATTERN)
     registration_open: bool = True
+    # Update check + anonymous adoption count (#111). Offered here — rather than
+    # only in Admin later — so an operator can decline *before* the first check
+    # ever fires, which is the difference between a choice and a notification.
+    update_checks_enabled: bool = True

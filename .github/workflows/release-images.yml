@@ -71,8 +71,11 @@ jobs:
             ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/flagpost-${{ matrix.name }}:${{ github.ref_name }}
             ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/flagpost-${{ matrix.name }}:latest
           # Same-origin mode for the release frontend (empty NEXT_PUBLIC_API_URL
-          # overrides the Dockerfile's localhost default). Backend takes no args.
+          # overrides the Dockerfile's localhost default). APP_VERSION bakes the
+          # tag into the backend so the running deployment knows its own version
+          # (#111) — the tag already names the image, this makes it readable
+          # from inside the container too.
           build-args: |
-            ${{ matrix.name == 'frontend' && 'NEXT_PUBLIC_API_URL=' || '' }}
+            ${{ matrix.name == 'frontend' && 'NEXT_PUBLIC_API_URL=' || format('APP_VERSION={0}', github.ref_name) }}
           cache-from: type=gha,scope=release-${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=release-${{ matrix.name }}

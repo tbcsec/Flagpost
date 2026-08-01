@@ -157,6 +157,7 @@ async def _loop(db_factory, interval_seconds: float) -> None:
     # Imported here, not at module top: retention pulls in the storage layer,
     # which the pure rule-evaluation imports above shouldn't drag along.
     from utils.retention import purge_expired_competitions
+    from utils.update_check import run_check
 
     while True:
         try:
@@ -166,6 +167,10 @@ async def _loop(db_factory, interval_seconds: float) -> None:
             # platform housekeeping like the lifecycle events, active
             # regardless of any per-competition module toggle.
             await purge_expired_competitions(db_factory)
+            # Update check + adoption count (#111). Self-rate-limiting to once
+            # a day off its own persisted timestamps, so calling it every tick
+            # costs one row read that almost always returns immediately.
+            await run_check(db_factory)
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 — a bad tick must not kill the loop

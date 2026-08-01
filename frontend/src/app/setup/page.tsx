@@ -103,6 +103,7 @@ function SetupWizard() {
 
   // Step 3 — site options.
   const [registrationOpen, setRegistrationOpen] = useState(true);
+  const [updateChecks, setUpdateChecks] = useState(true);
 
   // Live-preview the chosen theme on the wizard itself.
   useEffect(() => {
@@ -124,6 +125,7 @@ function SetupWizard() {
         default_palette: palette,
         accent,
         registration_open: registrationOpen,
+        update_checks_enabled: updateChecks,
       },
       {
         onSuccess: () => router.replace("/"),
@@ -256,6 +258,31 @@ function SetupWizard() {
                   <option value="open">Open — anyone can create an account</option>
                   <option value="closed">Closed — you create accounts (Admin → Users)</option>
                 </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="upd">Update checks</Label>
+                <Select id="upd" value={updateChecks ? "on" : "off"} onChange={(e) => setUpdateChecks(e.target.value === "on")}>
+                  <option value="on">On — check daily for new releases</option>
+                  <option value="off">Off — never contact the update service</option>
+                </Select>
+                {/* Disclosed here, before the first check can fire, so declining
+                    is a choice rather than a correction after the fact. */}
+                <p className="text-xs text-muted-foreground">
+                  Once a day Flagpost asks{" "}
+                  <span className="font-mono">updates.flagpost.io</span> whether a newer
+                  release exists. It sends <strong>only the version you&apos;re running</strong> —
+                  no identifier, no hostname, no competition or user data — and counting those
+                  requests is how the project gauges how many deployments are live.{" "}
+                  <a
+                    href="https://github.com/tbcsec/Flagpost/blob/main/PRIVACY.md"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    Details
+                  </a>
+                  .
+                </p>
               </div>
               <div className="rounded-md border border-border bg-muted/40 p-3 text-sm">
                 <p className="mb-1 font-medium">Ready to go</p>

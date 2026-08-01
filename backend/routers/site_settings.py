@@ -37,6 +37,7 @@ from storage import get_storage
 from storage.base import ObjectStorage
 from utils import backup, mailer
 from utils.event_bus import event_bus
+from utils.update_check import notice_dismissed, update_available
 
 router = APIRouter(prefix="/api/site-settings", tags=["site-settings"])
 
@@ -316,6 +317,13 @@ def _operational_out(settings: SiteSettings) -> OperationalSettingsOut:
         archive_retention_days=settings.archive_retention_days,
         email_domain_allowlist_enabled=settings.email_domain_allowlist_enabled,
         allowed_email_domains=settings.allowed_email_domains or [],
+        update_checks_enabled=settings.update_checks_enabled,
+        last_update_check_at=settings.last_update_check_at,
+        last_update_check_status=settings.last_update_check_status,
+        current_version=app_config.app_version,
+        latest_known_version=settings.latest_known_version,
+        update_available=update_available(settings),
+        update_notice_dismissed=notice_dismissed(settings),
         email_verification_enabled=settings.email_verification_enabled,
         updated_at=settings.updated_at,
     )
@@ -362,6 +370,8 @@ async def update_operational_settings(
     settings.email_domain_allowlist_enabled = body.email_domain_allowlist_enabled
     settings.allowed_email_domains = body.allowed_email_domains
     settings.email_verification_enabled = body.email_verification_enabled
+    if body.update_checks_enabled is not None:
+        settings.update_checks_enabled = body.update_checks_enabled
     await db.commit()
     await db.refresh(settings)
 
@@ -369,4 +379,26 @@ async def update_operational_settings(
         "site.settings_updated",
         {"user_id": current_user.id, "section": "operational"},
     )
+    return _operational_out(settings)
+
+
+@router.post("/update-notice/dismiss", response_model=OperationalSettingsOut)
+async def dismiss_update_notice(
+    current_user: User = Depends(require_permission("manage_site_settings")),
+    db: AsyncSession = Depends(get_db),
+) -> OperationalSettingsOut:
+    """Hide the update notice until something newer than the current latest ships.
+
+    Records the *version* dismissed rather than a timestamp or a boolean: a
+    timestamp would need a re-show policy to tune, and a boolean would swallow
+    the next release. Pinning it to a version means a given release nags at most
+    once, and a genuinely newer one always gets through (#111).
+
+    Not a settings mutation in the meaningful sense — no event, since a personal
+    "I've seen this" isn't something an audit reader needs.
+    """
+    settings = await get_or_create_settings(db)
+    settings.dismissed_update_version = settings.latest_known_version
+    await db.commit()
+    await db.refresh(settings)
     return _operational_out(settings)

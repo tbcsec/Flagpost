@@ -176,12 +176,26 @@ class Settings(BaseSettings):
     # direct HTTP dev run).
     public_base_url: str = ""
 
-    # This deployment's version (#111). Baked into the release image at build
-    # time from the git tag; "dev" for anything built from source. It's the only
-    # thing the update check sends, and the backend is the single authority —
-    # the frontend displays whatever this reports rather than carrying its own
-    # copy that could disagree.
-    app_version: str = "dev"
+    # This deployment's version (#111). It's the only thing the update check
+    # sends, and the backend is the single authority — the frontend displays
+    # whatever this reports rather than carrying its own copy that could
+    # disagree.
+    #
+    # A release image overrides it via APP_VERSION, baked from the git tag by
+    # release-images.yml. This default is what a **source build** reports, and
+    # the README's headline quickstart is `git clone` + `docker compose up`, so
+    # it's what most deployments will send.
+    #
+    # It means "the release this source tree is based on", not "this is that
+    # release" — `main` starts accumulating the next version's work the moment a
+    # tag is cut. Hence the `-src` marker, which is honest about that *and*
+    # keeps source builds distinguishable from images in the adoption data. The
+    # suffix is ignored for ordering, so an update notice still fires correctly.
+    #
+    # **Bump this when tagging a release.** A tag-push check in
+    # release-images.yml fails the release if it disagrees with the tag, so a
+    # forgotten bump is a red build rather than months of quietly wrong data.
+    app_version: str = "1.2.0-src"
 
     # Update check + anonymous adoption count (#111). One daily GET carrying
     # only `app_version`. Setting this to "" disables the feature outright, for

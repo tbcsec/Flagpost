@@ -13,9 +13,12 @@ The order matters and is deliberate:
    an existing local account. Gated on the IdP asserting ``email_verified``,
    because otherwise anyone able to set an arbitrary unverified address at a
    permissive IdP could claim an existing Flagpost account.
-3. **JIT-create** — a brand-new account holding **Participant** and nothing
-   more, mirroring the rule that public registration never grants above
-   Participant.
+3. **JIT-create** — a brand-new account with **no role assignment at all**,
+   exactly like public registration (``routers/auth.register``). Per-competition
+   Participant comes later, from ``membership.ensure_participant_role`` when the
+   user actually joins a competition (§7.5). Granting anything here would be
+   granting it *site-wide*, since an assignment with no ``competition_id`` is
+   the Administrator mechanism — see ``deps.user_has_permission``.
 
 A JIT-created user gets a random password hash that is never disclosed. That's
 what makes "local login is break-glass only" a structural property rather than a
@@ -27,7 +30,6 @@ working when the IdP is down.
 from __future__ import annotations
 
 import asyncio
-import logging
 import secrets
 
 from sqlalchemy import func, select
@@ -36,11 +38,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth.security import hash_password
 from db import utcnow
 from models.oidc import OidcProvider, UserExternalIdentity
-from models.role import Role, RoleAssignment
 from models.user import User
 from utils.event_bus import event_bus
-
-logger = logging.getLogger("oidc")
 
 
 async def unusable_password_hash() -> str:
@@ -89,14 +88,8 @@ def display_name_from_claims(claims: dict, email: str | None) -> str:
     return "user"
 
 
-async def _assign_participant(db: AsyncSession, user: User) -> None:
-    """Grant the global Participant role — the same floor public registration
-    lands on. Never anything higher, whatever the IdP claims about the user."""
-    role = await db.scalar(select(Role).where(Role.name == "Participant"))
-    if role is None:  # pragma: no cover — seeded at startup
-        logger.error("Participant role missing; JIT user %s has no role", user.id)
-        return
-    db.add(RoleAssignment(user_id=user.id, role_id=role.id, competition_id=None))
+
+
 
 
 async def _emit_linked(user_id: str, provider: OidcProvider) -> None:
@@ -166,7 +159,11 @@ async def resolve_identity(
         await _emit_linked(existing.id, provider)
         return existing, False
 
-    # 3. JIT-provision.
+    # 3. JIT-provision. Deliberately no RoleAssignment: an assignment with no
+    #    competition_id grants site-wide (deps.user_has_permission), so granting
+    #    the competition-scoped Participant role here would hand every SSO user
+    #    permissions on every competition. Local registration grants nothing
+    #    either; both paths earn Participant per-competition on join.
     display_name = await _unique_display_name(
         db, display_name_from_claims(claims, email)
     )
@@ -181,7 +178,6 @@ async def resolve_identity(
     )
     db.add(user)
     await db.flush()
-    await _assign_participant(db, user)
     db.add(
         UserExternalIdentity(
             user_id=user.id,

@@ -22,19 +22,24 @@ async def effective_permissions(db: AsyncSession, user_id: str) -> dict:
     Lets the frontend gate nav/sections honestly instead of showing everything.
     The client's effective set for a competition is ``global ∪ by_competition[id]``
     — a global Administrator role grants its permissions everywhere.
+
+    Mirrors ``deps.user_has_permission``: an unscoped assignment of a
+    competition-scoped role is malformed and grants nothing, so the UI gates on
+    the same set the API will actually enforce.
     """
     rows = (
         await db.execute(
-            select(Role.permissions, RoleAssignment.competition_id)
+            select(Role.permissions, Role.scope, RoleAssignment.competition_id)
             .join(RoleAssignment, RoleAssignment.role_id == Role.id)
             .where(RoleAssignment.user_id == user_id)
         )
     ).all()
     global_perms: set[str] = set()
     by_competition: dict[str, set[str]] = {}
-    for permissions, competition_id in rows:
+    for permissions, role_scope, competition_id in rows:
         if competition_id is None:
-            global_perms.update(permissions)
+            if role_scope == "global":
+                global_perms.update(permissions)
         else:
             by_competition.setdefault(competition_id, set()).update(permissions)
     return {
@@ -86,12 +91,22 @@ async def member_competition_ids(db: AsyncSession, user_id: str) -> set[str]:
 
 
 async def has_global_role(db: AsyncSession, user_id: str) -> bool:
-    """Whether ``user_id`` holds any global (competition_id IS NULL) role — i.e.
-    an Administrator, who can see every competition (§7.3)."""
+    """Whether ``user_id`` holds a site-wide role — i.e. an Administrator, who
+    can see every competition (§7.3).
+
+    The role must itself be ``scope="global"``. Checking only for a NULL
+    ``competition_id`` would treat any unscoped row as administrator-equivalent,
+    and this helper decides private-competition visibility (including the invite
+    code in ``CompetitionOut``) — so a malformed assignment would disclose every
+    private competition on the install.
+    """
     found = await db.scalar(
-        select(RoleAssignment.id).where(
+        select(RoleAssignment.id)
+        .join(Role, Role.id == RoleAssignment.role_id)
+        .where(
             RoleAssignment.user_id == user_id,
             RoleAssignment.competition_id.is_(None),
+            Role.scope == "global",
         )
     )
     return found is not None

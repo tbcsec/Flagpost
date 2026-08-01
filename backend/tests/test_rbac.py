@@ -86,3 +86,35 @@ async def test_no_assignment_means_no_permission():
         assert not await user_has_permission(
             session, user_id, "challenge_view", "A"
         )
+
+
+async def test_unscoped_assignment_of_a_competition_role_grants_nothing():
+    """A competition-scoped role pinned to no competition is malformed.
+
+    ``routers.roles.assign_role`` refuses to create this shape, but OIDC JIT
+    provisioning wrote it directly for every SSO user, and the NULL was read as
+    "site-wide" — handing Participant permissions on every competition to
+    anyone who could log in through the IdP. Resolution now requires the *role*
+    to be global-scoped before an unscoped assignment counts, so such a row
+    grants nothing rather than everything.
+    """
+    async with SessionLocal() as session:
+        user_id = await _make_user(session, "sso@example.com")
+        participant_id = await _role_id(session, "Participant")
+        comp = await _make_competition(session, "Someone else's event")
+        session.add(
+            RoleAssignment(
+                user_id=user_id, competition_id=None, role_id=participant_id
+            )
+        )
+        await session.commit()
+
+        assert not await user_has_permission(
+            session, user_id, "challenge_view", comp
+        )
+        assert not await user_has_permission(
+            session, user_id, "challenge_view", "any-other-competition"
+        )
+        assert not await user_has_permission(
+            session, user_id, "challenge_view", None
+        )

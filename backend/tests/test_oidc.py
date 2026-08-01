@@ -14,6 +14,7 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy import select, text
 
+from auth.security import create_access_token
 from db import SessionLocal
 from models.oidc import OidcProvider, UserExternalIdentity
 from models.role import RoleAssignment
@@ -245,7 +246,15 @@ async def test_login_redirect_carries_pkce_and_state(client, idp):
 # --- the callback: identity resolution --------------------------------------
 
 
-async def test_jit_provisions_a_participant(client, idp):
+async def test_jit_provisions_a_user_with_no_role_assignment(client, idp):
+    """A JIT user starts with *nothing*, exactly like public registration.
+
+    Granting the competition-scoped Participant role here would mean granting it
+    with ``competition_id=NULL``, which is the site-wide shape — every SSO user
+    would hold challenge_view on every competition. Assert the assignment set is
+    empty rather than asserting the role *name*: the name was right while the
+    scope was catastrophically wrong, and a name-only check passed throughout.
+    """
     admin = await admin_token(client)
     await _create_provider(client, admin)
     state, _ = await _begin_login(client, idp)
@@ -268,15 +277,55 @@ async def test_jit_provisions_a_participant(client, idp):
                 select(RoleAssignment).where(RoleAssignment.user_id == user.id)
             )
         ).all()
-        roles = []
-        for a in assignments:
-            from models.role import Role
-
-            roles.append((await session.get(Role, a.role_id)).name)
-    # Never above Participant, whatever the IdP said.
-    assert roles == ["Participant"]
+    assert assignments == []
     # The IdP vouched for the address, so it isn't asked to verify again.
     assert user.email_verified_at is not None
+
+
+async def test_jit_user_cannot_see_other_competitions(client, idp):
+    """The end-to-end property the missing assignment protects.
+
+    Regression for the SSO tenancy escape: a JIT user who has joined nothing
+    must not see a private competition — nor, therefore, its invite code.
+    """
+    admin = await admin_token(client)
+    private = await client.post(
+        "/api/competitions",
+        json={
+            "name": "Private Event",
+            "description": "invite only",
+            "visibility": "private",
+            "participation_mode": "team",
+        },
+        headers={"Authorization": f"Bearer {admin}"},
+    )
+    assert private.status_code == 201
+
+    await _create_provider(client, admin)
+    state, _ = await _begin_login(client, idp)
+    resp = await client.get(
+        f"/api/auth/oidc/testidp/callback?code=abc&state={state}",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+
+    async with SessionLocal() as session:
+        user = await session.scalar(
+            select(User).where(User.email == "sso@example.com")
+        )
+    token = create_access_token(user.id)
+
+    listing = await client.get(
+        "/api/competitions", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert listing.status_code == 200
+    assert listing.json() == []
+
+    detail = await client.get(
+        f"/api/competitions/{private.json()['id']}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert detail.status_code == 404
 
 
 async def test_jit_user_cannot_use_local_login(client, idp):

@@ -281,6 +281,116 @@ async def test_banned_administrator_does_not_satisfy_the_last_admin_guard(client
     assert (await client.get("/api/setup/status")).json()["needs_setup"] is False
 
 
+async def _role_manager(client, admin: str) -> str:
+    """A user holding a global role with `manage_roles` and nothing else.
+
+    Exactly what the router's docstring advertises: "hand out narrower access
+    than the three built-ins".
+    """
+    role = await client.post(
+        "/api/roles",
+        json={"name": "Role Manager", "scope": "global", "permissions": ["manage_roles"]},
+        headers=_auth(admin),
+    )
+    assert role.status_code == 201, role.text
+    token = await _register(client, "rolemgr@example.com")
+    assigned = await client.post(
+        "/api/roles/assignments",
+        json={
+            "email": "rolemgr@example.com",
+            "role_id": role.json()["id"],
+            "competition_id": None,
+        },
+        headers=_auth(admin),
+    )
+    assert assigned.status_code == 201, assigned.text
+    return token
+
+
+async def test_role_manager_cannot_self_assign_administrator(client):
+    """Regression: `manage_roles` must not be a route to full Administrator.
+
+    `GET /api/roles` is permitted by `manage_roles` and returns the built-in
+    Administrator's id, and `assign_role` never asked whether the actor was
+    entitled to confer it — so this was two requests to all 38 permissions.
+    """
+    admin = await admin_token(client)
+    manager = await _role_manager(client, admin)
+
+    admin_role_id = (await _roles(client, manager))["Administrator"]["id"]
+    resp = await client.post(
+        "/api/roles/assignments",
+        json={
+            "email": "rolemgr@example.com",
+            "role_id": admin_role_id,
+            "competition_id": None,
+        },
+        headers=_auth(manager),
+    )
+    assert resp.status_code == 403, resp.text
+
+    # And they genuinely didn't gain the permissions.
+    assert (
+        await client.get("/api/users", headers=_auth(manager))
+    ).status_code == 403
+
+
+async def test_role_manager_cannot_mint_a_role_beyond_their_own_permissions(client):
+    """The equivalent longer route: create the power, then take it."""
+    admin = await admin_token(client)
+    manager = await _role_manager(client, admin)
+
+    resp = await client.post(
+        "/api/roles",
+        json={
+            "name": "Definitely Not Admin",
+            "scope": "global",
+            "permissions": ["manage_roles", "manage_users", "manage_site_settings"],
+        },
+        headers=_auth(manager),
+    )
+    assert resp.status_code == 403, resp.text
+    assert "manage_users" in resp.json()["detail"]
+
+    # Cloning Administrator is the same escalation wearing a hat.
+    admin_role_id = (await _roles(client, manager))["Administrator"]["id"]
+    cloned = await client.post(
+        "/api/roles",
+        json={"name": "Admin Copy", "clone_from": admin_role_id},
+        headers=_auth(manager),
+    )
+    assert cloned.status_code == 403, cloned.text
+
+
+async def test_role_manager_can_still_manage_within_its_own_grant(client):
+    """The fix must not break the delegation it protects."""
+    admin = await admin_token(client)
+    manager = await _role_manager(client, admin)
+
+    created = await client.post(
+        "/api/roles",
+        json={"name": "Deputy", "scope": "global", "permissions": ["manage_roles"]},
+        headers=_auth(manager),
+    )
+    assert created.status_code == 201, created.text
+
+    # Renaming touches no permissions, so it stays allowed...
+    renamed = await client.patch(
+        f"/api/roles/{created.json()['id']}",
+        json={"description": "a deputy"},
+        headers=_auth(manager),
+    )
+    assert renamed.status_code == 200, renamed.text
+
+    # ...as does dropping a permission, which is a de-escalation.
+    stripped = await client.patch(
+        f"/api/roles/{created.json()['id']}",
+        json={"permissions": []},
+        headers=_auth(manager),
+    )
+    assert stripped.status_code == 200, stripped.text
+
+
 async def test_role_mutations_emit_events(client):
     admin = await admin_token(client)
     role = (

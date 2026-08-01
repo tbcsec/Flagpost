@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import require_permission
 from auth.identity import find_by_identifier
+from auth.membership import effective_permissions
 from auth.permissions import PERMISSIONS, is_known
 from auth.setup import ADMINISTRATOR_ROLE_NAME, active_global_admin_count
 from db import get_db
@@ -46,6 +47,46 @@ from schemas.role import (
 from utils.event_bus import event_bus
 
 router = APIRouter(prefix="/api/roles", tags=["roles"])
+
+
+async def _assert_may_grant(
+    db: AsyncSession,
+    actor: User,
+    permissions: list[str],
+    *,
+    already_granted: list[str] | None = None,
+) -> None:
+    """Refuse to put a permission into a role the actor doesn't hold themselves.
+
+    Without this, ``manage_roles`` is not a delegation of role management — it is
+    a delegation of everything. A holder could read the built-in Administrator's
+    id from ``GET /api/roles`` and assign it to themselves, or mint a global role
+    carrying the whole catalog. The router advertises custom roles as a way to
+    "hand out narrower access than the three built-ins", so an operator creating
+    a restricted role administrator must actually get one.
+
+    ``manage_roles`` is ``Scope.GLOBAL``, so any actor who reaches these routes
+    necessarily holds a site-wide assignment; comparing against their *global*
+    set is therefore the meaningful bound. Administrator holds the full catalog
+    and is unaffected.
+
+    Only *added* permissions are checked. Removing one is always a de-escalation,
+    and requiring the actor to hold what they're taking away would block a
+    lesser role admin from editing a role's name or description.
+    """
+    added = set(permissions) - set(already_granted or [])
+    if not added:
+        return
+    effective = await effective_permissions(db, actor.id)
+    missing = sorted(added - set(effective["global"]))
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "You can't grant permissions you don't hold yourself: "
+                + ", ".join(missing)
+            ),
+        )
 
 
 def _validate_permission_keys(keys: list[str]) -> None:
@@ -121,6 +162,7 @@ async def create_role(
             detail="A role with that name already exists",
         )
     _validate_permission_keys(permissions)
+    await _assert_may_grant(db, current_user, permissions)
 
     role = Role(
         name=body.name,
@@ -173,6 +215,9 @@ async def update_role(
         role.description = body.description
     if body.permissions is not None:
         _validate_permission_keys(body.permissions)
+        await _assert_may_grant(
+            db, current_user, body.permissions, already_granted=role.permissions
+        )
         role.permissions = list(body.permissions)
 
     await db.commit()
@@ -275,6 +320,13 @@ async def assign_role(
     role = await db.get(Role, body.role_id)
     if role is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
+
+    # Conferring a role hands over its whole permission set, so the actor must
+    # hold all of it. This is what stops the shortest escalation there was:
+    # read the built-in Administrator's id from GET /api/roles, then assign it
+    # to yourself. Self-assignment needs no special case — the subset rule
+    # already refuses anything the actor doesn't have.
+    await _assert_may_grant(db, current_user, role.permissions)
 
     # Assignment scope must match the role scope (§7.5).
     competition: Competition | None = None

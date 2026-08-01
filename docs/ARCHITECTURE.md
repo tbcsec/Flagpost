@@ -716,6 +716,17 @@ multi-site case in §6, where a site's judges shouldn't automatically gain
 judge-level access to every other site's competition just because they
 hold a judge role somewhere.
 
+The `None only valid for global-scope roles` comment above is an **invariant**,
+and it is enforced in three places rather than one. `routers.roles.assign_role`
+refuses to create any other shape; `deps.user_has_permission` and
+`membership.effective_permissions` / `has_global_role` each require the *role*
+to be `scope="global"` before an unscoped assignment grants anything. The
+redundancy is deliberate. A `competition_id IS NULL` row is the site-wide
+grant, so a competition-scoped role written with a NULL — by a bug, a
+migration, or a restored backup — would otherwise silently promote its holder
+from one competition to every competition. Resolution treats such a row as
+malformed and grants nothing.
+
 ### 7.6 Enforcement
 
 Permission checks happen at the data-access layer, not scattered across

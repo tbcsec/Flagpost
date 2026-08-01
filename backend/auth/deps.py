@@ -139,20 +139,29 @@ async def user_has_permission(
     - A **competition** role assignment grants its permissions only for that
       competition — this is how a Judge on competition A gets nothing on
       competition B (§7.5).
+
+    A site-wide assignment only counts when the *role* is itself global-scoped.
+    ``routers.roles.assign_role`` already refuses to create any other shape, but
+    enforcing it here too means a row written around that route — by a bug, a
+    migration, or a restored backup — grants nothing instead of granting
+    everything. Getting this wrong is not a small mistake: it is the difference
+    between one competition and all of them.
     """
     rows = (
         await db.execute(
-            select(Role.permissions, RoleAssignment.competition_id)
+            select(Role.permissions, Role.scope, RoleAssignment.competition_id)
             .join(RoleAssignment, RoleAssignment.role_id == Role.id)
             .where(RoleAssignment.user_id == user_id)
         )
     ).all()
 
-    for permissions, assignment_competition_id in rows:
+    for permissions, role_scope, assignment_competition_id in rows:
         if permission_key not in permissions:
             continue
         if assignment_competition_id is None:
-            return True  # global assignment applies everywhere
+            if role_scope == "global":
+                return True  # global assignment applies everywhere
+            continue  # malformed: a competition role pinned to no competition
         if (
             competition_id is not None
             and assignment_competition_id == competition_id

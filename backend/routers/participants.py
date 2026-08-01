@@ -25,7 +25,7 @@ from models.role import Role, RoleAssignment
 from models.submission import Submission
 from models.user import User
 from schemas.participant import ParticipantOut
-from utils.scoreboard import compute_scoreboard
+from utils.scoreboard import compute_scoreboard, visible_solve_cutoff
 
 router = APIRouter(
     prefix="/api/competitions/{competition_id}/participants", tags=["participants"]
@@ -37,7 +37,7 @@ _AWARDED = (Submission.is_correct.is_(True), Submission.is_duplicate.is_(False))
 @router.get("", response_model=list[ParticipantOut])
 async def list_participants(
     competition_id: str,
-    _user: User = Depends(require_permission("challenge_view")),
+    current_user: User = Depends(require_permission("challenge_view")),
     db: AsyncSession = Depends(get_db),
 ) -> list[ParticipantOut]:
     competition = await db.get(Competition, competition_id)
@@ -66,16 +66,19 @@ async def list_participants(
     board = await compute_scoreboard(db, competition)
     standing = {e["subject_id"]: (e["rank"], e["points"]) for e in board["entries"]}
 
-    # Distinct challenges each user has solved.
+    # Distinct challenges each user has solved, under the same cutoff the board
+    # above already applies. Without it this response carried frozen rank and
+    # points beside a *live* solve count — the two disagreeing is itself the
+    # leak, since the delta is exactly what the freeze is hiding.
+    cutoff = await visible_solve_cutoff(db, competition, current_user)
+    solve_stmt = select(
+        Submission.user_id,
+        func.count(distinct(Submission.challenge_id)),
+    ).where(Submission.competition_id == competition_id, *_AWARDED)
+    if cutoff is not None:
+        solve_stmt = solve_stmt.where(Submission.created_at <= cutoff)
     solve_rows = (
-        await db.execute(
-            select(
-                Submission.user_id,
-                func.count(distinct(Submission.challenge_id)),
-            )
-            .where(Submission.competition_id == competition_id, *_AWARDED)
-            .group_by(Submission.user_id)
-        )
+        await db.execute(solve_stmt.group_by(Submission.user_id))
     ).all()
     solves = {user_id: count for user_id, count in solve_rows}
 

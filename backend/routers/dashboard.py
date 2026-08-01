@@ -17,10 +17,10 @@ from __future__ import annotations
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import distinct, func, select
+from sqlalchemy import distinct, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth.deps import require_permission
+from auth.deps import require_permission, user_has_permission
 from db import get_db, utcnow
 from models.challenge import Challenge
 from models.competition import Competition
@@ -37,7 +37,7 @@ from schemas.dashboard import (
     MyStanding,
     RecentSolve,
 )
-from utils.scoreboard import compute_scoreboard
+from utils.scoreboard import compute_scoreboard, visible_solve_cutoff
 from utils.scoring import resolve_subject, solved_challenge_ids
 
 router = APIRouter(
@@ -113,24 +113,41 @@ async def dashboard_stats(
 @router.get("/recent-solves", response_model=list[RecentSolve])
 async def recent_solves(
     competition_id: str,
-    _user: User = Depends(require_permission("challenge_view")),
+    current_user: User = Depends(require_permission("challenge_view")),
     db: AsyncSession = Depends(get_db),
 ) -> list[RecentSolve]:
     competition = await _load_competition(db, competition_id)
-    rows = (
-        await db.execute(
-            select(
-                Submission.team_id,
-                Submission.user_id,
-                Submission.points_awarded,
-                Submission.created_at,
-                Challenge.title,
-            )
-            .join(Challenge, Challenge.id == Submission.challenge_id)
-            .where(Submission.competition_id == competition_id, *_AWARDED)
-            .order_by(Submission.created_at.desc())
-            .limit(10)
+    stmt = (
+        select(
+            Submission.team_id,
+            Submission.user_id,
+            Submission.points_awarded,
+            Submission.created_at,
+            Challenge.title,
         )
+        .join(Challenge, Challenge.id == Submission.challenge_id)
+        .where(Submission.competition_id == competition_id, *_AWARDED)
+    )
+    # A live ticker of subject + challenge + points is the frozen standings in
+    # instalments, so it takes the same cutoff as the board itself.
+    cutoff = await visible_solve_cutoff(db, competition, current_user)
+    if cutoff is not None:
+        stmt = stmt.where(Submission.created_at <= cutoff)
+    # Staff test-solve before publishing, and `resolve_subject` gives any user a
+    # subject in individual mode, so those attempts become awarded rows. Without
+    # this the ticker names unreleased challenges — and their point value — to
+    # competitors ahead of a scheduled wave. Every other competitor-facing read
+    # of a challenge goes through `load_visible_challenge`, which applies the
+    # same two conditions.
+    if not await user_has_permission(
+        db, current_user.id, "challenge_edit", competition_id
+    ):
+        stmt = stmt.where(
+            Challenge.state == "published",
+            or_(Challenge.release_at.is_(None), Challenge.release_at <= utcnow()),
+        )
+    rows = (
+        await db.execute(stmt.order_by(Submission.created_at.desc()).limit(10))
     ).all()
 
     # Resolve subject names in one query rather than per row.

@@ -22,6 +22,7 @@ from typing import Any
 from sqlalchemy import func, select, type_coerce
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from auth.deps import user_has_permission
 from db import UtcDateTime, ensure_aware_utc, utcnow
 from models.automation import Achievement
 from models.challenge import Challenge
@@ -120,6 +121,28 @@ def freeze_cutoff(competition: Competition):
         return None
     frozen_at = ensure_aware_utc(frozen_at)
     return frozen_at if utcnow() >= frozen_at else None
+
+
+async def visible_solve_cutoff(db: AsyncSession, competition: Competition, user):
+    """The instant past which ``user`` must not see solve data, or ``None``.
+
+    **Every** read exposing who solved what, when, or how many have, goes
+    through this — not only the scoreboard. A freeze is a single concealment
+    decision by the organiser, so it cannot be a property of one endpoint: the
+    per-challenge solver list, the recent-solves ticker, per-participant solve
+    counts and the browse list's solve totals each reconstruct the standings on
+    their own, and one unfiltered path defeats the whole feature.
+
+    ``None`` means unrestricted — either the board isn't frozen, or the caller
+    holds ``scoreboard_freeze`` and is entitled to the true picture, matching
+    the ``live=true`` bypass on the scoreboard route itself.
+    """
+    cutoff = freeze_cutoff(competition)
+    if cutoff is None:
+        return None
+    if await user_has_permission(db, user.id, "scoreboard_freeze", competition.id):
+        return None
+    return cutoff
 
 
 async def _awarded_by_subject(

@@ -41,6 +41,7 @@ from storage.base import ObjectStorage
 from utils.challenge_yaml import export_challenges, import_challenges
 from utils.event_bus import event_bus
 from utils.flags import hash_static_flag, make_salt
+from utils.scoreboard import visible_solve_cutoff
 from utils.scoring import (
     challenge_value,
     resolve_subject,
@@ -291,7 +292,15 @@ async def list_challenges(
         if competition is not None
         else None
     )
-    counts = await solve_counts(db, competition_id)
+    counts = await solve_counts(
+        db,
+        competition_id,
+        as_of=(
+            await visible_solve_cutoff(db, competition, current_user)
+            if competition is not None
+            else None
+        ),
+    )
     solved = (
         await solved_challenge_ids(db, competition_id, subject)
         if subject is not None
@@ -477,18 +486,22 @@ async def list_solves(
         if team_mode
         else Submission.team_id.is_(None)
     )
-    rows = (
-        await db.execute(
-            select(subj_col, Submission.created_at)
-            .where(
-                Submission.challenge_id == challenge_id,
-                Submission.is_correct.is_(True),
-                Submission.is_duplicate.is_(False),
-                scope,
-            )
-            .order_by(Submission.created_at)
-        )
-    ).all()
+    # A frozen board hides *who has solved what*, not just the rankings — the
+    # solver list with timestamps reconstructs the standings directly.
+    cutoff = (
+        await visible_solve_cutoff(db, competition, current_user)
+        if competition is not None
+        else None
+    )
+    stmt = select(subj_col, Submission.created_at).where(
+        Submission.challenge_id == challenge_id,
+        Submission.is_correct.is_(True),
+        Submission.is_duplicate.is_(False),
+        scope,
+    )
+    if cutoff is not None:
+        stmt = stmt.where(Submission.created_at <= cutoff)
+    rows = (await db.execute(stmt.order_by(Submission.created_at))).all()
     if not rows:
         return []
 

@@ -199,21 +199,23 @@ async def subject_attempt_counts(
 
 
 async def solve_counts(
-    db: AsyncSession, competition_id: str
+    db: AsyncSession, competition_id: str, as_of=None
 ) -> dict[str, int]:
     """Map challenge_id -> number of distinct solving subjects, for a whole
-    competition in one query (drives the browse list's ``solve_count``)."""
-    rows = (
-        await db.execute(
-            select(Submission.challenge_id, func.count(Submission.id))
-            .where(
-                Submission.competition_id == competition_id,
-                Submission.is_correct.is_(True),
-                Submission.is_duplicate.is_(False),
-            )
-            .group_by(Submission.challenge_id)
-        )
-    ).all()
+    competition in one query (drives the browse list's ``solve_count``).
+
+    ``as_of`` clamps the count to solves at or before that instant. Callers pass
+    the freeze cutoff (``scoreboard.visible_solve_cutoff``): a live per-challenge
+    solve count is enough to watch the endgame unfold through a frozen board.
+    """
+    stmt = select(Submission.challenge_id, func.count(Submission.id)).where(
+        Submission.competition_id == competition_id,
+        Submission.is_correct.is_(True),
+        Submission.is_duplicate.is_(False),
+    )
+    if as_of is not None:
+        stmt = stmt.where(Submission.created_at <= as_of)
+    rows = (await db.execute(stmt.group_by(Submission.challenge_id))).all()
     return {challenge_id: count for challenge_id, count in rows}
 
 

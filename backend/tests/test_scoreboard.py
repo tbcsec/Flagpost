@@ -214,6 +214,144 @@ async def test_freeze_hides_later_solves_from_players_but_not_live_staff(client)
     assert after["entries"][0]["points"] == 350
 
 
+async def test_freeze_covers_every_endpoint_that_exposes_solve_data(client):
+    """Regression: the freeze was a filter on /scoreboard alone.
+
+    Four other competitor-facing reads went straight at `submissions` with no
+    cutoff, and each reconstructs the standings by itself — so the freeze
+    concealed nothing from anyone using the API, or in fact the shipped UI.
+    A cutoff applied per-endpoint is a cutoff that grows a fifth hole later, so
+    these all resolve it through one helper; this test is the thing that fails
+    when a sixth endpoint forgets to call it.
+    """
+    comp = await _make_competition(client, mode="individual")
+    c1 = await _published_challenge(client, comp, "flag{a}", 100)
+    c2 = await _published_challenge(client, comp, "flag{b}", 250)
+    admin = await admin_token(client)
+    player, pid = await _register(client, "ada@example.com")
+    async with __import__("db").SessionLocal() as s:
+        from sqlalchemy import select
+        from models.role import Role, RoleAssignment
+        role = await s.scalar(select(Role).where(Role.name == "Participant"))
+        s.add(RoleAssignment(user_id=pid, competition_id=comp, role_id=role.id))
+        await s.commit()
+
+    await _submit(client, comp, c1, player, "flag{a}")
+    assert (
+        await client.post(
+            f"/api/competitions/{comp}/scoreboard/freeze", json={}, headers=_auth(admin)
+        )
+    ).status_code == 200
+    await _submit(client, comp, c2, player, "flag{b}")
+
+    # 1. Per-challenge solver list — named solvers with timestamps.
+    solves = (
+        await client.get(
+            f"/api/competitions/{comp}/challenges/{c2}/solves", headers=_auth(player)
+        )
+    ).json()
+    assert solves == [], "post-freeze solve leaked via the solver list"
+
+    # 2. Recent-solves ticker — subject, challenge title and points awarded.
+    recent = (
+        await client.get(
+            f"/api/competitions/{comp}/dashboard/recent-solves", headers=_auth(player)
+        )
+    ).json()
+    assert [r["challenge_title"] for r in recent] == ["Chal flag{a}"], recent
+
+    # 3. Participant roster — solve_count sat beside a *frozen* rank/points.
+    roster = (
+        await client.get(
+            f"/api/competitions/{comp}/participants", headers=_auth(player)
+        )
+    ).json()
+    mine = next(p for p in roster if p["user_id"] == pid)
+    assert mine["points"] == 100
+    assert mine["solve_count"] == 1, "live solve count contradicted the frozen points"
+
+    # 4. Browse list — per-challenge solve totals.
+    listing = (
+        await client.get(
+            f"/api/competitions/{comp}/challenges", headers=_auth(player)
+        )
+    ).json()
+    counts = {c["title"]: c["solve_count"] for c in listing}
+    assert counts == {"Chal flag{a}": 1, "Chal flag{b}": 0}, counts
+
+    # Staff keep the true picture on every one of them.
+    staff_solves = (
+        await client.get(
+            f"/api/competitions/{comp}/challenges/{c2}/solves", headers=_auth(admin)
+        )
+    ).json()
+    assert len(staff_solves) == 1
+    staff_list = (
+        await client.get(
+            f"/api/competitions/{comp}/challenges", headers=_auth(admin)
+        )
+    ).json()
+    assert {c["title"]: c["solve_count"] for c in staff_list} == {
+        "Chal flag{a}": 1,
+        "Chal flag{b}": 1,
+    }
+
+    # Unfreezing restores it for competitors too.
+    await client.post(
+        f"/api/competitions/{comp}/scoreboard/unfreeze", headers=_auth(admin)
+    )
+    after = (
+        await client.get(
+            f"/api/competitions/{comp}/challenges/{c2}/solves", headers=_auth(player)
+        )
+    ).json()
+    assert len(after) == 1
+
+
+async def test_recent_solves_hides_unreleased_challenge_titles(client):
+    """Staff test-solve before publishing, which creates awarded rows.
+
+    The ticker joined `challenges` with no visibility predicate, so those rows
+    named an unreleased challenge — and its point value — to competitors ahead
+    of a scheduled wave.
+    """
+    comp = await _make_competition(client, mode="individual")
+    admin = await admin_token(client)
+    player, pid = await _register(client, "bob@example.com")
+    async with __import__("db").SessionLocal() as s:
+        from sqlalchemy import select
+        from models.role import Role, RoleAssignment
+        role = await s.scalar(select(Role).where(Role.name == "Participant"))
+        s.add(RoleAssignment(user_id=pid, competition_id=comp, role_id=role.id))
+        await s.commit()
+
+    draft = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges",
+            json={"title": "wave-two-secret", "points": 500, "flag": "flag{secret}"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+
+    # An admin test-solve on the unpublished challenge.
+    await _submit(client, comp, draft, admin, "flag{secret}")
+
+    recent = (
+        await client.get(
+            f"/api/competitions/{comp}/dashboard/recent-solves", headers=_auth(player)
+        )
+    ).json()
+    assert "wave-two-secret" not in [r["challenge_title"] for r in recent]
+
+    # Staff still see their own test solves.
+    staff = (
+        await client.get(
+            f"/api/competitions/{comp}/dashboard/recent-solves", headers=_auth(admin)
+        )
+    ).json()
+    assert "wave-two-secret" in [r["challenge_title"] for r in staff]
+
+
 async def test_freeze_requires_permission(client):
     comp = await _make_competition(client, mode="individual")
     player, _ = await _register(client, "nobody@example.com")

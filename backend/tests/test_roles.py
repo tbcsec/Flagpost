@@ -231,6 +231,56 @@ async def test_cannot_remove_last_administrator(client):
     assert resp.status_code == 409
 
 
+async def test_banned_administrator_does_not_satisfy_the_last_admin_guard(client):
+    """Regression: the guard counted assignment rows, not *active* holders.
+
+    Banning a user clears `is_active` but leaves the role assignment, so with a
+    banned second administrator the count read 2 and the guard let the only
+    remaining active administrator drop their own role. Active administrators
+    then hit zero, which reopened the public setup wizard on a live install and
+    let any anonymous caller mint a new owner.
+    """
+    admin = await admin_token(client)
+    roles = await _roles(client, admin)
+    admin_role_id = roles["Administrator"]["id"]
+
+    # A second administrator, who is then banned.
+    second = await client.post(
+        "/api/users",
+        json={"display_name": "second-admin", "password": "s3cretpw!"},
+        headers=_auth(admin),
+    )
+    assert second.status_code == 201, second.text
+    second_id = second.json()["id"]
+    assigned = await client.post(
+        "/api/roles/assignments",
+        json={"email": "second-admin", "role_id": admin_role_id, "competition_id": None},
+        headers=_auth(admin),
+    )
+    assert assigned.status_code == 201, assigned.text
+    assert (
+        await client.post(f"/api/users/{second_id}/ban", headers=_auth(admin))
+    ).status_code == 200
+
+    # Two Administrator assignment rows now exist, but only one active holder.
+    assignments = (
+        await client.get(
+            f"/api/roles/assignments?role_id={admin_role_id}", headers=_auth(admin)
+        )
+    ).json()
+    assert len(assignments) == 2
+
+    # Removing the *active* administrator's assignment must still be refused.
+    mine = next(a for a in assignments if a["user_id"] != second_id)
+    resp = await client.delete(
+        f"/api/roles/assignments/{mine['id']}", headers=_auth(admin)
+    )
+    assert resp.status_code == 409, resp.text
+
+    # The install therefore still has an owner, and stays un-claimable.
+    assert (await client.get("/api/setup/status")).json()["needs_setup"] is False
+
+
 async def test_role_mutations_emit_events(client):
     admin = await admin_token(client)
     role = (

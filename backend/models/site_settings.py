@@ -34,6 +34,13 @@ class SiteSettings(Base, TimestampMixin):
     __tablename__ = "site_settings"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=SITE_SETTINGS_ID)
+    # When first-run provisioning completed (ADR-0017). One-way: nothing clears
+    # it, and the setup wizard refuses to run once it is set. Losing every active
+    # Administrator is an operator problem; it must never reopen a public
+    # endpoint that mints one on a live install.
+    setup_completed_at: Mapped[datetime | None] = mapped_column(
+        UtcDateTime, nullable=True
+    )
     platform_name: Mapped[str] = mapped_column(
         String, nullable=False, default=DEFAULT_PLATFORM_NAME
     )

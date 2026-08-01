@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth.deps import require_permission
 from auth.identity import find_by_identifier
 from auth.permissions import PERMISSIONS, is_known
+from auth.setup import ADMINISTRATOR_ROLE_NAME, active_global_admin_count
 from db import get_db
 from models.competition import Competition
 from models.role import Role, RoleAssignment
@@ -45,8 +46,6 @@ from schemas.role import (
 from utils.event_bus import event_bus
 
 router = APIRouter(prefix="/api/roles", tags=["roles"])
-
-ADMINISTRATOR_ROLE_NAME = "Administrator"
 
 
 def _validate_permission_keys(keys: list[str]) -> None:
@@ -343,15 +342,20 @@ async def unassign_role(
         )
     role = await db.get(Role, assignment.role_id)
 
-    # Never remove the last Administrator — an install must keep at least one
-    # account that can manage roles, or it locks itself out.
-    if role is not None and role.name == ADMINISTRATOR_ROLE_NAME and role.is_system:
-        admin_count = await db.scalar(
-            select(func.count())
-            .select_from(RoleAssignment)
-            .where(RoleAssignment.role_id == role.id)
-        )
-        if admin_count is not None and admin_count <= 1:
+    # Never remove the last Administrator. This counts *active* holders through
+    # the shared helper rather than raw assignment rows: a banned admin keeps
+    # their assignment (ban only clears is_active), so counting rows let this
+    # guard pass while the real number of usable administrators was zero — which
+    # reopened the public setup wizard on a live install.
+    if (
+        role is not None
+        and role.name == ADMINISTRATOR_ROLE_NAME
+        and role.is_system
+        and assignment.competition_id is None
+    ):
+        if not await active_global_admin_count(
+            db, exclude_user_id=assignment.user_id
+        ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Can't remove the last administrator",

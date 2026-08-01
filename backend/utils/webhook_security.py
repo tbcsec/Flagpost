@@ -71,11 +71,22 @@ class WebhookSecurityError(Exception):
 def _ip_is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     """Any non-globally-routable address is blocked: loopback, private,
     link-local (incl. the 169.254.169.254 cloud metadata endpoint), reserved,
-    multicast, and the unspecified address."""
+    multicast, shared address space, and the unspecified address."""
     # Unwrap IPv4-mapped IPv6 (``::ffff:169.254.169.254``) so it can't smuggle
     # a blocked v4 target past the v6 checks.
     if ip.version == 6 and ip.ipv4_mapped is not None:
         ip = ip.ipv4_mapped
+    # `is_global` is the property this docstring actually describes; the
+    # predicates below only enumerate most of it. The gap that mattered was
+    # 100.64.0.0/10 (RFC 6598 shared address space), which is `is_global == False`
+    # but satisfies none of them — so it was reachable. That range is the default
+    # for Tailscale, several Kubernetes CNI layouts and ISP CGNAT, and on Alibaba
+    # Cloud it carries the instance metadata service at 100.100.100.200.
+    #
+    # The enumeration is kept alongside rather than replaced: `is_global` treats
+    # NAT64 (64:ff9b::/96) as global, and `is_reserved` catches it.
+    if not ip.is_global:
+        return True
     return (
         ip.is_loopback
         or ip.is_private

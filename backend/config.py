@@ -136,6 +136,27 @@ class Settings(BaseSettings):
     submission_rate_limit: int = 10
     submission_rate_window_seconds: int = 30
 
+    # --- Unauthenticated credential endpoints ---
+    # Login, registration, password reset and email verification. Without this
+    # there is no throttle and no lockout anywhere in the auth path: a breach
+    # corpus can be replayed at full concurrency, and forgot-password is an
+    # unmetered mail cannon aimed at any address the caller names.
+    #
+    # Keyed on the *identifier* (or email), not the client IP, because nothing
+    # in the stack derives a trustworthy client address — uvicorn runs without
+    # --proxy-headers, so the peer is Caddy for every request. That means this
+    # blunts a targeted attack on one account but not spraying one password
+    # across many; closing that needs trusted proxy headers first, and keying on
+    # a forgeable header would be worse than not keying at all.
+    #
+    # Windows are generous enough that a human who mistypes a password twice
+    # never notices.
+    auth_rate_limit: int = 10
+    auth_rate_window_seconds: int = 300
+    # Tighter, because each one sends mail to an address the caller chose.
+    auth_email_rate_limit: int = 3
+    auth_email_rate_window_seconds: int = 900
+
     # --- Public spectator page (#24) ---
     # TTL for the memoised public insights/timeline payload. The endpoint is
     # unauthenticated and can fan out to many spectators while the page polls

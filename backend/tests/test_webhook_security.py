@@ -35,6 +35,14 @@ from utils.webhook_security import (
         "http://[::1]/x",                 # IPv6 loopback
         "http://[::ffff:169.254.169.254]/x",  # IPv4-mapped metadata
         "http://0.0.0.0/x",               # unspecified
+        # RFC 6598 shared address space. None of is_private / is_loopback /
+        # is_link_local / is_reserved / is_multicast covers 100.64.0.0/10, so
+        # enumerating them left it reachable — it's the default range for
+        # Tailscale, several K8s CNI layouts and ISP CGNAT.
+        "http://100.64.0.1/x",
+        # ...and on Alibaba Cloud this specific address is the instance
+        # metadata service, i.e. the same class of target as 169.254.169.254.
+        "http://100.100.100.200/latest/meta-data/",
     ],
 )
 async def test_ssrf_blocks_non_routable_targets(url):

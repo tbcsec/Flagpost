@@ -64,6 +64,38 @@ REFRESH_COOKIE_NAME = "refresh_token"
 REFRESH_COOKIE_PATH = "/api/auth"
 
 
+async def _throttle(
+    rate_limiter: RateLimiter,
+    key: str,
+    *,
+    limit: int | None = None,
+    window: int | None = None,
+) -> None:
+    """Reject the request if ``key`` has exceeded its window, else record a hit.
+
+    Applied to the unauthenticated credential endpoints, which previously had no
+    throttle and no lockout of any kind — a breach corpus could be replayed
+    against /login at full concurrency, and forgot-password would mail any
+    address as often as asked.
+
+    The key is always lowercased so ``Ada`` and ``ada`` share a bucket; the
+    identifier lookup is case-insensitive (§7.7), so keying case-sensitively
+    would hand out a fresh budget per capitalisation.
+    """
+    allowed = await rate_limiter.hit(
+        key.lower(),
+        limit=limit if limit is not None else settings.auth_rate_limit,
+        window_seconds=(
+            window if window is not None else settings.auth_rate_window_seconds
+        ),
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many attempts — please wait a few minutes and try again",
+        )
+
+
 async def _issue_session(db: AsyncSession, user: User, response: Response) -> str:
     """Create a refresh session, set the httpOnly cookie, return an access token."""
     raw_refresh = generate_refresh_token()
@@ -129,8 +161,15 @@ async def _send_verification_email(db: AsyncSession, user: User) -> None:
     "/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED
 )
 async def register(
-    body: RegisterRequest, response: Response, db: AsyncSession = Depends(get_db)
+    body: RegisterRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> TokenResponse:
+    # Unauthenticated, and each call costs an argon2 hash plus a row. Keyed on
+    # the requested display name so a flood has to vary it, which is also what
+    # makes the accounts distinguishable afterwards.
+    await _throttle(rate_limiter, f"register:{body.display_name}")
     # Before the first-run wizard completes there's no owner — no self-serve
     # accounts until one exists (ADR-0017).
     if await instance_needs_setup(db):
@@ -213,8 +252,15 @@ async def register(
 
 @router.post("/login", response_model=TokenResponse)
 async def login(
-    body: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)
+    body: LoginRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> TokenResponse:
+    # Throttle before the lookup, so a refused attempt costs nothing and the
+    # limit can't be probed by timing. Keyed per identifier — see the note on
+    # `auth_rate_limit` about why not per IP.
+    await _throttle(rate_limiter, f"login:{body.identifier}")
     # The identifier is the display name (username) or the email, matched
     # case-insensitively (§7.7).
     user = await find_by_identifier(db, body.identifier)
@@ -512,10 +558,23 @@ async def change_email(
 
 @router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT)
 async def forgot_password(
-    body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)
+    body: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> Response:
     """Email a password-reset link. Always 204 — never reveals whether an
     account exists for the address. No-ops silently if SMTP is unconfigured."""
+    # Tighter than the login limit: this endpoint accepts an *arbitrary* address
+    # and sends mail to it, so unthrottled it is a mail cannon aimed at anyone
+    # and a fast way to burn the instance's SMTP reputation. Contrast
+    # /resend-verification, which has always been capped for this exact reason
+    # but only covers the caller's own address.
+    await _throttle(
+        rate_limiter,
+        f"forgot-password:{body.email}",
+        limit=settings.auth_email_rate_limit,
+        window=settings.auth_email_rate_window_seconds,
+    )
     import secrets
     from datetime import timedelta
 
@@ -550,7 +609,9 @@ async def forgot_password(
 
 @router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
 async def reset_password(
-    body: ResetPasswordRequest, db: AsyncSession = Depends(get_db)
+    body: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> Response:
     """Set a new password from a valid, unexpired reset token, then revoke every
     refresh session **and** every personal API token.
@@ -560,6 +621,11 @@ async def reset_password(
     recovered without knowing the old password — the compromise assumption — so
     every credential the account holds dies with it (#75).
     """
+    # Defence in depth. The token is 256 bits of `secrets.token_urlsafe`, so it
+    # isn't guessable and this isn't what stands between an attacker and an
+    # account — but an unmetered endpoint that takes a bearer-ish secret and
+    # tells you whether it's valid should still cost something to hammer.
+    await _throttle(rate_limiter, f"reset-password:{body.token[:16]}")
     token = await db.scalar(
         select(PasswordResetToken).where(
             PasswordResetToken.token_hash == _hash_token(body.token)
@@ -600,10 +666,13 @@ async def reset_password(
 
 @router.post("/verify-email", status_code=status.HTTP_204_NO_CONTENT)
 async def verify_email(
-    body: VerifyEmailRequest, db: AsyncSession = Depends(get_db)
+    body: VerifyEmailRequest,
+    db: AsyncSession = Depends(get_db),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> Response:
     """Confirm an account's email from a valid, unexpired verification token.
     Generic 400 on either an invalid or expired token — no enumeration."""
+    await _throttle(rate_limiter, f"verify-email:{body.token[:16]}")
     token = await db.scalar(
         select(EmailVerificationToken).where(
             EmailVerificationToken.token_hash == _hash_token(body.token)

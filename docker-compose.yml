@@ -77,6 +77,12 @@ services:
       # below, so sessions survive restarts and container recreation.
       JWT_SECRET: ${JWT_SECRET:-}
       JWT_SECRET_FILE: /data/.jwt_secret
+      # The refresh cookie is a 14-day credential, so it ships with Secure set:
+      # this stack is the production stack, and Caddy terminates TLS in front of
+      # it. Browsers treat http://localhost as a secure context, so a local
+      # `docker compose up` is unaffected. Set false only for a plain-HTTP
+      # deployment on a non-localhost host, which is not a supported topology.
+      REFRESH_COOKIE_SECURE: ${REFRESH_COOKIE_SECURE:-true}
       # Encryption key for at-rest secrets (ADR-0020) — same derive-and-persist
       # pattern as the JWT secret, on the same volume so it survives recreation.
       # Losing it means stored provider secrets must be re-entered.

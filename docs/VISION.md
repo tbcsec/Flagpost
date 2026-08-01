@@ -2,6 +2,15 @@
 
 # Flagpost — Modern Open Source CTF Competition Platform
 
+> **This is the founding document — intent, not status.** It's kept close to as
+> written so the original reasoning stays legible, and it is deliberately *not*
+> updated as features ship. For what Flagpost does today read
+> [`../README.md`](../README.md); for how it's built,
+> [`ARCHITECTURE.md`](ARCHITECTURE.md); for what's next,
+> [`ROADMAP.md`](ROADMAP.md). Where this document and `ARCHITECTURE.md`
+> disagree, `ARCHITECTURE.md` wins — it's the binding one, and §11.3 explicitly
+> reconciles the two on the plugin/core split.
+
 ## Overview
 
 This project aims to build a modern, open-source competition management platform focused initially on Capture The Flag (CTF) competitions.
@@ -445,6 +454,12 @@ SECURITY.md
 /docs/adr
     Architecture Decision Records
 ```
+
+*What actually happened:* `PLUGIN_SYSTEM.md` and `API_DESIGN.md` were never
+written as separate files — the module system became `ARCHITECTURE.md` §11 and
+the API conventions §6/§7/§8, on the grounds that splitting them out would mean
+two places to keep in sync for no reader benefit. `SECURITY.md` lives at the
+repository root (where GitHub looks for it), and `PRIVACY.md` joined it.
 
 These documents provide context for:
 

@@ -13,8 +13,14 @@ placeholder data and flagged in-app with a "Preview — …" banner. **Every sec
 is now wired** (see below), so that scaffolding — the banner component and
 `placeholder-data.ts` — has since been removed.
 
-**Status: Tiers 0–3 all complete (Phases 0–10 shipped) — initial-public-release
-ready.** Since the original handoff the backend caught up through every tier
+**Status: every surface in the mock is wired, and the platform has shipped
+through v1.1.1 with v1.2.0 complete on `main`.** The tables below are kept
+current, so they double as a map of
+which hook and module back each screen — but this document is fundamentally a
+*record of the handoff*, not the feature list. For what the platform does today,
+read `README.md`; for what's next, `ROADMAP.md`.
+
+Since the original handoff the backend caught up through every tier
 (per `claude_plans/phase_3.md`): the notification bell (Phase 0), the whole
 automation surface — rules + the visual builder (Phases 1–3), feedback / surveys
 (Phase 4), challenge & team analytics (Phase 5), **dashboard customization** —
@@ -90,14 +96,35 @@ code.
 | Presence indicators | **Wired** (Tier 2 Phase 3, §4.1) — WS presence with debounced clear: "N others viewing" on the challenge dialog (new presence-only `challenge` room) and "a judge is looking at this ticket" on the ticket thread (`usePresence` + `PresenceIndicator`) |
 | Admin → Site settings → Appearance (site-wide theming + branding) | **Wired** (Tier 2 Phase 4 §9; **custom logo** added Tier 3 Phase 9) — platform name + palette + accent (preset or custom hex) with live preview, plus a **custom org logo** (upload/replace/remove) and a `show_wordmark` toggle; `manage_site_settings`-gated `site_settings` module. Logo bytes live in the DB (a `deferred` blob on the singleton) and stream from a public `GET /site-settings/logo` (nosniff + sandbox CSP); the public read carries `logo_url` + `show_wordmark`, so login/register/sidebar brand from it (`Lockup` gained `logoUrl`/`showWordmark`; `use-site-settings` absolutizes `logo_url`). A **mandatory** "Powered by Flagpost" footer (`PoweredByFooter`) renders on every page so attribution survives a full rebrand (`use-site-settings`, `lib/theme.ts`) |
 | Admin → Roles (custom role editor) | **Wired** (Tier 2 Phase 5, §7.4) — `roles` module gated on `manage_roles`: list + permission catalog, create/clone/edit/delete custom roles, assign(by-email)/unassign; system roles read-only, last-admin guard (`use-roles`) |
-| Admin → Site settings (operational) | **Wired** (Tier 3 Phase 9) — registration policy (`registration_open`; closed → `/register` 403 + hidden link) and SMTP config for the `send_email` action (`GET`/`PUT /site-settings/operational`, `manage_site_settings`; password write-only). The mailer resolves SMTP from the DB (env fallback). AI/SSO deferred (`use-site-settings`). Plus **platform export / import** (`BackupPanel`, ADR-0016): section-checkbox export → JSON download, additive import from a file → per-table created/skipped summary; `POST /site-settings/export`+`/import`, `manage_site_settings`-gated |
+| Admin → Site settings (operational) | **Wired** (Tier 3 Phase 9) — registration policy (`registration_open`; closed → `/register` 403 + hidden link) and SMTP config for the `send_email` action (`GET`/`PUT /site-settings/operational`, `manage_site_settings`; password write-only). The mailer resolves SMTP from the DB (env fallback). AI stays unbuilt (v1.4.0, #98); **SSO shipped** as its own Auth tab — see below (`use-site-settings`). Plus **platform export / import** (`BackupPanel`, ADR-0016): section-checkbox export → JSON download, additive import from a file → per-table created/skipped summary; `POST /site-settings/export`+`/import`, `manage_site_settings`-gated |
 | Admin → Dashboard (site overview) | **Wired** (Tier 3 Phase 9, §6.3) — cross-competition oversight gated on `view_global_analytics`: platform totals (accounts / competitions / teams / challenges / solves) + a per-competition **health** table (status / participants / challenges / solves / open tickets) off `GET /api/admin/overview` (`use-admin-overview`) |
 | Admin → Users (account directory + lifecycle) | **Wired** (Tier 3 Phase 9, §7) — `users` module: directory + search (`view_all_users`), create / edit(+password) / soft-ban / unban / hard-delete (`manage_users`). Ban = `User.is_active`, enforced at the auth dependency + login + refresh, revokes sessions; can't ban/delete yourself or the last admin. Role *assignment* stays on Admin → Roles (`use-users`, `UserFormDialog`) |
 | Notifications (topbar bell) | **Wired** (Tier 3 Phase 0, §4.4) — real per-user inbox: `notifications` required-core module, `/ws/user/<id>` live push, list/mark-read/read-all; ticket events routed like the audio cue (`use-notifications`). **Per-user preferences wired** (Phase 9): `GET/PUT /api/notifications/preferences` — in-app category mutes (tickets / automations, gated in `create_notifications`) + browser & sound delivery hints (client-honored via `lib/notification-prefs`) |
 | Automations (competition + admin) | **Wired** (Tier 3 Phases 1–3, §5) — the `automations` optional module + engine (nine §5.3 actions incl. `open_survey`, per-competition toggle, plus the time-based `competition.time_remaining` trigger via a scheduler) and the §5.5 **visual rule builder**: catalog-driven When→If→Then editor for competition + global rules, plus a personal notify-self section (`use-automations`, `rule-builder`) |
 | Feedback / surveys | **Wired** (Tier 3 Phase 4, #22) — the `feedback` optional module: staff survey builder (5 question types, reorder, open/close), competitor response form, results dialog (histograms/tallies/text) + CSV export; a submission emits `survey.submitted`, a live automation trigger (`use-feedback`) |
 | Analytics | **Wired** (Tier 3 Phase 5, #23) — the `analytics` optional module (staff, `view_competition_analytics`): overview + per-challenge table (solves / attempts+fails / completion rate / avg solve time / hints / linked tickets) and a competitors/teams ranking (rank / points / solves / first bloods / tickets / last solve), read off existing submission data (`use-analytics`) |
-| Collaborative notes | **Wired** (Tier 3 Phase 7, §4.2, ADR-0014) — the required-core `collab` module: a **team per-challenge scratchpad** in the challenge dialog and **staff notes** on a ticket thread, both live-collaborative rich text (Y.js under TipTap over a `note/<doc_key>` WS room, dumb-relay transport + blob persistence). Scoped per-request — team membership / `ticket_view_internal_notes` (`CollabNote`, `lib/collab`) |
+| Collaborative notes | **Wired** (Tier 3 Phase 7, §4.2, ADR-0014) — the required-core `collab` module: a **team per-challenge scratchpad** in the challenge dialog and **staff notes** on a ticket thread, both live-collaborative rich text (Y.js under TipTap over a `note/<doc_key>` WS room, dumb-relay transport + blob persistence). Scoped per-request — team membership / `ticket_view_internal_notes` (`CollabNote`, `lib/collab`). v1.1.0 added a **personal** `user_challenge:` scope so individual-mode competitors get the same surface (#47) |
+
+### Added after the handoff (v1.1.0 – v1.2.0)
+
+Surfaces with no counterpart in the original mock, listed so the table stays a
+complete map of the app.
+
+| Section | Status |
+| --- | --- |
+| Live updates across the site | **Wired** (v1.1.0, #18) — a per-competition `activity` WS room fans id-only pings from a curated §3.2 event allowlist; pages refetch their own permission-filtered slice rather than trusting a pushed payload. Keeps the analytics insight cards, challenge grid and ticket lists live for free |
+| Sortable / searchable / paginated tables | **Wired** (v1.1.0, #16 #17 #20) — a headless data-table layer (`lib/data-table`, `use-data-table`, `components/ui/data-table`) rolled out across the table and card surfaces |
+| Public spectator board | **Wired** (Phase 9 + v1.1.0 #24) — a standalone `/public` directory + `/public/[competitionId]` board **outside** the app shell and outside auth, per-competition opt-in. v1.1.0 added insight cards and a live cumulative-points timeline (`usePublicScoreboard`, `utils/public_insights`), all computed under the board's own freeze cutoff so the page can't leak what the board hides |
+| Announcements — severity + targeting | **Wired** (v1.1.0, #44) — info/warning/critical severity and an audience (whole competition, or chosen teams/users), with a bell notification per recipient. Targeted announcements never touch the shared room; they go over each recipient's `/ws/user/<id>` room, and the join snapshot is filtered identically |
+| Admin → Site settings → Auth (identity providers) | **Wired** (v1.2.0, #58, ADR-0021) — the `sso` required-core module: CRUD over site-wide `OidcProvider` rows gated on `manage_auth_providers` (deliberately *not* `manage_site_settings`). Login renders a provider button per enabled row; `/auth/callback` completes the code exchange. The settings page admits either permission and hides tabs the holder lacks |
+| Profile — API tokens | **Wired** (v1.2.0, #75) — self-service mint/list/revoke (`ApiTokensCard`); the raw `flp_…` token is shown exactly once. Admin → Users carries the oversight panel (`manage_api_tokens`: list every token on the platform, revoke any) |
+| Profile — email card + verification | **Wired** (v1.2.0, #74/#106) — add / change / clear your own email behind your current password and a 5-per-5-min limit; a change clears verification and re-triggers it. `/verify-email` completes a mailed link; the lobby carries an unverified prompt |
+| Rules / code of conduct | **Wired** (v1.2.0, #57) — site-wide text with an optional per-competition override, authored on Admin → Site settings and Competition Settings. `RulesAcceptModal` gates all four join paths (checkbox-gated Accept, or Continue when the document is display-only); acceptance is recorded, and changing the document resets it |
+| Analytics → Submissions | **Wired** (v1.2.0, #76) — a staff dispute-resolution tab: filterable, paginated raw submissions with CSV export, behind its own `view_submissions` permission (`SubmissionsBrowser`, `use-submissions`) |
+| Support tickets — screenshots | **Wired** (v1.2.0, #80, §13.3) — `ScreenshotPicker` stages images on a message, `TicketAttachments` renders thumbnails into a lightbox. Bytes stream through the API and render from a `blob:` URL (the CSP blocks a cross-origin storage URL in an `<img>`); an attachment on an internal note inherits that note's visibility |
+| Update notice | **Wired** (v1.2.0, #111) — an admin-only banner when a newer release exists, dismissible per version, plus a "last checked" line on Admin → Site settings. Gated at the *query*, not just the render, so a competitor never calls the admin endpoint |
+| First-run setup wizard | **Wired** (Phase 9, ADR-0017) — `/setup`, outside the shell: creates the owner account and initial branding on an install that has no administrator. `SetupGuard` redirects to it while unconfigured |
+| Password reset | **Wired** (Phase 9, Group D) — `/forgot-password` + `/reset-password`, both outside the shell (`useForgotPassword`/`useResetPassword`) |
 
 ## Formerly UI-only (now wired or deferred)
 
@@ -109,9 +136,13 @@ real backend, or the underlying feature deferred with the placeholder UI removed
   Phase 6, see the wired table above). The widget-registration architecture that
   shipped as a fixed layout made the drag-and-drop customization layer additive,
   exactly as intended (§10.2) — it's now built for the manager dashboard.
-- **Admin → Site settings — AI / SSO / integrations** — deferred; the theming
-  half moved to Admin → Site settings → Appearance, and the operational half (registration policy
-  + SMTP) is now wired (see the wired table). AI and SSO stay off the roadmap.
+- **Admin → Site settings — AI / SSO / integrations** — the mock's single
+  catch-all panel became a tabbed page (#104): **General** (registration policy,
+  data retention, update checks), **Email** (SMTP), **Auth**, **Rules**,
+  **Backup**, **Appearance**, **AI**. **SSO shipped in v1.2.0** on the Auth tab,
+  gated on its own `manage_auth_providers` permission (#58, ADR-0021). **AI is
+  the one surface still a stub** — the tab renders a disabled card, and the
+  feature is scheduled for v1.4.0 (#98) rather than abandoned.
 
 ## Deliberately not carried over from the mock
 
@@ -147,3 +178,7 @@ Phase 9 once its last consumers (the Admin → Dashboard global stats/module
 health and the Admin → Users directory) were wired to real endpoints. Every
 section listed above now reads live data; the remaining "not wired" surfaces are
 feature gaps (no fake data), not placeholder screens.
+
+The single exception is the **AI** tab on Admin → Site settings, which renders a
+disabled card because the feature genuinely doesn't exist yet (#98, v1.4.0). It
+shows no data, real or fake.

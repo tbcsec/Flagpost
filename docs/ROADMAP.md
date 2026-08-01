@@ -1,14 +1,22 @@
-# Roadmap: MVP
+# Roadmap
 
-This document breaks `ARCHITECTURE.md` and `VISION.md` down into an ordered,
-actionable feature list for a viable MVP.
+Flagpost shipped **v1.0.0 on 2026-07-25**; the latest tag is **v1.1.1**, with
+the v1.2.0 milestone complete on `main` and awaiting a tag. This document has
+two halves:
 
-**Scope of this MVP**: a basic, well-run competition management tool with
-the modern frontend already designed — not the automation engine, not AI
-assistance, not the plugin marketplace, not multi-site tenancy. Those are
-real parts of the long-term vision, but none of them are required for an
-organiser to run a competition better than a spreadsheet + Discord today.
-Where a feature is deferred, it's noted explicitly so nothing gets lost.
+- **[Tiers 0–3](#tier-0--foundation)** — the pre-1.0 build order, breaking
+  `ARCHITECTURE.md` and `VISION.md` down into the feature list that got the
+  platform to a public release. All four tiers are complete; this half is now a
+  **historical record** of what was built and in what order, kept because the
+  reasoning in it still explains why the codebase is shaped the way it is.
+- **[Post-1.0 releases](#post-10--release-milestones)** — the live plan. Work is
+  tracked as GitHub issues against **version milestones**, not tiers.
+
+**Where to look for what's next:** the
+[milestones page](https://github.com/tbcsec/flagpost/milestones) is the source of
+truth. The summary here is a convenience and can lag it.
+
+## How to read the tiers
 
 Tiers are ordered by importance: **Tier 0 is scaffolding nothing else can
 be built without; Tier 1 is what makes the platform minimally usable to run
@@ -17,6 +25,14 @@ prefer it to what they're using now; Tier 3 is polish worth doing before a
 public launch, but not before Tier 1/2.** Within each tier, items are
 listed in the order they should be built — later items in a tier often
 depend on earlier ones.
+
+The original MVP scope deliberately excluded the automation engine, AI
+assistance, external identity providers, the plugin marketplace, and multi-site
+tenancy — none of them were required for an organiser to run a competition
+better than a spreadsheet + Discord. Three of those exclusions have since
+lifted: the **automation engine** (with dashboard drag-and-drop and CRDT
+editing) was pulled into Tier 3, **OIDC shipped in v1.2.0**, and **AI is
+scheduled for v1.4.0**. What's still deferred is listed at the bottom.
 
 ---
 
@@ -119,9 +135,10 @@ the MVP line.
 Phase 0 (pre-Tier-2 gap fixes), Phase 1 (#16, judge/admin dashboard), Phase 2
 (#18, support tickets), Phase 3 (#19, presence), Phase 4 (#20, site-wide
 theming) and Phase 5 (#21, custom role editor) all shipped. Two owner scope
-changes from the list below carried through: **#17 (challenge
-lifecycle) is deferred to a future tier** (needs more design), and **#20 is
-rescoped from per-competition to site-wide theming** (the
+changes from the list below carried through: **item 17 (challenge
+lifecycle) is deferred** (needs more design — still unscheduled, with no
+milestone), and **item 20 is rescoped from per-competition to site-wide
+theming** (the
 per-competition/white-label variant may return later if demand warrants —
 see ADR-0011).
 
@@ -138,8 +155,8 @@ what we have."
     the full lifecycle in `VISION.md` (no testing sign-off workflow, no
     version history yet) — enough that a team of organisers isn't
     stepping on each other publishing half-finished challenges.
-    **Deferred to a future tier** (owner decision) — wants more design
-    first; not built in Tier 2.
+    **Deferred** (owner decision) — wants more design first. Still
+    unbuilt and unscheduled as of v1.2.0.
 18. **Basic support tickets** — a competitor can ask a question tied to a
     challenge; a judge can respond and mark it resolved. No routing rules,
     no analytics on response time yet — just replacing the "ask in
@@ -189,8 +206,9 @@ self-service password reset, point-bearing awards, and more (see
 four-stage pre-public pass (accessibility, full bug pass, optimization + motion,
 in-depth security review). Release engineering on top: the AGPL-3.0 license, a
 single-origin production Docker stack, a marketing README, and demo mode + the
-hosted demo (demo.flagpost.io). The platform is at initial-public-release
-readiness.
+hosted demo (demo.flagpost.io). All of this shipped as **v1.0.0** on
+2026-07-25 — see [Post-1.0 releases](#post-10--release-milestones) for what
+came after.
 
 Worth doing before a public/1.0 release, not worth doing before Tiers 1–2
 are solid.
@@ -235,20 +253,112 @@ are solid.
 
 ---
 
+## Post-1.0 — release milestones
+
+Everything above got the platform to **v1.0.0 (2026-07-25)**. From that point on
+the unit of planning is a **version milestone** on GitHub, not a tier — each one
+a small, shippable batch rather than a months-long phase.
+
+> **Read `#N` in this section as a GitHub issue.** The numbered items in the
+> tiers above are *roadmap item* numbers, a separate sequence that started
+> before the repository was public — so roadmap item 23 (challenge analytics)
+> and issue #23 (judge insight cards) are unrelated. Only this section's
+> numbers are issues.
+
+### Shipped
+
+**v1.0.0** — the initial public release: Tiers 0–3 complete, plus the release
+engineering on top (AGPL-3.0, the single-origin Caddy production stack, the
+marketing README, and demo mode + the hosted demo at demo.flagpost.io).
+
+**v1.1.0** — the first post-release batch, mostly "the platform should feel
+live and legible":
+
+- **Live updates everywhere** (#18) — a per-competition `activity` WebSocket
+  room fans id-only pings from a curated event allowlist, so every page
+  refreshes its own permission-filtered slice instead of going stale.
+- **A reusable data-table layer** (#16 #17 #20) — headless sort / search /
+  pagination rolled out across the table and card surfaces.
+- **Spectator insights + points timeline** (#24) — the public board gained
+  insight cards and a live cumulative-points chart, computed under the same
+  freeze cutoff as the board itself.
+- **Judge insight cards** (#23) — least solved, most attempted, most tickets,
+  most first bloods, derived from reports the analytics page already fetched.
+- **Announcement severity + audience targeting** (#44) — an info/warning/critical
+  ladder, targeting to chosen teams or users, and a bell notification per
+  recipient; targeted announcements bypass the shared room so the body can't
+  leak to the whole competition.
+- **Archived-competition auto-delete** (#26) — an opt-out retention policy that
+  stamps a purge date on archive and lets the scheduler collect it.
+- **A personal challenge scratchpad** (#47) — the CRDT notes surface extended to
+  individual mode, private to its owner.
+- Plus a contextual top-10 scoreboard chart (#53), themed scrollbars, friendly
+  automation template fields (`{user_name}`, `{challenge_title}`, …), and an
+  auto-dismissing announcement banner.
+
+**v1.1.1** — **version-tagged GHCR images** (#54). Pushing a `v*` tag publishes
+pinned backend/frontend images; the release frontend is built in same-origin
+mode so one image works behind any single-origin proxy without a rebuild.
+
+**v1.2.0** — the identity, accountability and trust batch
+([milestone](https://github.com/tbcsec/flagpost/milestone/2)). **Complete on
+`main`, not yet tagged** — every issue in the milestone is closed:
+
+- **OIDC / OAuth2 external identity** (#58, ADR-0021) — the headline feature,
+  and the first item lifted off the deferred list below.
+- **Personal API tokens** (#75) — self-service, `flp_`-prefixed, with
+  `manage_api_tokens` as an oversight-and-revocation grant that can never mint.
+- **Email verification** (#74) and **self-service add / change / clear email**
+  (#106), which together close the ADR-0015 dead end where an email-less account
+  could neither reset its password nor pass a verification gate.
+- **Registration email-domain allowlist** (#56).
+- **Rules / code of conduct** (#57) — authoring, a join gate, and recorded
+  acceptance.
+- **Submissions browser** (#76) — a staff dispute-resolution tab with filters and
+  CSV export, behind its own `view_submissions` permission.
+- **Support-ticket attachments** (#80) — screenshots on a thread, inheriting the
+  visibility of the message they hang off.
+- **Update check + anonymous adoption count** (#111, `PRIVACY.md`).
+- Admin → Site settings refactored into tabs (#104), the react-hooks/React
+  Compiler lint burn-down (#38), and fixes (#105, #124, #125, #126).
+
+### Planned
+
+Summarised from the open milestones; the milestone pages are authoritative.
+
+- **v1.3.0** — auth breadth and per-surface polish: **SAML 2.0** (#100) and
+  **LDAP / Active Directory** (#101) extending the OIDC framework, restricting
+  **which external identities may sign in** (#118), an **encrypted-at-rest
+  facility for retrievable secrets** (#109 — now largely a matter of adopting
+  `utils/crypto.EncryptedString`, built for #58), a **tabbed profile page**
+  (#113), an **alternative challenge view** (#55), **venue/projector mode**
+  (#77), and a magic-byte check on logo upload (#114).
+- **v1.4.0** — the **AI assistants module** (#98), lifting the deferral below,
+  and **dashboard drag-and-drop improvements** (#21).
+- **v1.5.0** — an **i18n pass** (#78) and **Major League Cyber integration**
+  (#59).
+- **Unmilestoned** — **scoreboard scale-out** (#87: a cached read model with
+  delta/top-N broadcasts) is the known scaling limit, waiting on an event large
+  enough to justify it.
+
+---
+
 ## Explicitly Deferred Past MVP
 
-Real parts of the long-term vision, intentionally not in this roadmap:
+Real parts of the long-term vision that were deliberately left out of the
+pre-1.0 build. Two have since been scheduled — kept here with their status so
+the reasoning isn't lost.
 
 - **AI integration** (Architecture §12) — both the administrator and
-  competitor assistants. Needs real usage data and a settled event/data
-  layer to be useful rather than decorative.
-- **SSO / external identity providers** (Architecture §7.7) — **partially
-  lifted.** OIDC/OAuth2 shipped in v1.2.0 (#58, ADR-0021): the prediction
-  here held, and it plugged into the §7.7 contract as a bolt-on rather than
-  a refactor. **SAML (#100) and LDAP (#101) stay deferred** — SAML is the
-  same browser-redirect shape and should be cheap on top of the OIDC
-  framework; LDAP is a credential *bind*, not a redirect flow, so it needs
-  its own seam (ADR-0021 leaves room for one).
+  competitor assistants. **Now scheduled for v1.4.0** (#98): the condition
+  stated here — real usage data and a settled event/data layer — is met.
+- **SSO / external identity providers** (Architecture §7.7) — **lifted.**
+  OIDC/OAuth2 shipped in v1.2.0 (#58, ADR-0021): the prediction here held, and
+  it plugged into the §7.7 contract as a bolt-on rather than a refactor. **SAML
+  (#100) and LDAP (#101) are scheduled for v1.3.0** — SAML is the same
+  browser-redirect shape and should be cheap on top of the OIDC framework; LDAP
+  is a credential *bind*, not a redirect flow, so it needs its own seam
+  (ADR-0021 leaves room for one).
 - **Plugin marketplace & third-party modules** (Architecture §11) — the
   marketplace listing/discovery experience and the isolation story for
   untrusted third-party modules (Architecture §15). The manifest-driven

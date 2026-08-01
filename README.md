@@ -253,6 +253,16 @@ setup, conventions, and the PR flow, and please follow the
 Found a security issue? **Don't** open a public issue — see
 [`SECURITY.md`](SECURITY.md) for private disclosure.
 
+## 🔒 Privacy
+
+Your competitions, users and submissions never leave your infrastructure. The
+only thing Flagpost sends out is a **once-daily update check** that carries your
+version number and nothing else — no identifier, no hostname, no user data. The
+count of those requests is how the project gauges how many deployments are live.
+
+Turn it off in Admin → Site settings, or set `UPDATE_CHECK_URL=""` to make sure
+the call is never attempted at all. Full detail in [`PRIVACY.md`](PRIVACY.md).
+
 ## 📄 License
 
 Copyright © 2026 **Tom Collier**.

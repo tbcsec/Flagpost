@@ -176,6 +176,19 @@ class Settings(BaseSettings):
     # direct HTTP dev run).
     public_base_url: str = ""
 
+    # This deployment's version (#111). Baked into the release image at build
+    # time from the git tag; "dev" for anything built from source. It's the only
+    # thing the update check sends, and the backend is the single authority —
+    # the frontend displays whatever this reports rather than carrying its own
+    # copy that could disagree.
+    app_version: str = "dev"
+
+    # Update check + anonymous adoption count (#111). One daily GET carrying
+    # only `app_version`. Setting this to "" disables the feature outright, for
+    # air-gapped installs that must never make an outbound call — a stronger
+    # guarantee than the in-app toggle, which needs a running app to flip.
+    update_check_url: str = "https://updates.flagpost.io/v1/check"
+
     # OIDC (#58, ADR-0021). Issuers must normally be public https endpoints —
     # the SSRF guard that enforces that also, correctly, blocks `localhost`,
     # which makes a local mock IdP unusable. This opt-out exists so the feature

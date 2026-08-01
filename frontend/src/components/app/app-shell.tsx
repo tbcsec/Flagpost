@@ -6,6 +6,7 @@ import * as React from "react";
 
 import { AnnouncementBanner } from "@/components/announcements/announcement-banner";
 import { DemoBanner } from "@/components/app/demo-banner";
+import { UpdateNotice } from "@/components/admin/update-notice";
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
 import { PaletteMenu } from "@/components/theme/palette-menu";
@@ -213,6 +214,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </a>
       {/* Demo-instance banner spans the full width above the shell. */}
       <DemoBanner />
+      {/* "A newer version is available" (#111) — renders nothing unless the
+          viewer can act on it and there's genuinely an update. */}
+      <UpdateNotice />
       <div className="flex min-h-0 flex-1 overflow-hidden">
       {/* Mobile drawer backdrop. */}
       {mobileOpen && (

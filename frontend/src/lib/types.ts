@@ -914,6 +914,23 @@ export interface OperationalSettings {
   allowed_email_domains: string[];
   /** Email verification gate (#74). Enabling it requires SMTP configured. */
   email_verification_enabled: boolean;
+  /** Daily update check + anonymous adoption count (#111). On by default; this
+   *  is the operator's off switch. The timestamp and status sit beside it so an
+   *  admin can tell whether the check is working, rather than inferring it from
+   *  the absence of a notice. */
+  update_checks_enabled: boolean;
+  last_update_check_at: string | null;
+  last_update_check_status: string | null;
+  /** What this deployment runs ("dev" for a source build) vs. the newest the
+   *  endpoint has reported. `update_available` folds in the dismissal. */
+  current_version: string;
+  latest_known_version: string | null;
+  /** Raw fact: a newer release exists. Not dismissal-adjusted — the settings
+   *  page must stay truthful after the banner is dismissed. */
+  update_available: boolean;
+  /** Whether the current latest has been waved away. The banner shows when
+   *  `update_available && !update_notice_dismissed`. */
+  update_notice_dismissed: boolean;
   updated_at: string | null;
 }
 
@@ -928,6 +945,9 @@ export interface SetupRequest {
   default_palette: string;
   accent: string;
   registration_open: boolean;
+  /** Update check + anonymous adoption count (#111), offered at first run so an
+   *  operator can decline before the first check fires. */
+  update_checks_enabled: boolean;
 }
 
 /** A platform export document (Admin → Site settings → Export). Opaque data — the
@@ -957,6 +977,7 @@ export interface OperationalSettingsUpdate {
   email_domain_allowlist_enabled: boolean;
   allowed_email_domains: string[];
   email_verification_enabled: boolean;
+  update_checks_enabled: boolean;
 }
 
 // RBAC admin (§7.4). Roles are data: a permission-key array + scope.

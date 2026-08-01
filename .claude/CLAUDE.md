@@ -743,6 +743,29 @@ What's built:
     credential, and per-install-encrypted anyway). Migration `8d9eafb0c1d2`.
     SAML (#100) / LDAP (#101) still deferred; **#118** tracks restricting *which*
     external identities may sign in (the #56 allowlist does not apply here).
+  - **Update check + anonymous adoption count** (#111, `PRIVACY.md`) — one
+    daily `GET updates.flagpost.io/v1/check?version=…` doing double duty: the
+    response drives an admin update notice, and counting the requests is the
+    project's only adoption signal. **It sends the version and nothing else** —
+    counting *unique* installs would need an identifier (pseudonymous, and out
+    of bounds); counting *daily check-ins* needs none, so the cadence is "once
+    per 24h, persisted in the DB so restarts don't re-trigger it" and
+    `requests/day ≈ deployments/day`. `utils/update_check.py` on the existing
+    per-minute scheduler; state on `SiteSettings` (migration `9eafb0c1d2e3`).
+    **Never renders anything from the response** — the version is regex-validated
+    (bounded digits, so a hostile value can't reach `int()`) and only ever
+    compared; the body is streamed with a 64 KiB cap. Suppressed for `demo_mode`
+    (hourly resets would inflate the count ~24×) and **while the instance still
+    needs setup** — the *public* `GET /site-settings` creates the settings row,
+    so without that guard the first check would fire before the wizard's
+    disclosure. `APP_VERSION` is baked into the backend image by
+    `release-images.yml` from the git tag (the backend is the single authority;
+    the frontend reads it from the API). Off switches: the Site-settings toggle
+    (omitted from a settings `PUT` = **left unchanged**, not re-enabled) and
+    `UPDATE_CHECK_URL=""` for air-gapped installs. Notice dismissal pins to the
+    *version*, so a release nags at most once. **Auto-update was considered and
+    rejected** — a container can't replace itself, and the Watchtower shape needs
+    the Docker socket (root-equivalent) on a host running adversarial user input.
 
 Read before touching the relevant area: ADR-0008 (stateful refresh
 sessions), ADR-0012 (event-dispatch sync-critical vs background, supersedes

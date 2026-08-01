@@ -109,6 +109,20 @@ class OperationalSettingsOut(BaseModel):
     # Email verification gate (#74): requires SMTP to be configured (checked at
     # the write layer — see routers.site_settings.update_operational_settings).
     email_verification_enabled: bool
+    # Update check + adoption count (#111). The timestamp sits beside the toggle
+    # in the admin UI so an operator can see whether the check is actually
+    # working, rather than inferring it from the absence of a notice.
+    update_checks_enabled: bool
+    last_update_check_at: datetime | None = None
+    last_update_check_status: str | None = None
+    # What this deployment is running, and the newest the endpoint has reported.
+    current_version: str = "dev"
+    latest_known_version: str | None = None
+    # Raw fact: a newer release exists. Deliberately *not* dismissal-adjusted —
+    # the settings page must report the truth even after the banner is waved
+    # away. The banner combines the two.
+    update_available: bool = False
+    update_notice_dismissed: bool = False
     updated_at: datetime | None
 
 
@@ -147,6 +161,12 @@ class OperationalSettingsUpdate(BaseModel):
     # unless SMTP is configured (this write's smtp_host, or the env fallback) —
     # there'd be no way to deliver the confirmation link otherwise.
     email_verification_enabled: bool = False
+    # Update check + adoption count (#111). **Omitted / null = leave unchanged**,
+    # like smtp_password above — not `= True`. This PUT replaces the whole
+    # object, so a default would let a scripted client that changes SMTP and
+    # omits this field silently opt the install back in. Re-enabling a
+    # privacy-relevant setting by omission is exactly the surprise to avoid.
+    update_checks_enabled: bool | None = None
 
     @field_validator("allowed_email_domains")
     @classmethod

@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs } from "@/components/ui/tabs";
+import { relativeTime } from "@/lib/datetime";
 import { useAccess } from "@/lib/hooks/use-permissions";
 import {
   useOperationalSettings,
@@ -152,6 +153,41 @@ export default function AdminSettingsPage() {
   );
 }
 
+/** The "is this actually working?" line shown beside the toggle. Deliberately
+ *  states the running version even when everything is fine — "last checked N ago"
+ *  alone doesn't tell an admin what they're on. */
+function updateCheckStatus(data: OperationalSettings): string {
+  const version = data.current_version;
+  if (!data.update_checks_enabled) {
+    return `Checks are off. Running version ${version}.`;
+  }
+  if (!data.last_update_check_at) {
+    const failed = data.last_update_check_status;
+    if (failed === "unreachable") {
+      return `Running version ${version}. Couldn't reach the update service — that's expected on an air-gapped install.`;
+    }
+    if (failed === "error") {
+      return `Running version ${version}. The update service responded but the answer wasn't usable.`;
+    }
+    return `Running version ${version}. No check has run yet — the first one happens within a minute of startup.`;
+  }
+  const checked = relativeTime(data.last_update_check_at);
+  if (data.update_available && data.latest_known_version) {
+    // Reports the fact regardless of dismissal — this is the page an admin
+    // consults to find out whether they're current, so "up to date" here has to
+    // mean up to date, not "you clicked Dismiss".
+    const waved = data.update_notice_dismissed
+      ? " You've dismissed the notice for it."
+      : "";
+    return `Running version ${version}. Version ${data.latest_known_version} is available.${waved} Last checked ${checked}.`;
+  }
+  const stale =
+    data.last_update_check_status && data.last_update_check_status !== "ok"
+      ? " The most recent attempt failed."
+      : "";
+  return `Running version ${version} — up to date. Last checked ${checked}.${stale}`;
+}
+
 // One form, one PUT, two views of it. Both sections stay mounted (toggled with
 // `hidden`) rather than being conditionally rendered, for two reasons: card-local
 // state like DomainListEditor's draft survives a tab switch, and — the important
@@ -170,6 +206,7 @@ function SettingsForm({
 }) {
   const update = useUpdateOperationalSettings();
   const [registrationOpen, setRegistrationOpen] = useState(data.registration_open);
+  const [updateChecks, setUpdateChecks] = useState(data.update_checks_enabled);
   const [host, setHost] = useState(data.smtp_host ?? "");
   const [port, setPort] = useState(String(data.smtp_port));
   const [from, setFrom] = useState(data.smtp_from);
@@ -225,6 +262,7 @@ function SettingsForm({
         email_domain_allowlist_enabled: allowlistEnabled,
         allowed_email_domains: allowedDomains,
         email_verification_enabled: verificationEnabled,
+        update_checks_enabled: updateChecks,
       },
       {
         onSuccess: () => toast("Settings saved", { variant: "success" }),
@@ -263,6 +301,49 @@ function SettingsForm({
                 <option value="open">Open — anyone can register</option>
                 <option value="closed">Closed — invite / admin-created only</option>
               </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Update checks</CardTitle>
+            <CardDescription>
+              Once a day Flagpost asks{" "}
+              <span className="font-mono text-xs">updates.flagpost.io</span> whether a newer
+              release exists. The request sends <strong>only the version you&apos;re
+              running</strong> — no identifier, no hostname, no competition or user data —
+              and the count of those requests is how the project gauges how many
+              deployments are live. See{" "}
+              <a
+                href="https://github.com/tbcsec/Flagpost/blob/main/PRIVACY.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                PRIVACY.md
+              </a>{" "}
+              for the full detail.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="updchk">Check for updates</Label>
+              <Select
+                id="updchk"
+                value={updateChecks ? "on" : "off"}
+                onChange={(e) => setUpdateChecks(e.target.value === "on")}
+                className="max-w-xs"
+              >
+                <option value="on">On — check daily</option>
+                <option value="off">Off — never contact the update service</option>
+              </Select>
+              {/* Inline with the toggle rather than in a banner: this is the
+                  operational detail an admin comes looking for, and it tells
+                  them the check is alive even when there's no update. */}
+              <p className="text-xs text-muted-foreground">
+                {updateCheckStatus(data)}
+              </p>
             </div>
           </CardContent>
         </Card>

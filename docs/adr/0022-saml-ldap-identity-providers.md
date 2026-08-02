@@ -1,6 +1,6 @@
 # ADR-0022: SAML and LDAP identity providers — generalizing the provider model
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-08-02
 **Architecture reference:** `ARCHITECTURE.md` §7.7 (extends ADR-0021; secret
 storage from ADR-0020; SSRF hardening from ADR-0013; admission gate from #118)

@@ -33,6 +33,13 @@ install, bound by natural key to whichever local account matches — grafting a
 working credential the receiving operator never issued and cannot trace. Import
 is additive and cross-install by design (ADR-0016), so credentials must not ride
 along. Tokens are per-install and cheap to re-issue from /profile.
+
+The same logic applies **per column** to a retrievable secret that lives on an
+otherwise-portable row: ``site_settings.smtp_password`` is encrypted with a
+per-install key (ADR-0020), so it's dropped via ``Spec.secret_columns`` while the
+rest of the settings row (branding, rules, registration policy) still travels.
+SMTP config is install-specific and re-entered on restore — the same posture as
+the excluded OIDC provider secret.
 """
 
 from __future__ import annotations
@@ -90,11 +97,19 @@ SECTIONS: tuple[str, ...] = (
 
 # --- generic column (de)serialisation ---------------------------------------
 
-def serialize_row(obj) -> dict:
+def serialize_row(obj, skip: tuple[str, ...] = ()) -> dict:
     """A JSON-safe dict of every column: datetimes → ISO strings, bytes → base64,
-    everything else (incl. ``JSON`` list/dict columns) passes through."""
+    everything else (incl. ``JSON`` list/dict columns) passes through.
+
+    ``skip`` names columns to omit entirely — used for secret columns. It skips
+    *before* the ``getattr``, which matters: a deferred secret (smtp_password)
+    that wasn't undeferred would otherwise trigger a forbidden async lazy-load
+    here, and reading it at all would decrypt it. Skipping keeps the secret out
+    of the export without ever touching it."""
     out: dict = {}
     for col in obj.__table__.columns:
+        if col.name in skip:
+            continue
         val = getattr(obj, col.name)
         if isinstance(val, datetime):
             out[col.name] = val.isoformat()
@@ -148,6 +163,16 @@ class Spec:
     regenerate: tuple[str, ...] = ()
     singleton: bool = False
     keep_id: bool = False
+    # Columns dropped from the export. For an `EncryptedString` secret, the
+    # generic serialiser reads through the ORM and hands back *plaintext*, and
+    # ciphertext would be undecryptable on a target install with a different key
+    # anyway — so a per-install secret has no business in a portable backup
+    # (ADR-0020). This is the column-level form of the whole-table exclusion the
+    # oidc_providers row gets; site_settings can't be dropped wholesale because
+    # its branding/rules/registration fields are portable and wanted. Import
+    # tolerates the absent key (load_row only sets present columns), so the
+    # secret is simply re-entered after a restore.
+    secret_columns: tuple[str, ...] = ()
     # Set for tables whose rows point at an object-storage blob. The engine then
     # carries the bytes in a ``_object_data`` side-car on export and re-puts them
     # on import under a freshly-minted key built by this callable (the old key
@@ -216,7 +241,8 @@ _COMP = ("competition_id", "competition", True)
 
 # Order matters: a table's referenced entities must be imported before it.
 SPECS: tuple[Spec, ...] = (
-    Spec("site_settings", SiteSettings, "site_settings", singleton=True),
+    Spec("site_settings", SiteSettings, "site_settings", singleton=True,
+         secret_columns=("smtp_password",)),
     Spec("users", User, "users", id_map="user", natural_key=_nk_user),
     Spec("roles", Role, "roles", id_map="role", natural_key=_nk_role),
     Spec("competitions", Competition, "competitions", id_map="competition",
@@ -306,15 +332,24 @@ async def export_data(
         if spec.section not in picked:
             continue
         stmt = select(spec.model)
-        # Undefer any deferred columns (e.g. the site-settings logo blob) so
-        # serialising them here doesn't trigger a forbidden async lazy-load.
-        deferred = [a.key for a in sa_inspect(spec.model).column_attrs if a.deferred]
+        # Undefer deferred columns (e.g. the site-settings logo blob) so
+        # serialising them here doesn't trigger a forbidden async lazy-load —
+        # but NOT the secret ones: they're dropped from the export anyway
+        # (ADR-0020), and undeferring smtp_password would decrypt it for nothing
+        # and 500 the export on a key mismatch. serialize_row(skip=...) omits
+        # them before the getattr, so the deferred-and-not-undeferred secret is
+        # never touched.
+        deferred = [
+            a.key
+            for a in sa_inspect(spec.model).column_attrs
+            if a.deferred and a.key not in spec.secret_columns
+        ]
         if deferred:
             stmt = stmt.options(*[undefer(getattr(spec.model, k)) for k in deferred])
         rows = (await db.scalars(stmt)).all()
         serialised: list[dict] = []
         for r in rows:
-            d = serialize_row(r)
+            d = serialize_row(r, skip=spec.secret_columns)
             if spec.object_key_for is not None:
                 try:
                     d["_object_data"] = base64.b64encode(storage.get(r.object_key)).decode("ascii")

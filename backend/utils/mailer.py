@@ -25,13 +25,25 @@ async def _effective_smtp():
     """Resolve the SMTP config: the DB SiteSettings row wins when its host is set
     (Admin → Site settings), otherwise fall back to the env config. Returns a
     dict of connection kwargs, or None if no host is configured anywhere."""
+    from sqlalchemy.orm import undefer
+
     from db import SessionLocal
     from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 
     row = None
     try:
         async with SessionLocal() as db:
-            row = await db.get(SiteSettings, SITE_SETTINGS_ID)
+            # Undefer smtp_password: it's deferred so ordinary settings loads
+            # don't decrypt it, but the mailer is the one place that needs the
+            # plaintext, so load it eagerly here (the reads below happen after the
+            # session closes). A key mismatch raises in the decrypt and is caught
+            # like any other settings-read failure — delivery falls back to the
+            # env config or no-ops, and is never blocked.
+            row = await db.get(
+                SiteSettings,
+                SITE_SETTINGS_ID,
+                options=[undefer(SiteSettings.smtp_password)],
+            )
     except Exception:  # noqa: BLE001 — never let a settings-read failure block delivery attempts
         row = None
 

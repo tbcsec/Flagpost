@@ -140,6 +140,35 @@ async def test_api_tokens_never_leave_in_a_backup(client):
     assert "Should not be exported" not in json.dumps(doc)
 
 
+async def test_smtp_password_is_excluded_but_settings_still_round_trip(client):
+    """ADR-0020 / #109: the SMTP password is encrypted with a per-install key,
+    so it's dropped from the export (Spec.secret_columns) — but the rest of the
+    site_settings row is portable and must survive."""
+    admin = await admin_token(client)
+    await client.put(
+        "/api/site-settings/operational",
+        json={
+            "registration_open": True,
+            "smtp_host": "smtp.example.com",
+            "smtp_from": "ctf@example.com",
+            "smtp_password": "do-not-export-me",
+        },
+        headers={"Authorization": f"Bearer {admin}"},
+    )
+
+    storage = InMemoryStorage()
+    async with SessionLocal() as db:
+        doc = await backup.export_data(db, storage, ["site_settings"])
+
+    row = doc["data"]["site_settings"][0]
+    # The secret is gone by name and by value — neither plaintext nor ciphertext.
+    assert "smtp_password" not in row
+    assert "do-not-export-me" not in json.dumps(doc)
+    # ...but the portable fields on the same row are still there.
+    assert row["smtp_host"] == "smtp.example.com"
+    assert row["registration_open"] is True
+
+
 async def test_import_rejects_foreign_document(client):
     async with SessionLocal() as db:
         with pytest.raises(backup.ImportError_):

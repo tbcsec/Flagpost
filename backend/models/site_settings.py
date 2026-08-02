@@ -18,6 +18,7 @@ from sqlalchemy import JSON, Boolean, Integer, LargeBinary, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base, TimestampMixin, UtcDateTime, ensure_aware_utc, utcnow
+from utils.crypto import EncryptedString
 
 # The single row's fixed primary key — the singleton sentinel.
 SITE_SETTINGS_ID = "site"
@@ -81,14 +82,32 @@ class SiteSettings(Base, TimestampMixin):
     )
     # Outbound SMTP for the send_email automation action (§5.3). When smtp_host
     # is set these override the env config; unset = fall back to env (or, if that
-    # too is unset, email is a logged no-op). smtp_password is write-only in the
-    # API (never serialized back).
+    # too is unset, email is a logged no-op).
     smtp_host: Mapped[str | None] = mapped_column(String, nullable=True)
     smtp_port: Mapped[int] = mapped_column(
         Integer, nullable=False, default=587, server_default="587"
     )
     smtp_username: Mapped[str | None] = mapped_column(String, nullable=True)
-    smtp_password: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The password must be *presented* to the mail server, so it's encrypted at
+    # rest, not hashed (ADR-0020) — the same treatment as the OIDC client secret.
+    # The underlying column is still TEXT (EncryptedString.impl = String), so
+    # adopting the type needs no schema change; the 2026-08-02 migration encrypts
+    # the one pre-existing plaintext value. Write-only in the API (never
+    # serialized back — GET exposes only `smtp_password_set`), and dropped from
+    # the backup export (utils/backup — a per-install key makes it useless off-box).
+    #
+    # **Deferred**, like the logo blob above, and for a sharper reason than size:
+    # decryption runs when the column loads, and it *raises* on a key mismatch
+    # (crypto.EncryptedString). This row is read on the public pre-auth path for
+    # branding and on the admin settings page — the very page an operator needs
+    # to re-enter the secret after a lost/rotated key. Eager-decrypting here would
+    # 500 all of those the moment the key changed, blocking the documented
+    # recovery. Deferring keeps ordinary loads clear of the secret; the mailer,
+    # the sole point of use, undefers it explicitly, so a key failure surfaces at
+    # the SMTP send that actually needs it — which is what ADR-0020 wants.
+    smtp_password: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True
+    )
     smtp_from: Mapped[str] = mapped_column(
         String, nullable=False, default="flagpost@localhost",
         server_default="flagpost@localhost",

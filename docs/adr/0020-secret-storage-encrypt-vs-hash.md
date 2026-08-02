@@ -111,3 +111,50 @@ existing plaintext `smtp_password`.
   that genuinely needs a *searchable* secret, or that wants to hash something
   an integration must actually send, has to come back and change this ADR
   rather than quietly diverge.
+
+## Resolutions (the two items #109 left open)
+
+Both deferred questions were settled when #109 applied the facility to
+`SiteSettings.smtp_password`:
+
+- **Backup export.** A retrievable secret is **excluded** from the ADR-0016
+  export and re-entered after a restore — whole-table for `oidc_providers`,
+  per-column (`Spec.secret_columns`) for `smtp_password`, which shares an
+  otherwise-portable row. Ciphertext in a backup is useless on a target install
+  with a different key, and shipping the plaintext would preserve exactly the
+  exposure the encryption is meant to remove. This matches the "config is
+  install-specific, re-enter on new infra" posture SMTP and OIDC already have.
+- **Migration mechanics.** The `EncryptedString` type tolerates plaintext on
+  read and re-encrypts on write, so no schema change is needed. For the one
+  existing value, a one-shot data migration (`e7c1f9a4b206`) encrypts it in
+  place on upgrade rather than waiting for a chance re-save, so it isn't left at
+  rest in the clear indefinitely.
+
+## Decryption raises, so encrypted columns on hot-path tables are deferred
+
+`EncryptedString` decrypts when the column loads and **raises** on a key
+mismatch — deliberately, so a key problem surfaces loudly rather than as a
+silent "no secret". The corollary: an eager (non-deferred) encrypted column
+makes *loading the row at all* fail when the key is wrong, taking down every
+read of that row, not just the ones that need the secret.
+
+That is fine for a row read only where the secret is used (an OIDC provider,
+loaded during the login flow), but wrong for a row on a hot or recovery path.
+`SiteSettings` is read on the public pre-auth branding path and on the admin
+settings page — the page an operator uses to re-enter a secret after losing the
+key. So `smtp_password` is a **deferred** column: ordinary loads never touch it,
+the mailer (its one point of use) undefers it explicitly, and `smtp_password_set`
+is derived from the raw ciphertext without decrypting. A lost key then breaks
+only the actual SMTP send, leaving the recovery path usable. New encrypted
+columns on frequently-loaded tables should follow this pattern.
+
+## Key rotation
+
+Rotating `SECRET_ENCRYPTION_KEY` (or losing the key file) invalidates every
+stored secret: `EncryptedString` raises on a decrypt failure with instructions
+to restore the key or clear and re-enter the affected values. That is the
+supported rotation path today — **stop, swap the key, re-enter the handful of
+secrets**. Zero-downtime rotation (decrypt-with-old, re-encrypt-with-new,
+keeping a key history) is intentionally **not** built: with two secret columns
+in the whole platform the demand doesn't justify the key-management surface. If
+that changes it's a follow-up, not a change to this decision.

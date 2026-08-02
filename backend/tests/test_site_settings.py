@@ -183,6 +183,88 @@ async def test_smtp_round_trips_password_write_only(client):
     assert resp.json()["smtp_password_set"] is True
 
 
+async def test_smtp_password_is_encrypted_at_rest(client):
+    """ADR-0020 / #109: retrievable, so encrypted (not hashed) — but the raw
+    column must not hold the plaintext."""
+    from sqlalchemy import text
+
+    from db import SessionLocal
+
+    admin = await admin_token(client)
+    resp = await client.put(
+        "/api/site-settings/operational",
+        json={
+            "registration_open": True,
+            "smtp_host": "smtp.example.com",
+            "smtp_from": "ctf@example.com",
+            "smtp_password": "super-secret-pw",
+        },
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 200
+
+    # Raw SQL on purpose: reading through the ORM would run the EncryptedString
+    # decrypt and hand back the plaintext, making this assertion meaningless.
+    async with SessionLocal() as db:
+        raw = (
+            await db.execute(text("SELECT smtp_password FROM site_settings"))
+        ).scalar_one()
+    assert raw is not None
+    assert "super-secret-pw" not in raw
+    assert raw.startswith("gAAAAA"), "should be a Fernet token"
+
+    # ...and it decrypts transparently when explicitly loaded, so the mailer
+    # gets the real password back. The column is deferred, so undefer it the way
+    # the mailer does — a bare attribute access would lazy-load and fail.
+    from sqlalchemy.orm import undefer
+
+    async with SessionLocal() as db:
+        from models.site_settings import SITE_SETTINGS_ID, SiteSettings
+
+        settings = await db.get(
+            SiteSettings,
+            SITE_SETTINGS_ID,
+            options=[undefer(SiteSettings.smtp_password)],
+        )
+        assert settings.smtp_password == "super-secret-pw"
+
+
+async def test_lost_key_does_not_break_the_settings_pages(client, monkeypatch):
+    """Regression (review of #109): the SMTP password is deferred so an ordinary
+    settings load never decrypts it. A lost/rotated key must NOT take down the
+    public branding page or the admin settings page — those are exactly what an
+    operator needs to re-enter the secret (ADR-0020 recovery)."""
+    from cryptography.fernet import Fernet
+
+    import utils.crypto as crypto
+
+    admin = await admin_token(client)
+    await client.put(
+        "/api/site-settings/operational",
+        json={
+            "registration_open": True,
+            "smtp_host": "smtp.example.com",
+            "smtp_from": "ctf@example.com",
+            "smtp_password": "will-become-unreadable",
+        },
+        headers=_auth(admin),
+    )
+
+    # Simulate key loss: swap in a fresh key the stored ciphertext can't decrypt.
+    monkeypatch.setenv("SECRET_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    crypto._fernet.cache_clear()
+    try:
+        # Public branding page still loads (never touches the secret).
+        assert (await client.get("/api/site-settings")).status_code == 200
+        # Admin settings page still loads, and reports the secret as present
+        # without decrypting it — so the operator can clear and re-enter it.
+        op = await client.get("/api/site-settings/operational", headers=_auth(admin))
+        assert op.status_code == 200
+        assert op.json()["smtp_password_set"] is True
+    finally:
+        crypto._fernet.cache_clear()
+
+
 async def test_closing_registration_blocks_signup(client):
     admin = await admin_token(client)
     # Open by default: a signup works.

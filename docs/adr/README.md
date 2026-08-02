@@ -55,4 +55,4 @@ Status is one of:
 | [0019](0019-jwt-secret-hardening.md) | Derive a per-install JWT secret instead of a public default | Accepted |
 | [0020](0020-secret-storage-encrypt-vs-hash.md) | Hash what is only verified, encrypt what must be retrieved | Accepted |
 | [0021](0021-oidc-identity-provider-framework.md) | External identity via OIDC, with local login as break-glass | Accepted |
-| [0022](0022-saml-ldap-identity-providers.md) | SAML and LDAP identity providers — generalizing the provider model | Proposed |
+| [0022](0022-saml-ldap-identity-providers.md) | SAML and LDAP identity providers — generalizing the provider model | Accepted |

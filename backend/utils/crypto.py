@@ -105,10 +105,15 @@ def decrypt_secret(value: str) -> str:
 class EncryptedString(TypeDecorator):
     """A ``String`` column whose value is encrypted at rest (ADR-0020).
 
-    Stored as text so it stays portable across SQLite and Postgres (ADR-0006)
-    and survives the generic backup engine's column (de)serialiser unchanged —
-    it round-trips the ciphertext, which is the correct behaviour: a backup of
-    an encrypted column shouldn't contain the plaintext.
+    Stored as text so it stays portable across SQLite and Postgres (ADR-0006).
+
+    Note it does **not** protect itself in the platform backup: that engine
+    reads through the ORM (``utils/backup.serialize_row``), so an encrypted
+    column is handed back as *plaintext* like any other. A secret that must stay
+    out of the export is excluded there explicitly — whole-table for
+    ``oidc_providers``, per-column via ``Spec.secret_columns`` for
+    ``site_settings.smtp_password``. Exporting the ciphertext instead would be no
+    use anyway: a different install has a different key.
     """
 
     impl = String

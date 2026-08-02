@@ -183,6 +183,45 @@ async def test_smtp_round_trips_password_write_only(client):
     assert resp.json()["smtp_password_set"] is True
 
 
+async def test_smtp_password_is_encrypted_at_rest(client):
+    """ADR-0020 / #109: retrievable, so encrypted (not hashed) — but the raw
+    column must not hold the plaintext."""
+    from sqlalchemy import text
+
+    from db import SessionLocal
+
+    admin = await admin_token(client)
+    resp = await client.put(
+        "/api/site-settings/operational",
+        json={
+            "registration_open": True,
+            "smtp_host": "smtp.example.com",
+            "smtp_from": "ctf@example.com",
+            "smtp_password": "super-secret-pw",
+        },
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 200
+
+    # Raw SQL on purpose: reading through the ORM would run the EncryptedString
+    # decrypt and hand back the plaintext, making this assertion meaningless.
+    async with SessionLocal() as db:
+        raw = (
+            await db.execute(text("SELECT smtp_password FROM site_settings"))
+        ).scalar_one()
+    assert raw is not None
+    assert "super-secret-pw" not in raw
+    assert raw.startswith("gAAAAA"), "should be a Fernet token"
+
+    # ...and it decrypts transparently through the ORM, so the mailer gets the
+    # real password back.
+    async with SessionLocal() as db:
+        from models.site_settings import SITE_SETTINGS_ID, SiteSettings
+
+        settings = await db.get(SiteSettings, SITE_SETTINGS_ID)
+        assert settings.smtp_password == "super-secret-pw"
+
+
 async def test_closing_registration_blocks_signup(client):
     admin = await admin_token(client)
     # Open by default: a signup works.

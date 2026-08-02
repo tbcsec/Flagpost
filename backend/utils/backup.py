@@ -33,6 +33,13 @@ install, bound by natural key to whichever local account matches — grafting a
 working credential the receiving operator never issued and cannot trace. Import
 is additive and cross-install by design (ADR-0016), so credentials must not ride
 along. Tokens are per-install and cheap to re-issue from /profile.
+
+The same logic applies **per column** to a retrievable secret that lives on an
+otherwise-portable row: ``site_settings.smtp_password`` is encrypted with a
+per-install key (ADR-0020), so it's dropped via ``Spec.secret_columns`` while the
+rest of the settings row (branding, rules, registration policy) still travels.
+SMTP config is install-specific and re-entered on restore — the same posture as
+the excluded OIDC provider secret.
 """
 
 from __future__ import annotations
@@ -148,6 +155,16 @@ class Spec:
     regenerate: tuple[str, ...] = ()
     singleton: bool = False
     keep_id: bool = False
+    # Columns dropped from the export. For an `EncryptedString` secret, the
+    # generic serialiser reads through the ORM and hands back *plaintext*, and
+    # ciphertext would be undecryptable on a target install with a different key
+    # anyway — so a per-install secret has no business in a portable backup
+    # (ADR-0020). This is the column-level form of the whole-table exclusion the
+    # oidc_providers row gets; site_settings can't be dropped wholesale because
+    # its branding/rules/registration fields are portable and wanted. Import
+    # tolerates the absent key (load_row only sets present columns), so the
+    # secret is simply re-entered after a restore.
+    secret_columns: tuple[str, ...] = ()
     # Set for tables whose rows point at an object-storage blob. The engine then
     # carries the bytes in a ``_object_data`` side-car on export and re-puts them
     # on import under a freshly-minted key built by this callable (the old key
@@ -216,7 +233,8 @@ _COMP = ("competition_id", "competition", True)
 
 # Order matters: a table's referenced entities must be imported before it.
 SPECS: tuple[Spec, ...] = (
-    Spec("site_settings", SiteSettings, "site_settings", singleton=True),
+    Spec("site_settings", SiteSettings, "site_settings", singleton=True,
+         secret_columns=("smtp_password",)),
     Spec("users", User, "users", id_map="user", natural_key=_nk_user),
     Spec("roles", Role, "roles", id_map="role", natural_key=_nk_role),
     Spec("competitions", Competition, "competitions", id_map="competition",
@@ -315,6 +333,11 @@ async def export_data(
         serialised: list[dict] = []
         for r in rows:
             d = serialize_row(r)
+            # Never let a retrievable secret into the export (ADR-0020). The
+            # serialiser read it back as plaintext via the ORM; drop it here so
+            # it's re-entered after a restore rather than shipped off-box.
+            for col in spec.secret_columns:
+                d.pop(col, None)
             if spec.object_key_for is not None:
                 try:
                     d["_object_data"] = base64.b64encode(storage.get(r.object_key)).decode("ascii")

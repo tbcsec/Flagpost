@@ -18,6 +18,7 @@ from sqlalchemy import JSON, Boolean, Integer, LargeBinary, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base, TimestampMixin, UtcDateTime, ensure_aware_utc, utcnow
+from utils.crypto import EncryptedString
 
 # The single row's fixed primary key — the singleton sentinel.
 SITE_SETTINGS_ID = "site"
@@ -81,14 +82,20 @@ class SiteSettings(Base, TimestampMixin):
     )
     # Outbound SMTP for the send_email automation action (§5.3). When smtp_host
     # is set these override the env config; unset = fall back to env (or, if that
-    # too is unset, email is a logged no-op). smtp_password is write-only in the
-    # API (never serialized back).
+    # too is unset, email is a logged no-op).
     smtp_host: Mapped[str | None] = mapped_column(String, nullable=True)
     smtp_port: Mapped[int] = mapped_column(
         Integer, nullable=False, default=587, server_default="587"
     )
     smtp_username: Mapped[str | None] = mapped_column(String, nullable=True)
-    smtp_password: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The password must be *presented* to the mail server, so it's encrypted at
+    # rest, not hashed (ADR-0020) — the same treatment as the OIDC client secret.
+    # The underlying column is still TEXT (EncryptedString.impl = String), so
+    # adopting the type needs no schema change; the 2026-08-02 migration encrypts
+    # the one pre-existing plaintext value. Write-only in the API (never
+    # serialized back — GET exposes only `smtp_password_set`), and dropped from
+    # the backup export (utils/backup — a per-install key makes it useless off-box).
+    smtp_password: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
     smtp_from: Mapped[str] = mapped_column(
         String, nullable=False, default="flagpost@localhost",
         server_default="flagpost@localhost",

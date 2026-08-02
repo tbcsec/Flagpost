@@ -125,3 +125,24 @@ class PublicInsightsOut(BaseModel):
     stats: InsightStats
     highlights: InsightHighlights
     timeline: PointsTimeline
+
+
+# --- Public recent-solves feed (venue mode, #77) -----------------------------
+
+
+class RecentSolveOut(BaseModel):
+    """One awarded solve, newest-first in the feed. ``is_first_blood`` marks the
+    earliest awarded solve of its challenge — the venue-mode splash fires on a
+    new one. Freeze-aware exactly like the board, so a frozen competition emits
+    no post-cutoff solves (and therefore no splash)."""
+
+    challenge_id: str
+    title: str
+    subject_name: str
+    solved_at: datetime
+    points: int
+    is_first_blood: bool
+
+
+class PublicActivityOut(BaseModel):
+    recent_solves: list[RecentSolveOut] = []

@@ -1,12 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { use } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, use } from "react";
 
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
+import { StatTiles, Highlights } from "@/components/public/insights-cards";
 import { PointsTimeline } from "@/components/public/points-timeline";
+import { VenueMode } from "@/components/public/venue/venue-mode";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -19,27 +23,85 @@ import {
 } from "@/components/ui/table";
 import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
 import {
+  usePublicActivity,
   usePublicInsights,
   usePublicScoreboard,
 } from "@/lib/hooks/use-public-scoreboard";
-import type { PublicInsights } from "@/lib/types";
+import { parseRotateSeconds } from "@/lib/venue";
 
 // The standalone spectator scoreboard (no login) for a public competition.
 // Lives outside the (app) shell so it needs no account; brand comes from the
 // public site settings, attribution from the mandatory footer. Wider than the
 // app's own pages (#24) because the points timeline wants the room.
+//
+// Venue mode (#77) is an in-page toggle: `?venue=1` swaps the static view for a
+// full-screen rotating display, kept in the URL so it's bookmarkable and
+// survives a refresh. `?interval=` tunes the rotation cadence.
 export default function PublicScoreboardPage({
   params,
 }: {
   params: Promise<{ competitionId: string }>;
 }) {
+  // Split so useSearchParams sits under a Suspense boundary — without one Next
+  // refuses to prerender the route (a build-time contract, not a nicety).
+  return (
+    <Suspense fallback={<PublicScoreboardFallback />}>
+      <PublicScoreboardContent params={params} />
+    </Suspense>
+  );
+}
+
+function PublicScoreboardFallback() {
+  return (
+    <div className="mx-auto flex min-h-dvh max-w-7xl flex-col gap-6 px-4 py-8">
+      <Skeleton className="h-64 w-full" />
+    </div>
+  );
+}
+
+function PublicScoreboardContent({
+  params,
+}: {
+  params: Promise<{ competitionId: string }>;
+}) {
   const { competitionId } = use(params);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const venue = searchParams.get("venue") === "1";
+  const intervalSeconds = parseRotateSeconds(searchParams.get("interval"));
+
   const { data, isLoading, isError } = usePublicScoreboard(competitionId);
   // Insights are a separate fetch: richer, and if it fails the standings — the
   // thing people came for — still render.
   const { data: insights } = usePublicInsights(competitionId);
+  // Recent-solves feed drives venue mode's first-blood splash; only polled while
+  // venue mode is on, so the static page adds no extra request load.
+  const { data: activity } = usePublicActivity(competitionId, { enabled: venue });
   const { data: settings } = useSiteSettings();
   const brand = settings ?? FALLBACK_SETTINGS;
+
+  const enterVenue = () => {
+    router.replace(`${pathname}?venue=1`);
+    document.documentElement.requestFullscreen?.().catch(() => {});
+  };
+  const exitVenue = () => {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    router.replace(pathname);
+  };
+
+  if (venue && data) {
+    return (
+      <VenueMode
+        scoreboard={data}
+        insights={insights}
+        activity={activity}
+        brand={brand}
+        intervalSeconds={intervalSeconds}
+        onExit={exitVenue}
+      />
+    );
+  }
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-7xl flex-col gap-6 px-4 py-8">
@@ -50,7 +112,14 @@ export default function PublicScoreboardPage({
           logoUrl={brand.logo_url}
           showWordmark={brand.show_wordmark}
         />
-        {data?.frozen && <Badge variant="secondary">Frozen</Badge>}
+        <div className="flex items-center gap-2">
+          {data?.frozen && <Badge variant="secondary">Frozen</Badge>}
+          {data && (
+            <Button variant="outline" size="sm" onClick={enterVenue}>
+              Venue mode
+            </Button>
+          )}
+        </div>
       </header>
 
       {isLoading && <Skeleton className="h-64 w-full" />}
@@ -132,89 +201,4 @@ export default function PublicScoreboardPage({
       <PoweredByFooter className="mt-auto" />
     </div>
   );
-}
-
-/** Headline counts, in the same compact card idiom as the analytics overview. */
-function StatTiles({ stats }: { stats: PublicInsights["stats"] }) {
-  const tiles = [
-    { label: "Participants", value: stats.participants },
-    { label: "Solves", value: stats.solves },
-    { label: "Challenges", value: stats.challenges },
-    { label: "Unsolved", value: stats.unsolved },
-  ];
-  return (
-    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-      {tiles.map((tile) => (
-        <Card key={tile.label}>
-          <CardContent className="p-4">
-            <div className="text-2xl font-semibold tabular-nums">{tile.value}</div>
-            <div className="text-xs text-muted-foreground">{tile.label}</div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
-}
-
-function Highlights({
-  highlights,
-}: {
-  highlights: PublicInsights["highlights"];
-}) {
-  const { most_solved, most_attempted, first_blood_leader, fastest_solve } =
-    highlights;
-  const cards = [
-    most_solved && {
-      label: "Most solved",
-      value: most_solved.title,
-      detail: `${most_solved.count} ${most_solved.count === 1 ? "solve" : "solves"}`,
-    },
-    most_attempted && {
-      label: "Most attempted",
-      value: most_attempted.title,
-      detail: `${most_attempted.count} attempts`,
-    },
-    first_blood_leader && {
-      label: "Most first bloods",
-      value: first_blood_leader.name,
-      detail: `${first_blood_leader.count} first ${
-        first_blood_leader.count === 1 ? "blood" : "bloods"
-      }`,
-    },
-    fastest_solve && {
-      label: "Fastest solve",
-      value: fastest_solve.title,
-      detail: `${fastest_solve.name} · ${formatElapsed(fastest_solve.seconds)}`,
-    },
-  ].filter(Boolean) as { label: string; value: string; detail: string }[];
-
-  if (cards.length === 0) return null;
-
-  // self-start keeps the cards their natural height: beside the standings table
-  // the grid row is as tall as the table, and stretching would inflate each
-  // card to fill it.
-  return (
-    <div className="grid gap-4 self-start sm:grid-cols-2 lg:grid-cols-1">
-      {cards.map((card) => (
-        <Card key={card.label}>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground">{card.label}</div>
-            <div className="mt-0.5 truncate font-medium" title={card.value}>
-              {card.value}
-            </div>
-            <div className="text-xs text-muted-foreground">{card.detail}</div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
-}
-
-/** Time from the competition start, in the coarsest useful unit. */
-function formatElapsed(seconds: number): string {
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ${minutes % 60}m`;
 }

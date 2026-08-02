@@ -66,6 +66,7 @@ import type {
   SetupStatus,
   RoleAssignment,
   RulesSettings,
+  PublicActivity,
   PublicCompetition,
   PublicInsights,
   PublicScoreboard,
@@ -713,6 +714,11 @@ export const publicApi = {
   insights: (competitionId: string) =>
     apiFetch<PublicInsights>(
       `/api/public/competitions/${competitionId}/insights`,
+    ),
+  // Recent awarded solves, first-bloods tagged — drives venue mode (#77).
+  activity: (competitionId: string) =>
+    apiFetch<PublicActivity>(
+      `/api/public/competitions/${competitionId}/activity`,
     ),
 };
 

@@ -58,6 +58,29 @@ _AWARDED = (Submission.is_correct.is_(True), Submission.is_duplicate.is_(False))
 # cheap insurance. Keyed by competition; TTL from settings (<= 0 disables it,
 # which the tests do so they can observe a mutation immediately).
 _cache: dict[str, tuple[float, dict[str, Any]]] = {}
+# Separate memo for the recent-activity feed (#77): venue mode polls it on a
+# faster cadence than the insights page, so it has its own shorter TTL.
+_activity_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+
+
+def _first_solvers(
+    solves: list[tuple[str, str, Any, int]], titles: dict[str, str]
+) -> dict[str, tuple[Any, str]]:
+    """First blood per visible challenge: the earliest awarded solve, as
+    ``{challenge_id: (when, subject_id)}``.
+
+    The single definition of "first blood", shared by the highlight leaderboard
+    (``_highlights``) and the recent-activity feed (``recent_activity``) so the
+    two can never disagree about who drew first blood on a challenge."""
+    first: dict[str, tuple[Any, str]] = {}
+    for cid, sid, ts, _value in solves:
+        if cid not in titles:
+            continue
+        when = ensure_aware_utc(ts)
+        current = first.get(cid)
+        if current is None or when < current[0]:
+            first[cid] = (when, sid)
+    return first
 
 
 def _subject_columns(team_mode: bool):
@@ -264,13 +287,8 @@ def _highlights(
         visible_attempts.items(), key=lambda kv: kv[1], default=None
     )
 
-    # First blood = the earliest awarded solve of each challenge.
-    first_solver: dict[str, tuple[Any, str]] = {}
-    for cid, sid, ts, _value in solves:
-        when = ensure_aware_utc(ts)
-        current = first_solver.get(cid)
-        if cid in titles and (current is None or when < current[0]):
-            first_solver[cid] = (when, sid)
+    # First blood = the earliest awarded solve of each challenge (shared helper).
+    first_solver = _first_solvers(solves, titles)
     blood_counts: dict[str, int] = {}
     for _when, sid in first_solver.values():
         blood_counts[sid] = blood_counts.get(sid, 0) + 1
@@ -363,4 +381,63 @@ async def public_insights(
 
     if ttl > 0:
         _cache[competition.id] = (time.monotonic() + ttl, payload)
+    return payload
+
+
+async def recent_activity(
+    db: AsyncSession, competition: Competition, limit: int = 25
+) -> dict[str, Any]:
+    """The most recent awarded solves for the spectator surface (venue mode, #77).
+
+    Newest-first, capped at ``limit``, each tagged ``is_first_blood`` via the
+    same ``_first_solvers`` definition the highlight leaderboard uses. Only
+    visible (published + released) challenges appear, and — like every figure in
+    this module — it's computed as of ``freeze_cutoff``: a frozen competition
+    emits nothing after the cutoff, so the venue splash stays silent during a
+    freeze rather than leaking the movement the board is hiding.
+
+    The caller (routers/public_scoreboard.py) owns the opt-in/archived gating.
+    """
+    ttl = settings.public_activity_cache_seconds
+    if ttl > 0:
+        cached = _activity_cache.get(competition.id)
+        if cached is not None and cached[0] > time.monotonic():
+            return cached[1]
+
+    team_mode = competition.participation_mode == "team"
+    as_of = freeze_cutoff(competition)
+    board = await compute_scoreboard(db, competition)  # spectator = non-staff
+    names = {e["subject_id"]: e["name"] for e in board["entries"]}
+    titles = dict(await _visible_challenges(db, competition.id))
+    solves = await _awarded_solves(db, competition, team_mode, as_of)
+    first_solver = _first_solvers(solves, titles)
+
+    recent = sorted(
+        (
+            (cid, sid, ensure_aware_utc(ts), value)
+            for cid, sid, ts, value in solves
+            if cid in titles
+        ),
+        key=lambda row: row[2],
+        reverse=True,
+    )[:limit]
+
+    payload = {
+        "recent_solves": [
+            {
+                "challenge_id": cid,
+                "title": titles[cid],
+                "subject_name": names.get(sid, "—"),
+                "solved_at": when.isoformat(),
+                "points": value,
+                # First blood only if this solve *is* the challenge's earliest —
+                # a later solver of a first-blooded challenge is a plain solve.
+                "is_first_blood": first_solver.get(cid) == (when, sid),
+            }
+            for cid, sid, when, value in recent
+        ]
+    }
+
+    if ttl > 0:
+        _activity_cache[competition.id] = (time.monotonic() + ttl, payload)
     return payload

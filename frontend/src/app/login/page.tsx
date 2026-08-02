@@ -34,6 +34,11 @@ const SSO_ERRORS: Record<string, string> = {
   provider_denied: "Your identity provider declined the sign-in request.",
   invalid_response: "Your identity provider sent an incomplete response.",
   account_disabled: "That account has been disabled. Contact an administrator.",
+  // #118 — kept generic on purpose: neither reveals whether an account exists.
+  domain_not_allowed:
+    "Your account isn't permitted to sign in to this instance. Contact an administrator.",
+  registration_closed:
+    "This instance isn't accepting new accounts. Contact an administrator.",
   default: "Single sign-on failed. Please try again, or sign in with a password.",
 };
 

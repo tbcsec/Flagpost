@@ -93,6 +93,20 @@ def _fail(reason: str, code: str) -> RedirectResponse:
     )
 
 
+def _claim_is_true(value: object) -> bool:
+    """Strictly interpret an OIDC boolean claim like ``email_verified``.
+
+    OIDC Core §5.1 permits these claims to arrive as either a JSON boolean or its
+    string form, and several providers emit the string. ``bool()`` is the wrong
+    tool: ``bool("false")`` is ``True``, so a provider that serialises the claim
+    as a string would have every user read as verified — and this signal gates
+    both existing-account linking and (issue #118) the email-domain admission
+    check, so a false positive is a real bypass. Accept only a real ``True`` or
+    the string ``"true"``.
+    """
+    return value is True or (isinstance(value, str) and value.strip().lower() == "true")
+
+
 async def _enabled_provider(db: AsyncSession, slug: str) -> OidcProvider | None:
     return await db.scalar(
         select(OidcProvider).where(
@@ -227,26 +241,35 @@ async def oidc_callback(
         return _fail("id_token had no sub", "invalid_token")
 
     email = claims.get("email")
-    email_verified = bool(claims.get("email_verified"))
+    email_verified = _claim_is_true(claims.get("email_verified"))
     if not email:
         # Some providers only expose the address at the userinfo endpoint.
         info = await oidc_utils.fetch_userinfo(document, tokens.get("access_token", ""))
         email = info.get("email")
-        email_verified = bool(info.get("email_verified"))
+        email_verified = _claim_is_true(info.get("email_verified"))
         claims = {**info, **claims}
 
     # Imported here rather than at module scope to keep the import graph acyclic
     # (auth.oidc_identity pulls in the event bus, which imports routers).
-    from auth.oidc_identity import resolve_identity
+    from auth.oidc_identity import IdentityRejected, resolve_identity
 
-    user, created = await resolve_identity(
-        db,
-        provider,
-        subject=subject,
-        email=email,
-        email_verified=email_verified,
-        claims=claims,
-    )
+    try:
+        user, created = await resolve_identity(
+            db,
+            provider,
+            subject=subject,
+            email=email,
+            email_verified=email_verified,
+            claims=claims,
+        )
+    except IdentityRejected as exc:
+        # Site admission policy refused a new account (#118). The generic
+        # ?error= code lands on /login without revealing whether the address has
+        # a local account.
+        return _fail(
+            f"admission policy rejected identity via {provider.slug}: {exc.code}",
+            exc.code,
+        )
     if not user.is_active:
         return _fail(f"user {user.id} is banned", "account_disabled")
 

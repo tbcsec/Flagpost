@@ -35,11 +35,25 @@ import secrets
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from auth.registration_policy import domain_allowed
 from auth.security import hash_password
 from db import utcnow
 from models.oidc import OidcProvider, UserExternalIdentity
+from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 from models.user import User
 from utils.event_bus import event_bus
+
+
+class IdentityRejected(Exception):
+    """An external identity was refused admission by site policy (issue #118).
+
+    Carries a short ``code`` for the callback to surface on ``/login?error=``
+    without disclosing whether a local account exists for the address.
+    """
+
+    def __init__(self, code: str):
+        self.code = code
+        super().__init__(code)
 
 
 async def unusable_password_hash() -> str:
@@ -158,6 +172,34 @@ async def resolve_identity(
         await db.commit()
         await _emit_linked(existing.id, provider)
         return existing, False
+
+    # Admission policy for a *new* account (issue #118). Only JIT reaches here —
+    # an already-linked identity (step 1) and a link to a pre-existing account
+    # (step 2) both returned above, so this never locks out an existing user; it
+    # mirrors POST /register's controls so SSO can't create accounts the public
+    # form couldn't. #56's allowlist and the registration-open toggle otherwise
+    # governed every entry path *except* this one — enabling a public provider
+    # (Google, GitHub) would let any account there provision itself.
+    # Read the policy with explicit defaults rather than skipping the checks when
+    # the settings row is absent. A missing row only ever means a never-configured
+    # install (the row is created the moment anyone writes site settings), whose
+    # defaults are permissive — but applying those defaults *through the checks*
+    # keeps the "no row" path from silently diverging from a configured default if
+    # one ever changes, instead of a fail-open skip.
+    site = await db.get(SiteSettings, SITE_SETTINGS_ID)
+    registration_open = site.registration_open if site is not None else True
+    allowlist_enabled = (
+        site.email_domain_allowlist_enabled if site is not None else False
+    )
+    allowed_domains = (site.allowed_email_domains if site is not None else None) or []
+    if not registration_open:
+        raise IdentityRejected("registration_closed")
+    if allowlist_enabled and not (
+        email and email_verified and domain_allowed(email, allowed_domains)
+    ):
+        # Requires a *verified* address: the domain gate is only as trustworthy as
+        # the claim that the user controls that mailbox.
+        raise IdentityRejected("domain_not_allowed")
 
     # 3. JIT-provision. Deliberately no RoleAssignment: an assignment with no
     #    competition_id grants site-wide (deps.user_has_permission), so granting

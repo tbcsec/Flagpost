@@ -12,7 +12,7 @@ import time
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 
 from auth.security import create_access_token
 from db import SessionLocal
@@ -616,3 +616,175 @@ def test_return_to_allows_ordinary_paths():
 
     assert _safe_return_to("/challenges") == "/challenges"
     assert _safe_return_to("/a/b?c=1#d") == "/a/b?c=1#d"
+
+
+# --- SSO admission policy (#118) ---------------------------------------------
+
+
+async def _set_site_policy(*, registration_open=True, allowlist=None):
+    """Set the platform admission controls the SSO gate reuses (#56 allowlist +
+    the registration-open toggle)."""
+    from routers.site_settings import get_or_create_settings
+
+    async with SessionLocal() as db:
+        s = await get_or_create_settings(db)
+        s.registration_open = registration_open
+        if allowlist is not None:
+            s.email_domain_allowlist_enabled = True
+            s.allowed_email_domains = allowlist
+        await db.commit()
+
+
+async def _sso_login(client, idp, state, *, email="sso@example.com", email_verified=True):
+    """Drive the callback with a specific IdP-asserted email/verification."""
+    idp["token_response"] = {
+        "id_token": _id_token(nonce=idp["nonce"], email=email, email_verified=email_verified),
+        "access_token": "stub-access-token",
+    }
+    return await client.get(
+        f"/api/auth/oidc/testidp/callback?code=abc&state={state}",
+        follow_redirects=False,
+    )
+
+
+async def _user_by_email(email):
+    async with SessionLocal() as db:
+        return await db.scalar(select(User).where(func.lower(User.email) == email.lower()))
+
+
+async def _external_identity_count(user_id):
+    async with SessionLocal() as db:
+        return len(
+            (
+                await db.scalars(
+                    select(UserExternalIdentity).where(
+                        UserExternalIdentity.user_id == user_id
+                    )
+                )
+            ).all()
+        )
+
+
+async def test_sso_allowlist_admits_a_matching_domain(client, idp):
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+    await _set_site_policy(allowlist=["example.com"])
+    state, _ = await _begin_login(client, idp)
+
+    resp = await _sso_login(client, idp, state, email="alice@example.com")
+    assert resp.status_code == 302
+    assert "/auth/callback" in resp.headers["location"]
+    assert await _user_by_email("alice@example.com") is not None
+
+
+async def test_sso_allowlist_rejects_a_non_matching_domain(client, idp):
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+    await _set_site_policy(allowlist=["example.com"])
+    state, _ = await _begin_login(client, idp)
+
+    resp = await _sso_login(client, idp, state, email="attacker@gmail.com")
+    assert resp.status_code == 302
+    assert "/login?error=domain_not_allowed" in resp.headers["location"]
+    # No account was provisioned.
+    assert await _user_by_email("attacker@gmail.com") is None
+
+
+async def test_sso_allowlist_rejects_a_matching_domain_when_unverified(client, idp):
+    """The domain gate is only as trustworthy as `email_verified`; an unverified
+    address at the allowed domain must not slip through."""
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+    await _set_site_policy(allowlist=["example.com"])
+    state, _ = await _begin_login(client, idp)
+
+    resp = await _sso_login(
+        client, idp, state, email="spoofer@example.com", email_verified=False
+    )
+    assert resp.status_code == 302
+    assert "/login?error=domain_not_allowed" in resp.headers["location"]
+    assert await _user_by_email("spoofer@example.com") is None
+
+
+async def test_sso_registration_closed_rejects_a_new_account(client, idp):
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+    await _set_site_policy(registration_open=False)
+    state, _ = await _begin_login(client, idp)
+
+    resp = await _sso_login(client, idp, state, email="newcomer@example.com")
+    assert resp.status_code == 302
+    assert "/login?error=registration_closed" in resp.headers["location"]
+    assert await _user_by_email("newcomer@example.com") is None
+
+
+async def test_sso_registration_closed_still_admits_an_already_linked_user(client, idp):
+    """Closing registration blocks *new* accounts, never an existing SSO user —
+    the already-linked path returns before the admission check."""
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+
+    # First login (registration open) creates + links the identity.
+    state, _ = await _begin_login(client, idp)
+    first = await _sso_login(client, idp, state, email="regular@example.com")
+    assert first.status_code == 302 and "/auth/callback" in first.headers["location"]
+
+    # Now close registration and sign in again with the same identity.
+    await _set_site_policy(registration_open=False)
+    state2, _ = await _begin_login(client, idp)
+    second = await _sso_login(client, idp, state2, email="regular@example.com")
+    assert second.status_code == 302
+    assert "/auth/callback" in second.headers["location"], second.headers["location"]
+
+
+async def test_sso_allowlist_does_not_block_linking_to_a_pre_existing_account(client, idp):
+    """The allowlist gates JIT only. Linking a verified SSO identity to an
+    account that already exists is unaffected — matching #56's 'admin-created
+    accounts are deliberately unaffected'."""
+    admin = await admin_token(client)
+    # A pre-existing local account whose domain isn't on the allowlist.
+    reg = await client.post(
+        "/api/auth/register",
+        json={"display_name": "prior", "email": "prior@gmail.com", "password": "password123"},
+    )
+    assert reg.status_code == 201, reg.text
+    prior = await _user_by_email("prior@gmail.com")
+
+    await _create_provider(client, admin)
+    await _set_site_policy(allowlist=["example.com"])  # gmail.com NOT allowed
+    state, _ = await _begin_login(client, idp)
+
+    resp = await _sso_login(client, idp, state, email="prior@gmail.com", email_verified=True)
+    assert resp.status_code == 302
+    assert "/auth/callback" in resp.headers["location"], resp.headers["location"]
+    # It linked to the existing account rather than being refused or duplicated.
+    assert await _external_identity_count(prior.id) == 1
+
+
+async def test_unverified_string_false_does_not_hijack_an_existing_account(client, idp):
+    """`email_verified: "false"` (a string, permitted by OIDC Core) must read as
+    unverified — the old bool("false")==True coercion would have linked an
+    attacker's SSO identity onto a local account by email."""
+    reg = await client.post(
+        "/api/auth/register",
+        json={"display_name": "victim", "email": "victim@example.com", "password": "password123"},
+    )
+    assert reg.status_code == 201, reg.text
+    victim = await _user_by_email("victim@example.com")
+
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+    state, _ = await _begin_login(client, idp)
+
+    # Same email, but the IdP marks it unverified — as the literal string "false".
+    idp["token_response"] = {
+        "id_token": _id_token(nonce=idp["nonce"], email="victim@example.com", email_verified="false"),
+        "access_token": "stub-access-token",
+    }
+    resp = await client.get(
+        f"/api/auth/oidc/testidp/callback?code=abc&state={state}",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    # The victim's account was NOT linked to the attacker's SSO identity.
+    assert await _external_identity_count(victim.id) == 0

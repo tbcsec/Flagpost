@@ -73,3 +73,19 @@ def test_svg_carrying_a_script_still_passes_the_structural_check():
 def test_unrecognised_returns_none():
     assert sniff_logo_type(b"") is None
     assert sniff_logo_type(b"\x00\x00\x00\x00") is None
+
+
+def test_svg_with_many_leading_comments_is_linear_not_quadratic():
+    """Regression: peeling the prolog with `sub(count=1)` in a loop re-scanned
+    the whole payload per token — O(n²), ~5s on a 1 MB file of tiny comments,
+    which pinned the single event loop. The offset scan makes it linear."""
+    import time
+
+    payload = b"<!---->" * (1024 * 1024 // 7) + b"<svg></svg>"  # ~1 MB, ~150k comments
+    start = time.monotonic()
+    result = sniff_logo_type(payload)
+    elapsed = time.monotonic() - start
+    assert result == "image/svg+xml"
+    # A generous bound: the linear scan is ~25ms; the old quadratic form was
+    # ~5s. Anything approaching a second means the O(n²) form is back.
+    assert elapsed < 1.0, f"sniff took {elapsed:.2f}s — quadratic blowup regressed"

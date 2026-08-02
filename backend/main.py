@@ -46,6 +46,22 @@ async def lifespan(app: FastAPI):
             from auth.demo import seed_demo_data
 
             await seed_demo_data(session)
+        # Consistency net (#133): every owner-provisioning path must mark setup
+        # complete via `mark_setup_complete`. If an active global Administrator
+        # exists but the flag was never set, some path minted an owner without
+        # it — the drift that caused GHSA-ccm4 / #132. Warn loudly rather than
+        # fix silently: the setup wizard would (correctly) refuse to run, so this
+        # points at the real bug instead of masking it.
+        from auth.setup import active_global_admin_count, setup_is_complete
+
+        if await active_global_admin_count(session) > 0 and not await setup_is_complete(
+            session
+        ):
+            logger.warning(
+                "An active administrator exists but setup was never marked "
+                "complete — an owner-provisioning path skipped mark_setup_complete "
+                "(#133). The setup wizard is correctly refusing; fix the path."
+            )
     # Start the automation time-trigger scheduler (§5.2) — kernel wiring like the
     # audit-log consumer; the tick no-ops until a competition.time_remaining rule
     # exists. Not started under the test transport (no lifespan), so tests drive

@@ -47,6 +47,48 @@ def _setup_body(**over):
     return body
 
 
+# --- mark_setup_complete: the single writer (#133) ---------------------------
+
+
+async def test_mark_setup_complete_claims_once_then_no_ops(client):
+    """The atomic writer every provisioning path shares: the first call claims
+    (True), a second is idempotent (False) — which is exactly how the wizard's
+    concurrent loser gets turned away."""
+    from auth.setup import mark_setup_complete, setup_is_complete
+
+    await _simulate_fresh_install()
+
+    async with SessionLocal() as db:
+        first = await mark_setup_complete(db)
+        await db.commit()
+    assert first is True
+
+    async with SessionLocal() as db:
+        assert await setup_is_complete(db) is True
+        second = await mark_setup_complete(db)
+        await db.commit()
+    assert second is False
+
+
+async def test_mark_setup_complete_creates_the_singleton_if_absent(client):
+    """It ensures the row exists, so no caller has to remember to."""
+    from auth.setup import mark_setup_complete
+
+    async with SessionLocal() as db:
+        row = await db.get(SiteSettings, SITE_SETTINGS_ID)
+        if row is not None:
+            await db.delete(row)
+            await db.commit()
+
+    async with SessionLocal() as db:
+        assert await mark_setup_complete(db) is True
+        await db.commit()
+
+    async with SessionLocal() as db:
+        row = await db.get(SiteSettings, SITE_SETTINGS_ID)
+        assert row is not None and row.setup_completed_at is not None
+
+
 async def test_status_reflects_provisioning_not_admin_presence(client):
     # Seeded (provisioned) install → configured.
     assert (await client.get("/api/setup/status")).json()["needs_setup"] is False

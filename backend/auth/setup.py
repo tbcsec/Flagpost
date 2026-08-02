@@ -22,9 +22,10 @@ Two separate questions live here, and conflating them was a vulnerability:
 
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from db import utcnow
 from models.role import Role, RoleAssignment
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 from models.user import User
@@ -77,3 +78,38 @@ async def setup_is_complete(db: AsyncSession) -> bool:
     """
     settings = await db.get(SiteSettings, SITE_SETTINGS_ID)
     return settings is not None and settings.setup_completed_at is not None
+
+
+async def mark_setup_complete(db: AsyncSession) -> bool:
+    """Record — atomically and idempotently — that provisioning has finished,
+    and return whether **this** call was the one that set it.
+
+    The **single writer** of ``setup_completed_at``. Every path that provisions
+    an owner (the wizard, ``seed_admin_user``, ``seed_demo_data``) goes through
+    here, so "provisioning an owner marks setup complete" is one function rather
+    than an invariant each caller re-implements and can drift from — which is how
+    GHSA-ccm4 happened, and then recurred in #132 when the demo seed was the one
+    path that hadn't stamped. A future path that forgets is caught by the startup
+    consistency check in ``main`` (active admin, but setup never marked).
+
+    **Atomic** via a conditional UPDATE, not a read-then-write: two concurrent
+    wizard submissions both pass a plain :func:`setup_is_complete` check, but only
+    one UPDATE matches the still-NULL row, so only one provisions an owner and the
+    loser gets its 409. The seeds run single-threaded at startup and only need the
+    flag set, so they ignore the return.
+
+    Ensures the singleton row exists first (autoflushed so the UPDATE sees it), so
+    no caller has to remember to create it.
+    """
+    if await db.get(SiteSettings, SITE_SETTINGS_ID) is None:
+        db.add(SiteSettings(id=SITE_SETTINGS_ID))
+        await db.flush()
+    result = await db.execute(
+        update(SiteSettings)
+        .where(
+            SiteSettings.id == SITE_SETTINGS_ID,
+            SiteSettings.setup_completed_at.is_(None),
+        )
+        .values(setup_completed_at=utcnow())
+    )
+    return result.rowcount == 1

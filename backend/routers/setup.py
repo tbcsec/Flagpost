@@ -10,15 +10,14 @@ can't be used to mint a second owner or reset an install.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.identity import display_name_taken, email_taken
 from auth.security import hash_password
-from auth.setup import ADMINISTRATOR_ROLE_NAME, setup_is_complete
-from db import get_db, utcnow
+from auth.setup import ADMINISTRATOR_ROLE_NAME, mark_setup_complete, setup_is_complete
+from db import get_db
 from models.role import Role, RoleAssignment
-from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 from models.user import User
 from routers.auth import _issue_session
 from routers.site_settings import get_or_create_settings
@@ -77,23 +76,14 @@ async def complete_setup(
 
     settings = await get_or_create_settings(db)
 
-    # Claim first-run atomically, before writing anything. The guard above is a
-    # plain SELECT, so two requests arriving together would both read "not set
-    # up" and both provision an owner — on a fresh public deployment that is a
-    # race an attacker polling /api/setup/status can enter deliberately. A
-    # conditional UPDATE makes the database the arbiter: the loser blocks on the
-    # row, re-evaluates the predicate against the winner's committed value, and
-    # matches nothing. Everything below shares this transaction, so a later
-    # failure rolls the claim back and the wizard stays open.
-    claimed = await db.execute(
-        update(SiteSettings)
-        .where(
-            SiteSettings.id == SITE_SETTINGS_ID,
-            SiteSettings.setup_completed_at.is_(None),
-        )
-        .values(setup_completed_at=utcnow())
-    )
-    if claimed.rowcount == 0:
+    # Claim first-run atomically, before writing anything — `mark_setup_complete`
+    # is a conditional UPDATE, so of two requests arriving together only one wins
+    # the still-NULL row and the loser is turned away here rather than both
+    # provisioning an owner (a race an attacker polling /api/setup/status could
+    # enter deliberately on a fresh deployment). Everything below shares this
+    # transaction, so a later failure rolls the claim back and the wizard stays
+    # open. Same writer the seeds use, so the flag can't drift between them.
+    if not await mark_setup_complete(db):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="This instance is already set up.",

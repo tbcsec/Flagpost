@@ -290,12 +290,14 @@ async def test_closing_registration_blocks_signup(client):
 
 # --- Branding: custom logo + wordmark toggle (Phase 9) ---
 
-# A minimal valid PNG (1x1, transparent) — real magic bytes so any downstream
-# sniffing is happy; the endpoint gates on the content-type header regardless.
+# A minimal valid PNG (1x1, transparent) — real magic bytes, so it passes the
+# magic-byte sniff the endpoint gates on (#114).
 _PNG = bytes.fromhex(
     "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
     "890000000d4944415478da6360000002000154a24f8f0000000049454e44ae426082"
 )
+_GIF = b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x00\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;"
+_SVG = b'<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>'
 
 
 async def test_logo_upload_serve_and_clear(client):
@@ -350,6 +352,68 @@ async def test_logo_upload_rejects_non_image(client):
         headers=_auth(admin),
     )
     assert resp.status_code == 415
+
+
+async def test_logo_upload_gates_on_magic_bytes_not_content_type(client):
+    """#114: a renamed non-image with a spoofed image/* header must be rejected,
+    and the stored type must be derived from the bytes, not the client claim."""
+    admin = await admin_token(client)
+
+    # Non-image bytes claiming to be a PNG — the old content-type gate passed
+    # this; the magic-byte sniff must not.
+    spoofed = await client.post(
+        "/api/site-settings/logo",
+        files={"file": ("logo.png", b"<html>totally a png</html>", "image/png")},
+        headers=_auth(admin),
+    )
+    assert spoofed.status_code == 415, spoofed.text
+
+    # A real PNG mislabelled as something else is accepted, and the *derived*
+    # type wins over the (wrong) client header.
+    ok = await client.post(
+        "/api/site-settings/logo",
+        files={"file": ("logo.bin", _PNG, "application/octet-stream")},
+        headers=_auth(admin),
+    )
+    assert ok.status_code == 200, ok.text
+    assert (await client.get("/api/site-settings/logo")).headers[
+        "content-type"
+    ] == "image/png"
+
+
+async def test_logo_upload_accepts_gif_and_svg(client):
+    admin = await admin_token(client)
+
+    gif = await client.post(
+        "/api/site-settings/logo",
+        files={"file": ("mark.gif", _GIF, "image/gif")},
+        headers=_auth(admin),
+    )
+    assert gif.status_code == 200, gif.text
+    assert (await client.get("/api/site-settings/logo")).headers[
+        "content-type"
+    ] == "image/gif"
+
+    svg = await client.post(
+        "/api/site-settings/logo",
+        files={"file": ("mark.svg", _SVG, "image/svg+xml")},
+        headers=_auth(admin),
+    )
+    assert svg.status_code == 200, svg.text
+    assert (await client.get("/api/site-settings/logo")).headers[
+        "content-type"
+    ] == "image/svg+xml"
+
+
+async def test_logo_upload_rejects_fake_svg(client):
+    """A script/text file labelled image/svg+xml but without an <svg> root."""
+    admin = await admin_token(client)
+    resp = await client.post(
+        "/api/site-settings/logo",
+        files={"file": ("x.svg", b"<script>alert(1)</script>", "image/svg+xml")},
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 415, resp.text
 
 
 # --- Email-domain allowlist for public registration (#56) ---

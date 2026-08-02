@@ -7,6 +7,7 @@ from auth.demo import DEMO_COMPETITION_NAME, seed_demo_data
 from config import settings
 from db import SessionLocal
 from models.competition import Competition
+from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 from models.user import User
 
 
@@ -29,6 +30,33 @@ async def test_demo_seed_creates_accounts_and_is_idempotent(client):
             )
         ).all()
         assert len(comps) == 1  # not duplicated by the second run
+
+
+async def test_demo_seed_marks_the_install_provisioned(client):
+    """Regression: a fresh demo booted straight into the setup wizard.
+
+    The wizard gate keys on `setup_completed_at`, not admin presence
+    (GHSA-ccm4-9573-9965). The demo path runs `seed_demo_data` only — never
+    `seed_admin_user` — and on a fresh volume the backfill migration runs on an
+    empty DB, so nothing stamped the flag and `/api/setup/status` reported
+    needs_setup. Clear the fixture's stamp to reproduce that state.
+    """
+    async with SessionLocal() as db:
+        settings_row = await db.get(SiteSettings, SITE_SETTINGS_ID)
+        if settings_row is not None:
+            settings_row.setup_completed_at = None
+            await db.commit()
+
+    assert (await client.get("/api/setup/status")).json()["needs_setup"] is True
+
+    async with SessionLocal() as db:
+        await seed_demo_data(db)
+
+    # The demo instance must present its login page, not the wizard.
+    assert (await client.get("/api/setup/status")).json()["needs_setup"] is False
+    async with SessionLocal() as db:
+        settings_row = await db.get(SiteSettings, SITE_SETTINGS_ID)
+        assert settings_row.setup_completed_at is not None
 
 
 async def test_demo_seeded_accounts_can_log_in(client):

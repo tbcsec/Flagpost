@@ -23,11 +23,13 @@ from auth.demo_data import (
     DEMO_WRONG_FLAGS,
 )
 from auth.security import hash_password
+from db import utcnow
 from models.automation import AutomationRule
 from models.challenge import Category, Challenge
 from models.competition import Competition, generate_invite_code
 from models.hint import Hint
 from models.role import Role, RoleAssignment
+from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 from models.submission import Submission
 from models.user import User
 from utils.flags import hash_static_flag, make_salt
@@ -320,5 +322,17 @@ async def seed_demo_data(db: AsyncSession) -> None:
         _solve(participant, "Quick Quiz"),
         _solve(bob, "Quick Quiz"),
     ])
+
+    # Seeding the owner *is* provisioning, so mark the install complete — exactly
+    # like seed_admin_user and the wizard itself. The setup gate keys on this
+    # flag, not on admin presence (ADR-0017 / GHSA-ccm4-9573-9965), and a fresh
+    # demo volume runs the backfill migration on an empty DB (no users yet), so
+    # without this the demo boots straight into the setup wizard.
+    settings = await db.get(SiteSettings, SITE_SETTINGS_ID)
+    if settings is None:
+        settings = SiteSettings(id=SITE_SETTINGS_ID)
+        db.add(settings)
+    if settings.setup_completed_at is None:
+        settings.setup_completed_at = utcnow()
 
     await db.commit()

@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import dynamic from "next/dynamic";
 
 import { NoCompetition } from "@/components/app/no-competition";
 import { ChallengeHints } from "@/components/challenges/challenge-hints";
+import { ChallengeList } from "@/components/challenges/challenge-list";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // Heavy editors load on demand, not in the page bundle: ChallengeAdmin pulls
@@ -51,6 +52,7 @@ import { relativeTime } from "@/lib/datetime";
 import { richTextToPlain } from "@/lib/rich-text";
 import type { Challenge } from "@/lib/types";
 import { useAuthStore } from "@/stores/auth";
+import { useChallengeViewStore } from "@/stores/challenge-view";
 import { toast } from "@/stores/toast";
 import { cn } from "@/lib/utils";
 
@@ -64,6 +66,16 @@ export default function ChallengesPage() {
   const [availability, setAvailability] = useState<"all" | "available" | "locked">("all");
   const [open, setOpen] = useState<Challenge | null>(null);
   const [managing, setManaging] = useState(false);
+
+  // Card grid (default) vs. the grouped list (#55) — a per-device preference.
+  // Restore the saved choice once on mount, like the palette override; the
+  // store starts SSR-safe at "card" so server and first client render match.
+  const viewMode = useChallengeViewStore((s) => s.viewMode);
+  const setViewMode = useChallengeViewStore((s) => s.setViewMode);
+  const hydrateView = useChallengeViewStore((s) => s.hydrate);
+  useEffect(() => {
+    hydrateView();
+  }, [hydrateView]);
 
   const allData = challenges.data ?? [];
   const hasLocked = allData.some((c) => c.locked);
@@ -154,31 +166,58 @@ export default function ChallengesPage() {
           </button>
         ))}
 
-        {/* Availability filter — only when prerequisites actually lock some,
-            so it doesn't clutter a competition without unlock chains. */}
-        {hasLocked && (
-          <div className="ml-auto inline-flex overflow-hidden rounded-full border border-border text-xs">
-            {(["all", "available", "locked"] as const).map((a) => (
+        <div className="ml-auto flex items-center gap-2">
+          {/* Availability filter — only when prerequisites actually lock some,
+              so it doesn't clutter a competition without unlock chains. Applies
+              in both views. */}
+          {hasLocked && (
+            <div className="inline-flex overflow-hidden rounded-full border border-border text-xs">
+              {(["all", "available", "locked"] as const).map((a) => (
+                <button
+                  key={a}
+                  type="button"
+                  aria-pressed={availability === a}
+                  onClick={() => {
+                    setAvailability(a);
+                    grid.setPage(0);
+                  }}
+                  className={cn(
+                    "px-3 py-1.5 font-medium capitalize transition-colors",
+                    availability === a
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-accent/60",
+                  )}
+                >
+                  {a}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Card grid (default) vs. grouped list (#55). */}
+          <div
+            role="group"
+            aria-label="Challenge layout"
+            className="inline-flex overflow-hidden rounded-full border border-border text-xs"
+          >
+            {(["card", "list"] as const).map((m) => (
               <button
-                key={a}
+                key={m}
                 type="button"
-                aria-pressed={availability === a}
-                onClick={() => {
-                  setAvailability(a);
-                  grid.setPage(0);
-                }}
+                aria-pressed={viewMode === m}
+                onClick={() => setViewMode(m)}
                 className={cn(
-                  "px-3 py-1.5 font-medium capitalize transition-colors",
-                  availability === a
+                  "px-3 py-1.5 font-medium transition-colors",
+                  viewMode === m
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-accent/60",
                 )}
               >
-                {a}
+                {m === "card" ? "Cards" : "List"}
               </button>
             ))}
           </div>
-        )}
+        </div>
       </div>
 
       {challenges.isLoading && <SkeletonCards count={6} />}
@@ -203,7 +242,19 @@ export default function ChallengesPage() {
         />
       )}
 
-      {challenges.data && allData.length > 0 && (
+      {challenges.data && allData.length > 0 && viewMode === "list" && (
+        // List view groups the full filtered set by category (no pagination —
+        // collapse-by-default is the volume control); the card grid keeps its
+        // own pagination below. Both consume the same `visible` filtered array,
+        // so the category/availability filters behave identically in either.
+        <ChallengeList
+          challenges={visible}
+          categories={categories.data ?? []}
+          onOpen={setOpen}
+        />
+      )}
+
+      {challenges.data && allData.length > 0 && viewMode === "card" && (
         <>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {grid.rows.map((ch) => (

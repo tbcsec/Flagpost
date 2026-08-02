@@ -1,14 +1,20 @@
-"""Magic-byte image sniffing for uploaded ticket attachments (issue #80).
+"""Magic-byte / structural image sniffing for uploaded files (issues #80, #114).
 
 A browser-supplied ``Content-Type`` is a *claim*, not evidence — anything can be
 labelled ``image/png``. So rather than validate the claim, we **derive** the
-type from the leading bytes and store that; the client's header is discarded.
-What we serve back is then always what the file actually is, which is what makes
-the ``nosniff`` header on the download path meaningful.
+type from the file itself and store that; the client's header is discarded. What
+we serve back is then always what the file actually is, which is what makes the
+``nosniff`` header on the download path meaningful.
 
-Deliberately narrow: the three still-image formats a screenshot arrives as. No
-GIF (animation isn't a screenshot) and no SVG (it's a script-bearing document,
-not an image) — the owner's call on issue #80.
+Two sniffers, deliberately different in reach:
+
+- :func:`sniff_image_type` — **ticket screenshots** (#80). The three still-image
+  formats a screenshot arrives as: PNG, JPEG, WebP. No GIF (animation isn't a
+  screenshot) and no SVG (a script-bearing document, not an image).
+- :func:`sniff_logo_type` — **admin logos** (#114). Broader by product choice: it
+  adds GIF, and SVG validated *structurally* (SVG has no magic bytes — it's XML
+  text). The residual "an SVG can carry script" risk is contained on the serve
+  side, not here — see :func:`_looks_like_svg`.
 
 **Dimensions are checked too, not just the byte count.** A byte-size cap alone
 doesn't bound the cost of *viewing* an image: a 20000x20000 PNG of flat colour
@@ -22,6 +28,7 @@ arithmetic, so it can't itself be turned into a decode bomb.
 
 from __future__ import annotations
 
+import re
 import struct
 
 # Longest prefix we need is WebP's 12 bytes ("RIFF" + size + "WEBP").
@@ -47,6 +54,71 @@ def sniff_image_type(data: bytes) -> str | None:
     # WebP is a RIFF container: "RIFF" <4-byte little-endian size> "WEBP".
     if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
         return "image/webp"
+    return None
+
+
+# One leading XML prolog, DOCTYPE, or comment (with optional whitespace) —
+# matched at an advancing offset, in any order, before the SVG root. No `^`:
+# these are used with ``match(text, pos)``, which anchors at ``pos`` itself.
+_SVG_SKIP = re.compile(
+    r"\s*(?:"
+    r"<\?xml\b[^>]*\?>"                      # <?xml ... ?>
+    r"|<!DOCTYPE\b[^>[]*(?:\[[^\]]*\])?\s*>"  # DOCTYPE, optional internal subset
+    r"|<!--.*?-->"                            # comment
+    r")",
+    re.IGNORECASE | re.DOTALL,
+)
+_SVG_ROOT = re.compile(r"\s*<svg[\s/>]", re.IGNORECASE)
+
+
+def _looks_like_svg(data: bytes) -> bool:
+    """Whether ``data`` is structurally an SVG document.
+
+    SVG has no magic bytes — it's XML text — so "magic-byte" validation means a
+    structural one: the payload must decode as UTF-8 and its first element,
+    after any BOM / XML prolog / DOCTYPE / comments, must be the ``<svg>`` root.
+    That's enough to reject a renamed binary or a bare script masquerading as a
+    logo. It does **not** try to prove the SVG is script-free — an ``<svg>`` that
+    also carries a ``<script>`` still passes here; that residual risk is
+    contained on the serve path, which returns the logo under a sandboxed,
+    ``nosniff`` CSP (see routers/site_settings read_logo). Parsing is avoided
+    entirely (regex, not an XML parser), so this can't be turned into an
+    entity-expansion bomb.
+
+    The prolog/comments are consumed by advancing an **offset**, never by
+    rewriting the string. Peeling with ``sub(count=1)`` in a loop re-copied and
+    re-scanned the whole ~1 MB payload per token, so a file of thousands of tiny
+    leading comments was O(n²) — seconds of CPU pinning the single event loop.
+    Matching at ``pos`` makes it a single linear pass.
+    """
+    try:
+        text = data.decode("utf-8-sig")  # -sig strips a leading BOM if present
+    except UnicodeDecodeError:
+        return False
+    pos = 0
+    while True:
+        m = _SVG_SKIP.match(text, pos)
+        if m is None or m.end() == pos:  # no more tokens (or a zero-width guard)
+            break
+        pos = m.end()
+    return _SVG_ROOT.match(text, pos) is not None
+
+
+def sniff_logo_type(data: bytes) -> str | None:
+    """The image type a **logo** upload actually is, or ``None`` if unrecognised.
+
+    Broader than :func:`sniff_image_type` (which is screenshot-only): a logo may
+    also be a GIF or an SVG. Raster formats are identified by magic bytes; SVG,
+    having none, is validated structurally. The client's ``Content-Type`` is
+    never consulted — this result is the authoritative type, stored and served.
+    """
+    raster = sniff_image_type(data)  # PNG / JPEG / WebP
+    if raster is not None:
+        return raster
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    if _looks_like_svg(data):
+        return "image/svg+xml"
     return None
 
 

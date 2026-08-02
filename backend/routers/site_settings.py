@@ -37,6 +37,7 @@ from storage import get_storage
 from storage.base import ObjectStorage
 from utils import backup, mailer
 from utils.event_bus import event_bus
+from utils.image_sniff import exceeds_pixel_budget, sniff_logo_type
 from utils.update_check import notice_dismissed, update_available
 
 router = APIRouter(prefix="/api/site-settings", tags=["site-settings"])
@@ -44,13 +45,6 @@ router = APIRouter(prefix="/api/site-settings", tags=["site-settings"])
 # A custom logo is small by nature; cap it well under an attachment. Big enough
 # for a detailed SVG or a 2x raster mark, small enough to sit in the DB row.
 MAX_LOGO_BYTES = 1 * 1024 * 1024  # 1 MB
-ALLOWED_LOGO_TYPES = {
-    "image/png",
-    "image/jpeg",
-    "image/webp",
-    "image/gif",
-    "image/svg+xml",
-}
 
 
 async def get_or_create_settings(db: AsyncSession) -> SiteSettings:
@@ -112,12 +106,6 @@ async def upload_logo(
     """Store a custom org logo that replaces the built-in mark in the lockup.
     Kept in the DB (not object storage) so branding works on the infra-free
     stack and pre-auth. Emits ``site.settings_updated`` like any branding change."""
-    content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
-    if content_type not in ALLOWED_LOGO_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail="Logo must be a PNG, JPEG, WebP, GIF, or SVG image",
-        )
     data = await file.read()
     if len(data) == 0:
         raise HTTPException(
@@ -127,6 +115,24 @@ async def upload_logo(
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"Logo exceeds {MAX_LOGO_BYTES // (1024 * 1024)} MB limit",
+        )
+
+    # Derive the type from the bytes, never the client's Content-Type (#114): a
+    # renamed non-image with a spoofed header must be rejected, and what we store
+    # + serve back has to be what the file actually is for the nosniff header on
+    # the download path to mean anything. The sniff result is the allowlist.
+    content_type = sniff_logo_type(data)
+    if content_type is None:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Logo must be a PNG, JPEG, WebP, GIF, or SVG image",
+        )
+    # Same decode-bomb guard the ticket-attachment path uses: a byte cap doesn't
+    # bound the cost of rendering a huge-dimensioned raster in the browser.
+    if exceeds_pixel_budget(data, content_type):
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Logo image dimensions are too large",
         )
 
     settings = await get_or_create_settings(db)

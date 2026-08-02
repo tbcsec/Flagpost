@@ -97,11 +97,19 @@ SECTIONS: tuple[str, ...] = (
 
 # --- generic column (de)serialisation ---------------------------------------
 
-def serialize_row(obj) -> dict:
+def serialize_row(obj, skip: tuple[str, ...] = ()) -> dict:
     """A JSON-safe dict of every column: datetimes → ISO strings, bytes → base64,
-    everything else (incl. ``JSON`` list/dict columns) passes through."""
+    everything else (incl. ``JSON`` list/dict columns) passes through.
+
+    ``skip`` names columns to omit entirely — used for secret columns. It skips
+    *before* the ``getattr``, which matters: a deferred secret (smtp_password)
+    that wasn't undeferred would otherwise trigger a forbidden async lazy-load
+    here, and reading it at all would decrypt it. Skipping keeps the secret out
+    of the export without ever touching it."""
     out: dict = {}
     for col in obj.__table__.columns:
+        if col.name in skip:
+            continue
         val = getattr(obj, col.name)
         if isinstance(val, datetime):
             out[col.name] = val.isoformat()
@@ -324,20 +332,24 @@ async def export_data(
         if spec.section not in picked:
             continue
         stmt = select(spec.model)
-        # Undefer any deferred columns (e.g. the site-settings logo blob) so
-        # serialising them here doesn't trigger a forbidden async lazy-load.
-        deferred = [a.key for a in sa_inspect(spec.model).column_attrs if a.deferred]
+        # Undefer deferred columns (e.g. the site-settings logo blob) so
+        # serialising them here doesn't trigger a forbidden async lazy-load —
+        # but NOT the secret ones: they're dropped from the export anyway
+        # (ADR-0020), and undeferring smtp_password would decrypt it for nothing
+        # and 500 the export on a key mismatch. serialize_row(skip=...) omits
+        # them before the getattr, so the deferred-and-not-undeferred secret is
+        # never touched.
+        deferred = [
+            a.key
+            for a in sa_inspect(spec.model).column_attrs
+            if a.deferred and a.key not in spec.secret_columns
+        ]
         if deferred:
             stmt = stmt.options(*[undefer(getattr(spec.model, k)) for k in deferred])
         rows = (await db.scalars(stmt)).all()
         serialised: list[dict] = []
         for r in rows:
-            d = serialize_row(r)
-            # Never let a retrievable secret into the export (ADR-0020). The
-            # serialiser read it back as plaintext via the ORM; drop it here so
-            # it's re-entered after a restore rather than shipped off-box.
-            for col in spec.secret_columns:
-                d.pop(col, None)
+            d = serialize_row(r, skip=spec.secret_columns)
             if spec.object_key_for is not None:
                 try:
                     d["_object_data"] = base64.b64encode(storage.get(r.object_key)).decode("ascii")

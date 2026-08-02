@@ -95,7 +95,19 @@ class SiteSettings(Base, TimestampMixin):
     # the one pre-existing plaintext value. Write-only in the API (never
     # serialized back — GET exposes only `smtp_password_set`), and dropped from
     # the backup export (utils/backup — a per-install key makes it useless off-box).
-    smtp_password: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    #
+    # **Deferred**, like the logo blob above, and for a sharper reason than size:
+    # decryption runs when the column loads, and it *raises* on a key mismatch
+    # (crypto.EncryptedString). This row is read on the public pre-auth path for
+    # branding and on the admin settings page — the very page an operator needs
+    # to re-enter the secret after a lost/rotated key. Eager-decrypting here would
+    # 500 all of those the moment the key changed, blocking the documented
+    # recovery. Deferring keeps ordinary loads clear of the secret; the mailer,
+    # the sole point of use, undefers it explicitly, so a key failure surfaces at
+    # the SMTP send that actually needs it — which is what ADR-0020 wants.
+    smtp_password: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True
+    )
     smtp_from: Mapped[str] = mapped_column(
         String, nullable=False, default="flagpost@localhost",
         server_default="flagpost@localhost",

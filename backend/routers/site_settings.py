@@ -14,7 +14,7 @@ without a data migration.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import String, select, type_coerce
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 
@@ -304,7 +304,26 @@ async def update_rules_settings(
     )
 
 
-def _operational_out(settings: SiteSettings) -> OperationalSettingsOut:
+async def _smtp_password_present(db: AsyncSession) -> bool:
+    """Whether an SMTP password is stored — without decrypting it.
+
+    `smtp_password` is a deferred `EncryptedString`; reading the attribute would
+    load and decrypt it, which raises on a key mismatch (the exact state the
+    settings page must stay usable through). `type_coerce` to plain `String`
+    reads the raw ciphertext straight past the decrypt, so presence is knowable
+    even when the key is wrong. `smtp_password_set` never needed the plaintext.
+    """
+    raw = await db.scalar(
+        select(type_coerce(SiteSettings.__table__.c.smtp_password, String)).where(
+            SiteSettings.__table__.c.id == SITE_SETTINGS_ID
+        )
+    )
+    return bool(raw)
+
+
+def _operational_out(
+    settings: SiteSettings, *, smtp_password_set: bool
+) -> OperationalSettingsOut:
     return OperationalSettingsOut(
         registration_open=settings.registration_open,
         smtp_host=settings.smtp_host,
@@ -312,7 +331,7 @@ def _operational_out(settings: SiteSettings) -> OperationalSettingsOut:
         smtp_username=settings.smtp_username,
         smtp_from=settings.smtp_from,
         smtp_starttls=settings.smtp_starttls,
-        smtp_password_set=bool(settings.smtp_password),
+        smtp_password_set=smtp_password_set,
         archive_auto_delete=settings.archive_auto_delete,
         archive_retention_days=settings.archive_retention_days,
         email_domain_allowlist_enabled=settings.email_domain_allowlist_enabled,
@@ -336,7 +355,10 @@ async def read_operational_settings(
 ) -> OperationalSettingsOut:
     """Registration policy + SMTP config — admin-only (never public; carries the
     mail server address). The SMTP password is not returned (§`smtp_password_set`)."""
-    return _operational_out(await get_or_create_settings(db))
+    return _operational_out(
+        await get_or_create_settings(db),
+        smtp_password_set=await _smtp_password_present(db),
+    )
 
 
 @router.put("/operational", response_model=OperationalSettingsOut)
@@ -379,7 +401,9 @@ async def update_operational_settings(
         "site.settings_updated",
         {"user_id": current_user.id, "section": "operational"},
     )
-    return _operational_out(settings)
+    return _operational_out(
+        settings, smtp_password_set=await _smtp_password_present(db)
+    )
 
 
 @router.post("/update-notice/dismiss", response_model=OperationalSettingsOut)
@@ -401,4 +425,6 @@ async def dismiss_update_notice(
     settings.dismissed_update_version = settings.latest_known_version
     await db.commit()
     await db.refresh(settings)
-    return _operational_out(settings)
+    return _operational_out(
+        settings, smtp_password_set=await _smtp_password_present(db)
+    )

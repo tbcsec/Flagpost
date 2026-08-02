@@ -130,6 +130,24 @@ Both deferred questions were settled when #109 applied the facility to
   place on upgrade rather than waiting for a chance re-save, so it isn't left at
   rest in the clear indefinitely.
 
+## Decryption raises, so encrypted columns on hot-path tables are deferred
+
+`EncryptedString` decrypts when the column loads and **raises** on a key
+mismatch — deliberately, so a key problem surfaces loudly rather than as a
+silent "no secret". The corollary: an eager (non-deferred) encrypted column
+makes *loading the row at all* fail when the key is wrong, taking down every
+read of that row, not just the ones that need the secret.
+
+That is fine for a row read only where the secret is used (an OIDC provider,
+loaded during the login flow), but wrong for a row on a hot or recovery path.
+`SiteSettings` is read on the public pre-auth branding path and on the admin
+settings page — the page an operator uses to re-enter a secret after losing the
+key. So `smtp_password` is a **deferred** column: ordinary loads never touch it,
+the mailer (its one point of use) undefers it explicitly, and `smtp_password_set`
+is derived from the raw ciphertext without decrypting. A lost key then breaks
+only the actual SMTP send, leaving the recovery path usable. New encrypted
+columns on frequently-loaded tables should follow this pattern.
+
 ## Key rotation
 
 Rotating `SECRET_ENCRYPTION_KEY` (or losing the key file) invalidates every

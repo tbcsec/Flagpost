@@ -163,6 +163,12 @@ class Settings(BaseSettings):
     # every 30s, so a short memo collapses them onto one computation. Set to 0
     # to disable (the tests do, so they can observe a mutation immediately).
     public_insights_cache_seconds: float = 15.0
+    # TTL for the memoised recent-solves feed that drives venue mode's
+    # first-blood splash (#77). Shorter than the insights memo because venue
+    # mode polls it faster (a splash should land within a few seconds of the
+    # solve); still enough to collapse concurrent spectators onto one query.
+    # 0 disables it (the tests do).
+    public_activity_cache_seconds: float = 5.0
 
     # --- Real-time layer (§4.1) ---
     # How long a fresh WebSocket connection has to send its first-frame auth

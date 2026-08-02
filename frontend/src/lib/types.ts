@@ -788,6 +788,23 @@ export interface PublicCompetition {
 
 /** Spectator context for a public competition (#24). Every score-derived figure
  *  respects a scoreboard freeze exactly like the board it accompanies. */
+/** One awarded solve in the public recent-solves feed (venue mode, #77).
+ *  `is_first_blood` marks the earliest solve of its challenge — what the venue
+ *  splash fires on. Freeze-aware, so a frozen board emits none after the cutoff.
+ *  (Distinct from the dashboard's `RecentSolve`, which is a different shape.) */
+export interface PublicRecentSolve {
+  challenge_id: string;
+  title: string;
+  subject_name: string;
+  solved_at: string;
+  points: number;
+  is_first_blood: boolean;
+}
+
+export interface PublicActivity {
+  recent_solves: PublicRecentSolve[];
+}
+
 export interface PublicInsights {
   frozen: boolean;
   frozen_at: string | null;

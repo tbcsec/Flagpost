@@ -29,6 +29,21 @@ export function usePublicInsights(competitionId: string) {
   });
 }
 
+/** Recent awarded solves, first-bloods tagged (#77). Polled faster than the
+ *  30s board so a first-blood splash lands within a few seconds of the solve;
+ *  only enabled while venue mode is on, so the static page adds no extra load. */
+export function usePublicActivity(
+  competitionId: string,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  return useQuery({
+    queryKey: ["public-activity", competitionId],
+    queryFn: () => publicApi.activity(competitionId),
+    enabled: enabled && Boolean(competitionId),
+    refetchInterval: 7_000,
+  });
+}
+
 /** The /public directory of competitions offering a public scoreboard. */
 export function usePublicCompetitions() {
   return useQuery({

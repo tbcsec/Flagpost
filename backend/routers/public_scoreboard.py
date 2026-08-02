@@ -17,11 +17,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_db
 from models.competition import Competition
 from schemas.scoreboard import (
+    PublicActivityOut,
     PublicCompetitionOut,
     PublicInsightsOut,
     PublicScoreboardOut,
 )
-from utils.public_insights import public_insights
+from utils.public_insights import public_insights, recent_activity
 from utils.scoreboard import compute_scoreboard
 
 router = APIRouter(prefix="/api/public", tags=["public"])
@@ -98,6 +99,20 @@ async def public_competition_insights(
     ``utils/public_insights``. Same opt-in gating as the scoreboard."""
     competition = await _load_public_competition(db, competition_id)
     return await public_insights(db, competition)
+
+
+@router.get(
+    "/competitions/{competition_id}/activity",
+    response_model=PublicActivityOut,
+)
+async def public_competition_activity(
+    competition_id: str, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Recent awarded solves, each tagged first-blood — the feed venue mode
+    (#77) polls to drive its first-blood splash. Freeze-aware and under the same
+    opt-in/archived gating as the board it accompanies (see ``recent_activity``)."""
+    competition = await _load_public_competition(db, competition_id)
+    return await recent_activity(db, competition)
 
 
 @router.get("/competitions/{competition_id}/ctftime")

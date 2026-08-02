@@ -27,6 +27,7 @@ import { FlagpostMark } from "@/components/brand/flagpost-mark";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, FlagEmptyIcon } from "@/components/ui/empty-state";
+import { FirstBloodIcon } from "@/components/ui/first-blood-icon";
 import { SkeletonCards } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -552,23 +553,6 @@ function ChallengeNotes({
         }
       />
     </section>
-  );
-}
-
-// A lightning bolt marks the first solver (first blood) — same stroke/currentColor
-// idiom as the app's other inline SVG icons, and friendlier than a blood drop.
-function FirstBloodIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      className="text-warning"
-      aria-hidden="true"
-    >
-      <path d="M13 2 4 13h6l-1 9 10-12h-7l1-8z" />
-    </svg>
   );
 }
 

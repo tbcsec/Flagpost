@@ -27,9 +27,8 @@ from auth.permissions import (
     PARTICIPANT_PERMISSIONS,
 )
 from auth.security import hash_password, verify_password
-from db import utcnow
+from auth.setup import mark_setup_complete
 from models.role import Role, RoleAssignment
-from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 from models.user import User
 
 logger = logging.getLogger("seed")
@@ -126,16 +125,11 @@ async def seed_admin_user(session: AsyncSession) -> None:
         RoleAssignment(user_id=user.id, competition_id=None, role_id=admin_role.id)
     )
 
-    # Seeding an owner *is* provisioning, so record it — otherwise the instance
-    # still looks like a fresh install and the public setup wizard would happily
-    # mint a second administrator. This mirrors what the c4a8d35b1e07 migration
-    # backfills for installs provisioned before the flag existed.
-    settings = await session.get(SiteSettings, SITE_SETTINGS_ID)
-    if settings is None:
-        settings = SiteSettings(id=SITE_SETTINGS_ID)
-        session.add(settings)
-    if settings.setup_completed_at is None:
-        settings.setup_completed_at = utcnow()
+    # Seeding an owner *is* provisioning: mark the install complete through the
+    # single writer, so the public wizard won't mint a second administrator on
+    # what still looks like a fresh install (the same reason the c4a8d35b1e07
+    # migration backfills existing installs).
+    await mark_setup_complete(session)
 
     await session.commit()
     logger.info("Seeded default administrator %s", DEFAULT_ADMIN_EMAIL)

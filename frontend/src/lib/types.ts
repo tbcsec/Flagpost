@@ -151,16 +151,27 @@ export interface AuthProviderPublic {
 
 /** Admin view of a provider. The client secret is write-only: only whether one
  *  is stored is ever returned. */
-export interface AuthProvider {
-  id: string;
-  name: string;
-  slug: string;
+/** Non-secret OIDC settings carried in AuthProvider.config (ADR-0022). Becomes
+ *  a per-kind union when SAML/LDAP land (#100/#101). */
+export interface OidcProviderConfig {
   issuer: string;
   client_id: string;
   scopes: string;
+}
+export interface AuthProvider {
+  id: string;
+  /** Protocol: "oidc" today; "saml" / "ldap" arrive with their transports. */
+  kind: string;
+  /** ADR-0022 trust posture: "open" = public-signup gate applies; "closed" =
+   *  being enabled is the admission decision. */
+  posture: "open" | "closed";
+  name: string;
+  slug: string;
+  email_is_authoritative: boolean;
+  config: OidcProviderConfig;
   enabled: boolean;
   created_at: string;
-  client_secret_set: boolean;
+  secret_set: boolean;
   /** The exact callback URL to register at the IdP. Server-computed, since it
    *  depends on PUBLIC_BASE_URL — a mismatch is the commonest setup failure. */
   redirect_uri: string;

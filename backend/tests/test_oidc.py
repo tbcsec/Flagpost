@@ -16,7 +16,7 @@ from sqlalchemy import func, select, text
 
 from auth.security import create_access_token
 from db import SessionLocal
-from models.oidc import OidcProvider, UserExternalIdentity
+from models.identity_provider import IdentityProvider, UserExternalIdentity
 from models.role import RoleAssignment
 from models.user import User
 from tests.conftest import admin_token
@@ -103,15 +103,25 @@ async def _noop():
     return None
 
 
-async def _create_provider(client, admin, *, enabled=True, slug="testidp") -> dict:
+async def _create_provider(
+    client,
+    admin,
+    *,
+    enabled=True,
+    slug="testidp",
+    posture="open",
+    email_is_authoritative=False,
+) -> dict:
     resp = await client.post(
-        "/api/admin/oidc-providers",
+        "/api/admin/auth-providers",
         json={
+            "kind": "oidc",
             "name": "Test IdP",
             "slug": slug,
-            "issuer": ISSUER,
-            "client_id": CLIENT_ID,
-            "client_secret": "super-secret-value",
+            "posture": posture,
+            "email_is_authoritative": email_is_authoritative,
+            "secret": "super-secret-value",
+            "config": {"issuer": ISSUER, "client_id": CLIENT_ID},
             "enabled": enabled,
         },
         headers=_auth(admin),
@@ -138,12 +148,12 @@ async def test_provider_crud_hides_the_secret(client, idp):
     admin = await admin_token(client)
     created = await _create_provider(client, admin)
 
-    assert "client_secret" not in created
-    assert created["client_secret_set"] is True
+    assert "secret" not in created
+    assert created["secret_set"] is True
 
-    listed = (await client.get("/api/admin/oidc-providers", headers=_auth(admin))).json()
-    assert listed[0]["client_secret_set"] is True
-    assert "client_secret" not in listed[0]
+    listed = (await client.get("/api/admin/auth-providers", headers=_auth(admin))).json()
+    assert listed[0]["secret_set"] is True
+    assert "secret" not in listed[0]
 
 
 async def test_client_secret_is_encrypted_at_rest(client, idp):
@@ -157,7 +167,7 @@ async def test_client_secret_is_encrypted_at_rest(client, idp):
     # this assertion pass no matter what was stored.
     async with SessionLocal() as session:
         raw = (
-            await session.execute(text("SELECT client_secret FROM oidc_providers"))
+            await session.execute(text("SELECT secret FROM identity_providers"))
         ).scalar_one()
     assert raw is not None
     assert "super-secret-value" not in raw
@@ -165,8 +175,8 @@ async def test_client_secret_is_encrypted_at_rest(client, idp):
 
     # ...and it decrypts transparently through the ORM.
     async with SessionLocal() as session:
-        provider = await session.scalar(select(OidcProvider))
-    assert provider.client_secret == "super-secret-value"
+        provider = await session.scalar(select(IdentityProvider))
+    assert provider.secret == "super-secret-value"
 
 
 async def test_provider_management_requires_the_dedicated_permission(client, idp):
@@ -181,7 +191,7 @@ async def test_provider_management_requires_the_dedicated_permission(client, idp
     )
     token = reg.json()["access_token"]
     assert (
-        await client.get("/api/admin/oidc-providers", headers=_auth(token))
+        await client.get("/api/admin/auth-providers", headers=_auth(token))
     ).status_code == 403
 
 
@@ -190,24 +200,24 @@ async def test_secret_omitted_on_update_is_preserved(client, idp):
     provider = await _create_provider(client, admin)
 
     resp = await client.patch(
-        f"/api/admin/oidc-providers/{provider['id']}",
+        f"/api/admin/auth-providers/{provider['id']}",
         json={"name": "Renamed"},
         headers=_auth(admin),
     )
     assert resp.status_code == 200
-    assert resp.json()["client_secret_set"] is True
+    assert resp.json()["secret_set"] is True
 
     async with SessionLocal() as session:
-        stored = await session.scalar(select(OidcProvider))
-    assert stored.client_secret == "super-secret-value"
+        stored = await session.scalar(select(IdentityProvider))
+    assert stored.secret == "super-secret-value"
 
     # An explicit empty string clears it (public client on PKCE alone).
     cleared = await client.patch(
-        f"/api/admin/oidc-providers/{provider['id']}",
-        json={"client_secret": ""},
+        f"/api/admin/auth-providers/{provider['id']}",
+        json={"secret": ""},
         headers=_auth(admin),
     )
-    assert cleared.json()["client_secret_set"] is False
+    assert cleared.json()["secret_set"] is False
 
 
 # --- public surface ---------------------------------------------------------
@@ -788,3 +798,168 @@ async def test_unverified_string_false_does_not_hijack_an_existing_account(clien
     assert resp.status_code == 302
     # The victim's account was NOT linked to the attacker's SSO identity.
     assert await _external_identity_count(victim.id) == 0
+
+
+# --- provider posture + config validation (ADR-0022) --------------------------
+
+
+async def test_closed_provider_admits_when_registration_is_closed(client, idp):
+    """A closed provider's enablement *is* the admission decision — the #118
+    public-signup gate applies to open providers only (ADR-0022 §2/§3)."""
+    admin = await admin_token(client)
+    await _create_provider(client, admin, posture="closed")
+    await _set_site_policy(registration_open=False)
+    state, _ = await _begin_login(client, idp)
+
+    resp = await _sso_login(client, idp, state, email="staffer@example.com")
+    assert resp.status_code == 302
+    assert "/auth/callback" in resp.headers["location"], resp.headers["location"]
+
+
+async def test_closed_provider_ignores_the_domain_allowlist(client, idp):
+    """The allowlist is a public-signup control; applying it to an
+    admin-admitted directory would lock out the population the admin just
+    admitted (ADR-0022 §2)."""
+    admin = await admin_token(client)
+    await _create_provider(client, admin, posture="closed")
+    await _set_site_policy(allowlist=["example.com"])
+    state, _ = await _begin_login(client, idp)
+
+    resp = await _sso_login(client, idp, state, email="dev@other-corp.io")
+    assert resp.status_code == 302
+    assert "/auth/callback" in resp.headers["location"], resp.headers["location"]
+
+
+async def test_closed_provider_email_cannot_claim_an_existing_account(client, idp):
+    """The C1 hijack from the ADR-0022 design review: a closed provider's email
+    attribute is *not* proof of address ownership, so without
+    email_is_authoritative it must never link to a pre-existing local account —
+    even when the provider asserts email_verified."""
+    admin = await admin_token(client)
+    reg = await client.post(
+        "/api/auth/register",
+        json={
+            "display_name": "prior",
+            "email": "prior@example.com",
+            "password": "password123",
+        },
+    )
+    victim_id = reg.json()["user"]["id"]
+
+    await _create_provider(client, admin, posture="closed")
+    state, _ = await _begin_login(client, idp)
+    resp = await _sso_login(client, idp, state, email="prior@example.com")
+    assert resp.status_code == 302
+    assert "/auth/callback" in resp.headers["location"]
+
+    # The victim gained no external identity; a separate account was JIT'd with
+    # no email (the untrusted claim is dropped, not stored on the user).
+    assert await _external_identity_count(victim_id) == 0
+    async with SessionLocal() as db:
+        jit = await db.scalar(select(User).where(User.display_name == "prior2"))
+    assert jit is not None and jit.id != victim_id
+    assert jit.email is None and jit.email_verified_at is None
+
+
+async def test_closed_authoritative_provider_links_by_email(client, idp):
+    """The admin who knows their directory verifies addresses may opt in to
+    first-contact linking (email_is_authoritative, ADR-0022 §2)."""
+    admin = await admin_token(client)
+    reg = await client.post(
+        "/api/auth/register",
+        json={
+            "display_name": "linkme",
+            "email": "linkme@example.com",
+            "password": "password123",
+        },
+    )
+    existing_id = reg.json()["user"]["id"]
+
+    await _create_provider(
+        client, admin, posture="closed", email_is_authoritative=True
+    )
+    state, _ = await _begin_login(client, idp)
+    # The directory doesn't assert verification; the admin's flag is the trust.
+    resp = await _sso_login(
+        client, idp, state, email="linkme@example.com", email_verified=False
+    )
+    assert resp.status_code == 302
+    assert "/auth/callback" in resp.headers["location"]
+    assert await _external_identity_count(existing_id) == 1
+
+
+async def test_email_is_authoritative_requires_closed_posture(client, idp):
+    """For an open provider email trust comes from the IdP's own claim; the
+    admin override is a closed-directory concept only."""
+    admin = await admin_token(client)
+    resp = await client.post(
+        "/api/admin/auth-providers",
+        json={
+            "kind": "oidc",
+            "name": "Bad",
+            "slug": "bad",
+            "posture": "open",
+            "email_is_authoritative": True,
+            "config": {"issuer": ISSUER, "client_id": CLIENT_ID},
+        },
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 400
+
+
+async def test_unknown_provider_kind_is_rejected(client, idp):
+    admin = await admin_token(client)
+    resp = await client.post(
+        "/api/admin/auth-providers",
+        json={"kind": "carrier-pigeon", "name": "X", "slug": "x", "config": {}},
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 400
+
+
+async def test_incomplete_config_is_rejected_at_write(client, idp):
+    """ADR-0022 §6: "enabled but half-configured" must not be reachable through
+    the API — and a typo'd config key is a 400, not a silently ignored field."""
+    admin = await admin_token(client)
+    missing = await client.post(
+        "/api/admin/auth-providers",
+        json={
+            "kind": "oidc",
+            "name": "Half",
+            "slug": "half",
+            "config": {"issuer": ISSUER},  # no client_id
+            "enabled": True,
+        },
+        headers=_auth(admin),
+    )
+    assert missing.status_code == 400
+
+    typo = await client.post(
+        "/api/admin/auth-providers",
+        json={
+            "kind": "oidc",
+            "name": "Typo",
+            "slug": "typo",
+            "config": {"issuer": ISSUER, "client_id": CLIENT_ID, "isuer": "x"},
+        },
+        headers=_auth(admin),
+    )
+    assert typo.status_code == 400
+
+
+async def test_corrupt_stored_config_is_a_skip_not_a_500(client, idp):
+    """ADR-0022 §6: the login-time re-parse turns a drifted row (direct DB edit,
+    bad migration) into an unavailable provider, not an error page."""
+    admin = await admin_token(client)
+    created = await _create_provider(client, admin)
+
+    async with SessionLocal() as db:
+        provider = await db.get(IdentityProvider, created["id"])
+        provider.config = {"issuer": ISSUER}  # client_id lost
+        await db.commit()
+
+    resp = await client.get("/api/auth/oidc/testidp/login", follow_redirects=False)
+    assert resp.status_code == 404
+    # ...and the login page's button list hides it too, so the skip is
+    # consistent — no button whose click lands on that 404.
+    assert (await client.get("/api/auth/oidc/providers")).json() == []

@@ -14,7 +14,8 @@ local user"*, not "a provider is an OAuth dance". It named SAML (#100) and LDAP
 framework has shipped and met a real provider" — which it now has (v1.2.0).
 
 The seam is
-[`auth.oidc_identity.resolve_identity`](../../backend/auth/oidc_identity.py):
+[`resolve_identity`](../../backend/auth/external_identity.py) (then
+`auth/oidc_identity.py`):
 given a normalized `(provider, subject, email, email_verified, claims)` it does
 sub-first linking, the #118 admission gate, JIT-provision-as-Participant, and the
 break-glass unusable-password-hash. Two supporting pieces are already generic:
@@ -25,7 +26,7 @@ The questions here were never about the session contract or the *downstream* of
 identity resolution — those are settled. They were:
 
 1. **How one provider model holds three unlike kinds**, given
-   [`UserExternalIdentity.provider_id`](../../backend/models/oidc.py) FKs
+   [`UserExternalIdentity.provider_id`](../../backend/models/identity_provider.py) FKs
    `oidc_providers` and the kinds' configuration barely overlaps.
 2. **Where each transport plugs in** — OIDC and SAML are browser-redirect
    federations; LDAP is a credential *bind* with no redirect and the user's

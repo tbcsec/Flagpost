@@ -111,7 +111,7 @@ class EncryptedString(TypeDecorator):
     reads through the ORM (``utils/backup.serialize_row``), so an encrypted
     column is handed back as *plaintext* like any other. A secret that must stay
     out of the export is excluded there explicitly — whole-table for
-    ``oidc_providers``, per-column via ``Spec.secret_columns`` for
+    ``identity_providers``, per-column via ``Spec.secret_columns`` for
     ``site_settings.smtp_password``. Exporting the ciphertext instead would be no
     use anyway: a different install has a different key.
     """

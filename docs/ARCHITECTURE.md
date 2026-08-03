@@ -797,19 +797,28 @@ getting the module contract right mattered more than building several auth
 backends against it. That contract held: **OIDC/OAuth2 shipped in v1.2.0**
 (#58, ADR-0021) as a bolt-on that touches no part of RBAC.
 
-**External identity (§7.7.1, ADR-0021).** The `sso` required-core module owns
-site-wide `OidcProvider` rows (each independently `enabled`), because
-authentication is a property of the install, not of a competition —
-`competition_modules` (§11.3) is per-competition and has no site-scoped
-equivalent. A login is the standard authorization-code flow with **mandatory
+**External identity (§7.7.1, ADR-0021, generalized by ADR-0022).** The `sso`
+required-core module owns site-wide `IdentityProvider` rows (each independently
+`enabled`), because authentication is a property of the install, not of a
+competition — `competition_modules` (§11.3) is per-competition and has no
+site-scoped equivalent. A provider row carries a `kind` (`oidc` today; SAML
+#100 / LDAP #101 later), a **trust posture** (`open`: the public-signup gate
+applies; `closed`: enablement *is* the admission decision and email is
+display-only unless the admin sets `email_is_authoritative`), one encrypted
+`secret`, and a per-kind `config` JSON validated at write and re-parsed at
+login. An OIDC login is the standard authorization-code flow with **mandatory
 PKCE and `state`**; the callback validates the ID token (signature via cached
-JWKS, plus `iss`/`aud`/`exp`/`nonce`) and then resolves identity:
+JWKS, plus `iss`/`aud`/`exp`/`nonce`) and then resolves identity
+(`auth/external_identity.resolve_identity`):
 
-- **`(provider_id, sub)` matches** → existing linked user.
-- **First contact, and the IdP asserts `email_verified: true`** → link to the
-  local account with that address.
+- **`(provider_id, subject)` matches** → existing linked user.
+- **First contact with a trusted email** (open: the IdP asserts
+  `email_verified: true`; closed: the admin set `email_is_authoritative`) →
+  link to the local account with that address.
 - **Otherwise** → JIT-create a user holding **Participant only**, mirroring the
-  rule that public registration never grants above Participant.
+  rule that public registration never grants above Participant. The #118
+  admission gate (registration-open + domain allowlist) applies to **open**
+  providers only.
 
 External identity answers *who you are*; RBAC (§7) alone decides what you may
 do. Group and role claims are deliberately ignored — honouring them would move
@@ -1156,9 +1165,9 @@ importance — module state is *per-competition* (§11.3), and authentication is
 property of the **install**, not of a competition. There is no site-scoped
 equivalent of `competition_modules` to hang it on, so an optional `sso` module
 would have meant "OIDC works in this competition but not that one", which is
-incoherent. Enablement lives on the provider rows instead (each `OidcProvider`
-carries its own `enabled` flag). Any future site-wide module — SAML (#100),
-LDAP (#101) — inherits the same shape.
+incoherent. Enablement lives on the provider rows instead (each
+`IdentityProvider` carries its own `enabled` flag, ADR-0022). SAML (#100) and
+LDAP (#101) inherit the same shape as new provider `kind`s, not new modules.
 
 `VISION.md`'s Plugin Ecosystem section lists "Notifications" and
 "Collaboration tools" as example Core Plugins — worth reconciling

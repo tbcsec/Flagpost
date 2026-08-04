@@ -801,8 +801,8 @@ backends against it. That contract held: **OIDC/OAuth2 shipped in v1.2.0**
 required-core module owns site-wide `IdentityProvider` rows (each independently
 `enabled`), because authentication is a property of the install, not of a
 competition — `competition_modules` (§11.3) is per-competition and has no
-site-scoped equivalent. A provider row carries a `kind` (`oidc` today; SAML
-#100 / LDAP #101 later), a **trust posture** (`open`: the public-signup gate
+site-scoped equivalent. A provider row carries a `kind` (`oidc`, `saml` or
+`ldap`), a **trust posture** (`open`: the public-signup gate
 applies; `closed`: enablement *is* the admission decision and email is
 display-only unless the admin sets `email_is_authoritative`), one encrypted
 `secret`, and a per-kind `config` JSON validated at write and re-parsed at
@@ -837,9 +837,14 @@ identically regardless of how the user got in. Provider `client_secret`s are
 stored **encrypted** (`utils/crypto.EncryptedString`) rather than plaintext,
 per ADR-0020 — they must be retrieved to call the token endpoint. **SAML 2.0
 (#100) shipped** as a second redirect provider `kind` on the ADR-0022 framework
-(SP-initiated, python3-saml, signature-before-trust); **LDAP (#101) remains
-deferred**, since ADR-0021/ADR-0022 note it is a credential bind rather than a
-redirect flow and needs its own seam in the local login route.
+(SP-initiated, python3-saml, signature-before-trust). **LDAP (#101) shipped**
+as the first non-redirect `kind` (ADR-0022 §5): it has no login button —
+`POST /api/auth/login` falls through to a directory bind (`utils/ldap`, ldap3,
+TLS-mandatory, RFC 4515-escaped search, stable-id subject) only after local
+password verification fails, so the ADR-0017 owner never touches a directory
+and a directory outage degrades to "LDAP users can't log in", never "nobody
+can". A banned user's directory bind still succeeds, which is why the route's
+post-resolve `is_active` check is load-bearing.
 
 ---
 

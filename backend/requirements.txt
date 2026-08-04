@@ -44,3 +44,8 @@ aiosmtplib>=5.1.2,<6.0
 # are needed to build. Imported lazily by the `saml` transport, so an install
 # with no SAML provider never loads it (mirrors aiosmtplib).
 python3-saml>=1.16,<2.0
+
+# LDAP directory bind (#101, ADR-0022 §5). Pure Python, no native deps.
+# Imported lazily by utils/ldap, so an install with no LDAP provider never
+# loads it (mirrors aiosmtplib / python3-saml).
+ldap3>=2.9.1,<3.0

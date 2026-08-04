@@ -22,9 +22,10 @@ event — all from one self-hostable app. It's multi-tenant from the ground up (
 many competitions from a single install), real-time throughout (WebSockets, not
 polling), and ships as a one-command production stack.
 
-Sign-in is local (username + optional email) or **OIDC/OAuth2** — Google, Okta,
-Keycloak, Entra, or anything else with a discovery document. SAML, LDAP, and an
-AI assistant are on the roadmap but deliberately not built yet.
+Sign-in is local (username + optional email) or an external directory —
+**OIDC/OAuth2** (Google, Okta, Keycloak, Entra, or anything with a discovery
+document), **SAML 2.0**, or **LDAP / Active Directory**. An AI assistant is on
+the roadmap but deliberately not built yet.
 
 ## ✨ Highlights
 
@@ -53,10 +54,12 @@ The things that set Flagpost apart — every one of them **built and working tod
 - **🔁 CTFd-compatible & fully portable.** Bulk challenge import/export in the
   **ctfcli YAML** format, plus a one-click, full-fidelity **platform backup**
   (export/import any section of your install).
-- **🔐 Bring your own identity provider.** Full **OIDC/OAuth2** single sign-on
-  (PKCE, sub-first account linking, just-in-time provisioning) alongside local
-  accounts — so an existing Google/Okta/Keycloak/Entra directory just works,
-  while local login stays as break-glass.
+- **🔐 Bring your own identity provider.** **OIDC/OAuth2** (PKCE, sub-first
+  account linking, just-in-time provisioning), **SAML 2.0** (signature-before-
+  trust, SP-metadata endpoint), and **LDAP / Active Directory** (a directory
+  bind behind the ordinary login form) — alongside local accounts, so an
+  existing Google/Okta/Keycloak/Entra/Shibboleth or on-prem directory just
+  works, while local login stays as break-glass.
 - **🔒 Secure by default.** argon2 hashing, a per-install auto-derived JWT secret
   (no shipped credentials — a first-run setup wizard creates your owner account),
   SSRF-hardened webhooks, ReDoS-contained regex flags, and timing-safe auth.
@@ -142,7 +145,7 @@ The things that set Flagpost apart — every one of them **built and working tod
 - Operational **dashboard** with drag-and-drop widgets
 
 **Administration**
-- **OIDC / OAuth2** providers alongside local accounts
+- **OIDC / SAML / LDAP** identity providers alongside local accounts
 - **Users** directory + soft-ban / lifecycle
 - Data-driven **roles & permissions** editor
 - Personal **API tokens** with platform-wide oversight
@@ -222,7 +225,7 @@ two-line override) to upgrade by tag instead of rebuilding from source.
 
 A release image reports its exact tag as the running version; a build from
 source reports the release it's based on with an `-src` suffix (e.g.
-`1.2.0-src`), since `main` starts accumulating the next version the moment a tag
+`1.3.0-src`), since `main` starts accumulating the next version the moment a tag
 is cut.
 
 ## 🛠️ Local development
@@ -265,7 +268,7 @@ once before shipping one.
 ## 🧱 Tech stack
 
 **Backend** — Python · FastAPI · SQLAlchemy 2 (async) · Alembic · PostgreSQL ·
-Redis · MinIO/S3 · JWT + argon2 + OIDC · a first-class async event bus.
+Redis · MinIO/S3 · JWT + argon2 + OIDC/SAML/LDAP · a first-class async event bus.
 **Frontend** — TypeScript · Next.js 15 (App Router) · React 19 · TanStack Query ·
 Zustand · Tailwind v4 · TipTap + Y.js (CRDT).
 **Realtime** — WebSockets throughout. **Deploy** — Docker Compose + Caddy.

@@ -17,7 +17,7 @@ predates it.
 | `phase_1.md` | Tier 1 — minimum viable competition | Shipped |
 | `phase_2.md` | Tier 2 — dashboard, tickets, presence, theming, roles | Shipped |
 | `phase_3.md` | Tier 3 — automation engine, DnD dashboard, CRDT, polish, and the ad-hoc Phase 9/10 tranches | Shipped |
-| `issue-55-challenge-list-view.md` | Alternative challenge view | **Not yet built** — scheduled for v1.3.0 |
+| `issue-55-challenge-list-view.md` | Alternative challenge view | Shipped in v1.3.0 |
 | `issue-57-rules-code-of-conduct.md` | Rules / code of conduct | Shipped in v1.2.0 |
 | `issue-76-submissions-browser.md` | Submissions browser | Shipped in v1.2.0 |
 

@@ -1,8 +1,8 @@
 # Roadmap
 
-Flagpost shipped **v1.0.0 on 2026-07-25**; the latest tag is **v1.1.1**, with
-the v1.2.0 milestone complete on `main` and awaiting a tag. This document has
-two halves:
+Flagpost shipped **v1.0.0 on 2026-07-25**; the latest tag is **v1.3.0**
+(2026-08-04). `main` is now `1.3.0-src`, accumulating the **v1.4.0** milestone.
+This document has two halves:
 
 - **[Tiers 0–3](#tier-0--foundation)** — the pre-1.0 build order, breaking
   `ARCHITECTURE.md` and `VISION.md` down into the feature list that got the
@@ -31,8 +31,9 @@ assistance, external identity providers, the plugin marketplace, and multi-site
 tenancy — none of them were required for an organiser to run a competition
 better than a spreadsheet + Discord. Three of those exclusions have since
 lifted: the **automation engine** (with dashboard drag-and-drop and CRDT
-editing) was pulled into Tier 3, **OIDC shipped in v1.2.0**, and **AI is
-scheduled for v1.4.0**. What's still deferred is listed at the bottom.
+editing) was pulled into Tier 3, **external identity providers shipped** (OIDC
+in v1.2.0, then SAML and LDAP in v1.3.0), and **AI is scheduled for v1.4.0**.
+What's still deferred is listed at the bottom.
 
 ---
 
@@ -156,7 +157,7 @@ what we have."
     version history yet) — enough that a team of organisers isn't
     stepping on each other publishing half-finished challenges.
     **Deferred** (owner decision) — wants more design first. Still
-    unbuilt and unscheduled as of v1.2.0.
+    unbuilt and unscheduled as of v1.3.0.
 18. **Basic support tickets** — a competitor can ask a question tied to a
     challenge; a judge can respond and mark it resolved. No routing rules,
     no analytics on response time yet — just replacing the "ask in
@@ -301,8 +302,8 @@ pinned backend/frontend images; the release frontend is built in same-origin
 mode so one image works behind any single-origin proxy without a rebuild.
 
 **v1.2.0** — the identity, accountability and trust batch
-([milestone](https://github.com/tbcsec/flagpost/milestone/2)). **Complete on
-`main`, not yet tagged** — every issue in the milestone is closed:
+([milestone](https://github.com/tbcsec/flagpost/milestone/2)). **Shipped**
+(tagged `v1.2.0`) — every issue in the milestone is closed:
 
 - **OIDC / OAuth2 external identity** (#58, ADR-0021) — the headline feature,
   and the first item lifted off the deferred list below.
@@ -322,17 +323,33 @@ mode so one image works behind any single-origin proxy without a rebuild.
 - Admin → Site settings refactored into tabs (#104), the react-hooks/React
   Compiler lint burn-down (#38), and fixes (#105, #124, #125, #126).
 
+**v1.3.0** — external-auth breadth and per-surface polish
+([milestone](https://github.com/tbcsec/flagpost/milestone/3)). **Shipped**
+(tagged `v1.3.0`, 2026-08-04) — every issue in the milestone is closed:
+
+- **SAML 2.0 identity providers** (#100, ADR-0022) — a second browser-redirect
+  `kind` on the ADR-0021 provider framework: signature-before-trust,
+  `InResponseTo`/replay/XSW defences, a persistent-NameID requirement, and an
+  SP-metadata endpoint.
+- **LDAP / Active Directory** (#101, ADR-0022 §5) — the first non-redirect
+  `kind`: a directory bind inside `POST /api/auth/login`, tried only after local
+  password verification fails, so the break-glass owner never touches a directory
+  and an outage never locks everyone out. TLS-mandatory, RFC 4515-escaped search,
+  stable-id subject, off the event loop under a timeout.
+- **Restrict which external identities may sign in** (#118) — a per-provider
+  `open`/`closed` trust posture that closes the unverified-email account-takeover
+  hole for admin-configured directories.
+- **Encrypted-at-rest facility for retrievable secrets** (#109, ADR-0020) —
+  `utils/crypto.EncryptedString` (Fernet) covering the SMTP password and the
+  OIDC/SAML/LDAP provider secrets, kept out of portable backups.
+- **Alternative challenge list view** (#55), **venue/projector mode** (#77), a
+  **tabbed profile page** (#113), a **magic-byte check on logo upload** (#114),
+  and a single owner-provisioning helper that stamps `setup_completed_at` (#133).
+
 ### Planned
 
 Summarised from the open milestones; the milestone pages are authoritative.
 
-- **v1.3.0** — auth breadth and per-surface polish: **SAML 2.0** (#100) and
-  **LDAP / Active Directory** (#101) extending the OIDC framework, restricting
-  **which external identities may sign in** (#118), an **encrypted-at-rest
-  facility for retrievable secrets** (#109 — now largely a matter of adopting
-  `utils/crypto.EncryptedString`, built for #58), a **tabbed profile page**
-  (#113), an **alternative challenge view** (#55), **venue/projector mode**
-  (#77), and a magic-byte check on logo upload (#114).
 - **v1.4.0** — the **AI assistants module** (#98), lifting the deferral below,
   and **dashboard drag-and-drop improvements** (#21).
 - **v1.5.0** — an **i18n pass** (#78) and **Major League Cyber integration**
@@ -346,19 +363,21 @@ Summarised from the open milestones; the milestone pages are authoritative.
 ## Explicitly Deferred Past MVP
 
 Real parts of the long-term vision that were deliberately left out of the
-pre-1.0 build. Two have since been scheduled — kept here with their status so
-the reasoning isn't lost.
+pre-1.0 build. Two have since moved off the deferred list — kept here with their
+status so the reasoning isn't lost.
 
 - **AI integration** (Architecture §12) — both the administrator and
   competitor assistants. **Now scheduled for v1.4.0** (#98): the condition
   stated here — real usage data and a settled event/data layer — is met.
-- **SSO / external identity providers** (Architecture §7.7) — **lifted.**
-  OIDC/OAuth2 shipped in v1.2.0 (#58, ADR-0021): the prediction here held, and
-  it plugged into the §7.7 contract as a bolt-on rather than a refactor. **SAML
-  (#100) and LDAP (#101) are scheduled for v1.3.0** — SAML is the same
-  browser-redirect shape and should be cheap on top of the OIDC framework; LDAP
-  is a credential *bind*, not a redirect flow, so it needs its own seam
-  (ADR-0021 leaves room for one).
+- **SSO / external identity providers** (Architecture §7.7) — **lifted, and now
+  complete.** OIDC/OAuth2 shipped in v1.2.0 (#58, ADR-0021): the prediction here
+  held, and it plugged into the §7.7 contract as a bolt-on rather than a
+  refactor. **SAML (#100) and LDAP (#101) shipped in v1.3.0** (ADR-0022,
+  generalizing the provider framework): SAML as another browser-redirect
+  provider, and LDAP as a credential *bind* with its own seam in the login route
+  — the non-redirect seam ADR-0021 deliberately left room for. External auth is
+  now OIDC + SAML + LDAP under one `IdentityProvider` model; a fourth protocol is
+  a new `kind`, not a new subsystem.
 - **Plugin marketplace & third-party modules** (Architecture §11) — the
   marketplace listing/discovery experience and the isolation story for
   untrusted third-party modules (Architecture §15). The manifest-driven

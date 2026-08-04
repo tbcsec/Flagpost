@@ -14,7 +14,7 @@ is now wired** (see below), so that scaffolding — the banner component and
 `placeholder-data.ts` — has since been removed.
 
 **Status: every surface in the mock is wired, and the platform has shipped
-through v1.1.1 with v1.2.0 complete on `main`.** The tables below are kept
+through v1.3.0.** The tables below are kept
 current, so they double as a map of
 which hook and module back each screen — but this document is fundamentally a
 *record of the handoff*, not the feature list. For what the platform does today,
@@ -105,7 +105,7 @@ code.
 | Analytics | **Wired** (Tier 3 Phase 5, #23) — the `analytics` optional module (staff, `view_competition_analytics`): overview + per-challenge table (solves / attempts+fails / completion rate / avg solve time / hints / linked tickets) and a competitors/teams ranking (rank / points / solves / first bloods / tickets / last solve), read off existing submission data (`use-analytics`) |
 | Collaborative notes | **Wired** (Tier 3 Phase 7, §4.2, ADR-0014) — the required-core `collab` module: a **team per-challenge scratchpad** in the challenge dialog and **staff notes** on a ticket thread, both live-collaborative rich text (Y.js under TipTap over a `note/<doc_key>` WS room, dumb-relay transport + blob persistence). Scoped per-request — team membership / `ticket_view_internal_notes` (`CollabNote`, `lib/collab`). v1.1.0 added a **personal** `user_challenge:` scope so individual-mode competitors get the same surface (#47) |
 
-### Added after the handoff (v1.1.0 – v1.2.0)
+### Added after the handoff (v1.1.0 – v1.3.0)
 
 Surfaces with no counterpart in the original mock, listed so the table stays a
 complete map of the app.
@@ -125,6 +125,11 @@ complete map of the app.
 | Update notice | **Wired** (v1.2.0, #111) — an admin-only banner when a newer release exists, dismissible per version, plus a "last checked" line on Admin → Site settings. Gated at the *query*, not just the render, so a competitor never calls the admin endpoint |
 | First-run setup wizard | **Wired** (Phase 9, ADR-0017) — `/setup`, outside the shell: creates the owner account and initial branding on an install that has no administrator. `SetupGuard` redirects to it while unconfigured |
 | Password reset | **Wired** (Phase 9, Group D) — `/forgot-password` + `/reset-password`, both outside the shell (`useForgotPassword`/`useResetPassword`) |
+| Auth providers — SAML & LDAP | **Wired** (v1.3.0, #100/#101, ADR-0022) — the Auth tab's provider form grows two more `kind`s on the same `/api/admin/auth-providers` CRUD: **SAML 2.0** (IdP entity/SSO/cert + SP metadata URL, another "Sign in with…" redirect button) and **LDAP / AD** (server/bind/base/attribute fields, forced-closed posture, **no** login button — it rides the ordinary username/password form). The public button list excludes LDAP by kind |
+| Restrict external sign-in (trust posture) | **Wired** (v1.3.0, #118, ADR-0022) — each provider carries an `open`/`closed` posture on the Auth form: public IdPs stay behind the registration + email-domain gate, admin directories are admitted by being enabled, with an `email_is_authoritative` opt-in for email linking |
+| Alternative challenge list view | **Wired** (v1.3.0, #55) — a compact list alternative to the card grid, toggled and remembered per user (`stores/challenge-view`, `ChallengeList`) |
+| Venue / projector mode | **Wired** (v1.3.0, #77) — a big-screen public view for live events (scoreboard, first-blood splashes, insight cards) under `/public`, outside the app shell (`components/public/venue`) |
+| Tabbed profile page | **Wired** (v1.3.0, #113) — `/profile` reorganised into tabs (account incl. email + password, notifications, API tokens) the way Admin → Site settings is, with the active tab in `?tab=` |
 
 ## Formerly UI-only (now wired or deferred)
 

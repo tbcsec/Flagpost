@@ -36,9 +36,57 @@ class OidcConfig(BaseModel):
     scopes: str = Field(default="openid email profile", max_length=500)
 
 
-# kind -> config model. SAML (#100) and LDAP (#101) register theirs alongside
-# their transports.
-PROVIDER_CONFIG_MODELS: dict[str, type[BaseModel]] = {"oidc": OidcConfig}
+class SamlConfig(BaseModel):
+    """Non-secret SAML SP settings carried in ``IdentityProvider.config`` (#100,
+    ADR-0022 §4). The one secret — the SP private key used to sign AuthnRequests —
+    lives in ``IdentityProvider.secret``, not here; ``sp_x509_cert`` is public.
+
+    ``extra="forbid"`` so a typo'd key is a 400, not a silently ignored setting.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # --- The IdP (all three required — the cert is what validates the assertion
+    #     signature, and without it there is nothing to trust). ---
+    idp_entity_id: str = Field(min_length=1, max_length=1000)
+    # SSO endpoint for the HTTP-Redirect binding (where we send the AuthnRequest).
+    idp_sso_url: str = Field(min_length=1, max_length=1000)
+    # PEM or bare-base64 X.509; python3-saml accepts either.
+    idp_x509_cert: str = Field(min_length=1, max_length=20_000)
+
+    # --- The SP (us). ``sp_entity_id`` must match what's registered at the IdP;
+    #     the ACS URL is derived server-side from PUBLIC_BASE_URL, not stored. ---
+    sp_entity_id: str = Field(min_length=1, max_length=1000)
+    # Optional public SP cert; present only when signing AuthnRequests (paired
+    # with the private key in ``secret``). Signing the request is optional —
+    # the load-bearing signature is the IdP's on the *assertion*, always required.
+    sp_x509_cert: str | None = Field(default=None, max_length=20_000)
+
+    # Persistent by default and the only value we accept: a transient NameID
+    # changes each login and would JIT a fresh account every time (ADR-0022 §4,
+    # the SAML analogue of "not the DN").
+    nameid_format: Literal["persistent", "emailAddress"] = "persistent"
+
+    # SAML attribute name (or OID) to read for each field. Email defaults to the
+    # common friendly name; None falls back to the NameID when it's email-format.
+    email_attribute: str | None = Field(default="email", max_length=200)
+    name_attribute: str | None = Field(default="displayName", max_length=200)
+    # NOTE (ADR-0022 §4 deviation, flagged not worked-around): python3-saml
+    # validates Conditions timestamps exactly, with no clock-skew hook, so a
+    # `clock_skew_seconds` field would be dead config. Left out until we add a
+    # library-independent pre-check; tracked as a follow-up on #100.
+
+
+# kind -> config model. LDAP (#101) registers its config alongside its transport.
+PROVIDER_CONFIG_MODELS: dict[str, type[BaseModel]] = {
+    "oidc": OidcConfig,
+    "saml": SamlConfig,
+}
+
+# Provider kinds whose login is a browser redirect (a "Sign in with…" button),
+# as opposed to the local username/password form (LDAP, #101). Drives the
+# public provider list so a non-redirect kind never grows a dead button.
+REDIRECT_KINDS: frozenset[str] = frozenset({"oidc", "saml"})
 
 
 def parse_provider_config(kind: str, config: dict) -> BaseModel:
@@ -63,6 +111,17 @@ def provider_config_or_none(provider) -> BaseModel | None:
         return parse_provider_config(provider.kind, provider.config)
     except (ValueError, ValidationError):
         return None
+
+
+class PublicProviderOut(BaseModel):
+    """What an unauthenticated login page may know: enough to draw a button and
+    build its login URL (``/api/auth/{kind}/{slug}/login``). Deliberately
+    excludes all config — a login page has no use for an install's IdP topology,
+    and not publishing it is free."""
+
+    slug: str
+    name: str
+    kind: str
 
 
 class ProviderOut(BaseModel):

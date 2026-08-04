@@ -127,7 +127,7 @@ export function useRestoreSession() {
 export function useAuthProviders() {
   return useQuery({
     queryKey: ["auth-providers", "public"],
-    queryFn: authApi.oidcProviders,
+    queryFn: authApi.providers,
     // A provider list changes about as often as an admin edits it; don't
     // refetch it on every focus of a login screen.
     staleTime: 60_000,
@@ -135,11 +135,12 @@ export function useAuthProviders() {
     // Absolutize the login URL here rather than in the component: the SSO flow
     // is a full-page navigation to the *backend* origin, and components can't
     // import the API client (§8). Same approach use-site-settings takes for the
-    // logo URL.
+    // logo URL. The path is kind-aware so a SAML provider redirects to its own
+    // transport.
     select: (providers) =>
       providers.map((p) => ({
         ...p,
-        login_url: apiAssetUrl(`/api/auth/oidc/${p.slug}/login`),
+        login_url: apiAssetUrl(`/api/auth/${p.kind}/${p.slug}/login`),
       })),
   });
 }

@@ -10,7 +10,6 @@ import { useAuthStore } from "@/stores/auth";
 import type {
   AuthProvider,
   AuthProviderPublic,
-  OidcProviderConfig,
   Announcement,
   AnnouncementCreate,
   AppNotification,
@@ -329,8 +328,9 @@ export const authApi = {
     apiFetch<void>("/api/auth/resend-verification", { method: "POST" }),
   // Enabled external identity providers for the login page (#58). Public — the
   // login screen renders before there's any session.
-  oidcProviders: () =>
-    apiFetch<AuthProviderPublic[]>("/api/auth/oidc/providers", {}, { auth: false }),
+  // The kind-agnostic public provider list (OIDC + SAML redirect kinds).
+  providers: () =>
+    apiFetch<AuthProviderPublic[]>("/api/auth/providers", {}, { auth: false }),
   // Self-service add / change / clear of your own address (#106). Returns the
   // updated UserOut — the same shape the auth store already holds, so the
   // caller can drop it straight in.
@@ -357,7 +357,7 @@ export const authProvidersApi = {
     posture?: "open" | "closed";
     email_is_authoritative?: boolean;
     secret?: string | null;
-    config: OidcProviderConfig;
+    config: Record<string, string | null>;
     enabled?: boolean;
   }) =>
     apiFetch<AuthProvider>(authProvidersApi.base, {
@@ -373,7 +373,7 @@ export const authProvidersApi = {
       posture: "open" | "closed";
       email_is_authoritative: boolean;
       secret: string;
-      config: OidcProviderConfig;
+      config: Record<string, string | null>;
       enabled: boolean;
     }>,
   ) =>

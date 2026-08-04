@@ -8,17 +8,6 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
-class OidcProviderPublic(BaseModel):
-    """What an unauthenticated login page may know: enough to draw a button.
-
-    Deliberately excludes the issuer and client_id — a login page has no use for
-    them, and not publishing an install's IdP topology is free.
-    """
-
-    slug: str
-    name: str
-
-
 class ExternalIdentityOut(BaseModel):
     """A link shown on /profile so a user can see how they sign in."""
 

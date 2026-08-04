@@ -17,14 +17,15 @@ Excluded by design: ``refresh_sessions`` and ``api_tokens`` (live bearer
 credentials), and the transient/derived ``notifications`` / ``collab_documents``
 / ``dashboard_layouts`` — none belong in a portable backup.
 
-Also excluded, for the same credential reason: ``oidc_providers``,
-``user_external_identities`` and ``oidc_login_states`` (#58). A provider row
-holds an OAuth **client secret**, which is a credential the operator was issued
-by their IdP — and it's encrypted with a per-install key (ADR-0020), so it would
-restore as undecryptable ciphertext on any other install anyway. The identity
-links are meaningless without their providers, and login states are in-flight
-requests measured in minutes. An operator restoring onto new infrastructure
-re-enters provider config, which is also the moment to rotate the secret.
+Also excluded, for the same credential reason: ``identity_providers``,
+``user_external_identities`` and ``auth_login_states`` (#58, ADR-0022 §7). A
+provider row holds a **secret** — an OIDC client secret today; a SAML SP key or
+LDAP bind password later — a credential the operator was issued, encrypted with
+a per-install key (ADR-0020), so it would restore as undecryptable ciphertext on
+any other install anyway. The identity links are meaningless without their
+providers, and login states are in-flight requests measured in minutes. An
+operator restoring onto new infrastructure re-enters provider config, which is
+also the moment to rotate the secret.
 
 The credential exclusion is the load-bearing one. Only a token's SHA-256 is
 stored, but that hash is exactly what authentication compares against: exporting
@@ -168,7 +169,7 @@ class Spec:
     # ciphertext would be undecryptable on a target install with a different key
     # anyway — so a per-install secret has no business in a portable backup
     # (ADR-0020). This is the column-level form of the whole-table exclusion the
-    # oidc_providers row gets; site_settings can't be dropped wholesale because
+    # identity_providers row gets; site_settings can't be dropped wholesale because
     # its branding/rules/registration fields are portable and wanted. Import
     # tolerates the absent key (load_row only sets present columns), so the
     # secret is simply re-entered after a restore.

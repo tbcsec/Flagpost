@@ -6,7 +6,7 @@ The browser-facing half of SSO. Three routes:
 - ``GET /api/auth/oidc/{slug}/login`` — mints PKCE + ``state`` + ``nonce``,
   stores them server-side, redirects to the IdP.
 - ``GET /api/auth/oidc/{slug}/callback`` — validates everything, resolves the
-  identity (``auth.oidc_identity``), issues a session, redirects into the app.
+  identity (``auth.external_identity``), issues a session, redirects into the app.
 
 **The access token never travels in a URL.** The callback sets the same
 httpOnly refresh cookie password login sets, then redirects to a frontend page
@@ -37,8 +37,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from db import ensure_aware_utc, get_db, utcnow
-from models.oidc import OidcLoginState, OidcProvider
+from models.identity_provider import AuthLoginState, IdentityProvider
 from routers.auth import _issue_session
+from schemas.auth_providers import OidcConfig, provider_config_or_none
 from schemas.oidc import OidcProviderPublic
 from utils import oidc as oidc_utils
 from utils.oidc import OidcError
@@ -107,23 +108,58 @@ def _claim_is_true(value: object) -> bool:
     return value is True or (isinstance(value, str) and value.strip().lower() == "true")
 
 
-async def _enabled_provider(db: AsyncSession, slug: str) -> OidcProvider | None:
-    return await db.scalar(
-        select(OidcProvider).where(
-            OidcProvider.slug == slug, OidcProvider.enabled.is_(True)
+async def _enabled_provider(
+    db: AsyncSession, slug: str
+) -> tuple[IdentityProvider, OidcConfig] | None:
+    """The enabled OIDC provider behind ``slug`` with its parsed config, or
+    ``None``. The config re-parse is the ADR-0022 §6 guard: a row whose stored
+    JSON no longer validates (a drifted migration, a direct DB edit) is a
+    logged skip — indistinguishable from a disabled provider — rather than a
+    500 in a user's face at login time."""
+    provider = await db.scalar(
+        select(IdentityProvider).where(
+            IdentityProvider.slug == slug,
+            IdentityProvider.kind == "oidc",
+            IdentityProvider.enabled.is_(True),
         )
     )
+    if provider is None:
+        return None
+    config = provider_config_or_none(provider)
+    if not isinstance(config, OidcConfig):
+        logger.warning(
+            "provider %s has invalid stored config; treating as unavailable", slug
+        )
+        return None
+    return provider, config
 
 
 @router.get("/providers", response_model=list[OidcProviderPublic])
-async def list_providers(db: AsyncSession = Depends(get_db)) -> list[OidcProvider]:
-    """Enabled providers only. Public — the login page renders before auth."""
+async def list_providers(db: AsyncSession = Depends(get_db)) -> list[IdentityProvider]:
+    """Enabled redirect providers only. Public — the login page renders before
+    auth. Filtered by kind so a future non-redirect provider (LDAP, #101) never
+    grows a dead "Sign in with…" button (ADR-0022 §7), and by the same config
+    re-parse the login route applies — a drifted row must be indistinguishable
+    from a disabled provider *here too*, or it keeps a button whose click lands
+    on a raw 404 instead of the §6 logged skip."""
     rows = await db.scalars(
-        select(OidcProvider)
-        .where(OidcProvider.enabled.is_(True))
-        .order_by(OidcProvider.name)
+        select(IdentityProvider)
+        .where(
+            IdentityProvider.kind == "oidc",
+            IdentityProvider.enabled.is_(True),
+        )
+        .order_by(IdentityProvider.name)
     )
-    return list(rows)
+    providers = []
+    for provider in rows:
+        if provider_config_or_none(provider) is None:
+            logger.warning(
+                "provider %s has invalid stored config; hiding its login button",
+                provider.slug,
+            )
+            continue
+        providers.append(provider)
+    return providers
 
 
 @router.get("/{slug}/login")
@@ -133,16 +169,17 @@ async def oidc_login(
     return_to: str | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
-    provider = await _enabled_provider(db, slug)
-    if provider is None:
+    loaded = await _enabled_provider(db, slug)
+    if loaded is None:
         # A disabled or unknown provider is indistinguishable — no probing for
         # which providers an install has configured but not turned on.
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Unknown provider"
         )
+    provider, config = loaded
 
     try:
-        document = await oidc_utils.discover(provider.issuer)
+        document = await oidc_utils.discover(config.issuer)
     except OidcError as exc:
         return _fail(f"discovery failed for {slug}: {exc}", "provider_unavailable")
 
@@ -153,10 +190,10 @@ async def oidc_login(
     # Opportunistic sweep so abandoned logins don't accumulate; there's no
     # scheduler hook for this and the table is tiny.
     await db.execute(
-        delete(OidcLoginState).where(OidcLoginState.expires_at < utcnow())
+        delete(AuthLoginState).where(AuthLoginState.expires_at < utcnow())
     )
     db.add(
-        OidcLoginState(
+        AuthLoginState(
             state=state,
             provider_id=provider.id,
             code_verifier=verifier,
@@ -170,9 +207,9 @@ async def oidc_login(
 
     params = {
         "response_type": "code",
-        "client_id": provider.client_id,
+        "client_id": config.client_id,
         "redirect_uri": redirect_uri_for(request, slug),
-        "scope": provider.scopes,
+        "scope": config.scopes,
         "state": state,
         "nonce": nonce,
         "code_challenge": challenge,
@@ -202,7 +239,7 @@ async def oidc_callback(
     # Consume the state row first: single-use, so a replayed callback finds
     # nothing. This is also the CSRF check — a callback we didn't initiate has
     # no matching row.
-    login_state = await db.get(OidcLoginState, state)
+    login_state = await db.get(AuthLoginState, state)
     if login_state is None:
         return _fail("unknown or already-used state", "invalid_state")
     await db.delete(login_state)
@@ -211,26 +248,27 @@ async def oidc_callback(
     if ensure_aware_utc(login_state.expires_at) < utcnow():
         return _fail("state expired", "expired")
 
-    provider = await _enabled_provider(db, slug)
-    if provider is None or provider.id != login_state.provider_id:
+    loaded = await _enabled_provider(db, slug)
+    if loaded is None or loaded[0].id != login_state.provider_id:
         return _fail("provider disabled or mismatched between login and callback",
                      "provider_unavailable")
+    provider, config = loaded
 
     try:
-        document = await oidc_utils.discover(provider.issuer)
+        document = await oidc_utils.discover(config.issuer)
         tokens = await oidc_utils.exchange_code(
             document=document,
             code=code,
             redirect_uri=redirect_uri_for(request, slug),
-            client_id=provider.client_id,
-            client_secret=provider.client_secret,
+            client_id=config.client_id,
+            client_secret=provider.secret,
             code_verifier=login_state.code_verifier,
         )
         claims = await oidc_utils.validate_id_token(
             id_token=tokens["id_token"],
             document=document,
-            issuer=provider.issuer,
-            client_id=provider.client_id,
+            issuer=config.issuer,
+            client_id=config.client_id,
             nonce=login_state.nonce,
         )
     except OidcError as exc:
@@ -250,8 +288,8 @@ async def oidc_callback(
         claims = {**info, **claims}
 
     # Imported here rather than at module scope to keep the import graph acyclic
-    # (auth.oidc_identity pulls in the event bus, which imports routers).
-    from auth.oidc_identity import IdentityRejected, resolve_identity
+    # (auth.external_identity pulls in the event bus, which imports routers).
+    from auth.external_identity import IdentityRejected, resolve_identity
 
     try:
         user, created = await resolve_identity(

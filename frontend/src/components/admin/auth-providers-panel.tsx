@@ -29,6 +29,7 @@ import { useConfirm } from "@/components/ui/confirm";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import {
   useAdminAuthProviders,
   useCreateAuthProvider,
@@ -45,6 +46,8 @@ interface FormState {
   client_id: string;
   client_secret: string;
   scopes: string;
+  posture: "open" | "closed";
+  email_is_authoritative: boolean;
 }
 
 const EMPTY: FormState = {
@@ -54,6 +57,8 @@ const EMPTY: FormState = {
   client_id: "",
   client_secret: "",
   scopes: "openid email profile",
+  posture: "open",
+  email_is_authoritative: false,
 };
 
 function ProviderForm({
@@ -70,10 +75,12 @@ function ProviderForm({
       ? {
           name: editing.name,
           slug: editing.slug,
-          issuer: editing.issuer,
-          client_id: editing.client_id,
+          issuer: editing.config.issuer,
+          client_id: editing.config.client_id,
           client_secret: "", // never returned; blank means "leave unchanged"
-          scopes: editing.scopes,
+          scopes: editing.config.scopes,
+          posture: editing.posture,
+          email_is_authoritative: editing.email_is_authoritative,
         }
       : EMPTY,
   );
@@ -86,16 +93,27 @@ function ProviderForm({
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const config = {
+      issuer: form.issuer,
+      client_id: form.client_id,
+      scopes: form.scopes,
+    };
+    // The flag only means something for a closed directory (the API enforces
+    // this); switching back to open clears it rather than 400ing.
+    const posture = {
+      posture: form.posture,
+      email_is_authoritative:
+        form.posture === "closed" && form.email_is_authoritative,
+    };
     if (editing) {
       update.mutate(
         {
           id: editing.id,
           name: form.name,
-          issuer: form.issuer,
-          client_id: form.client_id,
-          scopes: form.scopes,
+          config,
+          ...posture,
           // Omitted entirely when blank, so an edit never wipes a stored secret.
-          ...(form.client_secret ? { client_secret: form.client_secret } : {}),
+          ...(form.client_secret ? { secret: form.client_secret } : {}),
         },
         {
           onSuccess: () => {
@@ -106,7 +124,15 @@ function ProviderForm({
       );
     } else {
       create.mutate(
-        { ...form, client_secret: form.client_secret || null, enabled: false },
+        {
+          kind: "oidc",
+          name: form.name,
+          slug: form.slug,
+          config,
+          ...posture,
+          secret: form.client_secret || null,
+          enabled: false,
+        },
         {
           onSuccess: () => {
             toast("Provider added — enable it when you've tested it", {
@@ -201,7 +227,7 @@ function ProviderForm({
               value={form.client_secret}
               onChange={(e) => set("client_secret", e.target.value)}
               placeholder={
-                editing?.client_secret_set ? "•••••• (leave blank to keep)" : ""
+                editing?.secret_set ? "•••••• (leave blank to keep)" : ""
               }
             />
             <p className="text-xs text-muted-foreground">
@@ -218,6 +244,54 @@ function ProviderForm({
               required
             />
           </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="ap-posture">Sign-in policy</Label>
+            <Select
+              id="ap-posture"
+              value={form.posture}
+              onChange={(e) =>
+                set("posture", e.target.value as "open" | "closed")
+              }
+            >
+              <option value="open">
+                Open — public provider, registration rules apply
+              </option>
+              <option value="closed">
+                Closed — being in this directory is the admission
+              </option>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {form.posture === "open"
+                ? "For public IdPs (Google, GitHub): new accounts pass the same registration-open and email-domain checks as the sign-up form."
+                : "For your own directory (corporate or campus IdP): anyone who can sign in there may enter, even while public registration is closed."}
+            </p>
+          </div>
+
+          {form.posture === "closed" && (
+            <div className="grid gap-2">
+              <label className="flex items-start gap-2.5 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.email_is_authoritative}
+                  onChange={(e) =>
+                    set("email_is_authoritative", e.target.checked)
+                  }
+                  className="mt-0.5"
+                  style={{ accentColor: "hsl(var(--primary))" }}
+                />
+                <span>
+                  Trust this provider&apos;s email addresses
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    Lets a first sign-in attach to an existing account with the
+                    same address. Only enable this if the directory verifies
+                    mailbox ownership — an unverified address here can claim
+                    someone else&apos;s account.
+                  </span>
+                </span>
+              </label>
+            </div>
+          )}
 
           {error && (
             <p role="alert" className="text-sm text-destructive">
@@ -311,11 +385,16 @@ export function AuthProvidersPanel() {
                     <Badge variant={p.enabled ? "success" : "muted"}>
                       {p.enabled ? "Enabled" : "Disabled"}
                     </Badge>
-                    {!p.client_secret_set && (
+                    {!p.secret_set && (
                       <Badge variant="muted">Public client</Badge>
                     )}
+                    {p.posture === "closed" && (
+                      <Badge variant="secondary">Closed</Badge>
+                    )}
                   </div>
-                  <span className="text-xs text-muted-foreground">{p.issuer}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {p.config.issuer}
+                  </span>
                   <span className="font-mono text-[11px] text-muted-foreground">
                     Redirect URI: {p.redirect_uri}
                   </span>

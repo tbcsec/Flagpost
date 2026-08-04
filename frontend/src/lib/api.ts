@@ -10,6 +10,7 @@ import { useAuthStore } from "@/stores/auth";
 import type {
   AuthProvider,
   AuthProviderPublic,
+  OidcProviderConfig,
   Announcement,
   AnnouncementCreate,
   AppNotification,
@@ -342,34 +343,37 @@ export const authApi = {
   restore: () => refreshOnce(),
 };
 
-// Admin CRUD for OIDC providers (#58). Gated on manage_auth_providers — a
-// higher-stakes grant than manage_site_settings, since it governs who can log
-// in at all. The client secret is write-only over this API.
+// Admin CRUD for identity providers, all kinds (ADR-0022). Gated on
+// manage_auth_providers — a higher-stakes grant than manage_site_settings,
+// since it governs who can log in at all. The secret is write-only over this
+// API; kind-specific settings travel in the nested `config` object.
 export const authProvidersApi = {
-  base: "/api/admin/oidc-providers",
+  base: "/api/admin/auth-providers",
   list: () => apiFetch<AuthProvider[]>(authProvidersApi.base),
   create: (input: {
+    kind: string;
     name: string;
     slug: string;
-    issuer: string;
-    client_id: string;
-    client_secret?: string | null;
-    scopes?: string;
+    posture?: "open" | "closed";
+    email_is_authoritative?: boolean;
+    secret?: string | null;
+    config: OidcProviderConfig;
     enabled?: boolean;
   }) =>
     apiFetch<AuthProvider>(authProvidersApi.base, {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  // Omit client_secret to leave the stored one untouched; "" clears it.
+  // Omit secret to leave the stored one untouched; "" clears it. `config` is a
+  // full replacement, not a merge.
   update: (
     id: string,
     input: Partial<{
       name: string;
-      issuer: string;
-      client_id: string;
-      client_secret: string;
-      scopes: string;
+      posture: "open" | "closed";
+      email_is_authoritative: boolean;
+      secret: string;
+      config: OidcProviderConfig;
       enabled: boolean;
     }>,
   ) =>

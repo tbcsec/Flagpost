@@ -94,9 +94,9 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "user.deleted": ["user_id", "actor_user_id"],
     "api_token.created": ["api_token_id", "user_id", "created_by_user_id"],
     "api_token.revoked": ["api_token_id", "user_id"],
-    "auth_provider.created": ["provider_id", "slug", "actor_user_id"],
-    "auth_provider.updated": ["provider_id", "slug", "changed_fields", "actor_user_id"],
-    "auth_provider.deleted": ["provider_id", "slug", "actor_user_id"],
+    "auth_provider.created": ["provider_id", "slug", "kind", "actor_user_id"],
+    "auth_provider.updated": ["provider_id", "slug", "kind", "changed_fields", "actor_user_id"],
+    "auth_provider.deleted": ["provider_id", "slug", "kind", "actor_user_id"],
     "identity.linked": ["user_id", "provider_id", "provider_slug"],
     "identity.unlinked": ["user_id", "provider_id", "provider_slug"],
 }

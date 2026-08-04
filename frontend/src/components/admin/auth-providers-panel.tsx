@@ -1,7 +1,8 @@
 "use client";
 
-// Admin → Site settings → Auth (#58/#100, ADR-0021, ADR-0022). Configure the
-// identity providers offered on the login page — OIDC and SAML today.
+// Admin → Site settings → Auth (#58/#100/#101, ADR-0021, ADR-0022). Configure
+// external identity providers — OIDC and SAML get a login-page button; LDAP
+// plugs into the ordinary username/password form and gets no button at all.
 //
 // A panel rather than its own route: it's a tab of Site settings, mounted
 // alongside the others. Note it's gated on `manage_auth_providers`, *not* the
@@ -9,9 +10,10 @@
 // higher-stakes surface than a palette (§7.1) — so the page shows this tab only
 // to holders of that permission.
 //
-// The secret (OIDC client secret; SAML SP private key) is write-only: the API
-// only ever tells us whether one is stored, so the edit form leaves its field
-// blank and omitting it preserves what's saved. That mirrors the SMTP password.
+// The secret (OIDC client secret; SAML SP private key; LDAP bind password) is
+// write-only: the API only ever tells us whether one is stored, so the edit
+// form leaves its field blank and omitting it preserves what's saved. That
+// mirrors the SMTP password.
 
 import { useState } from "react";
 
@@ -38,7 +40,7 @@ import {
 import type { AuthProvider } from "@/lib/types";
 import { toast } from "@/stores/toast";
 
-type Kind = "oidc" | "saml";
+type Kind = "oidc" | "saml" | "ldap";
 
 interface FormState {
   kind: Kind;
@@ -46,7 +48,8 @@ interface FormState {
   slug: string;
   posture: "open" | "closed";
   email_is_authoritative: boolean;
-  // Write-only: OIDC client secret, or SAML SP private key (PEM).
+  // Write-only: OIDC client secret, SAML SP private key (PEM), or LDAP bind
+  // password.
   secret: string;
   // OIDC
   issuer: string;
@@ -58,8 +61,16 @@ interface FormState {
   idp_x509_cert: string;
   sp_entity_id: string;
   sp_x509_cert: string;
+  // SAML + LDAP (per-kind defaults: "email"/"mail")
   email_attribute: string;
   name_attribute: string;
+  // LDAP
+  server_url: string;
+  use_starttls: boolean;
+  bind_dn: string;
+  base_dn: string;
+  search_attribute: string;
+  subject_attribute: string;
 }
 
 const EMPTY: FormState = {
@@ -79,7 +90,19 @@ const EMPTY: FormState = {
   sp_x509_cert: "",
   email_attribute: "email",
   name_attribute: "displayName",
+  server_url: "",
+  use_starttls: false,
+  bind_dn: "",
+  base_dn: "",
+  search_attribute: "uid",
+  subject_attribute: "entryUUID",
 };
+
+/** Config values are string | boolean | null; the string fields of the form
+ *  want strings. */
+function str(v: string | boolean | null | undefined, fallback = ""): string {
+  return typeof v === "string" ? v : fallback;
+}
 
 function fromEditing(p: AuthProvider): FormState {
   const c = p.config;
@@ -90,16 +113,22 @@ function fromEditing(p: AuthProvider): FormState {
     posture: p.posture,
     email_is_authoritative: p.email_is_authoritative,
     secret: "", // never returned; blank means "leave unchanged"
-    issuer: c.issuer ?? "",
-    client_id: c.client_id ?? "",
-    scopes: c.scopes ?? "openid email profile",
-    idp_entity_id: c.idp_entity_id ?? "",
-    idp_sso_url: c.idp_sso_url ?? "",
-    idp_x509_cert: c.idp_x509_cert ?? "",
-    sp_entity_id: c.sp_entity_id ?? "",
-    sp_x509_cert: c.sp_x509_cert ?? "",
-    email_attribute: c.email_attribute ?? "email",
-    name_attribute: c.name_attribute ?? "displayName",
+    issuer: str(c.issuer),
+    client_id: str(c.client_id),
+    scopes: str(c.scopes, "openid email profile"),
+    idp_entity_id: str(c.idp_entity_id),
+    idp_sso_url: str(c.idp_sso_url),
+    idp_x509_cert: str(c.idp_x509_cert),
+    sp_entity_id: str(c.sp_entity_id),
+    sp_x509_cert: str(c.sp_x509_cert),
+    email_attribute: str(c.email_attribute, p.kind === "ldap" ? "mail" : "email"),
+    name_attribute: str(c.name_attribute, "displayName"),
+    server_url: str(c.server_url),
+    use_starttls: c.use_starttls === true,
+    bind_dn: str(c.bind_dn),
+    base_dn: str(c.base_dn),
+    search_attribute: str(c.search_attribute, "uid"),
+    subject_attribute: str(c.subject_attribute, "entryUUID"),
   };
 }
 
@@ -123,6 +152,7 @@ function ProviderForm({
   const pending = create.isPending || update.isPending;
   const error = (create.error ?? update.error) as Error | null;
   const isSaml = form.kind === "saml";
+  const isLdap = form.kind === "ldap";
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -130,25 +160,36 @@ function ProviderForm({
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const config: Record<string, string | null> = isSaml
+    const config: Record<string, string | boolean | null> = isLdap
       ? {
-          idp_entity_id: form.idp_entity_id,
-          idp_sso_url: form.idp_sso_url,
-          idp_x509_cert: form.idp_x509_cert,
-          sp_entity_id: form.sp_entity_id,
-          sp_x509_cert: form.sp_x509_cert || null,
-          email_attribute: form.email_attribute,
-          name_attribute: form.name_attribute,
+          server_url: form.server_url,
+          use_starttls: form.use_starttls,
+          bind_dn: form.bind_dn,
+          base_dn: form.base_dn,
+          search_attribute: form.search_attribute,
+          subject_attribute: form.subject_attribute,
+          email_attribute: form.email_attribute || null,
+          name_attribute: form.name_attribute || null,
         }
-      : {
-          issuer: form.issuer,
-          client_id: form.client_id,
-          scopes: form.scopes,
-        };
-    // SAML is always closed (the API enforces it). For OIDC the admin chooses.
-    // email_is_authoritative only means something for a closed directory, so
-    // switching a provider to open clears it rather than 400ing.
-    const posture = isSaml ? "closed" : form.posture;
+      : isSaml
+        ? {
+            idp_entity_id: form.idp_entity_id,
+            idp_sso_url: form.idp_sso_url,
+            idp_x509_cert: form.idp_x509_cert,
+            sp_entity_id: form.sp_entity_id,
+            sp_x509_cert: form.sp_x509_cert || null,
+            email_attribute: form.email_attribute,
+            name_attribute: form.name_attribute,
+          }
+        : {
+            issuer: form.issuer,
+            client_id: form.client_id,
+            scopes: form.scopes,
+          };
+    // SAML/LDAP are always closed (the API enforces it). For OIDC the admin
+    // chooses. email_is_authoritative only means something for a closed
+    // directory, so switching a provider to open clears it rather than 400ing.
+    const posture = form.kind === "oidc" ? form.posture : "closed";
     const email_is_authoritative =
       posture === "closed" && form.email_is_authoritative;
 
@@ -199,9 +240,11 @@ function ProviderForm({
       <CardHeader>
         <CardTitle>{editing ? `Edit ${editing.name}` : "Add a provider"}</CardTitle>
         <CardDescription>
-          {isSaml
-            ? "Register Flagpost as a Service Provider at your IdP (its metadata is at the SP metadata URL below once saved), then paste the IdP's details here. New providers start disabled."
-            : "Register Flagpost as an OAuth client at your provider first, then paste its details here. New providers start disabled."}
+          {isLdap
+            ? "Point Flagpost at your directory. Directory users sign in with the ordinary username & password form — no separate button appears. New providers start disabled."
+            : isSaml
+              ? "Register Flagpost as a Service Provider at your IdP (its metadata is at the SP metadata URL below once saved), then paste the IdP's details here. New providers start disabled."
+              : "Register Flagpost as an OAuth client at your provider first, then paste its details here. New providers start disabled."}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -212,14 +255,26 @@ function ProviderForm({
               <Select
                 id="ap-kind"
                 value={form.kind}
-                onChange={(e) => set("kind", e.target.value as Kind)}
+                onChange={(e) => {
+                  const kind = e.target.value as Kind;
+                  // Each protocol has its own conventional attribute names, so
+                  // switching kind resets them to that kind's defaults.
+                  setForm((f) => ({
+                    ...f,
+                    kind,
+                    email_attribute: kind === "ldap" ? "mail" : "email",
+                    name_attribute: "displayName",
+                  }));
+                }}
               >
                 <option value="oidc">OpenID Connect (OAuth2)</option>
                 <option value="saml">SAML 2.0</option>
+                <option value="ldap">LDAP / Active Directory</option>
               </Select>
               <p className="text-xs text-muted-foreground">
                 Fixed after creation. SAML suits campus/enterprise IdPs
-                (Shibboleth, ADFS); OIDC suits most modern providers.
+                (Shibboleth, ADFS); OIDC suits most modern providers; LDAP binds
+                directly against a directory (AD, OpenLDAP, FreeIPA).
               </p>
             </div>
           )}
@@ -234,7 +289,9 @@ function ProviderForm({
               required
             />
             <p className="text-xs text-muted-foreground">
-              Shown on the login button: &ldquo;Sign in with {form.name || "…"}&rdquo;.
+              {isLdap
+                ? "Shown in the admin list — LDAP has no login button."
+                : `Shown on the login button: “Sign in with ${form.name || "…"}”.`}
             </p>
           </div>
 
@@ -256,7 +313,107 @@ function ProviderForm({
             </p>
           </div>
 
-          {isSaml ? (
+          {isLdap ? (
+            <>
+              <div className="grid gap-2">
+                <Label htmlFor="ap-ldap-url">Server URL</Label>
+                <Input
+                  id="ap-ldap-url"
+                  value={form.server_url}
+                  onChange={(e) => set("server_url", e.target.value)}
+                  placeholder="ldaps://directory.example.com"
+                  pattern="ldaps?://.*"
+                  required
+                />
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={form.use_starttls}
+                    onChange={(e) => set("use_starttls", e.target.checked)}
+                    style={{ accentColor: "hsl(var(--primary))" }}
+                  />
+                  Upgrade with StartTLS (required for ldap:// — a plaintext
+                  connection is never used)
+                </label>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="ap-ldap-bind">Service account (bind DN)</Label>
+                <Input
+                  id="ap-ldap-bind"
+                  value={form.bind_dn}
+                  onChange={(e) => set("bind_dn", e.target.value)}
+                  placeholder="cn=flagpost,ou=services,dc=example,dc=com"
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  Used to look up the person&apos;s entry before their own
+                  credentials are checked. Its password goes in the bind
+                  password field below.
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="ap-ldap-base">Search base DN</Label>
+                <Input
+                  id="ap-ldap-base"
+                  value={form.base_dn}
+                  onChange={(e) => set("base_dn", e.target.value)}
+                  placeholder="ou=people,dc=example,dc=com"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="ap-ldap-search">Login attribute</Label>
+                  <Input
+                    id="ap-ldap-search"
+                    value={form.search_attribute}
+                    onChange={(e) => set("search_attribute", e.target.value)}
+                    placeholder="uid"
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="ap-ldap-subject">Stable ID attribute</Label>
+                  <Input
+                    id="ap-ldap-subject"
+                    value={form.subject_attribute}
+                    onChange={(e) => set("subject_attribute", e.target.value)}
+                    placeholder="entryUUID"
+                    required
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Login attribute: what people type as their username
+                (<span className="font-mono">sAMAccountName</span> on AD,{" "}
+                <span className="font-mono">uid</span> elsewhere). Stable ID:
+                the attribute that identifies the account forever —{" "}
+                <span className="font-mono">objectGUID</span> on AD,{" "}
+                <span className="font-mono">entryUUID</span> on
+                OpenLDAP/FreeIPA. Never a DN.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="ap-attr-email">Email attribute</Label>
+                  <Input
+                    id="ap-attr-email"
+                    value={form.email_attribute}
+                    onChange={(e) => set("email_attribute", e.target.value)}
+                    placeholder="mail"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="ap-attr-name">Name attribute</Label>
+                  <Input
+                    id="ap-attr-name"
+                    value={form.name_attribute}
+                    onChange={(e) => set("name_attribute", e.target.value)}
+                    placeholder="displayName"
+                  />
+                </div>
+              </div>
+            </>
+          ) : isSaml ? (
             <>
               <div className="grid gap-2">
                 <Label htmlFor="ap-idp-entity">IdP entity ID</Label>
@@ -380,7 +537,11 @@ function ProviderForm({
 
           <div className="grid gap-2">
             <Label htmlFor="ap-secret">
-              {isSaml ? "SP private key (optional)" : "Client secret"}
+              {isLdap
+                ? "Bind password"
+                : isSaml
+                  ? "SP private key (optional)"
+                  : "Client secret"}
             </Label>
             {isSaml ? (
               <textarea
@@ -409,15 +570,17 @@ function ProviderForm({
             )}
             <p className="text-xs text-muted-foreground">
               Stored encrypted.{" "}
-              {isSaml
-                ? "Only needed to sign our requests — leave blank otherwise."
-                : "Leave blank for a public client using PKCE only."}
+              {isLdap
+                ? "The service account's password — required before the provider can be enabled."
+                : isSaml
+                  ? "Only needed to sign our requests — leave blank otherwise."
+                  : "Leave blank for a public client using PKCE only."}
             </p>
           </div>
 
-          {/* SAML is always a closed directory (the API enforces it), so the
-              posture control only appears for OIDC. */}
-          {!isSaml && (
+          {/* SAML and LDAP are always closed directories (the API enforces
+              it), so the posture control only appears for OIDC. */}
+          {form.kind === "oidc" && (
             <div className="grid gap-2">
               <Label htmlFor="ap-posture">Sign-in policy</Label>
               <Select
@@ -442,7 +605,7 @@ function ProviderForm({
             </div>
           )}
 
-          {(isSaml || form.posture === "closed") && (
+          {(form.kind !== "oidc" || form.posture === "closed") && (
             <div className="grid gap-2">
               <label className="flex items-start gap-2.5 text-sm">
                 <input
@@ -569,15 +732,21 @@ export function AuthProvidersPanel() {
                   <span className="text-xs text-muted-foreground">
                     {p.kind === "saml"
                       ? p.config.idp_entity_id
-                      : p.config.issuer}
+                      : p.kind === "ldap"
+                        ? p.config.server_url
+                        : p.config.issuer}
                   </span>
                   {p.kind === "oidc" ? (
                     <span className="font-mono text-[11px] text-muted-foreground">
                       Redirect URI: {p.redirect_uri}
                     </span>
-                  ) : (
+                  ) : p.kind === "saml" ? (
                     <span className="font-mono text-[11px] text-muted-foreground">
                       SP metadata: /api/auth/saml/{p.slug}/metadata
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-muted-foreground">
+                      Signs in through the standard username &amp; password form
                     </span>
                   )}
                 </div>
@@ -621,7 +790,7 @@ export function AuthProvidersPanel() {
         !adding && (
           <EmptyState
             title="No identity providers"
-            description="Add an OIDC or SAML provider to let people sign in with your organisation's directory instead of a Flagpost password."
+            description="Add an OIDC, SAML or LDAP provider to let people sign in with your organisation's directory instead of a Flagpost password."
             action={<Button onClick={() => setAdding(true)}>Add provider</Button>}
           />
         )

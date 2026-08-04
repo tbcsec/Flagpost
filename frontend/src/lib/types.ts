@@ -155,18 +155,19 @@ export interface AuthProviderPublic {
  *  is stored is ever returned. */
 export interface AuthProvider {
   id: string;
-  /** Protocol: "oidc" or "saml" today; "ldap" arrives with its transport. */
+  /** Protocol: "oidc", "saml" or "ldap". */
   kind: string;
   /** ADR-0022 trust posture: "open" = public-signup gate applies; "closed" =
-   *  being enabled is the admission decision. SAML is always closed. */
+   *  being enabled is the admission decision. SAML and LDAP are always closed. */
   posture: "open" | "closed";
   name: string;
   slug: string;
   email_is_authoritative: boolean;
   /** Per-kind non-secret settings (issuer/client_id for OIDC; IdP/SP entity ids,
-   *  SSO URL and cert for SAML). Values are all strings; the shape is owned by
-   *  the backend's per-kind config model. */
-  config: Record<string, string | null>;
+   *  SSO URL and cert for SAML; server/bind/search settings for LDAP). Values
+   *  are strings apart from LDAP's use_starttls flag; the shape is owned by the
+   *  backend's per-kind config model. */
+  config: Record<string, string | boolean | null>;
   enabled: boolean;
   created_at: string;
   secret_set: boolean;

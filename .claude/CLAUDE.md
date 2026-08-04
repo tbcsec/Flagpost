@@ -67,9 +67,12 @@ Subsystem by subsystem, with the non-obvious bits called out:
   (ADR-0003, ADR-0008). Identity is **username-primary with optional email**
   (ADR-0015): the display name is the case-insensitively-unique login handle,
   and login accepts name *or* email via `auth/identity.find_by_identifier`.
-  **OIDC/OAuth2** is built (`sso` module, ADR-0021) — sub-first linking, JIT
-  provisioning as Participant, local login surviving as break-glass because a
-  JIT user gets an undisclosed random password hash. Also: self-service password
+  **External auth is OIDC + SAML + LDAP** (`sso` module, ADR-0021/0022): one
+  `IdentityProvider` framework — sub-first linking, posture-aware trust
+  (`open`/`closed`), JIT provisioning as Participant, local login surviving as
+  break-glass because a JIT user gets an undisclosed random password hash.
+  LDAP is not a redirect: it's a bind inside `POST /api/auth/login`, tried
+  only after local verify fails. Also: self-service password
   reset, email verification (admin-toggleable), self-service email change, a
   registration domain allowlist, and personal **API tokens** (`flp_`-prefixed,
   minting is self-only by route shape).
@@ -250,11 +253,6 @@ than quietly building a scoped-down version:
 - AI integration — administrator or competitor assistant. **Scheduled for
   v1.4.0** (#98), so this is "not yet", not "never"; the Admin → Site
   settings → AI tab is a deliberate stub.
-- SAML (#100) / LDAP (#101) — **but OIDC/OAuth2 is built** (#58, ADR-0021),
-  so this is no longer "no external auth". SAML is the same redirect shape
-  and should extend the OIDC framework; LDAP is a credential *bind*, not a
-  redirect flow, and needs its own seam. Don't fold either into the OIDC
-  provider model without reading ADR-0021's provider-abstraction note.
 - Plugin marketplace / third-party modules — the module *mechanism* is
   used for required-core features starting in Tier 0, but the
   marketplace path (listing/discovery + untrusted-code sandboxing) stays
@@ -264,9 +262,11 @@ than quietly building a scoped-down version:
 - Per-competition / white-label theming — site-wide only for now
   (ADR-0011); the per-competition variant may return later.
 
-Note: the **automation engine**, **dashboard drag-and-drop**, and
-**collaborative rich-text/CRDT editing** were on this list once. All three
-were pulled into Tier 3 and **shipped** — don't treat them as deferred.
+Note: the **automation engine**, **dashboard drag-and-drop**,
+**collaborative rich-text/CRDT editing**, and **SAML/LDAP** (#100/#101,
+ADR-0022) were all on this list once and have **shipped** — don't treat
+them as deferred. External auth is now OIDC + SAML + LDAP, one
+`IdentityProvider` framework; a new protocol is a new `kind`, not a fork.
 
 ## Stack
 

@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import get_current_user
+from auth.external_identity import IdentityRejected, resolve_identity
 from auth.identity import display_name_taken, email_taken, find_by_identifier
 from auth.registration_policy import domain_allowed
 from auth.setup import instance_needs_setup
@@ -30,11 +31,14 @@ from config import settings
 from auth.membership import effective_permissions
 from db import ensure_aware_utc, get_db, utcnow
 from models.email_verification import EmailVerificationToken
+from models.identity_provider import IdentityProvider
 from models.password_reset import PasswordResetToken
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 from models.user import RefreshSession, User
 from ratelimit import get_rate_limiter
 from ratelimit.base import RateLimiter
+from schemas.auth_providers import provider_config_or_none
+from utils import ldap as ldap_utils
 from utils import mailer
 from schemas.auth import (
     ChangeEmailRequest,
@@ -250,6 +254,83 @@ async def register(
     return TokenResponse(access_token=access_token, user=UserOut.model_validate(user))
 
 
+async def _directory_login(
+    db: AsyncSession, identifier: str, password: str
+) -> User | None:
+    """Offer the submitted credentials to each enabled LDAP directory
+    (ADR-0022 §5), returning the resolved local user on the first success.
+
+    Runs only after local verification failed — the ADR-0017 owner and any
+    real-password account never touch a directory, and a returning LDAP user
+    (whose local hash is the unusable JIT one) falls through here by design.
+    A provider whose stored config no longer validates, or whose directory is
+    down, is a logged skip: the caller's generic 401 must not leak which.
+    """
+    providers = (
+        await db.scalars(
+            select(IdentityProvider)
+            .where(
+                IdentityProvider.kind == "ldap",
+                IdentityProvider.enabled.is_(True),
+            )
+            .order_by(IdentityProvider.created_at)
+        )
+    ).all()
+    for provider in providers:
+        config = provider_config_or_none(provider)
+        if config is None:
+            logger.warning(
+                "LDAP provider %s has invalid stored config; skipping it",
+                provider.slug,
+            )
+            continue
+        try:
+            # Off the event loop: the bind is blocking network I/O with a
+            # TIMEOUT_SECONDS ceiling, like the argon2 work above it. Called
+            # through the module so tests can substitute the directory seam.
+            found = await asyncio.to_thread(
+                ldap_utils.authenticate,
+                config,
+                provider.secret,
+                identifier,
+                password,
+            )
+        except ldap_utils.LdapUnavailable:
+            logger.warning(
+                "LDAP provider %s is unavailable; treating as a failed attempt",
+                provider.slug,
+                exc_info=True,
+            )
+            continue
+        if found is None:
+            continue
+        try:
+            user, _created = await resolve_identity(
+                db,
+                provider,
+                subject=found.subject,
+                # Honest per ADR-0022 §3: a directory `mail` attribute is not
+                # proof of address ownership. Whether the email may link or be
+                # stored is decided inside resolve_identity from the provider's
+                # `email_is_authoritative` flag, not from this parameter.
+                email=found.email,
+                email_verified=False,
+                claims={"name": found.display_name} if found.display_name else {},
+            )
+        except IdentityRejected:
+            # Unreachable for a closed provider (the admission gate doesn't
+            # apply, and the API forces LDAP posture closed) — but a drifted
+            # row lands on the gate, and a gated refusal must stay a generic
+            # failed login here, not a 500.
+            logger.warning(
+                "LDAP provider %s rejected by admission policy — posture drift?",
+                provider.slug,
+            )
+            continue
+        return user
+    return None
+
+
 @router.post("/login", response_model=TokenResponse)
 async def login(
     body: LoginRequest,
@@ -259,7 +340,8 @@ async def login(
 ) -> TokenResponse:
     # Throttle before the lookup, so a refused attempt costs nothing and the
     # limit can't be probed by timing. Keyed per identifier — see the note on
-    # `auth_rate_limit` about why not per IP.
+    # `auth_rate_limit` about why not per IP. Deliberately ahead of the LDAP
+    # leg below too, so the directory can't be probed unthrottled (ADR-0022 §5).
     await _throttle(rate_limiter, f"login:{body.identifier}")
     # The identifier is the display name (username) or the email, matched
     # case-insensitively (§7.7).
@@ -271,13 +353,22 @@ async def login(
     target_hash = user.password_hash if user is not None else _DUMMY_PASSWORD_HASH
     password_ok = await asyncio.to_thread(verify_password, body.password, target_hash)
     if user is None or not password_ok:
+        # Local failure falls through to the directory before 401ing
+        # (ADR-0022 §5). Both failure shapes take this branch, so the accepted
+        # residual timing signal (a bind round-trip on the miss path) doesn't
+        # distinguish "no such user" from "wrong password".
+        user = await _directory_login(db, body.identifier, body.password)
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
         )
     if not user.is_active:
         # Same status as bad credentials would be friendlier for enumeration, but
-        # a disabled user needs to know *why* they can't get in.
+        # a disabled user needs to know *why* they can't get in. Load-bearing for
+        # LDAP: the directory bind *succeeds* for a locally-banned user (the
+        # directory doesn't know about the ban), so this check is the only thing
+        # standing between them and a session (ADR-0022 §5).
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This account has been disabled. Contact an administrator.",

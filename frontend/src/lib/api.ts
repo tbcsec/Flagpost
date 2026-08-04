@@ -357,7 +357,7 @@ export const authProvidersApi = {
     posture?: "open" | "closed";
     email_is_authoritative?: boolean;
     secret?: string | null;
-    config: Record<string, string | null>;
+    config: Record<string, string | boolean | null>;
     enabled?: boolean;
   }) =>
     apiFetch<AuthProvider>(authProvidersApi.base, {
@@ -373,7 +373,7 @@ export const authProvidersApi = {
       posture: "open" | "closed";
       email_is_authoritative: boolean;
       secret: string;
-      config: Record<string, string | null>;
+      config: Record<string, string | boolean | null>;
       enabled: boolean;
     }>,
   ) =>

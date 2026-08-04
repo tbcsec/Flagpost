@@ -18,7 +18,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 
 class OidcConfig(BaseModel):
@@ -77,10 +77,65 @@ class SamlConfig(BaseModel):
     # library-independent pre-check; tracked as a follow-up on #100.
 
 
-# kind -> config model. LDAP (#101) registers its config alongside its transport.
+# LDAP attribute descriptor (RFC 4512 short form). Deliberately narrow: these
+# names are interpolated *unescaped* into the search filter and returned-
+# attribute list, so the pattern is what keeps admin-supplied config from
+# smuggling filter metacharacters (`*()\|&=`) past the RFC 4515 escaping that
+# protects the user-supplied identifier. Numeric OIDs are excluded on purpose —
+# every mainstream directory exposes a short name.
+_LDAP_ATTRIBUTE_RE = r"^[A-Za-z][A-Za-z0-9-]{0,99}$"
+
+
+class LdapConfig(BaseModel):
+    """Non-secret LDAP settings carried in ``IdentityProvider.config`` (#101,
+    ADR-0022 §5). The one secret — the service account's bind password — lives
+    in ``IdentityProvider.secret``, not here.
+
+    ``extra="forbid"`` so a typo'd key is a 400, not a silently ignored setting.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # ldaps://host[:port], or ldap://host[:port] combined with ``use_starttls``.
+    # A plaintext bind is deliberately not expressible: the user's directory
+    # password transits this server on every login (ADR-0022 §5).
+    server_url: str = Field(min_length=1, max_length=500)
+    use_starttls: bool = False
+
+    # Service account that searches for the user's entry. Required — no
+    # anonymous bind (ADR-0022 §5).
+    bind_dn: str = Field(min_length=1, max_length=1000)
+    base_dn: str = Field(min_length=1, max_length=1000)
+
+    # Attribute matched against the submitted login identifier
+    # (`sAMAccountName` / `userPrincipalName` on AD, `uid` elsewhere).
+    search_attribute: str = Field(default="uid", pattern=_LDAP_ATTRIBUTE_RE)
+    # The stable directory id used as the identity subject — `entryUUID`
+    # (OpenLDAP/FreeIPA) or `objectGUID` (AD). Never the DN: a DN changes on an
+    # OU move and would strand or re-mint the account (ADR-0022 §5).
+    subject_attribute: str = Field(default="entryUUID", pattern=_LDAP_ATTRIBUTE_RE)
+    email_attribute: str | None = Field(default="mail", pattern=_LDAP_ATTRIBUTE_RE)
+    name_attribute: str | None = Field(default="displayName", pattern=_LDAP_ATTRIBUTE_RE)
+
+    @model_validator(mode="after")
+    def _tls_required(self) -> "LdapConfig":
+        url = self.server_url.strip()
+        if url.startswith("ldaps://"):
+            return self
+        if url.startswith("ldap://") and self.use_starttls:
+            return self
+        raise ValueError(
+            "server_url must be ldaps://, or ldap:// with use_starttls enabled — "
+            "a plaintext bind would send users' directory passwords in the clear"
+        )
+
+
+# kind -> config model. Registering a model here is what makes a kind creatable
+# through the admin API (its transport must exist too, of course).
 PROVIDER_CONFIG_MODELS: dict[str, type[BaseModel]] = {
     "oidc": OidcConfig,
     "saml": SamlConfig,
+    "ldap": LdapConfig,
 }
 
 # Provider kinds whose login is a browser redirect (a "Sign in with…" button),

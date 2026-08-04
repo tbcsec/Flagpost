@@ -134,6 +134,15 @@ def _check_invariants(provider: IdentityProvider) -> None:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot enable a provider whose config is incomplete",
             ) from exc
+    if provider.kind == "ldap" and provider.enabled and not provider.secret:
+        # The secret is the service account's bind password, and LDAP has no
+        # anonymous-bind fallback (ADR-0022 §5) — unlike OIDC (public client +
+        # PKCE) and SAML (unsigned AuthnRequests), where an empty secret is a
+        # legitimate configuration.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An LDAP provider needs its bind password before it can be enabled",
+        )
 
 
 @router.get("", response_model=list[ProviderOut])

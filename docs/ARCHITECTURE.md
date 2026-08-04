@@ -835,9 +835,11 @@ The session itself is unchanged: the callback issues one through the same seam
 password login uses, so refresh, WebSocket auth and API tokens all behave
 identically regardless of how the user got in. Provider `client_secret`s are
 stored **encrypted** (`utils/crypto.EncryptedString`) rather than plaintext,
-per ADR-0020 — they must be retrieved to call the token endpoint. SAML (#100)
-and LDAP (#101) stay deferred; ADR-0021 notes that LDAP is a credential bind
-rather than a redirect flow and will need its own seam.
+per ADR-0020 — they must be retrieved to call the token endpoint. **SAML 2.0
+(#100) shipped** as a second redirect provider `kind` on the ADR-0022 framework
+(SP-initiated, python3-saml, signature-before-trust); **LDAP (#101) remains
+deferred**, since ADR-0021/ADR-0022 note it is a credential bind rather than a
+redirect flow and needs its own seam in the local login route.
 
 ---
 

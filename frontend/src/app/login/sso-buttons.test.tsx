@@ -39,8 +39,8 @@ describe("useAuthProviders", () => {
         ok: true,
         status: 200,
         json: async () => [
-          { slug: "company-sso", name: "Company SSO" },
-          { slug: "github", name: "GitHub" },
+          { slug: "company-sso", name: "Company SSO", kind: "oidc" },
+          { slug: "campus", name: "Campus IdP", kind: "saml" },
         ],
       }),
     );
@@ -52,9 +52,13 @@ describe("useAuthProviders", () => {
       "href",
       expect.stringContaining("/api/auth/oidc/company-sso/login"),
     );
+    // The login URL is kind-aware: a SAML provider points at its own transport.
     expect(
-      screen.getByRole("link", { name: "Sign in with GitHub" }),
-    ).toBeInTheDocument();
+      screen.getByRole("link", { name: "Sign in with Campus IdP" }),
+    ).toHaveAttribute(
+      "href",
+      expect.stringContaining("/api/auth/saml/campus/login"),
+    );
   });
 
   it("renders nothing when no providers are configured", async () => {

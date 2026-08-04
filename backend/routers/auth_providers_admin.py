@@ -107,6 +107,16 @@ async def _validated_config(kind: str, config: dict) -> dict:
 
 def _check_invariants(provider: IdentityProvider) -> None:
     """Cross-field rules on the resulting row (create and update alike)."""
+    if provider.kind != "oidc" and provider.posture != "closed":
+        # ADR-0022 §2: closed is "the default and only option for SAML/LDAP" —
+        # an admin-configured directory/federation is a trusted, closed
+        # provider by construction; an open SAML would apply the public-signup
+        # gate to a federated IdP, which is the category error the posture
+        # split exists to prevent.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"a {provider.kind} provider must have a closed posture",
+        )
     if provider.email_is_authoritative and provider.posture != "closed":
         # For an open provider, email trust comes from the IdP's own
         # email_verified claim; the admin override only means something for a

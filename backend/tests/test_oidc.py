@@ -228,10 +228,11 @@ async def test_only_enabled_providers_are_public(client, idp):
     await _create_provider(client, admin, enabled=False, slug="off")
     await _create_provider(client, admin, enabled=True, slug="on")
 
-    listed = (await client.get("/api/auth/oidc/providers")).json()
+    listed = (await client.get("/api/auth/providers")).json()
     assert [p["slug"] for p in listed] == ["on"]
     # The public list exposes no issuer/client_id — just enough for a button.
-    assert set(listed[0]) == {"slug", "name"}
+    assert set(listed[0]) == {"slug", "name", "kind"}
+    assert listed[0]["kind"] == "oidc"
 
 
 async def test_login_on_disabled_provider_404s(client, idp):
@@ -962,4 +963,4 @@ async def test_corrupt_stored_config_is_a_skip_not_a_500(client, idp):
     assert resp.status_code == 404
     # ...and the login page's button list hides it too, so the skip is
     # consistent — no button whose click lands on that 404.
-    assert (await client.get("/api/auth/oidc/providers")).json() == []
+    assert (await client.get("/api/auth/providers")).json() == []

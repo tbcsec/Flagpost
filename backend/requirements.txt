@@ -37,3 +37,10 @@ redis>=8.0.1,<9.0
 # aiosmtplib is lazily imported — an install with SMTP unconfigured never loads it.
 httpx>=0.28.1,<0.29
 aiosmtplib>=5.1.2,<6.0
+
+# SAML 2.0 SP (#100, ADR-0022): XML assertion parsing + signature validation.
+# python3-saml wraps xmlsec/lxml so we never hand-roll the XSW-prone bits; both
+# ship manylinux wheels that bundle libxmlsec1/libxml2, so no system dev headers
+# are needed to build. Imported lazily by the `saml` transport, so an install
+# with no SAML provider never loads it (mirrors aiosmtplib).
+python3-saml>=1.16,<2.0

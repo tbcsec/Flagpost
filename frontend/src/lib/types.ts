@@ -147,33 +147,32 @@ export interface DashboardLayout {
 export interface AuthProviderPublic {
   slug: string;
   name: string;
+  /** Which transport — drives the login URL `/api/auth/{kind}/{slug}/login`. */
+  kind: string;
 }
 
 /** Admin view of a provider. The client secret is write-only: only whether one
  *  is stored is ever returned. */
-/** Non-secret OIDC settings carried in AuthProvider.config (ADR-0022). Becomes
- *  a per-kind union when SAML/LDAP land (#100/#101). */
-export interface OidcProviderConfig {
-  issuer: string;
-  client_id: string;
-  scopes: string;
-}
 export interface AuthProvider {
   id: string;
-  /** Protocol: "oidc" today; "saml" / "ldap" arrive with their transports. */
+  /** Protocol: "oidc" or "saml" today; "ldap" arrives with its transport. */
   kind: string;
   /** ADR-0022 trust posture: "open" = public-signup gate applies; "closed" =
-   *  being enabled is the admission decision. */
+   *  being enabled is the admission decision. SAML is always closed. */
   posture: "open" | "closed";
   name: string;
   slug: string;
   email_is_authoritative: boolean;
-  config: OidcProviderConfig;
+  /** Per-kind non-secret settings (issuer/client_id for OIDC; IdP/SP entity ids,
+   *  SSO URL and cert for SAML). Values are all strings; the shape is owned by
+   *  the backend's per-kind config model. */
+  config: Record<string, string | null>;
   enabled: boolean;
   created_at: string;
   secret_set: boolean;
-  /** The exact callback URL to register at the IdP. Server-computed, since it
-   *  depends on PUBLIC_BASE_URL — a mismatch is the commonest setup failure. */
+  /** OIDC only: the exact callback URL to register at the IdP. Server-computed,
+   *  since it depends on PUBLIC_BASE_URL — a mismatch is the commonest setup
+   *  failure. Empty for non-OIDC kinds. */
   redirect_uri: string;
 }
 

@@ -2,7 +2,6 @@
 
 The browser-facing half of SSO. Three routes:
 
-- ``GET /api/auth/oidc/providers`` — public; the login page's button list.
 - ``GET /api/auth/oidc/{slug}/login`` — mints PKCE + ``state`` + ``nonce``,
   stores them server-side, redirects to the IdP.
 - ``GET /api/auth/oidc/{slug}/callback`` — validates everything, resolves the
@@ -40,7 +39,6 @@ from db import ensure_aware_utc, get_db, utcnow
 from models.identity_provider import AuthLoginState, IdentityProvider
 from routers.auth import _issue_session
 from schemas.auth_providers import OidcConfig, provider_config_or_none
-from schemas.oidc import OidcProviderPublic
 from utils import oidc as oidc_utils
 from utils.oidc import OidcError
 
@@ -132,34 +130,6 @@ async def _enabled_provider(
         )
         return None
     return provider, config
-
-
-@router.get("/providers", response_model=list[OidcProviderPublic])
-async def list_providers(db: AsyncSession = Depends(get_db)) -> list[IdentityProvider]:
-    """Enabled redirect providers only. Public — the login page renders before
-    auth. Filtered by kind so a future non-redirect provider (LDAP, #101) never
-    grows a dead "Sign in with…" button (ADR-0022 §7), and by the same config
-    re-parse the login route applies — a drifted row must be indistinguishable
-    from a disabled provider *here too*, or it keeps a button whose click lands
-    on a raw 404 instead of the §6 logged skip."""
-    rows = await db.scalars(
-        select(IdentityProvider)
-        .where(
-            IdentityProvider.kind == "oidc",
-            IdentityProvider.enabled.is_(True),
-        )
-        .order_by(IdentityProvider.name)
-    )
-    providers = []
-    for provider in rows:
-        if provider_config_or_none(provider) is None:
-            logger.warning(
-                "provider %s has invalid stored config; hiding its login button",
-                provider.slug,
-            )
-            continue
-        providers.append(provider)
-    return providers
 
 
 @router.get("/{slug}/login")

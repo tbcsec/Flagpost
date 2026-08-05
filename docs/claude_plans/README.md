@@ -3,13 +3,14 @@
 Working plans written before a large piece of work started, kept as a record of
 **what was intended and why**, not of what the code does now.
 
-**None of these are live.** Every plan here has been executed; the phase
-sequences in `phase_0.md`–`phase_3.md` are finished, and the issue plans
-describe features that shipped. Read them for the reasoning behind a design —
-which options were considered, which owner decisions were made, what was
-deliberately left out — and read the code, `ARCHITECTURE.md`, or the ADRs for
-current state. Where a plan and the code disagree, the code won: the plan
-predates it.
+**Almost none of these are live.** Every plan here has been executed *except*
+`issue-98-ai-assistants.md`, which is a design in progress for v1.4.0 (no code
+yet). The phase sequences in `phase_0.md`–`phase_3.md` are finished, and the
+other issue plans describe features that shipped. Read them for the reasoning
+behind a design — which options were considered, which owner decisions were made,
+what was deliberately left out — and read the code, `ARCHITECTURE.md`, or the ADRs
+for current state. Where a *shipped* plan and the code disagree, the code won:
+the plan predates it.
 
 | File | Covers | Status |
 |---|---|---|
@@ -20,6 +21,7 @@ predates it.
 | `issue-55-challenge-list-view.md` | Alternative challenge view | Shipped in v1.3.0 |
 | `issue-57-rules-code-of-conduct.md` | Rules / code of conduct | Shipped in v1.2.0 |
 | `issue-76-submissions-browser.md` | Submissions browser | Shipped in v1.2.0 |
+| `issue-98-ai-assistants.md` | AI assistants module (admin + competitor) | **In design** — v1.4.0, not yet built |
 
 Work after v1.0.0 is planned as GitHub issues against version milestones rather
 than as phase documents, so this directory is unlikely to grow much — a plan

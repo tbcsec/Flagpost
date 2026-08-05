@@ -1040,3 +1040,81 @@ export interface RoleAssignment {
   competition_id: string | null;
   competition_name: string | null;
 }
+
+// --- AI assistants (#98, ADR-0023) ------------------------------------------
+
+/** How much a competitor assistant may say (site default, per-competition
+ *  override arrives in a later phase). Surfaced now so the admin form can set
+ *  the inheritable default. */
+export type AiGuidanceLevel = "platform_only" | "conceptual" | "guided";
+
+/** Site-level provider config (Admin → Site settings → AI). The API key is
+ *  write-only — only `api_key_set` is ever read back. */
+export interface AiSettings {
+  enabled: boolean;
+  base_url: string | null;
+  model: string | null;
+  max_output_tokens: number;
+  competitor_max_output_tokens: number;
+  request_timeout_s: number;
+  admin_prompt_override: string | null;
+  competitor_prompt_override: string | null;
+  default_guidance_level: AiGuidanceLevel;
+  api_key_set: boolean;
+  updated_at: string | null;
+}
+
+/** Update payload — every field optional (partial update). Omit `api_key` to
+ *  keep the stored one; `""` clears it (a keyless local endpoint). */
+export interface AiSettingsUpdate {
+  enabled?: boolean;
+  base_url?: string | null;
+  model?: string | null;
+  api_key?: string;
+  max_output_tokens?: number;
+  competitor_max_output_tokens?: number;
+  request_timeout_s?: number;
+  admin_prompt_override?: string | null;
+  competitor_prompt_override?: string | null;
+  default_guidance_level?: AiGuidanceLevel;
+}
+
+/** One leg of the provider test-connection probe. */
+export interface AiConnectionCheck {
+  ok: boolean;
+  detail: string;
+}
+
+export interface AiConnectionResult {
+  completion: AiConnectionCheck;
+  tool_call: AiConnectionCheck;
+  model: string;
+}
+
+export interface AiConversation {
+  id: string;
+  assistant_type: string;
+  created_at: string;
+  closed_at: string | null;
+}
+
+export interface AiMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  /** Names of the tools the assistant turn invoked (metadata only). */
+  tool_calls: { name: string }[] | null;
+  created_at: string;
+}
+
+export interface AiUsage {
+  input_tokens: number;
+  output_tokens: number;
+  message_count: number;
+}
+
+/** The single boolean gating the assistant launcher — true when the module is
+ *  configured + enabled here and the caller may use it. */
+export interface AiAvailability {
+  available: boolean;
+}

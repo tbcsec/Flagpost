@@ -101,3 +101,13 @@ class AiUsageOut(BaseModel):
     input_tokens: int
     output_tokens: int
     message_count: int
+
+
+class AiAvailabilityOut(BaseModel):
+    """Whether the caller can open the administrator assistant in this
+    competition right now — the single boolean the client needs to decide
+    whether to show the assistant launcher, without exposing the provider
+    config (which needs ``manage_ai``) to a staffer who only holds a tool
+    permission."""
+
+    available: bool

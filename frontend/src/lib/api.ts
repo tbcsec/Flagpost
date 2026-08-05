@@ -22,6 +22,13 @@ import type {
   AutomationRuleInput,
   ChallengeAnalyticsReport,
   TeamAnalyticsReport,
+  AiSettings,
+  AiSettingsUpdate,
+  AiConnectionResult,
+  AiAvailability,
+  AiConversation,
+  AiMessage,
+  AiUsage,
   SubmissionPage,
   SubmissionQuery,
   QuestionInput,
@@ -1021,6 +1028,44 @@ export const automationsApi = {
     remove: (ruleId: string) =>
       apiFetch<void>(`/api/automations/personal/${ruleId}`, { method: "DELETE" }),
   },
+};
+
+// AI provider config (#98, ADR-0023) — Admin → Site settings → AI. Gated on
+// manage_ai (a higher-stakes grant than manage_site_settings: it holds an API
+// key and enables outbound calls). The key is write-only over this API.
+export const aiAdminApi = {
+  get: () => apiFetch<AiSettings>("/api/admin/ai/settings"),
+  // Omit api_key to leave the stored one; "" clears it.
+  update: (input: AiSettingsUpdate) =>
+    apiFetch<AiSettings>("/api/admin/ai/settings", {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  // Probe the saved config: a completion + a forced tool call, reported apart.
+  testConnection: () =>
+    apiFetch<AiConnectionResult>("/api/admin/ai/test-connection", {
+      method: "POST",
+    }),
+};
+
+// The administrator assistant's conversation API (#98, ADR-0023 Phase 2).
+// Competition-scoped; the live answer streams over the `ai` WS room while the
+// POST persists it (so the hook opens a socket, not just these calls).
+export const aiApi = {
+  base: (competitionId: string) => `/api/competitions/${competitionId}/ai`,
+  availability: (competitionId: string) =>
+    apiFetch<AiAvailability>(`${aiApi.base(competitionId)}/availability`),
+  createConversation: (competitionId: string) =>
+    apiFetch<AiConversation>(`${aiApi.base(competitionId)}/conversations`, {
+      method: "POST",
+    }),
+  postMessage: (competitionId: string, conversationId: string, content: string) =>
+    apiFetch<AiMessage>(
+      `${aiApi.base(competitionId)}/conversations/${conversationId}/messages`,
+      { method: "POST", body: JSON.stringify({ content }) },
+    ),
+  usage: (competitionId: string) =>
+    apiFetch<AiUsage>(`${aiApi.base(competitionId)}/usage`),
 };
 
 export const analyticsApi = {

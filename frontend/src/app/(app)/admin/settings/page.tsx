@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { SectionHeader } from "@/components/app/section-header";
+import { AiSettingsPanel } from "@/components/admin/ai-settings-panel";
 import { AppearancePanel } from "@/components/admin/appearance-panel";
 import { AuthProvidersPanel } from "@/components/admin/auth-providers-panel";
 import { BackupPanel } from "@/components/admin/backup-panel";
@@ -71,6 +72,9 @@ function AdminSettingsInner() {
   // hidden without it, and someone holding *only* it still gets into this page
   // rather than being locked out of the feature by the site-settings gate.
   const canManageAuth = access.has("manage_auth_providers");
+  // AI provider config is its own grant too (holds an API key + enables
+  // outbound calls) — same higher-stakes treatment as auth providers.
+  const canManageAi = access.has("manage_ai");
   const settings = useOperationalSettings();
   const data = settings.data;
   const router = useRouter();
@@ -78,7 +82,7 @@ function AdminSettingsInner() {
   const searchParams = useSearchParams();
 
   if (!access.ready) return <Skeleton className="h-64 w-full" />;
-  if (!canManage && !canManageAuth) {
+  if (!canManage && !canManageAuth && !canManageAi) {
     return (
       <>
         <SectionHeader title="Admin — Site settings" subtitle="Global — platform-wide" />
@@ -87,9 +91,11 @@ function AdminSettingsInner() {
     );
   }
 
-  const visibleTabs = TABS.filter((t) =>
-    t.value === "auth" ? canManageAuth : canManage,
-  );
+  const visibleTabs = TABS.filter((t) => {
+    if (t.value === "auth") return canManageAuth;
+    if (t.value === "ai") return canManageAi;
+    return canManage;
+  });
 
   // Everything below is derived *after* the permission guards, which is the fix
   // for #126. The tab used to be `useState(canManage ? "general" : "auth")`, and
@@ -172,14 +178,16 @@ function AdminSettingsInner() {
           <AppearancePanel active={showAppearance} />
         </div>
 
-        <div className={tab === "ai" ? "" : "hidden"}>
-          <Card className="max-w-2xl opacity-70">
-            <CardHeader>
-              <CardTitle>AI assistant</CardTitle>
-              <CardDescription>Not built yet — planned for a future release.</CardDescription>
-            </CardHeader>
-          </Card>
-        </div>
+        {canManageAi && (
+          <div className={tab === "ai" ? "" : "hidden"}>
+            <h2 className="text-lg font-semibold">AI assistants</h2>
+            <p className="mb-4 mt-1 text-sm text-muted-foreground">
+              Connect an OpenAI-compatible provider to power the read-only
+              organiser assistant.
+            </p>
+            <AiSettingsPanel />
+          </div>
+        )}
       </div>
     </>
   );

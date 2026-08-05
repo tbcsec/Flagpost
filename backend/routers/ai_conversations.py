@@ -29,6 +29,7 @@ from ratelimit import get_rate_limiter
 from ratelimit.base import RateLimiter
 from realtime import manager
 from schemas.ai import (
+    AiAvailabilityOut,
     AiConversationDetail,
     AiConversationOut,
     AiMessageCreate,
@@ -108,6 +109,29 @@ async def _conversation_or_404(
             status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found"
         )
     return conv
+
+
+@router.get("/availability", response_model=AiAvailabilityOut)
+async def availability(
+    competition_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AiAvailabilityOut:
+    """Whether the caller may open the administrator assistant here — the client
+    gate for showing the launcher. Never raises on "off"; returns ``available:
+    false`` when the module is unconfigured/disabled or the caller isn't staff,
+    so a competitor probing it learns only that the assistant isn't for them."""
+    settings = await db.get(AiSettings, AI_SETTINGS_ID)
+    configured = bool(
+        settings and settings.enabled and settings.base_url and settings.model
+    )
+    if not configured or not await is_module_enabled(db, "ai", competition_id):
+        return AiAvailabilityOut(available=False)
+    competition = await get_visible_competition(db, competition_id, current_user)
+    can_use = competition is not None and await can_use_admin_assistant(
+        db, current_user, competition_id
+    )
+    return AiAvailabilityOut(available=can_use)
 
 
 @router.post(

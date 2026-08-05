@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 
+import { AiAssistantMount } from "@/components/ai/ai-assistant";
 import { AnnouncementBanner } from "@/components/announcements/announcement-banner";
 import { DemoBanner } from "@/components/app/demo-banner";
 import { UpdateNotice } from "@/components/admin/update-notice";
@@ -119,6 +120,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { data: siteSettings } = useSiteSettings();
   const brand = siteSettings ?? FALLBACK_SETTINGS;
   const platformName = brand.platform_name;
+  // The active competition's name, for the assistant's context chip. Shares the
+  // Topbar's cached query, so this adds no request.
+  const { data: allCompetitions } = useCompetitions();
+  const activeCompetition = (allCompetitions ?? []).find(
+    (c) => c.id === activeCompetitionId,
+  );
 
   // The theme (palette + accent) is applied globally by <ThemeApplier>, which
   // also restores the saved per-user palette override — the shell no longer
@@ -378,6 +385,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       </div>
+      {/* The organiser assistant launcher (#98). Competition-scoped, so it's
+          shown only on a competition page (not the global Admin section, not the
+          lobby); <AiAssistantMount> itself checks the viewer is staff and the
+          module is enabled before rendering anything. Fixed-positioned, so its
+          place at the shell root — an ancestor with no transform — keeps it
+          anchored to the viewport. */}
+      {access.ready && !access.inLobby && !isAdminSection && activeCompetitionId && (
+        <AiAssistantMount
+          competitionId={activeCompetitionId}
+          competitionName={activeCompetition?.name}
+        />
+      )}
     </div>
   );
 }

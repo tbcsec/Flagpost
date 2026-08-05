@@ -130,6 +130,30 @@ async def test_staff_can_open_admin_assistant(client):
     assert r.json()["assistant_type"] == "admin"
 
 
+async def test_availability_false_until_configured(client):
+    admin = await admin_token(client)
+    comp = await _competition(client, admin)
+    # Never raises; false while the module is off, even for an Administrator.
+    r = await client.get(f"/api/competitions/{comp}/ai/availability", headers=_auth(admin))
+    assert r.status_code == 200
+    assert r.json() == {"available": False}
+
+
+async def test_availability_reflects_staff_and_config(client):
+    admin = await admin_token(client)
+    comp = await _competition(client, admin)
+    await _enable_ai(client, admin)
+    staff_token, _ = await _user_with_permissions(
+        client, comp, "availstaff@example.com", ["view_competition_analytics"]
+    )
+    p_token, _ = await _participant(client, comp, "availp@example.com")
+    # Staff with a tool permission see the assistant; a bare participant doesn't.
+    staff = await client.get(f"/api/competitions/{comp}/ai/availability", headers=_auth(staff_token))
+    assert staff.json() == {"available": True}
+    part = await client.get(f"/api/competitions/{comp}/ai/availability", headers=_auth(p_token))
+    assert part.json() == {"available": False}
+
+
 # --- execution-as-caller (the core security property) ------------------------
 
 

@@ -25,9 +25,14 @@ import type {
   AiSettings,
   AiSettingsUpdate,
   AiConnectionResult,
+  AiAssistantType,
   AiAvailability,
+  AiCompetitionSettings,
+  AiCompetitionSettingsUpdate,
   AiConversation,
   AiMessage,
+  AiTranscriptDetail,
+  AiTranscriptSummary,
   AiUsage,
   SubmissionPage,
   SubmissionQuery,
@@ -1055,17 +1060,42 @@ export const aiApi = {
   base: (competitionId: string) => `/api/competitions/${competitionId}/ai`,
   availability: (competitionId: string) =>
     apiFetch<AiAvailability>(`${aiApi.base(competitionId)}/availability`),
-  createConversation: (competitionId: string) =>
+  // Record the caller's one-time competitor-disclosure acceptance (idempotent).
+  acceptDisclosure: (competitionId: string) =>
+    apiFetch<void>(`${aiApi.base(competitionId)}/disclosure/accept`, {
+      method: "POST",
+    }),
+  createConversation: (competitionId: string, assistantType: AiAssistantType) =>
     apiFetch<AiConversation>(`${aiApi.base(competitionId)}/conversations`, {
       method: "POST",
+      body: JSON.stringify({ assistant_type: assistantType }),
     }),
   postMessage: (competitionId: string, conversationId: string, content: string) =>
     apiFetch<AiMessage>(
       `${aiApi.base(competitionId)}/conversations/${conversationId}/messages`,
       { method: "POST", body: JSON.stringify({ content }) },
     ),
+  // Staff-gated (a competitor never calls it — the hook gates on assistant type).
   usage: (competitionId: string) =>
     apiFetch<AiUsage>(`${aiApi.base(competitionId)}/usage`),
+  // Per-competition competitor-assistant controls (edit_competition).
+  competitionSettings: (competitionId: string) =>
+    apiFetch<AiCompetitionSettings>(`${aiApi.base(competitionId)}/settings`),
+  updateCompetitionSettings: (
+    competitionId: string,
+    input: AiCompetitionSettingsUpdate,
+  ) =>
+    apiFetch<AiCompetitionSettings>(`${aiApi.base(competitionId)}/settings`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  // Transcript review (ai_view_transcripts) — competitor conversations only.
+  transcripts: (competitionId: string) =>
+    apiFetch<AiTranscriptSummary[]>(`${aiApi.base(competitionId)}/transcripts`),
+  transcript: (competitionId: string, conversationId: string) =>
+    apiFetch<AiTranscriptDetail>(
+      `${aiApi.base(competitionId)}/transcripts/${conversationId}`,
+    ),
 };
 
 export const analyticsApi = {

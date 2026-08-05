@@ -1,27 +1,40 @@
 "use client";
 
-// The administrator-assistant chat (#98, ADR-0023, Phase 2) — an understated,
-// audience-aware launcher docked in the app shell that opens a side panel and
-// streams answers over the `ai` WS room. Read-only: every tool the assistant
-// calls re-checks the viewer's permissions, so it can only surface what the
-// organiser could already see.
+// The assistant chat (#98, ADR-0023 Phase 2/3) — one understated, audience-aware
+// launcher docked in the app shell. Staff get the administrator assistant;
+// participants get the competitor assistant when the competition is running and
+// the organiser enabled it; nothing renders when neither applies. Both open the
+// same docked side panel and stream answers over the `ai` WS room.
 //
-// Mounting is decided by <AiAssistantMount>: a client-side staff check gates the
-// availability request (so a competitor never fires it), and the request's
-// answer — which also confirms the module is configured + enabled here — gates
-// the launcher itself.
+// The server decides the audience: <AiAssistantMount> asks /availability (which
+// also confirms the module is configured + enabled here) and renders for
+// whichever assistant it grants. The client-side permission check only avoids
+// firing the request for viewers who could hold neither role; the server
+// re-decides authoritatively.
+//
+// The competitor path adds the one-time disclosure (spec §6): the first open
+// shows what the channel is (an operator-configured model endpoint;
+// staff-reviewable transcripts) inside the panel, and the chat only starts after
+// acceptance — which the backend enforces too.
 
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useAccess } from "@/lib/hooks/use-permissions";
-import { useAiAvailability, useAiChat, useAiUsage } from "@/lib/hooks/use-ai";
+import {
+  useAcceptAiDisclosure,
+  useAiAvailability,
+  useAiChat,
+  useAiUsage,
+} from "@/lib/hooks/use-ai";
+import type { AiAssistantType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 // The staff-marker permissions that make a user staff enough for the admin
 // assistant — kept in step with the backend's `_STAFF_MARKER_PERMISSIONS`
-// (utils/ai/tools.py). Used only to avoid firing the availability request for a
-// bare participant; the server re-decides authoritatively.
+// (utils/ai/tools.py) — plus `challenge_view`, which every participant holds.
+// Used only to avoid firing the availability request for a viewer who could
+// hold neither role; the server re-decides authoritatively.
 const STAFF_MARKERS = [
   "view_competition_analytics",
   "ticket_assign",
@@ -29,11 +42,35 @@ const STAFF_MARKERS = [
   "announcement_create",
 ];
 
-const SUGGESTIONS = [
-  "How is the competition going so far?",
-  "Are there any open support tickets?",
-  "Which challenges are the hardest right now?",
-];
+const COPY: Record<
+  AiAssistantType,
+  { title: string; intro: string; suggestions: string[] }
+> = {
+  admin: {
+    title: "Organiser assistant",
+    intro:
+      "Ask about standings, tickets, challenge stats, feedback or announcements. " +
+      "I only read — I can't change anything — and I answer from what you're " +
+      "allowed to see.",
+    suggestions: [
+      "How is the competition going so far?",
+      "Are there any open support tickets?",
+      "Which challenges are the hardest right now?",
+    ],
+  },
+  competitor: {
+    title: "Assistant",
+    intro:
+      "Ask about the platform, scoring, your standing, or announcements. How " +
+      "much help I can give with challenges is set by the organisers — and I " +
+      "never reveal flags.",
+    suggestions: [
+      "How does flag submission work?",
+      "What's my current rank?",
+      "Any recent announcements?",
+    ],
+  },
+};
 
 const sparkIcon = (
   <svg
@@ -60,16 +97,31 @@ export function AiAssistantMount({
   competitionName?: string;
 }) {
   const access = useAccess();
-  const canUse = STAFF_MARKERS.some((k) => access.has(k));
-  const availability = useAiAvailability(competitionId, access.ready && canUse);
-  if (!availability.data?.available) return null;
+  // Staff markers OR participant marker — either audience may get an assistant.
+  const couldUse =
+    STAFF_MARKERS.some((k) => access.has(k)) || access.has("challenge_view");
+  const availability = useAiAvailability(competitionId, access.ready && couldUse);
+  const data = availability.data;
+  // Staff preference: an organiser who is somehow also eligible for the
+  // competitor assistant gets the admin one (the data-dense tool they run the
+  // event with).
+  const assistantType: AiAssistantType | null = data?.admin
+    ? "admin"
+    : data?.competitor
+      ? "competitor"
+      : null;
+  if (!assistantType) return null;
   return (
     <AiAssistant
-      // Fresh chat state per competition — keying drops a stale thread when the
-      // active competition changes.
-      key={competitionId}
+      // Fresh chat state per competition *and* per audience — keying drops a
+      // stale thread if either changes.
+      key={`${competitionId}:${assistantType}`}
       competitionId={competitionId}
       competitionName={competitionName}
+      assistantType={assistantType}
+      disclosureAccepted={
+        assistantType === "admin" || Boolean(data?.competitor_disclosure_accepted)
+      }
     />
   );
 }
@@ -77,16 +129,30 @@ export function AiAssistantMount({
 function AiAssistant({
   competitionId,
   competitionName,
+  assistantType,
+  disclosureAccepted,
 }: {
   competitionId: string;
   competitionName?: string;
+  assistantType: AiAssistantType;
+  disclosureAccepted: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [input, setInput] = useState("");
 
-  const chat = useAiChat(competitionId);
-  const usage = useAiUsage(competitionId, open);
+  const isAdmin = assistantType === "admin";
+  const copy = COPY[assistantType];
+  const chat = useAiChat(competitionId, assistantType);
+  // The usage endpoint is staff-gated — never fire it for the competitor.
+  const usage = useAiUsage(competitionId, open && isAdmin);
+  const acceptDisclosure = useAcceptAiDisclosure(competitionId);
+  // Show the first-run disclosure until accepted (competitor only). Local state
+  // so the accept click transitions immediately; seeded from the server bit so
+  // a returning user never sees it again.
+  const [needsDisclosure, setNeedsDisclosure] = useState(
+    !isAdmin && !disclosureAccepted,
+  );
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -118,6 +184,15 @@ function AiAssistant({
     }
   }
 
+  function onAcceptDisclosure() {
+    acceptDisclosure.mutate(undefined, {
+      onSuccess: () => {
+        setNeedsDisclosure(false);
+        chat.ensureStarted();
+      },
+    });
+  }
+
   const usageText =
     usage.data && usage.data.message_count > 0
       ? `${(usage.data.input_tokens + usage.data.output_tokens).toLocaleString()} tokens`
@@ -129,9 +204,10 @@ function AiAssistant({
         type="button"
         onClick={() => {
           setOpen(true);
-          chat.ensureStarted();
+          // The competitor chat may only start after the disclosure.
+          if (!needsDisclosure) chat.ensureStarted();
         }}
-        aria-label="Open the organiser assistant"
+        aria-label={`Open the ${copy.title.toLowerCase()}`}
         className="fixed bottom-4 right-4 z-[90] flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg outline-none transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       >
         {sparkIcon}
@@ -142,7 +218,7 @@ function AiAssistant({
   return (
     <div
       role="dialog"
-      aria-label="Organiser assistant"
+      aria-label={copy.title}
       className={cn(
         "fixed z-[90] flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl",
         // Mobile: fill most of the screen. sm+: dock bottom-right.
@@ -157,7 +233,7 @@ function AiAssistant({
           {sparkIcon}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold leading-tight">Organiser assistant</div>
+          <div className="text-sm font-semibold leading-tight">{copy.title}</div>
           <div className="truncate text-xs text-muted-foreground">
             {competitionName ? `${competitionName} · read-only` : "Read-only"}
           </div>
@@ -196,104 +272,155 @@ function AiAssistant({
         </button>
       </header>
 
-      <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-        {chat.messages.length === 0 && chat.streaming === null && (
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Ask about standings, tickets, challenge stats, feedback or
-              announcements. I only read — I can&apos;t change anything — and I
-              answer from what you&apos;re allowed to see.
-            </p>
-            {chat.ready && !chat.closed && (
-              <div className="flex flex-col items-start gap-1.5">
-                {SUGGESTIONS.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => submit(s)}
-                    className="rounded-full border border-border px-3 py-1 text-left text-xs text-foreground transition-colors hover:bg-accent/60"
-                  >
-                    {s}
-                  </button>
-                ))}
+      {needsDisclosure ? (
+        <DisclosurePanel
+          pending={acceptDisclosure.isPending}
+          error={acceptDisclosure.isError ? (acceptDisclosure.error as Error).message : null}
+          onAccept={onAcceptDisclosure}
+          onDecline={() => setOpen(false)}
+        />
+      ) : (
+        <>
+          <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+            {chat.messages.length === 0 && chat.streaming === null && (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">{copy.intro}</p>
+                {chat.ready && !chat.closed && (
+                  <div className="flex flex-col items-start gap-1.5">
+                    {copy.suggestions.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => submit(s)}
+                        className="rounded-full border border-border px-3 py-1 text-left text-xs text-foreground transition-colors hover:bg-accent/60"
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {chat.messages.map((m) => (
+              <MessageBubble key={m.id} role={m.role} content={m.content} />
+            ))}
+
+            {chat.streaming !== null && (
+              <MessageBubble role="assistant" content={chat.streaming} pending />
+            )}
+
+            {chat.error && chat.ready && (
+              <p className="text-xs text-destructive">{chat.error}</p>
+            )}
+
+            {chat.closed && (
+              <div className="rounded-md border border-border bg-muted/40 p-3 text-xs">
+                <p className="text-muted-foreground">
+                  This conversation has reached its length limit.
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="mt-2"
+                  onClick={() => chat.startNew()}
+                >
+                  Start a new chat
+                </Button>
               </div>
             )}
           </div>
-        )}
 
-        {chat.messages.map((m) => (
-          <MessageBubble key={m.id} role={m.role} content={m.content} />
-        ))}
-
-        {chat.streaming !== null && (
-          <MessageBubble role="assistant" content={chat.streaming} pending />
-        )}
-
-        {chat.error && chat.ready && (
-          <p className="text-xs text-destructive">{chat.error}</p>
-        )}
-
-        {chat.closed && (
-          <div className="rounded-md border border-border bg-muted/40 p-3 text-xs">
-            <p className="text-muted-foreground">
-              This conversation has reached its length limit.
-            </p>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="mt-2"
-              onClick={() => chat.startNew()}
-            >
-              Start a new chat
-            </Button>
+          <div className="border-t border-border p-3">
+            {!chat.ready && chat.error ? (
+              <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span>Couldn&apos;t start the assistant.</span>
+                <Button type="button" size="sm" variant="outline" onClick={() => chat.startNew()}>
+                  Try again
+                </Button>
+              </div>
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  submit(input);
+                }}
+                className="flex items-end gap-2"
+              >
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={onKeyDown}
+                  rows={1}
+                  maxLength={8000}
+                  disabled={composerDisabled}
+                  placeholder={
+                    chat.ready
+                      ? "Ask the assistant…"
+                      : chat.starting
+                        ? "Connecting…"
+                        : "Starting…"
+                  }
+                  className="max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                />
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={composerDisabled || !input.trim()}
+                  className="h-10 flex-shrink-0"
+                >
+                  {chat.sending ? "…" : "Send"}
+                </Button>
+              </form>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
+    </div>
+  );
+}
 
-      <div className="border-t border-border p-3">
-        {!chat.ready && chat.error ? (
-          <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-            <span>Couldn&apos;t start the assistant.</span>
-            <Button type="button" size="sm" variant="outline" onClick={() => chat.startNew()}>
-              Try again
-            </Button>
-          </div>
-        ) : (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              submit(input);
-            }}
-            className="flex items-end gap-2"
-          >
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onKeyDown}
-              rows={1}
-              maxLength={8000}
-              disabled={composerDisabled}
-              placeholder={
-                chat.ready
-                  ? "Ask the assistant…"
-                  : chat.starting
-                    ? "Connecting…"
-                    : "Starting…"
-              }
-              className="max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            />
-            <Button
-              type="submit"
-              size="sm"
-              disabled={composerDisabled || !input.trim()}
-              className="h-10 flex-shrink-0"
-            >
-              {chat.sending ? "…" : "Send"}
-            </Button>
-          </form>
-        )}
+/** The competitor's one-time first-run disclosure (spec §6): plain facts, an
+ *  explicit accept, and a way out. Acceptance is recorded server-side and the
+ *  backend refuses the chat without it — this panel is the honest front of a
+ *  real gate, not a courtesy click-through. */
+function DisclosurePanel({
+  pending,
+  error,
+  onAccept,
+  onDecline,
+}: {
+  pending: boolean;
+  error: string | null;
+  onAccept: () => void;
+  onDecline: () => void;
+}) {
+  return (
+    <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
+      <p className="text-sm font-medium">Before you start</p>
+      <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
+        <li>
+          Your messages are sent to an AI model endpoint configured by this
+          site&apos;s operators.
+        </li>
+        <li>
+          Competition staff can review your conversations with the assistant.
+        </li>
+        <li>
+          The assistant is read-only, never reveals flags, and how much
+          challenge help it gives is set by the organisers.
+        </li>
+      </ul>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <div className="mt-auto flex items-center gap-2">
+        <Button type="button" size="sm" onClick={onAccept} disabled={pending}>
+          {pending ? "Saving…" : "I understand — start chatting"}
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={onDecline}>
+          Not now
+        </Button>
       </div>
     </div>
   );

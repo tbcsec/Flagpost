@@ -11,7 +11,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError, aiAdminApi, aiApi } from "@/lib/api";
 import { openRoomSocket, type RoomSocketHandle } from "@/lib/ws";
-import type { AiSettingsUpdate } from "@/lib/types";
+import type {
+  AiAssistantType,
+  AiCompetitionSettingsUpdate,
+  AiSettingsUpdate,
+} from "@/lib/types";
 
 // --- admin provider config ---------------------------------------------------
 
@@ -52,12 +56,74 @@ export function useAiAvailability(competitionId: string | null, enabled: boolean
   });
 }
 
-/** Per-competition token totals — the "surprise bill" indicator in the panel. */
+/** Per-competition token totals — the "surprise bill" indicator in the panel.
+ *  Staff-gated server-side, so callers must pass `enabled=false` for the
+ *  competitor assistant (it would 403). */
 export function useAiUsage(competitionId: string | null, enabled: boolean) {
   return useQuery({
     queryKey: ["ai", "usage", competitionId],
     queryFn: () => aiApi.usage(competitionId as string),
     enabled: Boolean(competitionId) && enabled,
+    staleTime: 30_000,
+  });
+}
+
+/** Record the one-time competitor-disclosure acceptance, then refresh
+ *  availability so the first-run modal doesn't reappear. */
+export function useAcceptAiDisclosure(competitionId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => aiApi.acceptDisclosure(competitionId as string),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["ai", "availability", competitionId],
+      }),
+  });
+}
+
+// --- per-competition organiser controls --------------------------------------
+
+export function useCompetitionAiSettings(competitionId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ["ai", "competition-settings", competitionId],
+    queryFn: () => aiApi.competitionSettings(competitionId as string),
+    enabled: Boolean(competitionId) && enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useUpdateCompetitionAiSettings(competitionId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: AiCompetitionSettingsUpdate) =>
+      aiApi.updateCompetitionSettings(competitionId as string, input),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["ai", "competition-settings", competitionId], data);
+      // The toggle changes what the launcher offers competitors.
+      queryClient.invalidateQueries({ queryKey: ["ai", "availability", competitionId] });
+    },
+  });
+}
+
+// --- transcript review (ai_view_transcripts) ---------------------------------
+
+export function useAiTranscripts(competitionId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ["ai", "transcripts", competitionId],
+    queryFn: () => aiApi.transcripts(competitionId as string),
+    enabled: Boolean(competitionId) && enabled,
+    staleTime: 30_000,
+  });
+}
+
+export function useAiTranscript(
+  competitionId: string | null,
+  conversationId: string | null,
+) {
+  return useQuery({
+    queryKey: ["ai", "transcripts", competitionId, conversationId],
+    queryFn: () => aiApi.transcript(competitionId as string, conversationId as string),
+    enabled: Boolean(competitionId && conversationId),
     staleTime: 30_000,
   });
 }
@@ -77,9 +143,12 @@ export interface AiChatMessage {
  *  which the backend guarantees matches the streamed text.
  *
  *  The assistant is competition-scoped, so the caller must key its component by
- *  `competitionId`: a switch remounts this hook fresh rather than mutating the
- *  thread in place. */
-export function useAiChat(competitionId: string | null) {
+ *  `competitionId` (and by `assistantType` if it can change): a switch remounts
+ *  this hook fresh rather than mutating the thread in place. */
+export function useAiChat(
+  competitionId: string | null,
+  assistantType: AiAssistantType,
+) {
   const queryClient = useQueryClient();
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
@@ -151,7 +220,7 @@ export function useAiChat(competitionId: string | null) {
     setStarting(true);
     setError(null);
     try {
-      const conv = await aiApi.createConversation(competitionId);
+      const conv = await aiApi.createConversation(competitionId, assistantType);
       setMessages([]);
       setClosed(false);
       conversationIdRef.current = conv.id;
@@ -162,7 +231,7 @@ export function useAiChat(competitionId: string | null) {
       startingRef.current = false;
       setStarting(false);
     }
-  }, [competitionId]);
+  }, [competitionId, assistantType]);
 
   // Open a conversation lazily — called when the panel is first shown, so staff
   // who never open the assistant leave no conversation row. A no-op once one

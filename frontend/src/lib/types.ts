@@ -1113,8 +1113,47 @@ export interface AiUsage {
   message_count: number;
 }
 
-/** The single boolean gating the assistant launcher — true when the module is
- *  configured + enabled here and the caller may use it. */
+/** Which assistant(s) the caller may open here — the audience-aware launcher
+ *  gate. Both false when the module is off/unconfigured. */
 export interface AiAvailability {
-  available: boolean;
+  admin: boolean;
+  competitor: boolean;
+  /** Whether the caller accepted the competitor disclosure (only meaningful
+   *  when `competitor` is true) — drives the first-run modal. */
+  competitor_disclosure_accepted: boolean;
+}
+
+export type AiAssistantType = "admin" | "competitor";
+
+/** Per-competition competitor-assistant controls (organiser view).
+ *  `guidance_level` is the raw override (null = inherit the site default);
+ *  `effective_guidance_level` is what actually applies. */
+export interface AiCompetitionSettings {
+  competitor_enabled: boolean;
+  guidance_level: AiGuidanceLevel | null;
+  effective_guidance_level: AiGuidanceLevel;
+  challenge_metadata_access: boolean;
+  updated_at: string | null;
+}
+
+export interface AiCompetitionSettingsUpdate {
+  competitor_enabled?: boolean;
+  /** Omit to leave unchanged; null clears the override (inherit). */
+  guidance_level?: AiGuidanceLevel | null;
+  challenge_metadata_access?: boolean;
+}
+
+/** One competitor conversation in the organiser's transcript-review list. */
+export interface AiTranscriptSummary {
+  id: string;
+  user_id: string;
+  user_display_name: string;
+  assistant_type: string;
+  message_count: number;
+  created_at: string;
+  closed_at: string | null;
+}
+
+export interface AiTranscriptDetail extends AiTranscriptSummary {
+  messages: AiMessage[];
 }

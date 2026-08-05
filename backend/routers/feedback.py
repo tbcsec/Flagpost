@@ -37,7 +37,6 @@ from plugins.loader import is_module_enabled
 from schemas.feedback import (
     QuestionCreate,
     QuestionOut,
-    QuestionResults,
     ReorderQuestions,
     ResponseSubmit,
     SurveyCreate,
@@ -47,13 +46,16 @@ from schemas.feedback import (
     SurveyUpdate,
 )
 from utils.event_bus import event_bus
+from utils.feedback import (
+    RATING_MAX as _RATING_MAX,
+    survey_questions as _questions,
+    survey_response_count as _response_count,
+    survey_results as compute_survey_results,
+)
 
 router = APIRouter(
     prefix="/api/competitions/{competition_id}/surveys", tags=["feedback"]
 )
-
-_RATING_MAX = {"rating_1_10": 10, "rating_1_5": 5}
-
 
 async def _guard(db: AsyncSession, competition_id: str) -> None:
     """Competition exists and the feedback module is enabled for it (§11.3)."""
@@ -94,35 +96,11 @@ async def _survey_or_404(db: AsyncSession, competition_id: str, survey_id: str) 
     return survey
 
 
-async def _questions(db: AsyncSession, survey_id: str) -> list[SurveyQuestion]:
-    return list(
-        (
-            await db.execute(
-                select(SurveyQuestion)
-                .where(SurveyQuestion.survey_id == survey_id)
-                .order_by(SurveyQuestion.position, SurveyQuestion.created_at)
-            )
-        )
-        .scalars()
-        .all()
-    )
-
-
 def _question_out(q: SurveyQuestion) -> QuestionOut:
     return QuestionOut(
         id=q.id, prompt=q.prompt, type=q.type, options=q.options or [],
         required=q.required, position=q.position,
     )
-
-
-async def _response_count(db: AsyncSession, survey_id: str) -> int:
-    return (
-        await db.scalar(
-            select(func.count(SurveyResponse.id)).where(
-                SurveyResponse.survey_id == survey_id
-            )
-        )
-    ) or 0
 
 
 async def _detail(
@@ -456,22 +434,6 @@ async def submit_response(
 # --- results + export (feedback_view_responses) ------------------------------
 
 
-async def _answers_by_question(
-    db: AsyncSession, survey_id: str
-) -> dict[str, list[str]]:
-    rows = (
-        await db.execute(
-            select(SurveyAnswer.question_id, SurveyAnswer.value)
-            .join(SurveyResponse, SurveyResponse.id == SurveyAnswer.response_id)
-            .where(SurveyResponse.survey_id == survey_id)
-        )
-    ).all()
-    grouped: dict[str, list[str]] = {}
-    for question_id, value in rows:
-        grouped.setdefault(question_id, []).append(value)
-    return grouped
-
-
 @router.get("/{survey_id}/results", response_model=SurveyResults)
 async def survey_results(
     competition_id: str,
@@ -480,36 +442,12 @@ async def survey_results(
     db: AsyncSession = Depends(get_db),
 ) -> SurveyResults:
     await _guard(db, competition_id)
-    survey = await _survey_or_404(db, competition_id, survey_id)
-    questions = await _questions(db, survey_id)
-    grouped = await _answers_by_question(db, survey_id)
-
-    results: list[QuestionResults] = []
-    for q in questions:
-        values = grouped.get(q.id, [])
-        entry = QuestionResults(
-            question_id=q.id, prompt=q.prompt, type=q.type, answered=len(values)
+    results = await compute_survey_results(db, competition_id, survey_id)
+    if results is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Survey not found"
         )
-        if q.type in _RATING_MAX:
-            nums = [int(v) for v in values if v.isdigit()]
-            entry.average = round(sum(nums) / len(nums), 2) if nums else None
-            counts: dict[str, int] = {}
-            for v in values:
-                counts[v] = counts.get(v, 0) + 1
-            entry.counts = counts
-        elif q.type == "multiple_choice":
-            counts = {opt: 0 for opt in (q.options or [])}
-            for v in values:
-                counts[v] = counts.get(v, 0) + 1
-            entry.counts = counts
-        else:
-            entry.texts = values
-        results.append(entry)
-
-    return SurveyResults(
-        survey_id=survey.id, title=survey.title,
-        response_count=await _response_count(db, survey_id), questions=results,
-    )
+    return results
 
 
 @router.get("/{survey_id}/responses.csv")

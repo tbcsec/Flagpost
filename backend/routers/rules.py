@@ -21,6 +21,7 @@ from db import get_db
 from models.competition import Competition
 from models.user import User
 from schemas.rules import RulesOut
+from utils.competitions import get_visible_competition
 from utils.rules import accept_rules, rules_state
 
 router = APIRouter(
@@ -31,12 +32,8 @@ router = APIRouter(
 async def _visible_competition_or_404(
     db: AsyncSession, competition_id: str, user: User
 ) -> Competition:
-    # Imported here (not at module top) to avoid a circular import with the
-    # competitions router, which itself imports the gate helpers.
-    from routers.competitions import _can_see
-
-    competition = await db.get(Competition, competition_id)
-    if competition is None or not await _can_see(db, competition, user):
+    competition = await get_visible_competition(db, competition_id, user)
+    if competition is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"
         )

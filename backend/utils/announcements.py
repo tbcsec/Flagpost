@@ -26,9 +26,10 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth.deps import users_with_permission
+from auth.deps import user_has_permission, users_with_permission
 from models.announcement import Announcement
 from models.team import TeamMembership
+from models.user import User
 
 
 async def user_team_ids(
@@ -65,6 +66,39 @@ def visible_to_user(
         return bool(team_ids & targets)
     # Unknown audience type: fail closed rather than disclose.
     return False
+
+
+async def list_visible_announcements(
+    db: AsyncSession, competition_id: str, user: User
+) -> list[Announcement]:
+    """Announcements in the competition the caller may see (§4.3, #40), newest
+    first. Staff who can post (``announcement_create``) see everything — their own
+    sent history; everyone else sees "all" plus what targets them. The team set is
+    resolved once, not per row.
+
+    This is the *audience* filter, not the ``challenge_view`` access gate — the
+    route applies that with ``require_permission`` (and any non-route caller
+    re-applies it).
+    """
+    rows = list(
+        (
+            await db.execute(
+                select(Announcement)
+                .where(Announcement.competition_id == competition_id)
+                .order_by(Announcement.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if await user_has_permission(db, user.id, "announcement_create", competition_id):
+        return rows
+    team_ids = await user_team_ids(db, competition_id, user.id)
+    return [
+        a
+        for a in rows
+        if visible_to_user(a, user_id=user.id, team_ids=team_ids, is_staff=False)
+    ]
 
 
 async def resolve_recipients(

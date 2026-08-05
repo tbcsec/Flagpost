@@ -19,81 +19,34 @@ the §4.4 audio cue, so this router stays transport-agnostic.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
 
-from auth.deps import require_permission, user_has_permission
+from auth.deps import require_permission
 from db import get_db
 from models.challenge import Challenge
 from models.competition import Competition
-from models.team import Team, TeamMembership
+from models.team import TeamMembership
 from models.ticket import Ticket, TicketMessage
-from models.ticket_attachment import TicketAttachment
 from models.user import User
 from schemas.ticket import (
     TicketAssign,
-    TicketAttachmentOut,
     TicketCreate,
     TicketDetail,
-    TicketMessageOut,
     TicketOut,
     TicketReply,
 )
 from utils.event_bus import event_bus
+from utils.tickets import (
+    can_see_internal as _can_see_internal,
+    list_visible_tickets,
+    ticket_detail as _ticket_detail,
+    visible_ticket_row,
+)
 
 router = APIRouter(
     prefix="/api/competitions/{competition_id}/tickets", tags=["tickets"]
 )
-
-
-async def _is_staff(db: AsyncSession, user: User, competition_id: str) -> bool:
-    return await user_has_permission(db, user.id, "ticket_assign", competition_id)
-
-
-async def _can_see_internal(db: AsyncSession, user: User, competition_id: str) -> bool:
-    return await user_has_permission(
-        db, user.id, "ticket_view_internal_notes", competition_id
-    )
-
-
-async def _message_count(db: AsyncSession, ticket_id: str) -> int:
-    return (
-        await db.scalar(
-            select(func.count(TicketMessage.id)).where(
-                TicketMessage.ticket_id == ticket_id
-            )
-        )
-    ) or 0
-
-
-def _row_to_out(row, message_count: int) -> TicketOut:
-    ticket, opener_name, team_name, challenge_title, assignee_name = row
-    return TicketOut(
-        id=ticket.id,
-        subject=ticket.subject,
-        status=ticket.status,
-        challenge_id=ticket.challenge_id,
-        challenge_title=challenge_title,
-        opener_name=opener_name,
-        team_name=team_name,
-        assignee_name=assignee_name,
-        message_count=message_count,
-        created_at=ticket.created_at,
-    )
-
-
-def _base_select(competition_id: str):
-    Opener = aliased(User)
-    Assignee = aliased(User)
-    return (
-        select(Ticket, Opener.display_name, Team.name, Challenge.title, Assignee.display_name)
-        .join(Opener, Opener.id == Ticket.opener_user_id)
-        .outerjoin(Team, Team.id == Ticket.team_id)
-        .outerjoin(Challenge, Challenge.id == Ticket.challenge_id)
-        .outerjoin(Assignee, Assignee.id == Ticket.assignee_user_id)
-        .where(Ticket.competition_id == competition_id)
-    )
 
 
 @router.get("", response_model=list[TicketOut])
@@ -103,35 +56,23 @@ async def list_tickets(
     current_user: User = Depends(require_permission("ticket_view")),
     db: AsyncSession = Depends(get_db),
 ) -> list[TicketOut]:
-    stmt = _base_select(competition_id).order_by(Ticket.created_at.desc())
-    if not await _is_staff(db, current_user, competition_id):
-        # Competitors see only their own tickets.
-        stmt = stmt.where(Ticket.opener_user_id == current_user.id)
-    if status_filter in ("open", "resolved"):
-        stmt = stmt.where(Ticket.status == status_filter)
-
-    rows = (await db.execute(stmt)).all()
-    out = []
-    for row in rows:
-        out.append(_row_to_out(row, await _message_count(db, row[0].id)))
-    return out
+    return await list_visible_tickets(
+        db, competition_id, current_user, status_filter=status_filter
+    )
 
 
 async def _load_visible_ticket(
     db: AsyncSession, competition_id: str, ticket_id: str, user: User
 ):
-    """Return the ticket row (or 404), enforcing competitor ownership."""
-    row = (
-        await db.execute(
-            _base_select(competition_id).where(Ticket.id == ticket_id)
-        )
-    ).first()
+    """The ticket row (or 404), enforcing competitor ownership — a thin HTTP
+    wrapper over ``utils.tickets.visible_ticket_row``. Kept here (rather than
+    inlined at each call site) because the ticket-attachments router imports it
+    for exactly this behaviour."""
+    row = await visible_ticket_row(db, competition_id, ticket_id, user)
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
-    ticket = row[0]
-    if not await _is_staff(db, user, competition_id) and ticket.opener_user_id != user.id:
-        # Hide someone else's ticket rather than 403 (existence not disclosed).
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found"
+        )
     return row
 
 
@@ -204,58 +145,6 @@ async def get_ticket(
 ) -> TicketDetail:
     await _load_visible_ticket(db, competition_id, ticket_id, current_user)
     return await _ticket_detail(db, competition_id, ticket_id, current_user)
-
-
-async def _ticket_detail(
-    db: AsyncSession, competition_id: str, ticket_id: str, user: User
-) -> TicketDetail:
-    row = (
-        await db.execute(_base_select(competition_id).where(Ticket.id == ticket_id))
-    ).first()
-    summary = _row_to_out(row, await _message_count(db, ticket_id))
-
-    show_internal = await _can_see_internal(db, user, competition_id)
-    msg_stmt = (
-        select(TicketMessage, User.display_name)
-        .join(User, User.id == TicketMessage.author_user_id)
-        .where(TicketMessage.ticket_id == ticket_id)
-        .order_by(TicketMessage.created_at)
-    )
-    if not show_internal:
-        msg_stmt = msg_stmt.where(TicketMessage.is_internal.is_(False))
-    rows = (await db.execute(msg_stmt)).all()
-
-    # One query for the whole thread's attachments, grouped in Python — a
-    # per-message query would be N+1 on a long ticket. Messages the viewer
-    # can't see were already dropped above, so their images never get grouped.
-    by_message: dict[str, list[TicketAttachmentOut]] = {}
-    if rows:
-        attachment_rows = await db.scalars(
-            select(TicketAttachment)
-            .where(
-                TicketAttachment.competition_id == competition_id,
-                TicketAttachment.message_id.in_([m.id for m, _ in rows]),
-            )
-            .order_by(TicketAttachment.created_at)
-        )
-        for a in attachment_rows:
-            by_message.setdefault(a.message_id, []).append(
-                TicketAttachmentOut.model_validate(a, from_attributes=True)
-            )
-
-    messages = [
-        TicketMessageOut(
-            id=m.id,
-            author_user_id=m.author_user_id,
-            author_name=name,
-            body=m.body,
-            is_internal=m.is_internal,
-            created_at=m.created_at,
-            attachments=by_message.get(m.id, []),
-        )
-        for m, name in rows
-    ]
-    return TicketDetail(**summary.model_dump(), messages=messages)
 
 
 @router.post("/{ticket_id}/messages", response_model=TicketDetail)

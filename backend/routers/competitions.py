@@ -41,6 +41,7 @@ from routers.site_settings import get_or_create_settings
 from storage import get_storage
 from storage.base import ObjectStorage
 from utils.competition_clone import clone_competition
+from utils.competitions import get_visible_competition
 from utils.event_bus import event_bus
 from utils.retention import delete_competition_tree
 from utils.rules import (
@@ -50,16 +51,6 @@ from utils.rules import (
 )
 
 router = APIRouter(prefix="/api/competitions", tags=["competitions"])
-
-
-async def _can_see(db: AsyncSession, competition: Competition, user: User) -> bool:
-    """Visibility (§6): a competition is visible if it's public, the caller holds
-    a role in it (member/organiser), or the caller is a global Administrator."""
-    if competition.visibility == "public":
-        return True
-    if await has_global_role(db, user.id):
-        return True
-    return competition.id in await member_competition_ids(db, user.id)
 
 
 @router.get("", response_model=list[CompetitionOut])
@@ -87,10 +78,10 @@ async def get_competition(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Competition:
-    competition = await db.get(Competition, competition_id)
     # A private competition the caller can't see 404s (indistinguishable from
     # missing), never 403 — its existence isn't disclosed.
-    if competition is None or not await _can_see(db, competition, current_user):
+    competition = await get_visible_competition(db, competition_id, current_user)
+    if competition is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"
         )

@@ -32,12 +32,13 @@ from db import get_db
 from models.ticket import TicketMessage
 from models.ticket_attachment import TicketAttachment
 from models.user import User
-from routers.tickets import _can_see_internal, _is_staff, _load_visible_ticket
+from routers.tickets import _load_visible_ticket
 from schemas.ticket import TicketAttachmentOut
 from storage import get_storage
 from storage.base import ObjectStorage
 from utils.event_bus import event_bus
 from utils.image_sniff import exceeds_pixel_budget, sniff_image_type
+from utils.tickets import can_see_internal as _can_see_internal, is_staff as _is_staff
 
 router = APIRouter(
     prefix="/api/competitions/{competition_id}/tickets/{ticket_id}",

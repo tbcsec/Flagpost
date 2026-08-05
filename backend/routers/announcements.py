@@ -14,16 +14,15 @@ resolver in ``utils/announcements``, so read and delivery can't drift.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth.deps import require_permission, user_has_permission
+from auth.deps import require_permission
 from db import get_db
 from models.announcement import Announcement
 from models.competition import Competition
 from models.user import User
 from schemas.announcement import AnnouncementCreate, AnnouncementOut
-from utils.announcements import user_team_ids, visible_to_user
+from utils.announcements import list_visible_announcements
 from utils.event_bus import event_bus
 
 router = APIRouter(
@@ -37,28 +36,7 @@ async def list_announcements(
     current_user: User = Depends(require_permission("challenge_view")),
     db: AsyncSession = Depends(get_db),
 ) -> list[Announcement]:
-    result = await db.execute(
-        select(Announcement)
-        .where(Announcement.competition_id == competition_id)
-        .order_by(Announcement.created_at.desc())
-    )
-    rows = list(result.scalars().all())
-    # Audience filter (#40). Staff who can post see everything (their own sent
-    # history); everyone else sees "all" plus what targets them. The team set is
-    # resolved once, not per row.
-    is_staff = await user_has_permission(
-        db, current_user.id, "announcement_create", competition_id
-    )
-    if is_staff:
-        return rows
-    team_ids = await user_team_ids(db, competition_id, current_user.id)
-    return [
-        a
-        for a in rows
-        if visible_to_user(
-            a, user_id=current_user.id, team_ids=team_ids, is_staff=False
-        )
-    ]
+    return await list_visible_announcements(db, competition_id, current_user)
 
 
 @router.post("", response_model=AnnouncementOut, status_code=status.HTTP_201_CREATED)

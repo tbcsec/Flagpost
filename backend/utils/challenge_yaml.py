@@ -38,28 +38,14 @@ from models.competition import Competition
 from models.hint import Hint
 from storage.base import ObjectStorage
 from utils.flags import hash_static_flag, make_salt
+from utils.richtext import doc_to_text
 
 
 # --- TipTap ⇄ plain text -----------------------------------------------------
 
-
-def _doc_to_text(doc: object) -> str:
-    """Flatten a TipTap/ProseMirror doc to plain text (paragraph-joined)."""
-    if not isinstance(doc, dict):
-        return ""
-    lines: list[str] = []
-
-    def walk(node: dict, buf: list[str]) -> None:
-        if node.get("type") == "text":
-            buf.append(node.get("text", ""))
-        for child in node.get("content", []) or []:
-            walk(child, buf)
-
-    for block in doc.get("content", []) or []:
-        buf: list[str] = []
-        walk(block, buf)
-        lines.append("".join(buf))
-    return "\n".join(lines).strip()
+# The doc→text direction now lives in utils.richtext (shared with the competitor
+# assistant tools); re-exported here under the module-private name its callers use.
+_doc_to_text = doc_to_text
 
 
 def _text_to_doc(text: str) -> dict:

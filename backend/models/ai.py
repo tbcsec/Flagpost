@@ -112,6 +112,69 @@ class AiSettings(Base, TimestampMixin):
     )
 
 
+class AiCompetitionSettings(Base, TimestampMixin):
+    """Per-competition controls for the competitor assistant (#98, ADR-0023
+    Phase 3). One row per competition (``competition_id`` is the primary key), so
+    absence means "all defaults" — the row is created lazily on first edit, the
+    same posture as the site-settings singleton.
+
+    Three orthogonal controls, deliberately kept distinct (spec §5, §10.2):
+
+    - ``competitor_enabled`` — the competitor assistant on/off for this
+      competition. Off by default: an organiser opts a hint channel in, it isn't
+      forced on when the module is enabled.
+    - ``guidance_level`` — how much solving help the assistant may offer. **NULL
+      inherits** the site-level ``default_guidance_level`` (resolved at read), so
+      raising the site default lifts every competition that hasn't overridden it.
+      This is a *behavioural* control (prompt layer 4), never a data guarantee.
+    - ``challenge_metadata_access`` — a **hard, code-enforced data toggle**
+      (default off): whether the competitor tools may surface challenge specifics
+      at all. Distinct from ``guidance_level`` and never conflated with it — this
+      gates the *tool's existence*, not the model's manners.
+
+    Tenant-scoped, so it purges with the competition under the archive/retention
+    lifecycle (§10.4) via the ``competition_id`` cascade, and it stays out of the
+    backup ``SPECS`` allowlist alongside the other AI tables.
+    """
+
+    __tablename__ = "ai_competition_settings"
+
+    competition_id: Mapped[str] = mapped_column(
+        ForeignKey("competitions.id", ondelete="CASCADE"), primary_key=True
+    )
+    competitor_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    # NULL = inherit the site-level default_guidance_level (resolved at read).
+    guidance_level: Mapped[str | None] = mapped_column(String, nullable=True)
+    challenge_metadata_access: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        UtcDateTime, onupdate=utcnow, nullable=True
+    )
+
+
+class AiDisclosureAcceptance(Base):
+    """A user's one-time acceptance of the competitor-assistant disclosure (#98,
+    spec §6 UX): that their messages go to the operator-configured model endpoint
+    and that transcripts are staff-reviewable. Recorded once per **user**, not
+    per competition — the disclosed facts (the external model, transcript
+    review) are properties of the install, so re-accepting per competition would
+    be noise. Gated on the competitor's first bubble open; creating a competitor
+    conversation is refused until it exists, which is what makes the record
+    meaningful rather than decorative."""
+
+    __tablename__ = "ai_disclosure_acceptances"
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    accepted_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, nullable=False, default=utcnow
+    )
+
+
 class AiConversation(Base, CompetitionScopedMixin, TimestampMixin):
     """One assistant conversation, scoped to a competition and owned by a user
     (§6.2). ``assistant_type`` is ``"admin"`` today; ``"competitor"`` arrives with

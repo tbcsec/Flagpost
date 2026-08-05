@@ -15,11 +15,29 @@ its context demands.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.membership import has_global_role, member_competition_ids
+from db import ensure_aware_utc, utcnow
 from models.competition import Competition
 from models.user import User
+
+
+def is_competition_active(competition: Competition, *, now: datetime | None = None) -> bool:
+    """Whether ``competition`` is currently *running* — started, not yet ended,
+    not paused, not archived. This is the availability gate for the competitor
+    assistant (owner decision: active-only, ADR-0023 Phase 3); it mirrors the
+    ``running`` phase the admin overview computes, plus the pause check."""
+    now = now or utcnow()
+    if competition.archived_at is not None or competition.paused:
+        return False
+    if competition.start_at is not None and now < ensure_aware_utc(competition.start_at):
+        return False
+    if competition.end_at is not None and now >= ensure_aware_utc(competition.end_at):
+        return False
+    return True
 
 
 async def can_see_competition(

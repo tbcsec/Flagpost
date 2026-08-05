@@ -66,12 +66,14 @@ EVENT_TYPES: tuple[str, ...] = (
     "auth_provider.created",
     "auth_provider.updated",
     "auth_provider.deleted",
-    # AI module (#98, ADR-0023). Provider config change, plus per-exchange usage
+    # AI module (#98, ADR-0023). Provider config change, per-exchange usage
     # (ai.query) and upstream failure (ai.error) — usage metadata only, never
-    # message content (spec §4).
+    # message content (spec §4) — plus a competitor's one-time acceptance of the
+    # assistant disclosure (Phase 3).
     "ai.settings_updated",
     "ai.query",
     "ai.error",
+    "ai.disclosure_accepted",
     # An external identity was attached to (or detached from) a local account.
     "identity.linked",
     "identity.unlinked",

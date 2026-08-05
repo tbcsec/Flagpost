@@ -13,14 +13,18 @@ from __future__ import annotations
 def setup(app, event_bus, db_factory) -> None:
     from realtime import register_room_type
     from routers.ai_admin import router as ai_admin_router
+    from routers.ai_competition import router as ai_competition_router
     from routers.ai_conversations import router as ai_conversations_router
 
     app.include_router(ai_admin_router)
     app.include_router(ai_conversations_router)
+    app.include_router(ai_competition_router)
 
     async def authorize_ai_room(db, user, conversation_id: str) -> bool:
-        # A conversation's live stream is joinable by its owner, or by staff who
-        # can use the assistant in that competition (the transcript-review lens).
+        # A conversation's live stream is joinable by its owner, or by the right
+        # oversight grant for its type: admin chats by admin-assistant access,
+        # competitor chats by ai_view_transcripts.
+        from auth.deps import user_has_permission
         from models.ai import AiConversation
         from utils.ai.tools import can_use_admin_assistant
 
@@ -29,6 +33,10 @@ def setup(app, event_bus, db_factory) -> None:
             return False
         if conv.user_id == user.id:
             return True
+        if conv.assistant_type == "competitor":
+            return await user_has_permission(
+                db, user.id, "ai_view_transcripts", conv.competition_id
+            )
         return await can_use_admin_assistant(db, user, conv.competition_id)
 
     register_room_type("ai", authorize=authorize_ai_room)

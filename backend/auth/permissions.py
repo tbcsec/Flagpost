@@ -99,6 +99,12 @@ PERMISSIONS: tuple[Permission, ...] = (
     # calls to an operator-chosen endpoint (a data-processing relationship), so
     # it's a higher-stakes control than a palette or SMTP host.
     Permission("manage_ai", "Site Settings", Scope.GLOBAL),
+    # Reading competitor-assistant conversation transcripts (#98, ADR-0023 Phase
+    # 3) — the oversight lens on a hint channel. Competition-scoped and its own
+    # grant: transcripts are competitor content of a different sensitivity than
+    # analytics or tickets, so a Judge holds it for their competition without it
+    # riding on view_competition_analytics.
+    Permission("ai_view_transcripts", "AI Assistants", Scope.COMPETITION),
     # Analytics
     Permission(
         "view_competition_analytics", "Analytics", Scope.COMPETITION
@@ -168,6 +174,8 @@ JUDGE_PERMISSIONS: list[str] = [
     "feedback_submit",
     "view_competition_analytics",
     "view_submissions",
+    # Review competitor-assistant transcripts in their competition (#98).
+    "ai_view_transcripts",
     "customize_dashboard",
     # Automations (§5): a Judge runs their competition's rules — "full
     # operational control" (§7.3). Reaches existing installs via the startup

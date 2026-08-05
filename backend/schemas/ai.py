@@ -66,7 +66,41 @@ class TestConnectionResult(BaseModel):
     model: str
 
 
+# --- per-competition controls (Phase 3) -------------------------------------
+
+
+class AiCompetitionSettingsOut(BaseModel):
+    """The competitor-assistant controls for one competition (organiser view).
+    ``guidance_level`` is the raw override (null = inherit);
+    ``effective_guidance_level`` is what actually applies after inheritance, so
+    the UI can show "inheriting: conceptual" without re-deriving it."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    competitor_enabled: bool
+    guidance_level: str | None
+    effective_guidance_level: str
+    challenge_metadata_access: bool
+    updated_at: datetime | None = None
+
+
+class AiCompetitionSettingsUpdate(BaseModel):
+    # guidance_level: omit to leave unchanged; null clears the override (inherit
+    # the site default); a level sets an override. The router reads
+    # ``model_fields_set`` to tell "omitted" from an explicit null.
+    competitor_enabled: bool | None = None
+    guidance_level: GuidanceLevel | None = None
+    challenge_metadata_access: bool | None = None
+
+
 # --- conversations (Phase 2) -------------------------------------------------
+
+
+AssistantType = Literal["admin", "competitor"]
+
+
+class AiConversationCreate(BaseModel):
+    assistant_type: AssistantType = "admin"
 
 
 class AiConversationOut(BaseModel):
@@ -104,10 +138,32 @@ class AiUsageOut(BaseModel):
 
 
 class AiAvailabilityOut(BaseModel):
-    """Whether the caller can open the administrator assistant in this
-    competition right now — the single boolean the client needs to decide
-    whether to show the assistant launcher, without exposing the provider
-    config (which needs ``manage_ai``) to a staffer who only holds a tool
-    permission."""
+    """Which assistant(s) the caller can open in this competition right now — the
+    audience-aware launcher gate. Both false when the module is off/unconfigured.
+    ``admin`` is true for staff who hold a tool permission; ``competitor`` is true
+    for a participant when the competition is running and its competitor assistant
+    is enabled. Neither exposes provider config to a non-``manage_ai`` caller."""
 
-    available: bool
+    admin: bool = False
+    competitor: bool = False
+    # Whether the caller has accepted the competitor-assistant disclosure (only
+    # meaningful when ``competitor`` is true) — drives the first-run modal.
+    competitor_disclosure_accepted: bool = False
+
+
+class AiTranscriptSummary(BaseModel):
+    """One competitor conversation in the organiser's transcript-review list."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    user_id: str
+    user_display_name: str
+    assistant_type: str
+    message_count: int
+    created_at: datetime
+    closed_at: datetime | None = None
+
+
+class AiTranscriptDetail(AiTranscriptSummary):
+    messages: list[AiMessageOut] = []

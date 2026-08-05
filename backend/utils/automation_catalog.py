@@ -138,6 +138,9 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     # analytics an org can already see.
     "ai.query": "view_competition_analytics",
     "ai.error": "view_competition_analytics",
+    # Same oversight tier as transcript review — it's who accepted the terms of
+    # that channel.
+    "ai.disclosure_accepted": "ai_view_transcripts",
     # Competition-lifecycle / staff events.
     "competition.created": "edit_competition",
     "competition.updated": "edit_competition",

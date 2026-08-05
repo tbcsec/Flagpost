@@ -17,7 +17,11 @@ Excluded by design: ``refresh_sessions`` and ``api_tokens`` (live bearer
 credentials), and the transient/derived ``notifications`` / ``collab_documents``
 / ``dashboard_layouts`` / ``ai_conversations`` / ``ai_messages`` (chat transcripts
 whose retention follows the competition lifecycle, #98) — none belong in a
-portable backup.
+portable backup. ``ai_competition_settings`` (the per-competition competitor-
+assistant toggles, #98 Phase 3) is likewise omitted: it depends on install-level
+AI provider config that itself isn't exported, so it resets to its safe defaults
+(assistant off, challenge-metadata off) on restore rather than travelling with a
+competition.
 
 Also excluded, for the same credential reason: ``identity_providers``,
 ``user_external_identities`` and ``auth_login_states`` (#58, ADR-0022 §7), and

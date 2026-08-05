@@ -5,7 +5,7 @@ fully populated — Alembic autogenerate and metadata-create both rely on that.
 Add new model modules to the imports below as domains are built.
 """
 
-from models.ai import AiSettings
+from models.ai import AiConversation, AiMessage, AiSettings
 from models.announcement import Announcement
 from models.api_token import ApiToken
 from models.attachment import Attachment
@@ -46,6 +46,8 @@ from models.user import RefreshSession, User
 
 __all__ = [
     "Achievement",
+    "AiConversation",
+    "AiMessage",
     "AiSettings",
     "Announcement",
     "ApiToken",

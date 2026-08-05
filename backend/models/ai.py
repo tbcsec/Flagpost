@@ -20,11 +20,12 @@ themselves in later phases; this row is the provider plumbing on its own.
 """
 
 from datetime import datetime
+from uuid import uuid4
 
-from sqlalchemy import Boolean, Integer, String, Text
+from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from db import Base, TimestampMixin, UtcDateTime, utcnow
+from db import Base, CompetitionScopedMixin, TimestampMixin, UtcDateTime, utcnow
 from utils.crypto import EncryptedString
 
 # The single row's fixed primary key — the singleton sentinel.
@@ -108,4 +109,52 @@ class AiSettings(Base, TimestampMixin):
     )
     updated_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, onupdate=utcnow, nullable=True
+    )
+
+
+class AiConversation(Base, CompetitionScopedMixin, TimestampMixin):
+    """One assistant conversation, scoped to a competition and owned by a user
+    (§6.2). ``assistant_type`` is ``"admin"`` today; ``"competitor"`` arrives with
+    that assistant. A conversation is closed once it reaches the length cap or the
+    module/toggle is turned off mid-chat (spec §9/§10), after which a new message
+    starts a fresh one."""
+
+    __tablename__ = "ai_conversations"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid4())
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    assistant_type: Mapped[str] = mapped_column(String, nullable=False)
+    closed_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+
+class AiMessage(Base, CompetitionScopedMixin, TimestampMixin):
+    """One turn in a conversation. Only the durable ``user`` and ``assistant``
+    turns are stored — the within-exchange tool-call rounds are ephemeral and
+    recomputed each message, so they don't live here; the *names* of tools an
+    assistant turn invoked are kept in ``tool_calls`` for the audit/usage event
+    and later transcript review, not the full tool protocol. Token counts are
+    per-turn so the per-competition usage counter is a sum (spec §9)."""
+
+    __tablename__ = "ai_messages"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid4())
+    )
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("ai_conversations.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    # "user" | "assistant".
+    role: Mapped[str] = mapped_column(String, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # Names of the tools an assistant turn called (metadata, not the protocol).
+    tool_calls: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    input_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    output_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
     )

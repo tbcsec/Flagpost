@@ -15,7 +15,9 @@ document restores cleanly into a different install.
 
 Excluded by design: ``refresh_sessions`` and ``api_tokens`` (live bearer
 credentials), and the transient/derived ``notifications`` / ``collab_documents``
-/ ``dashboard_layouts`` — none belong in a portable backup.
+/ ``dashboard_layouts`` / ``ai_conversations`` / ``ai_messages`` (chat transcripts
+whose retention follows the competition lifecycle, #98) — none belong in a
+portable backup.
 
 Also excluded, for the same credential reason: ``identity_providers``,
 ``user_external_identities`` and ``auth_login_states`` (#58, ADR-0022 §7), and

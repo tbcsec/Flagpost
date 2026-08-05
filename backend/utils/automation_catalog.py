@@ -134,6 +134,10 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     "site.settings_updated": "manage_site_settings",
     # AI provider config is admin-domain, like site settings and auth providers.
     "ai.settings_updated": "manage_ai",
+    # Per-competition assistant usage/errors — staff operational data, like the
+    # analytics an org can already see.
+    "ai.query": "view_competition_analytics",
+    "ai.error": "view_competition_analytics",
     # Competition-lifecycle / staff events.
     "competition.created": "edit_competition",
     "competition.updated": "edit_competition",

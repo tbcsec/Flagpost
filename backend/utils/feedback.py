@@ -62,6 +62,32 @@ async def answers_by_question(
     return grouped
 
 
+async def list_surveys(db: AsyncSession, competition_id: str) -> list[dict]:
+    """Lightweight survey inventory for a competition — id, title, open state and
+    response count, oldest first. Used by the assistant's feedback tool to
+    enumerate surveys before summarising one (the model doesn't know survey ids)."""
+    surveys = (
+        (
+            await db.execute(
+                select(Survey)
+                .where(Survey.competition_id == competition_id)
+                .order_by(Survey.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        {
+            "id": s.id,
+            "title": s.title,
+            "is_open": s.is_open,
+            "response_count": await survey_response_count(db, s.id),
+        }
+        for s in surveys
+    ]
+
+
 async def survey_results(
     db: AsyncSession, competition_id: str, survey_id: str
 ) -> SurveyResults | None:

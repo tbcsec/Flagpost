@@ -64,3 +64,40 @@ class TestConnectionResult(BaseModel):
     completion: TestConnectionCheck
     tool_call: TestConnectionCheck
     model: str
+
+
+# --- conversations (Phase 2) -------------------------------------------------
+
+
+class AiConversationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    assistant_type: str
+    created_at: datetime
+    closed_at: datetime | None = None
+
+
+class AiMessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    role: str
+    content: str
+    # Names of the tools the assistant turn invoked (metadata, no content).
+    tool_calls: list | None = None
+    created_at: datetime
+
+
+class AiConversationDetail(AiConversationOut):
+    messages: list[AiMessageOut]
+
+
+class AiMessageCreate(BaseModel):
+    content: str = Field(min_length=1, max_length=8000)
+
+
+class AiUsageOut(BaseModel):
+    input_tokens: int
+    output_tokens: int
+    message_count: int

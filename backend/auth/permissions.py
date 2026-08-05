@@ -94,6 +94,11 @@ PERMISSIONS: tuple[Permission, ...] = (
     # log in at all, so a misconfiguration or a compromise here is materially
     # worse than changing a palette or an SMTP host.
     Permission("manage_auth_providers", "Site Settings", Scope.GLOBAL),
+    # AI assistants provider config (#98, ADR-0023). Its own grant for the same
+    # reason as auth providers: this surface holds an API key and enables outbound
+    # calls to an operator-chosen endpoint (a data-processing relationship), so
+    # it's a higher-stakes control than a palette or SMTP host.
+    Permission("manage_ai", "Site Settings", Scope.GLOBAL),
     # Analytics
     Permission(
         "view_competition_analytics", "Analytics", Scope.COMPETITION

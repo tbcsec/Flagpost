@@ -132,6 +132,8 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     "identity.linked": "manage_users",
     "identity.unlinked": "manage_users",
     "site.settings_updated": "manage_site_settings",
+    # AI provider config is admin-domain, like site settings and auth providers.
+    "ai.settings_updated": "manage_ai",
     # Competition-lifecycle / staff events.
     "competition.created": "edit_competition",
     "competition.updated": "edit_competition",

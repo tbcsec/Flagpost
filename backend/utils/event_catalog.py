@@ -66,6 +66,9 @@ EVENT_TYPES: tuple[str, ...] = (
     "auth_provider.created",
     "auth_provider.updated",
     "auth_provider.deleted",
+    # AI module (#98, ADR-0023). Provider config changes here; the usage/error
+    # events (ai.query / ai.error) arrive with the assistants that emit them.
+    "ai.settings_updated",
     # An external identity was attached to (or detached from) a local account.
     "identity.linked",
     "identity.unlinked",

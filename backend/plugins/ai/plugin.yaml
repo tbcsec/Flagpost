@@ -1,0 +1,15 @@
+id: ai
+name: AI Assistants
+version: 0.1.0
+# The AI assistants module (#98, ADR-0023). Optional and — unlike the other
+# optional modules — it ships INERT: the site master switch (ai_settings.enabled)
+# defaults off, so nothing happens until an admin configures an OpenAI-compatible
+# endpoint and turns it on. Phase 1 mounts only the admin provider-config surface
+# (Admin → Site settings → AI); the two assistants and their conversation/WS flow
+# arrive in later phases. The platform stays fully operable with this disabled or
+# the upstream endpoint dead — no other feature may depend on it (spec §2/§14).
+required_core: false
+provides:
+  routes: true
+dependencies:
+  - competitions

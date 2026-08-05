@@ -18,11 +18,13 @@ credentials), and the transient/derived ``notifications`` / ``collab_documents``
 / ``dashboard_layouts`` — none belong in a portable backup.
 
 Also excluded, for the same credential reason: ``identity_providers``,
-``user_external_identities`` and ``auth_login_states`` (#58, ADR-0022 §7). A
-provider row holds a **secret** — an OIDC client secret today; a SAML SP key or
-LDAP bind password later — a credential the operator was issued, encrypted with
-a per-install key (ADR-0020), so it would restore as undecryptable ciphertext on
-any other install anyway. The identity links are meaningless without their
+``user_external_identities`` and ``auth_login_states`` (#58, ADR-0022 §7), and
+``ai_settings`` (#98, ADR-0023). A provider row holds a **secret** — an OIDC
+client secret, a SAML SP key or LDAP bind password, or the AI provider's API key —
+a credential the operator was issued, encrypted with a per-install key
+(ADR-0020), so it would restore as undecryptable ciphertext on any other install
+anyway. The AI/provider endpoint config is install-specific and re-entered on
+restore, which is also the moment to rotate the secret. The identity links are meaningless without their
 providers, and login states are in-flight requests measured in minutes. An
 operator restoring onto new infrastructure re-enters provider config, which is
 also the moment to rotate the secret.

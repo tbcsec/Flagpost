@@ -72,21 +72,21 @@ The things that set Flagpost apart — every one of them **built and working tod
 <table>
   <tr>
     <td width="50%" align="center">
-      <img src="docs/assets/screenshots/scoreboard.png" alt="Live scoreboard"><br>
+      <img src="docs/assets/scoreboard.png" alt="Live scoreboard"><br>
       <sub><b>Live scoreboard</b> — real-time standings, first blood, brackets &amp; freeze</sub>
     </td>
     <td width="50%" align="center">
-      <img src="docs/assets/screenshots/challenges.png" alt="Challenges"><br>
+      <img src="docs/assets/challenges.png" alt="Challenges"><br>
       <sub><b>Challenges</b> — cards, hints, live solves &amp; flag submission</sub>
     </td>
   </tr>
   <tr>
     <td width="50%" align="center">
-      <img src="docs/assets/screenshots/automations.png" alt="Automation builder"><br>
+      <img src="docs/assets/automations.png" alt="Automation builder"><br>
       <sub><b>Automation builder</b> — visual When → If → Then rules</sub>
     </td>
     <td width="50%" align="center">
-      <img src="docs/assets/screenshots/dashboard.png" alt="Operational dashboard"><br>
+      <img src="docs/assets/dashboard.png" alt="Operational dashboard"><br>
       <sub><b>Operational dashboard</b> — drag-and-drop widgets for organisers</sub>
     </td>
   </tr>

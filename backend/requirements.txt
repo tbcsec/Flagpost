@@ -31,7 +31,7 @@ python-multipart>=0.0.32,<0.1
 
 # Submission rate limiting (§13.2) — Redis in production; lazily imported so the
 # test suite (in-memory limiter) and a redis-less dev run never need the client.
-redis>=8.0.1,<9.0
+redis>=8.1.0,<9.0
 
 # Automation engine actions (§5.3): outbound webhooks + templated email.
 # aiosmtplib is lazily imported — an install with SMTP unconfigured never loads it.

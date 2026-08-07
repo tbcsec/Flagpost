@@ -15,6 +15,7 @@ tool can't blow the model's context or run up the token bill.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
@@ -34,6 +35,8 @@ from utils.tickets import list_visible_tickets, ticket_detail, visible_ticket_ro
 _MAX_ITEMS = 25
 _MAX_MESSAGES = 30
 _MAX_TEXT = 2000
+
+logger = logging.getLogger("ai")
 
 
 class ToolError(Exception):
@@ -57,6 +60,14 @@ def _truncate(text: str | None) -> str:
     if not text:
         return ""
     return text if len(text) <= _MAX_TEXT else text[:_MAX_TEXT] + "…"
+
+
+def _str_arg(args: dict, key: str) -> str | None:
+    """A string argument value, or None if absent/non-string. Model-supplied
+    arguments are untrusted, so a non-scalar (dict/list) value must never reach a
+    query — binding one raises a DB error that poisons the session on Postgres."""
+    value = args.get(key)
+    return value if isinstance(value, str) else None
 
 
 async def _require(db: AsyncSession, user: User, competition_id: str, permission: str) -> None:
@@ -136,7 +147,8 @@ async def _search_tickets(db, user, competition_id, args) -> dict:
     tickets = await list_visible_tickets(
         db, competition_id, user, status_filter=status
     )
-    query = (args.get("query") or "").strip().lower()
+    query = _str_arg(args, "query")
+    query = query.strip().lower() if query else ""
     if query:
         tickets = [t for t in tickets if query in t.subject.lower()]
     return {
@@ -147,9 +159,9 @@ async def _search_tickets(db, user, competition_id, args) -> dict:
 
 async def _get_ticket(db, user, competition_id, args) -> dict:
     await _require(db, user, competition_id, "ticket_view")
-    ticket_id = args.get("ticket_id")
+    ticket_id = _str_arg(args, "ticket_id")
     if not ticket_id:
-        raise ToolError("A ticket_id is required.")
+        raise ToolError("A valid ticket_id is required.")
     if await visible_ticket_row(db, competition_id, ticket_id, user) is None:
         raise ToolError("No such ticket in this competition (or it isn't yours to view).")
     detail = await ticket_detail(db, competition_id, ticket_id, user)
@@ -165,7 +177,7 @@ async def _get_ticket(db, user, competition_id, args) -> dict:
 async def _feedback_summary(db, user, competition_id, args) -> dict:
     await _require(db, user, competition_id, "feedback_view_responses")
     await _require_module(db, competition_id, "feedback")
-    survey_id = args.get("survey_id")
+    survey_id = _str_arg(args, "survey_id")
     if survey_id:
         results = await survey_results(db, competition_id, survey_id)
         if results is None:
@@ -323,3 +335,11 @@ async def execute_admin_tool(
         return await tool.handler(db, user, competition_id, args)
     except ToolError as exc:
         return {"error": str(exc)}
+    except Exception:
+        # Fail closed (see execute_competitor_tool): a handler bug or malformed
+        # argument becomes a tool error the model relays, not a 500, and the
+        # session is rolled back so a poisoned Postgres transaction can't break
+        # the turn's own commit.
+        logger.exception("admin tool %s failed", name)
+        await db.rollback()
+        return {"error": "That lookup didn't work — please try again."}

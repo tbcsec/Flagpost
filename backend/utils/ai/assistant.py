@@ -20,6 +20,7 @@ The two differ only in what :func:`_drive_turn` is handed:
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -31,11 +32,13 @@ from models.ai import AiCompetitionSettings, AiSettings
 from models.competition import Competition
 from models.user import User
 from utils.ai.client import (
+    AiProviderError,
     StreamDone,
     TextChunk,
     config_from_settings,
     stream_chat_completion,
 )
+from utils.ai.artifacts import scrub_leaked_tool_calls, strip_tool_call_artifacts
 from utils.ai.competitor_tools import competitor_tool_schemas, execute_competitor_tool
 from utils.ai.flag_scan import redact_flags
 from utils.ai.guidance import guidance_fragment, resolve_guidance_level
@@ -60,11 +63,12 @@ DEFAULT_ADMIN_PROMPT = (
 DEFAULT_COMPETITOR_PROMPT = (
     "You are the Flagpost competitor assistant, helping a participant during a "
     "Capture-the-Flag competition. Use the read-only tools to ground your answers "
-    "in real data — the scoreboard, the competitor's own standing, announcements, "
-    "and (when available) public challenge details.\n\n"
+    "in real data — the scoreboard, the competitor's own standing, the "
+    "organisers' announcements (operational notices about the competition), and "
+    "(when available) public challenge details.\n\n"
     "Be encouraging and concise. You must never reveal, guess, or confirm a flag "
     "or a correct multiple-choice answer, and you cannot change anything. Follow "
-    "the guidance level below for how much help with solving you may give."
+    "the guidance level above for how much help with solving you may give."
 )
 
 
@@ -72,7 +76,9 @@ def _preamble(competition_name: str, now: datetime) -> str:
     return (
         f'You are assisting a competition organiser with the competition '
         f'"{competition_name}". The current server time is {now.isoformat()}. '
-        f"Your access is read-only and scoped to this competition."
+        f"Your access is read-only and scoped to this competition. Never mention, "
+        f"name, or quote the internal tools or functions you use to fetch data; "
+        f"describe what you are doing in plain language."
     )
 
 
@@ -81,7 +87,14 @@ def _competitor_preamble(competition_name: str, now: datetime) -> str:
         f'You are assisting a competitor in the competition "{competition_name}". '
         f"The current server time is {now.isoformat()}. Your access is read-only "
         f"and scoped to this competition, and you must never reveal a flag or a "
-        f"correct answer — you do not have access to them and must not guess them."
+        f"correct answer — you do not have access to them and must not guess them. "
+        f"Looking things up is silent and invisible to the competitor: never "
+        f"announce, offer, or narrate an intent to look something up or call a "
+        f"function (nothing like: I can check the announcements, let me look that "
+        f"up, or here is the function call). Never write a tool or function name, "
+        f"and never write JSON, a function call, or any tool-invocation syntax in "
+        f"your reply. Either answer directly, or fetch what you need behind the "
+        f"scenes and answer only from the result — as if you simply knew it."
     )
 
 
@@ -159,55 +172,70 @@ async def _drive_turn(
     input_tokens = output_tokens = 0
     final_content = ""
 
-    for _round in range(MAX_TOOL_ROUNDS + 1):
-        result = None
-        async for event in stream_chat_completion(
-            config, messages, tools=tools, max_tokens=max_tokens
-        ):
-            if isinstance(event, TextChunk):
-                if stream_live:
-                    await on_text(event.text)
-            elif isinstance(event, StreamDone):
-                result = event.result
-        if result is None:  # defensive: stream yielded nothing
-            break
-        if result.usage:
-            input_tokens += result.usage.input_tokens
-            output_tokens += result.usage.output_tokens
-        # Accumulate every round's text (a tool round can carry a preamble
-        # alongside its tool calls), so the stored/delivered turn matches.
-        if result.content:
-            final_content += result.content
-        if not result.tool_calls:
-            break
-        messages.append(_assistant_tool_call_message(result))
-        for tc in result.tool_calls:
-            tools_used.append(tc.name)
-            output = await execute_tool(tc.name, _parse_args(tc.arguments))
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tc.id,
-                    "name": tc.name,
-                    "content": json.dumps(output, default=str),
-                }
-            )
-    else:
-        # Exhausted the rounds without a tool-free answer — say so honestly.
-        if not final_content:
-            final_content = (
-                "I gathered some data but couldn't finish answering within the "
-                "allowed number of steps. Try asking something more specific."
-            )
-            if stream_live:
-                await on_text(final_content)
+    # Bound the WHOLE turn, not just each provider read. httpx's timeout is a
+    # per-read timeout that resets on every SSE chunk, so a slow/drip-feeding
+    # endpoint could otherwise pin this worker — and its pooled DB connection —
+    # indefinitely across up to MAX_TOOL_ROUNDS+1 rounds. The overall budget is
+    # the per-call timeout times the round cap; blowing it surfaces as a provider
+    # error so the caller fails closed (generic message + ai.error) rather than
+    # letting it escape as a 500.
+    deadline = config.timeout_s * (MAX_TOOL_ROUNDS + 1)
+    try:
+        async with asyncio.timeout(deadline):
+            for _round in range(MAX_TOOL_ROUNDS + 1):
+                result = None
+                async for event in stream_chat_completion(
+                    config, messages, tools=tools, max_tokens=max_tokens
+                ):
+                    if isinstance(event, TextChunk):
+                        if stream_live:
+                            await on_text(event.text)
+                    elif isinstance(event, StreamDone):
+                        result = event.result
+                if result is None:  # defensive: stream yielded nothing
+                    break
+                if result.usage:
+                    input_tokens += result.usage.input_tokens
+                    output_tokens += result.usage.output_tokens
+                # Accumulate every round's text (a tool round can carry a preamble
+                # alongside its tool calls), so the stored/delivered turn matches.
+                if result.content:
+                    final_content += result.content
+                if not result.tool_calls:
+                    break
+                messages.append(_assistant_tool_call_message(result))
+                for tc in result.tool_calls:
+                    tools_used.append(tc.name)
+                    output = await execute_tool(tc.name, _parse_args(tc.arguments))
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tc.id,
+                            "name": tc.name,
+                            "content": json.dumps(output, default=str),
+                        }
+                    )
+            else:
+                # Exhausted the rounds without a tool-free answer — say so honestly.
+                if not final_content:
+                    final_content = (
+                        "I gathered some data but couldn't finish answering within "
+                        "the allowed number of steps. Try asking something more "
+                        "specific."
+                    )
+                    if stream_live:
+                        await on_text(final_content)
 
-    if post_process is not None:
-        final_content = post_process(final_content)
-    if not stream_live and final_content:
-        # Buffered path (competitor): deliver the post-processed answer in one
-        # shot, so the client never renders text ahead of the redaction scan.
-        await on_text(final_content)
+            if post_process is not None:
+                final_content = post_process(final_content)
+            if not stream_live and final_content:
+                # Buffered path (competitor): deliver the post-processed answer in
+                # one shot, so the client never renders text ahead of the scan.
+                await on_text(final_content)
+    except TimeoutError as exc:
+        raise AiProviderError(
+            f"the assistant turn exceeded its {deadline}s time budget"
+        ) from exc
 
     return AssistantOutcome(
         content=final_content,
@@ -246,6 +274,15 @@ async def run_admin_turn(
         on_text=on_text,
         stream_live=True,
     )
+
+
+def _scrub_competitor_output(text: str) -> str:
+    """Competitor output post-processing (buffered path, spec §5), innermost
+    first: strip a leading empty tool-call artifact, remove any leaked whole
+    tool-call JSON naming a known tool, then redact any flag-shaped string on what
+    actually ships. Admin output is never scrubbed — it executes as the organiser
+    and streams live, so there's nothing to hide and no buffer to scrub."""
+    return redact_flags(scrub_leaked_tool_calls(strip_tool_call_artifacts(text)))
 
 
 async def run_competitor_turn(
@@ -296,5 +333,5 @@ async def run_competitor_turn(
         execute_tool=execute,
         on_text=on_text,
         stream_live=False,
-        post_process=redact_flags,
+        post_process=_scrub_competitor_output,
     )

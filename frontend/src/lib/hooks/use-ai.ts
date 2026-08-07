@@ -221,7 +221,15 @@ export function useAiChat(
     setError(null);
     try {
       const conv = await aiApi.createConversation(competitionId, assistantType);
-      setMessages([]);
+      // Hydrate from the resumed thread's history (empty for a fresh one), so a
+      // refresh/reopen continues where the user left off rather than blanking.
+      setMessages(
+        conv.messages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+        })),
+      );
       setClosed(false);
       conversationIdRef.current = conv.id;
       setConversationId(conv.id);

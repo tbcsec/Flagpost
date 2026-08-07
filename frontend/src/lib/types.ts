@@ -1098,6 +1098,12 @@ export interface AiConversation {
   closed_at: string | null;
 }
 
+/** A conversation plus its full message history — returned when opening the
+ *  chat, so the window hydrates (resumes) in one call. */
+export interface AiConversationDetail extends AiConversation {
+  messages: AiMessage[];
+}
+
 export interface AiMessage {
   id: string;
   role: "user" | "assistant";
@@ -1151,6 +1157,9 @@ export interface AiTranscriptSummary {
   assistant_type: string;
   message_count: number;
   created_at: string;
+  /** When the thread was last active (newest message) — the sort key and the
+   *  "last seen" shown for a long-lived resumed conversation. */
+  last_activity_at: string;
   closed_at: string | null;
 }
 

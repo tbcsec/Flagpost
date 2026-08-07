@@ -82,8 +82,15 @@ With checks off you'll no longer be told about new releases; watch
   Content-Security-Policy blocks external scripts outright.
 - No crash or error reporting to any external service.
 - No outbound connection of any kind beyond the update check, and whatever *you*
-  configure: your SMTP server, your OIDC provider, and any automation webhooks
-  you create point wherever you tell them to.
+  configure: your SMTP server, your OIDC provider, any automation webhooks you
+  create, and — if you enable the optional AI assistant — the AI model endpoint
+  you point it at. All go wherever you tell them to.
+- The **AI assistant is off by default**. When you enable it, the messages people
+  send it (competitor and organiser chat, plus the competition/challenge details
+  its read-only tools surface) are sent to the model endpoint you configure.
+  Point it at a self-hosted local model and nothing leaves your infrastructure;
+  point it at a hosted provider and that content goes to that provider.
+  Competitors are shown a disclosure and must accept it before their first chat.
 
 Note that Flagpost also sets `NEXT_TELEMETRY_DISABLED=1`, so the Next.js
 framework's own telemetry is off in the shipped images. Turning off someone

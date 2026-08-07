@@ -187,8 +187,10 @@ bot-opened tickets. Its answers live in `auth/demo_data.py`, **shared with the
 seed**, so the two can't drift.
 
 **Outbound calls** are only: operator-configured SMTP/webhooks, OIDC provider
-traffic, and one daily version-only update check (`PRIVACY.md`, §13.4). Nothing
-else phones home — keep it that way.
+traffic, the operator-configured AI provider endpoint when the optional AI
+assistant is enabled (off by default; carries chat content — `PRIVACY.md`), and
+one daily version-only update check (`PRIVACY.md`, §13.4). Nothing else phones
+home — keep it that way.
 
 ## Read the ADR before touching
 

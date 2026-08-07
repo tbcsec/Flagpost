@@ -8,6 +8,9 @@ stubbed (scripted rounds) so the loop and tool execution run for real without a
 live endpoint.
 """
 
+import asyncio
+
+import pytest
 from sqlalchemy import select
 
 from db import SessionLocal
@@ -210,6 +213,51 @@ async def test_unknown_tool_is_a_clean_error(client):
         assert "error" in out and "Unknown tool" in out["error"]
 
 
+async def test_admin_tool_fails_closed_on_bad_args(client):
+    """A non-scalar id argument degrades to a tool error instead of binding into
+    a query and escaping the loop as a 500."""
+    admin = await admin_token(client)
+    comp = await _competition(client, admin)
+    _t, uid = await _user_with_permissions(
+        client, comp, "badargadmin@example.com", ["ticket_view"]
+    )
+    user = await _user(uid)
+    async with SessionLocal() as db:
+        out = await execute_admin_tool(db, user, comp, "get_ticket", {"ticket_id": {"x": 1}})
+    assert "error" in out
+
+
+async def test_drive_turn_enforces_wall_clock_deadline(monkeypatch):
+    """A turn that blows its overall wall-clock budget surfaces as an
+    AiProviderError (so the caller fails closed) rather than hanging or 500ing."""
+    from utils.ai.client import AiProviderError, CompletionResult, ProviderConfig, StreamDone
+
+    async def slow_stream(config, messages, *, tools=None, max_tokens=None, transport=None):
+        await asyncio.sleep(0.5)  # exceeds the (zero) deadline below
+        yield StreamDone(CompletionResult(content="too late"))
+
+    monkeypatch.setattr(assistant_mod, "stream_chat_completion", slow_stream)
+
+    async def on_text(_text):
+        pass
+
+    async def execute(_name, _args):
+        return {}
+
+    # timeout_s=0 → deadline 0 → the overall budget fires on the first await.
+    cfg = ProviderConfig(base_url="x", model="m", timeout_s=0)
+    with pytest.raises(AiProviderError):
+        await assistant_mod._drive_turn(
+            cfg,
+            [{"role": "user", "content": "hi"}],
+            tools=[],
+            max_tokens=10,
+            execute_tool=execute,
+            on_text=on_text,
+            stream_live=True,
+        )
+
+
 # --- conversation flow (scripted model) --------------------------------------
 
 
@@ -361,6 +409,65 @@ async def test_conversation_closes_at_length_cap(client, monkeypatch):
     async with SessionLocal() as db:
         conv_row = await db.get(AiConversation, conv)
         assert conv_row.closed_at is not None
+
+
+async def test_open_conversation_resumes_open_thread_with_history(client, monkeypatch):
+    """Opening the assistant again resumes the caller's still-open thread and
+    returns its history — a refresh/reopen continues it rather than spawning a
+    new row (the account-tied persistence fix)."""
+    admin = await admin_token(client)
+    comp = await _competition(client, admin)
+    await _enable_ai(client, admin)
+    _script(monkeypatch, [CompletionResult(content="Hello!", usage=Usage(5, 2))])
+
+    first = await client.post(f"/api/competitions/{comp}/ai/conversations", headers=_auth(admin))
+    assert first.status_code == 201
+    conv_id = first.json()["id"]
+    assert first.json()["messages"] == []  # a fresh thread starts empty
+    await client.post(
+        f"/api/competitions/{comp}/ai/conversations/{conv_id}/messages",
+        headers=_auth(admin), json={"content": "hi"},
+    )
+
+    again = await client.post(f"/api/competitions/{comp}/ai/conversations", headers=_auth(admin))
+    assert again.json()["id"] == conv_id  # same thread, not a new one
+    assert [m["role"] for m in again.json()["messages"]] == ["user", "assistant"]
+
+    async with SessionLocal() as db:
+        convs = (
+            await db.execute(select(AiConversation).where(AiConversation.competition_id == comp))
+        ).scalars().all()
+        assert len(convs) == 1  # exactly one row for this user+competition
+
+
+async def test_open_after_cap_close_starts_fresh(client, monkeypatch):
+    """A thread closed at the length cap is not resumed — the next open starts a
+    new empty one (so the cap still segments long histories, as chosen)."""
+    admin = await admin_token(client)
+    comp = await _competition(client, admin)
+    await _enable_ai(client, admin)
+    _script(monkeypatch, [CompletionResult(content="ok", usage=Usage(1, 1))])
+
+    from routers.ai_conversations import MAX_EXCHANGES
+
+    first = await client.post(f"/api/competitions/{comp}/ai/conversations", headers=_auth(admin))
+    conv_id = first.json()["id"]
+    for _ in range(MAX_EXCHANGES):
+        r = await client.post(
+            f"/api/competitions/{comp}/ai/conversations/{conv_id}/messages",
+            headers=_auth(admin), json={"content": "hi"},
+        )
+        assert r.status_code == 200
+    # The next message closes the thread.
+    r = await client.post(
+        f"/api/competitions/{comp}/ai/conversations/{conv_id}/messages",
+        headers=_auth(admin), json={"content": "one more"},
+    )
+    assert r.status_code == 409
+
+    again = await client.post(f"/api/competitions/{comp}/ai/conversations", headers=_auth(admin))
+    assert again.json()["id"] != conv_id
+    assert again.json()["messages"] == []
 
 
 async def test_provider_failure_emits_ai_error(client, monkeypatch):

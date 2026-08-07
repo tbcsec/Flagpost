@@ -24,6 +24,7 @@ from tests.test_ai_assistant import (
     _user,
     _user_with_permissions,
 )
+from utils.ai.artifacts import scrub_leaked_tool_calls, strip_tool_call_artifacts
 from utils.ai.client import CompletionResult
 from utils.ai.competitor_tools import (
     competitor_tool_schemas,
@@ -48,6 +49,60 @@ def test_flag_scan_redacts_flag_shapes():
     assert redact_flags("if (x) { return y }") == "if (x) { return y }"
     assert redact_flags("") == ""
     assert not contains_flag_shape("no flags here { spaced }")
+
+
+def test_strip_leading_tool_call_artifact():
+    # The observed llama3.1/Ollama shape: a bare `{}` ahead of the real answer.
+    assert strip_tool_call_artifacts("{}\nHere's the answer") == "Here's the answer"
+    assert strip_tool_call_artifacts("  { }\n\nHi") == "Hi"
+    assert strip_tool_call_artifacts("[]\nHi") == "Hi"
+    assert strip_tool_call_artifacts("{}{}\nHi") == "Hi"  # a run folds to one strip
+    # A legitimate empty object mid-answer, or not at the very start, is untouched.
+    assert strip_tool_call_artifacts("An empty object is {} in JSON") == (
+        "An empty object is {} in JSON"
+    )
+    assert strip_tool_call_artifacts("Sure {} here") == "Sure {} here"
+    # Non-empty braces (a code snippet) are never the artifact.
+    assert strip_tool_call_artifacts("{a: 1}\nHi") == "{a: 1}\nHi"
+    # Degenerate: artifact-only content is kept, not blanked.
+    assert strip_tool_call_artifacts("{}") == "{}"
+    assert strip_tool_call_artifacts("") == ""
+
+
+def test_scrub_leaked_tool_calls():
+    # The observed llama3.1 shape: a good answer, then a whole tool call emitted
+    # as prose. The JSON block is dropped; the raw call never renders.
+    leaked = (
+        "XSS is a web vulnerability.\n\n"
+        "Here is the JSON for the function call: "
+        '{"name": "get_announcements", "parameters": {}}'
+    )
+    assert scrub_leaked_tool_calls(leaked) == "XSS is a web vulnerability."
+    # A HALLUCINATED (non-catalogue) tool name is NOT masked — a genuinely broken
+    # call stays visible as the failure it is, rather than being hidden.
+    hallucinated = 'Check: {"name": "get_top_n_standings", "parameters": {"n": 5}}'
+    assert scrub_leaked_tool_calls(hallucinated) == hallucinated
+    # Legitimate prose is untouched: the gate is the tool name as a quoted VALUE of
+    # a name/function key, so discussing JSON, empty braces, a non-tool "name"
+    # value, or a flag shape all pass through unchanged.
+    assert scrub_leaked_tool_calls("An empty object is {} in JSON.") == (
+        "An empty object is {} in JSON."
+    )
+    assert scrub_leaked_tool_calls('Config: {"name": "get_started"}') == (
+        'Config: {"name": "get_started"}'
+    )
+    assert scrub_leaked_tool_calls("Flags look like flag{abc_123}.") == (
+        "Flags look like flag{abc_123}."
+    )
+    # A message that is nothing but a leaked call becomes an honest placeholder,
+    # never raw JSON or a blank bubble.
+    assert scrub_leaked_tool_calls(
+        '{"name": "get_scoreboard", "parameters": {}}'
+    ).startswith("Sorry")
+    assert scrub_leaked_tool_calls("") == ""
+    assert scrub_leaked_tool_calls(scrub_leaked_tool_calls(leaked)) == (
+        scrub_leaked_tool_calls(leaked)
+    )
 
 
 def test_guidance_resolution_and_inheritance():
@@ -248,6 +303,49 @@ async def test_challenge_tools_refuse_when_metadata_off(client):
     assert "error" in detail and "has_flag" not in detail
 
 
+async def test_competitor_tool_fails_closed_on_bad_args(client):
+    """A non-scalar tool argument must degrade to a tool error, never raise a 500
+    out of the loop (the reported get_challenge({"challenge_id": {...}}) path)."""
+    admin = await admin_token(client)
+    comp = await _competition(client, admin)
+    await _publish_challenge(client, comp, admin)
+    _t, uid = await _participant(client, comp, "badargcp@example.com")
+    user = await _user(uid)
+    competition = await _competition_obj(comp)
+    async with SessionLocal() as db:
+        out = await execute_competitor_tool(
+            db, user, competition, "get_challenge", {"challenge_id": {"x": 1}},
+            challenge_metadata_access=True,
+        )
+    assert "error" in out and "has_flag" not in out
+
+
+async def test_competitor_tool_backstop_catches_handler_error(client, monkeypatch):
+    """Any handler exception (not just ToolError) is caught and returned as a
+    tool error — the loop stays fail-closed as documented."""
+    from utils.ai import competitor_tools as ct
+
+    async def boom(db, user, competition, args):
+        raise RuntimeError("kaboom")
+
+    monkeypatch.setitem(
+        ct._TOOLS,
+        "get_scoreboard",
+        ct.Tool("get_scoreboard", "d", {"type": "object", "properties": {}}, boom),
+    )
+    admin = await admin_token(client)
+    comp = await _competition(client, admin)
+    _t, uid = await _participant(client, comp, "backstopcp@example.com")
+    user = await _user(uid)
+    competition = await _competition_obj(comp)
+    async with SessionLocal() as db:
+        out = await execute_competitor_tool(
+            db, user, competition, "get_scoreboard", {},
+            challenge_metadata_access=False,
+        )
+    assert "error" in out  # caught + rolled back, not raised
+
+
 # --- turn: flag scan + persistence + event -----------------------------------
 
 
@@ -289,7 +387,122 @@ async def test_competitor_turn_redacts_and_emits(client, monkeypatch):
     assert "leaked_via_model" not in stored.content
 
 
+async def test_competitor_turn_strips_leaked_tool_call(client, monkeypatch):
+    admin = await admin_token(client)
+    comp = await _competition(client, admin)
+    await _enable_ai(client, admin)
+    await _enable_competitor(client, comp, admin)
+    p_token, _ = await _participant(client, comp, "leakcp@example.com")
+    await _accept_disclosure(client, comp, p_token)
+
+    # The model answers well, then leaks a whole tool call as prose (llama3.1
+    # shape). The buffered post-process must drop the JSON block before delivery.
+    _script(monkeypatch, [CompletionResult(content=(
+        "XSS injects scripts into browsers.\n\n"
+        "Here is the JSON for the function call: "
+        '{"name": "get_announcements", "parameters": {}}'
+    ))])
+    conv = (
+        await client.post(
+            f"/api/competitions/{comp}/ai/conversations",
+            json={"assistant_type": "competitor"},
+            headers=_auth(p_token),
+        )
+    ).json()["id"]
+    r = await client.post(
+        f"/api/competitions/{comp}/ai/conversations/{conv}/messages",
+        json={"content": "tell me about xss"},
+        headers=_auth(p_token),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()["content"]
+    assert body == "XSS injects scripts into browsers."
+    assert "get_announcements" not in body and "{" not in body
+
+
+async def test_competitor_turn_strips_leading_tool_artifact(client, monkeypatch):
+    admin = await admin_token(client)
+    comp = await _competition(client, admin)
+    await _enable_ai(client, admin)
+    await _enable_competitor(client, comp, admin)
+    p_token, _ = await _participant(client, comp, "artifactcp@example.com")
+    await _accept_disclosure(client, comp, p_token)
+
+    # The model leaks a bare `{}` ahead of its prose (llama3.1/Ollama quirk); the
+    # buffered competitor post-process drops it before the answer is delivered.
+    _script(monkeypatch, [CompletionResult(content="{}\nHere's a platform tip!")])
+
+    conv = (
+        await client.post(
+            f"/api/competitions/{comp}/ai/conversations",
+            json={"assistant_type": "competitor"},
+            headers=_auth(p_token),
+        )
+    ).json()["id"]
+    r = await client.post(
+        f"/api/competitions/{comp}/ai/conversations/{conv}/messages",
+        json={"content": "how do I submit a flag?"},
+        headers=_auth(p_token),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["content"] == "Here's a platform tip!"
+
+    async with SessionLocal() as db:
+        stored = (
+            await db.execute(
+                AiMessage.__table__.select().where(
+                    AiMessage.conversation_id == conv, AiMessage.role == "assistant"
+                )
+            )
+        ).first()
+    assert stored.content == "Here's a platform tip!"
+
+
 # --- transcript review -------------------------------------------------------
+
+
+async def test_transcript_excludes_empty_and_orders_by_activity(client, monkeypatch):
+    """The review list omits opened-but-never-used (empty) threads and is ordered
+    by last activity — so a resumed thread reads as one entry with a live 'last
+    seen', not a pile of empty sessions."""
+    admin = await admin_token(client)
+    comp = await _competition(client, admin)
+    await _enable_ai(client, admin)
+    await _enable_competitor(client, comp, admin)
+    reviewer, _ = await _user_with_permissions(
+        client, comp, "rev2@example.com", ["ai_view_transcripts"]
+    )
+
+    # Participant A opens the assistant but never sends a message → empty thread.
+    a_token, _ = await _participant(client, comp, "emptya@example.com")
+    await _accept_disclosure(client, comp, a_token)
+    await client.post(
+        f"/api/competitions/{comp}/ai/conversations",
+        json={"assistant_type": "competitor"}, headers=_auth(a_token),
+    )
+
+    # Participant B actually chats → a real thread.
+    _script(monkeypatch, [CompletionResult(content="Hi B!")])
+    b_token, _ = await _participant(client, comp, "sendb@example.com")
+    await _accept_disclosure(client, comp, b_token)
+    conv_b = (
+        await client.post(
+            f"/api/competitions/{comp}/ai/conversations",
+            json={"assistant_type": "competitor"}, headers=_auth(b_token),
+        )
+    ).json()["id"]
+    await client.post(
+        f"/api/competitions/{comp}/ai/conversations/{conv_b}/messages",
+        json={"content": "hi"}, headers=_auth(b_token),
+    )
+
+    listing = (
+        await client.get(f"/api/competitions/{comp}/ai/transcripts", headers=_auth(reviewer))
+    ).json()
+    # Only B's thread appears; A's empty one is filtered out.
+    assert [t["id"] for t in listing] == [conv_b]
+    assert all(t["message_count"] > 0 for t in listing)
+    assert "last_activity_at" in listing[0]
 
 
 async def test_transcript_review_gated_on_permission(client, monkeypatch):

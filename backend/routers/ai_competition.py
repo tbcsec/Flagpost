@@ -97,23 +97,28 @@ async def list_transcripts(
     current_user: User = Depends(require_permission("ai_view_transcripts")),
     db: AsyncSession = Depends(get_db),
 ) -> list[AiTranscriptSummary]:
-    """Competitor conversations in this competition, newest first, with the
-    author's display name and message count — the review list."""
+    """Competitor conversations in this competition that have at least one
+    message, **most-recently-active first**, with the author's display name and
+    message count — the review list. Empty threads (opened but never used) are
+    omitted: there's nothing to review, and because a user resumes one ongoing
+    thread rather than spawning one per open, an empty row is only ever a
+    never-used session. The inner join to messages is what drops them."""
     rows = (
         await db.execute(
             select(
                 AiConversation,
                 User.display_name,
                 func.count(AiMessage.id),
+                func.max(AiMessage.created_at),
             )
             .join(User, User.id == AiConversation.user_id)
-            .outerjoin(AiMessage, AiMessage.conversation_id == AiConversation.id)
+            .join(AiMessage, AiMessage.conversation_id == AiConversation.id)
             .where(
                 AiConversation.competition_id == competition_id,
                 AiConversation.assistant_type == "competitor",
             )
             .group_by(AiConversation.id, User.display_name)
-            .order_by(AiConversation.created_at.desc())
+            .order_by(func.max(AiMessage.created_at).desc())
         )
     ).all()
     return [
@@ -124,9 +129,10 @@ async def list_transcripts(
             assistant_type=conv.assistant_type,
             message_count=count,
             created_at=conv.created_at,
+            last_activity_at=last_activity,
             closed_at=conv.closed_at,
         )
-        for conv, display_name, count in rows
+        for conv, display_name, count, last_activity in rows
     ]
 
 
@@ -165,6 +171,7 @@ async def get_transcript(
         assistant_type=conv.assistant_type,
         message_count=len(messages),
         created_at=conv.created_at,
+        last_activity_at=messages[-1].created_at if messages else conv.created_at,
         closed_at=conv.closed_at,
         messages=[AiMessageOut.model_validate(m) for m in messages],
     )

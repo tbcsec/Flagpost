@@ -29,7 +29,7 @@ import type {
   AiAvailability,
   AiCompetitionSettings,
   AiCompetitionSettingsUpdate,
-  AiConversation,
+  AiConversationDetail,
   AiMessage,
   AiTranscriptDetail,
   AiTranscriptSummary,
@@ -1065,8 +1065,10 @@ export const aiApi = {
     apiFetch<void>(`${aiApi.base(competitionId)}/disclosure/accept`, {
       method: "POST",
     }),
+  // Resume-or-create: returns the caller's open thread (with its message
+  // history) for this competition + assistant type, or a fresh one.
   createConversation: (competitionId: string, assistantType: AiAssistantType) =>
-    apiFetch<AiConversation>(`${aiApi.base(competitionId)}/conversations`, {
+    apiFetch<AiConversationDetail>(`${aiApi.base(competitionId)}/conversations`, {
       method: "POST",
       body: JSON.stringify({ assistant_type: assistantType }),
     }),

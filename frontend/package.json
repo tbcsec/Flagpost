@@ -26,6 +26,8 @@
     "next": "^15.5.21",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.6.0",
     "y-protocols": "^1.0.7",
     "yjs": "^13.6.31",

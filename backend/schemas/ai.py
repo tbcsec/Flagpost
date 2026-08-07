@@ -162,6 +162,10 @@ class AiTranscriptSummary(BaseModel):
     assistant_type: str
     message_count: int
     created_at: datetime
+    # When the thread was last active (its newest message) — the useful sort key
+    # and "last seen" for a long-lived, resumed conversation, distinct from when
+    # it was first opened (``created_at``).
+    last_activity_at: datetime
     closed_at: datetime | None = None
 
 

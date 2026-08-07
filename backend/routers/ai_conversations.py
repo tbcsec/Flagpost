@@ -49,7 +49,6 @@ from schemas.ai import (
     AiAvailabilityOut,
     AiConversationCreate,
     AiConversationDetail,
-    AiConversationOut,
     AiMessageCreate,
     AiMessageOut,
     AiUsageOut,
@@ -248,9 +247,34 @@ async def accept_disclosure(
     )
 
 
+async def _conversation_detail(
+    db: AsyncSession, conv: AiConversation
+) -> AiConversationDetail:
+    """A conversation with its full, chronological message history — what the
+    client hydrates a chat window from in one round-trip."""
+    messages = (
+        (
+            await db.execute(
+                select(AiMessage)
+                .where(AiMessage.conversation_id == conv.id)
+                .order_by(AiMessage.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return AiConversationDetail(
+        id=conv.id,
+        assistant_type=conv.assistant_type,
+        created_at=conv.created_at,
+        closed_at=conv.closed_at,
+        messages=[AiMessageOut.model_validate(m) for m in messages],
+    )
+
+
 @router.post(
     "/conversations",
-    response_model=AiConversationOut,
+    response_model=AiConversationDetail,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_conversation(
@@ -258,7 +282,15 @@ async def create_conversation(
     body: AiConversationCreate | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> AiConversationOut:
+) -> AiConversationDetail:
+    """Open the caller's assistant conversation, **resuming** their existing open
+    thread for this competition + assistant type if one exists, and creating one
+    otherwise. Resuming is what keeps a competitor's history across a refresh or
+    reopen (it's tied to their account, not the browser session) and what keeps a
+    user to a single thread rather than one per open. A thread that hit the length
+    cap is closed and never resumed — the next open then starts a fresh one.
+    Returns the conversation with its message history so the client hydrates in a
+    single call."""
     assistant_type = (body or AiConversationCreate()).assistant_type
     await _require_ai(db, competition_id)
     await _require_access(db, current_user, competition_id, assistant_type)
@@ -271,14 +303,28 @@ async def create_conversation(
             status_code=status.HTTP_409_CONFLICT,
             detail="Accept the assistant disclosure first.",
         )
-    conv = AiConversation(
-        competition_id=competition_id,
-        user_id=current_user.id,
-        assistant_type=assistant_type,
+    # Resume the most recent still-open thread; only start a fresh one when there
+    # is none (first open, or the previous thread closed at the length cap).
+    conv = await db.scalar(
+        select(AiConversation)
+        .where(
+            AiConversation.competition_id == competition_id,
+            AiConversation.user_id == current_user.id,
+            AiConversation.assistant_type == assistant_type,
+            AiConversation.closed_at.is_(None),
+        )
+        .order_by(AiConversation.created_at.desc())
+        .limit(1)
     )
-    db.add(conv)
-    await db.commit()
-    return AiConversationOut.model_validate(conv)
+    if conv is None:
+        conv = AiConversation(
+            competition_id=competition_id,
+            user_id=current_user.id,
+            assistant_type=assistant_type,
+        )
+        db.add(conv)
+        await db.commit()
+    return await _conversation_detail(db, conv)
 
 
 @router.get("/conversations/{conversation_id}", response_model=AiConversationDetail)
@@ -289,20 +335,7 @@ async def get_conversation(
     db: AsyncSession = Depends(get_db),
 ) -> AiConversationDetail:
     conv = await _conversation_or_404(db, competition_id, conversation_id, current_user)
-    messages = (
-        (
-            await db.execute(
-                select(AiMessage)
-                .where(AiMessage.conversation_id == conversation_id)
-                .order_by(AiMessage.created_at)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    detail = AiConversationDetail.model_validate(conv)
-    detail.messages = [AiMessageOut.model_validate(m) for m in messages]
-    return detail
+    return await _conversation_detail(db, conv)
 
 
 async def _history(db: AsyncSession, conversation_id: str) -> list[dict]:

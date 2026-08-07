@@ -27,8 +27,10 @@ _FRAGMENTS = {
         "finding and reading challenges, how scoring and the scoreboard work, how "
         "to submit a flag, team and rules questions. Do NOT discuss how to solve a "
         "challenge, its subject matter, techniques, or approaches. If asked for "
-        "help solving, say that solving help isn't enabled for this competition "
-        "and offer platform help instead."
+        "solving help, say only that you can't help with solving challenges and "
+        "offer platform help instead. Never mention settings, configuration, "
+        "guidance levels, or that this restriction is specific to this "
+        "competition — present it simply as what you do."
     ),
     "conceptual": (
         "Guidance level: CONCEPTUAL. You may explain general background concepts "

@@ -24,6 +24,7 @@ participant gets a refusal, not data.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
@@ -46,6 +47,8 @@ from utils.scoring import resolve_subject, solved_challenge_ids
 _MAX_ITEMS = 25
 _MAX_TEXT = 2000
 
+logger = logging.getLogger("ai")
+
 
 class ToolError(Exception):
     """A competitor tool refused (missing permission, disabled data, bad id).
@@ -56,6 +59,14 @@ def _truncate(text: str | None) -> str:
     if not text:
         return ""
     return text if len(text) <= _MAX_TEXT else text[:_MAX_TEXT] + "…"
+
+
+def _str_arg(args: dict, key: str) -> str | None:
+    """A string argument value, or None if absent/non-string. Model-supplied
+    arguments are untrusted, so a non-scalar (dict/list) value must never reach a
+    query — binding one raises a DB error that poisons the session on Postgres."""
+    value = args.get(key)
+    return value if isinstance(value, str) else None
 
 
 async def _require_player(db: AsyncSession, user: User, competition_id: str) -> None:
@@ -181,9 +192,9 @@ async def _list_challenges(db, user, competition, args) -> dict:
 
 async def _get_challenge(db, user, competition, args) -> dict:
     await _require_player(db, user, competition.id)
-    challenge_id = args.get("challenge_id")
+    challenge_id = _str_arg(args, "challenge_id")
     if not challenge_id:
-        raise ToolError("A challenge_id is required.")
+        raise ToolError("A valid challenge_id is required.")
     challenge = await db.scalar(
         select(Challenge).where(
             Challenge.competition_id == competition.id,
@@ -240,7 +251,10 @@ _TOOLS: dict[str, Tool] = {
         ),
         Tool(
             "get_announcements",
-            "Announcements the competitor can see in this competition.",
+            "Organiser announcements for this competition — schedule changes, "
+            "challenge releases, rule clarifications, and hint or infrastructure "
+            "updates. Use it for questions about competition logistics or what the "
+            "organisers have posted.",
             {"type": "object", "properties": {}},
             _announcements,
         ),
@@ -268,6 +282,13 @@ _TOOLS: dict[str, Tool] = {
         ),
     ]
 }
+
+
+def competitor_tool_names() -> tuple[str, ...]:
+    """Every competitor tool name — the allowlist the output leak-scrub anchors on
+    (``utils.ai.artifacts``), sourced here so it can't drift from this catalogue
+    when a tool is renamed or added."""
+    return tuple(_TOOLS)
 
 
 def competitor_tool_schemas(*, challenge_metadata_access: bool) -> list[dict]:
@@ -312,3 +333,12 @@ async def execute_competitor_tool(
         return await tool.handler(db, user, competition, args)
     except ToolError as exc:
         return {"error": str(exc)}
+    except Exception:
+        # Fail closed: a handler bug or a malformed model-supplied argument that
+        # slipped through degrades to a tool error the model relays, never a 500
+        # that escapes the loop (which would also skip the ai.error oversight
+        # emit). Roll back so a mid-statement DB error — which poisons the
+        # transaction on Postgres — can't break the turn's own commit.
+        logger.exception("competitor tool %s failed", name)
+        await db.rollback()
+        return {"error": "That lookup didn't work — please try again."}

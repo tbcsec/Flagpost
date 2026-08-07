@@ -20,6 +20,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Markdown } from "@/components/ui/markdown";
 import { useAccess } from "@/lib/hooks/use-permissions";
 import {
   useAcceptAiDisclosure,
@@ -440,13 +441,14 @@ function MessageBubble({
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
       <div
         className={cn(
-          "max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-sm",
+          "max-w-[85%] break-words rounded-2xl px-3.5 py-2 text-sm",
           isUser
-            ? "rounded-br-sm bg-primary text-primary-foreground"
+            ? "whitespace-pre-wrap rounded-br-sm bg-primary text-primary-foreground"
             : "rounded-bl-sm bg-muted text-foreground",
         )}
       >
-        {content}
+        {/* User text is shown verbatim; assistant answers are markdown. */}
+        {isUser ? content : <Markdown content={content} />}
         {pending && (content ? <BlinkingCursor /> : <TypingDots />)}
       </div>
     </div>

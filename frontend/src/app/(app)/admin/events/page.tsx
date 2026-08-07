@@ -241,15 +241,21 @@ export default function AdminEventLogPage() {
                   <TableCell className="text-muted-foreground">
                     {competitionName(entry.competition_id)}
                   </TableCell>
-                  <TableCell className="min-w-0">
+                  {/* max-w-0 lets the auto-layout table give this column the
+                      leftover width instead of sizing it to the payload's full
+                      intrinsic width; the inner truncate then clips to that
+                      width. Without it a long single-line payload (e.g.
+                      competition.updated) stretches the whole table off-screen
+                      (#157). */}
+                  <TableCell className="max-w-0">
                     {expanded === entry.id ? (
                       <pre className="max-w-xl overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs">
                         {JSON.stringify(entry.payload, null, 2)}
                       </pre>
                     ) : (
-                      <span className="line-clamp-1 font-mono text-xs text-muted-foreground">
+                      <div className="truncate font-mono text-xs text-muted-foreground">
                         {JSON.stringify(entry.payload)}
-                      </span>
+                      </div>
                     )}
                   </TableCell>
                 </TableRow>

@@ -299,10 +299,39 @@ async def submit_flag(
         )
 
     attempts_remaining: int | None = None
-    if challenge.flag_type == "multiple_choice" and limit is not None and not correct:
-        # This submission is now logged, so recount reflects it.
+    subject_value: int | None = None
+    penalty_pct = competition.mc_penalty_pct
+    if (
+        challenge.flag_type == "multiple_choice"
+        and not correct
+        and (limit is not None or penalty_pct)
+    ):
+        # This submission is now logged, so the recount reflects it.
         used = await subject_attempt_count(db, challenge_id, subject)
-        attempts_remaining = max(0, limit - used)
+        if limit is not None:
+            attempts_remaining = max(0, limit - used)
+        if penalty_pct:
+            # The subject's worth going forward, so the client can drop the shown
+            # value live rather than waiting for a challenge refetch (#148). Base
+            # is the current value (static points, or the dynamic worth at the live
+            # solve count); null when nothing's been docked yet.
+            solve_count = (
+                (
+                    await db.scalar(
+                        select(func.count(Submission.id)).where(
+                            Submission.challenge_id == challenge_id,
+                            Submission.is_correct.is_(True),
+                            Submission.is_duplicate.is_(False),
+                        )
+                    )
+                )
+                or 0
+                if challenge.scoring_type == "dynamic"
+                else 0
+            )
+            base_now = challenge_value(challenge, solve_count)
+            reduced = penalised_value(base_now, penalty_pct, used)
+            subject_value = reduced if reduced < base_now else None
 
     return SubmitResult(
         correct=correct,
@@ -313,4 +342,5 @@ async def submit_flag(
         # The pre-penalty worth, so the UI can show "reduced from N" — only when a
         # multiple-choice penalty actually docked this solve (#148).
         full_value=base_value if mc_penalty > 0 else None,
+        subject_value=subject_value,
     )

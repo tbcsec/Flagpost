@@ -766,6 +766,10 @@ export interface SubmitResult {
   /** Base worth before the multiple-choice wrong-guess penalty (#148), so the
    *  result can show "reduced from N". Null unless a penalty lowered this award. */
   full_value: number | null;
+  /** The subject's current worth going forward after this attempt, under the
+   *  wrong-guess penalty (#148) — set on an incorrect guess so the open detail
+   *  can drop the shown value live. Null when nothing's been docked yet. */
+  subject_value: number | null;
 }
 
 /** One ranked row on the scoreboard (Phase 7). The subject is the team in

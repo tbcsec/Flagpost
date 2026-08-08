@@ -31,6 +31,12 @@ class SubmitResult(BaseModel):
     # solve result can show "reduced from N". Null unless a penalty actually
     # lowered this award (i.e. points_awarded < full_value).
     full_value: int | None = None
+    # The subject's *current* worth going forward after this attempt, under the
+    # wrong-guess penalty (#148) — returned on an incorrect guess so the client can
+    # drop the displayed value live without waiting for a challenge refetch. Null
+    # when no penalty has reduced it (penalty off, not multiple-choice, or first
+    # guess still at full value).
+    subject_value: int | None = None
 
 
 class SubmissionCorrectness(str, Enum):

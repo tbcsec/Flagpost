@@ -332,6 +332,7 @@ export default function ChallengesPage() {
               categoryName={categoryName(open.category_id)}
               allChallenges={challenges.data ?? []}
               paused={Boolean(competition?.paused) && !access.canManageActiveCompetition}
+              penaltyPct={competition?.mc_penalty_pct ?? null}
             />
           )}
         </DialogContent>
@@ -346,12 +347,14 @@ function ChallengeDialogBody({
   categoryName,
   allChallenges,
   paused,
+  penaltyPct,
 }: {
   competitionId: string;
   challenge: Challenge;
   categoryName: string;
   allChallenges: Challenge[];
   paused: boolean;
+  penaltyPct: number | null;
 }) {
   const [flag, setFlag] = useState("");
   const submit = useSubmitFlag(competitionId, challenge.id);
@@ -375,6 +378,11 @@ function ChallengeDialogBody({
   const remaining = result?.attempts_remaining ?? challenge.attempts_remaining;
   const outOfGuesses =
     isMultipleChoice && remaining === 0 && !justSolved && !alreadySolved;
+  // The subject's live worth under the wrong-guess penalty (#148): the latest
+  // submit result wins (so it drops the instant a wrong guess lands), else the
+  // reduced value the challenge carried at open. Null = still at full value.
+  const subjectValue = result?.subject_value ?? challenge.subject_value;
+  const worth = subjectValue ?? challenge.value;
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -404,12 +412,12 @@ function ChallengeDialogBody({
         <DialogTitle>{challenge.title}</DialogTitle>
         <DialogDescription>
           {categoryName} ·{" "}
-          {challenge.subject_value != null && (
+          {subjectValue != null && (
             <span className="text-muted-foreground line-through">
               {challenge.value}{" "}
             </span>
           )}
-          {challenge.subject_value ?? challenge.value} pts
+          {worth} pts
           {challenge.scoring_type === "dynamic" && " (dynamic)"} · {challenge.solve_count} solves
         </DialogDescription>
       </DialogHeader>
@@ -484,9 +492,13 @@ function ChallengeDialogBody({
                   </label>
                 ))}
               </div>
-              {typeof remaining === "number" && (
+              {(typeof remaining === "number" || penaltyPct != null) && (
                 <span className="text-xs text-muted-foreground">
-                  {remaining} guess{remaining === 1 ? "" : "es"} remaining.
+                  {typeof remaining === "number" &&
+                    `${remaining} guess${remaining === 1 ? "" : "es"} remaining.`}
+                  {typeof remaining === "number" && penaltyPct != null && " "}
+                  {penaltyPct != null &&
+                    `Each wrong guess lowers this question's value by ${penaltyPct}%.`}
                 </span>
               )}
             </div>

@@ -444,3 +444,35 @@ async def test_dynamic_mc_penalty_preserves_each_subject_on_revalue(client):
     assert awarded[a] == max(0, base3 - pen_a)
     assert awarded[b] == base3
     assert awarded[c] == max(0, base3 - pen_c)
+
+
+async def test_incorrect_guess_returns_live_subject_value(client):
+    admin = await admin_token(client)
+    comp = await _mc_competition(client, admin, limit=None, penalty=25)
+    cid = await _mc_challenge(client, admin, comp, points=200)
+    ptoken, puid = await _register(client, "p@example.com")
+    await _assign_participant(puid, comp)
+    auth = _auth(ptoken)
+    submit = f"/api/competitions/{comp}/challenges/{cid}/submit"
+
+    # Each wrong guess returns the subject's reduced worth inline, so the client
+    # can drop the shown value live (#148): 200 → 150 → 100.
+    r1 = (await client.post(submit, json={"flag": "London"}, headers=auth)).json()
+    assert r1["correct"] is False and r1["subject_value"] == 150
+    r2 = (await client.post(submit, json={"flag": "Berlin"}, headers=auth)).json()
+    assert r2["subject_value"] == 100
+
+
+async def test_incorrect_guess_no_subject_value_when_penalty_off(client):
+    admin = await admin_token(client)
+    comp = await _mc_competition(client, admin, limit=2, penalty=None)
+    cid = await _mc_challenge(client, admin, comp, points=200)
+    ptoken, puid = await _register(client, "p@example.com")
+    await _assign_participant(puid, comp)
+    auth = _auth(ptoken)
+    submit = f"/api/competitions/{comp}/challenges/{cid}/submit"
+
+    # No penalty → no reduced value, but the guess cap still ticks down.
+    r = (await client.post(submit, json={"flag": "London"}, headers=auth)).json()
+    assert r["subject_value"] is None
+    assert r["attempts_remaining"] == 1

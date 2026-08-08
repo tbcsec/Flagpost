@@ -27,6 +27,10 @@ class SubmitResult(BaseModel):
     # Guesses left for the subject on a multiple-choice challenge under the
     # competition-wide cap (null = no cap, not multiple-choice, or already solved).
     attempts_remaining: int | None = None
+    # The base worth before the multiple-choice wrong-guess penalty (#148), so the
+    # solve result can show "reduced from N". Null unless a penalty actually
+    # lowered this award (i.e. points_awarded < full_value).
+    full_value: int | None = None
 
 
 class SubmissionCorrectness(str, Enum):

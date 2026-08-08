@@ -7,6 +7,7 @@ import dynamic from "next/dynamic";
 import { NoCompetition } from "@/components/app/no-competition";
 import { ChallengeHints } from "@/components/challenges/challenge-hints";
 import { ChallengeList } from "@/components/challenges/challenge-list";
+import { ChallengeValue } from "@/components/challenges/challenge-value";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // Heavy editors load on demand, not in the page bundle: ChallengeAdmin pulls
@@ -301,12 +302,7 @@ export default function ChallengesPage() {
                 </div>
               )}
               <div className="flex items-baseline justify-between">
-                <span className="font-mono text-sm font-semibold text-primary">
-                  {ch.value} pts
-                  {ch.scoring_type === "dynamic" && (
-                    <span className="ml-1 text-[10px] font-normal text-muted-foreground">dynamic</span>
-                  )}
-                </span>
+                <ChallengeValue challenge={ch} className="text-sm" />
                 <span className="text-xs text-muted-foreground">{ch.solve_count} solves</span>
               </div>
             </button>
@@ -388,7 +384,14 @@ function ChallengeDialogBody({
         if (r.correct) {
           toast(
             r.is_first_blood ? "First blood!" : "Solved!",
-            { description: `${challenge.title} · +${r.points_awarded} pts`, variant: "success" },
+            {
+              description: `${challenge.title} · +${r.points_awarded} pts${
+                r.full_value != null && r.full_value > r.points_awarded
+                  ? ` (reduced from ${r.full_value})`
+                  : ""
+              }`,
+              variant: "success",
+            },
           );
         }
       },
@@ -400,7 +403,13 @@ function ChallengeDialogBody({
       <DialogHeader>
         <DialogTitle>{challenge.title}</DialogTitle>
         <DialogDescription>
-          {categoryName} · {challenge.value} pts
+          {categoryName} ·{" "}
+          {challenge.subject_value != null && (
+            <span className="text-muted-foreground line-through">
+              {challenge.value}{" "}
+            </span>
+          )}
+          {challenge.subject_value ?? challenge.value} pts
           {challenge.scoring_type === "dynamic" && " (dynamic)"} · {challenge.solve_count} solves
         </DialogDescription>
       </DialogHeader>
@@ -432,6 +441,11 @@ function ChallengeDialogBody({
           </div>
           <div className="font-mono text-sm text-muted-foreground">
             +{result.points_awarded} pts
+            {result.full_value != null && result.full_value > result.points_awarded && (
+              <span className="ml-1 text-xs">
+                (reduced from {result.full_value})
+              </span>
+            )}
           </div>
           <ChallengeRatingPrompt competitionId={competitionId} challenge={challenge} />
         </div>

@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { ChallengeValue } from "@/components/challenges/challenge-value";
 import type { Challenge } from "@/lib/types";
 import { useChallengeViewStore } from "@/stores/challenge-view";
 import { cn } from "@/lib/utils";
@@ -170,14 +171,7 @@ function ChallengeListRow({
             </span>
           </span>
         </span>
-        <span className="shrink-0 font-mono text-sm font-semibold text-primary">
-          {ch.value} pts
-          {ch.scoring_type === "dynamic" && (
-            <span className="ml-1 text-[10px] font-normal text-muted-foreground">
-              dynamic
-            </span>
-          )}
-        </span>
+        <ChallengeValue challenge={ch} className="shrink-0 text-sm" />
       </button>
     </li>
   );

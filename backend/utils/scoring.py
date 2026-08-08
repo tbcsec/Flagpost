@@ -63,6 +63,24 @@ def challenge_value(challenge, solve_count: int) -> int:
     return challenge.points
 
 
+def penalised_value(base_value: int, penalty_pct: int | None, wrong_guesses: int) -> int:
+    """A subject's award for a multiple-choice challenge after ``wrong_guesses``
+    incorrect guesses, given the competition's per-guess penalty percentage (#148).
+
+    Each wrong guess subtracts ``penalty_pct`` percent of the *base* value
+    (``challenge_value`` — fixed points, or the current dynamic worth), applied
+    linearly and floored at 0 (owner decision). ``penalty_pct`` null/0 or no wrong
+    guesses returns ``base_value`` unchanged. This is the single source of truth
+    for the penalty: the submit path bakes it into ``points_awarded`` and the read
+    paths use it to show a competitor their reduced worth before they solve, so
+    the two can't drift.
+    """
+    if not penalty_pct or wrong_guesses <= 0:
+        return base_value
+    penalty = round(base_value * (penalty_pct / 100) * wrong_guesses)
+    return max(0, base_value - penalty)
+
+
 async def resolve_subject(
     db: AsyncSession, competition: Competition, user: User
 ) -> Subject | None:

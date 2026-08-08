@@ -129,6 +129,12 @@ class ChallengeOut(BaseModel):
     # the competition-wide cap. Null = no limit (or not multiple-choice). Computed
     # on the detail read; left None on create/update/publish responses.
     attempts_remaining: int | None = None
+    # The multiple-choice challenge's *current worth for the requesting subject*
+    # after their wrong guesses so far, under the competition's wrong-guess penalty
+    # (#148). Null unless a penalty is active and has already reduced it below
+    # ``value`` (i.e. not multiple-choice, penalty off, no wrong guesses yet, or
+    # already solved). Lets a competitor see the reduced stakes before solving.
+    subject_value: int | None = None
     # The requesting user's own 1–5 rating of this challenge, or null if they
     # haven't rated it (drives the post-solve rating prompt). Only competitors rate.
     my_rating: int | None = None

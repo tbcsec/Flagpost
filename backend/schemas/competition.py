@@ -21,6 +21,9 @@ class CompetitionCreate(BaseModel):
     # Competition-wide cap on guesses per subject per multiple-choice challenge.
     # Defaults to 2; send an explicit null for unlimited.
     mc_guess_limit: int | None = Field(default=2, ge=1, le=1000)
+    # Percent of a multiple-choice challenge's value docked per wrong guess (#148).
+    # 1–100; null = off. Defaults off — enabling it is an explicit opt-in.
+    mc_penalty_pct: int | None = Field(default=None, ge=1, le=100)
     challenge_ratings_enabled: bool = False
     # Managed vocab challenges may use (Phase 9).
     challenge_tags: list[str] = Field(default_factory=list, max_length=100)
@@ -55,6 +58,8 @@ class CompetitionUpdate(BaseModel):
     # Set to null to remove the cap. (exclude_unset means an omitted field is
     # left unchanged; an explicit null clears it.)
     mc_guess_limit: int | None = Field(default=None, ge=1, le=1000)
+    # Null clears the penalty (off); 1–100 sets it. Omitted = unchanged.
+    mc_penalty_pct: int | None = Field(default=None, ge=1, le=100)
     challenge_ratings_enabled: bool | None = None
     challenge_tags: list[str] | None = Field(default=None, max_length=100)
     difficulty_tiers: list[str] | None = Field(default=None, max_length=20)
@@ -91,6 +96,7 @@ class CompetitionOut(BaseModel):
     # null = no clock (active, retention off, or archived before the feature).
     purge_after: datetime | None = None
     mc_guess_limit: int | None = None
+    mc_penalty_pct: int | None = None
     challenge_ratings_enabled: bool = False
     challenge_tags: list[str] = Field(default_factory=list)
     difficulty_tiers: list[str] = Field(default_factory=list)

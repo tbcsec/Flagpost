@@ -50,6 +50,7 @@ export function CompetitionSettingsForm({
     registration_opens_at: toInput(competition.registration_opens_at),
     registration_closes_at: toInput(competition.registration_closes_at),
     mc_guess_limit: competition.mc_guess_limit ? String(competition.mc_guess_limit) : "",
+    mc_penalty_pct: competition.mc_penalty_pct ? String(competition.mc_penalty_pct) : "",
     challenge_ratings_enabled: competition.challenge_ratings_enabled,
     challenge_tags: competition.challenge_tags ?? [],
     difficulty_tiers: competition.difficulty_tiers ?? [],
@@ -102,6 +103,8 @@ export function CompetitionSettingsForm({
         registration_closes_at: fromInput(form.registration_closes_at),
         // Blank clears the cap (null); a positive number sets it.
         mc_guess_limit: form.mc_guess_limit ? Number(form.mc_guess_limit) : null,
+        // Blank clears the penalty (off); 1–100 sets it (#148).
+        mc_penalty_pct: form.mc_penalty_pct ? Number(form.mc_penalty_pct) : null,
         challenge_ratings_enabled: form.challenge_ratings_enabled,
         challenge_tags: form.challenge_tags,
         difficulty_tiers: form.difficulty_tiers,
@@ -376,6 +379,23 @@ export function CompetitionSettingsForm({
             Guesses each competitor (or team) gets per multiple-choice question, to
             curb brute-forcing. Blank = unlimited. Applies competition-wide.
           </p>
+          <div className="mt-3 space-y-2">
+            <Label htmlFor="mc_penalty_pct">Wrong-guess penalty (%)</Label>
+            <Input
+              id="mc_penalty_pct"
+              type="number"
+              min={1}
+              max={100}
+              placeholder="Off"
+              value={form.mc_penalty_pct}
+              onChange={(e) => set("mc_penalty_pct", e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Each wrong guess on a multiple-choice question lowers its value for
+              that team/competitor by this percent, so a later correct answer
+              awards less (floored at 0). Blank = off. Pairs with the guess limit.
+            </p>
+          </div>
           <label className="mt-2 flex items-center gap-2.5 text-sm">
             <input
               type="checkbox"

@@ -29,6 +29,7 @@ function mk(partial: Partial<Challenge> & { id: string; title: string }): Challe
     has_flag: true,
     choices: null,
     attempts_remaining: null,
+    subject_value: null,
     my_rating: null,
     solved: false,
     solve_count: 0,
@@ -123,5 +124,23 @@ describe("ChallengeList", () => {
   it("shows an empty-filter message when nothing matches", () => {
     render(<ChallengeList challenges={[]} categories={CATEGORIES} onOpen={vi.fn()} />);
     expect(screen.getByText(/no challenges match this filter/i)).toBeInTheDocument();
+  });
+
+  it("shows the reduced subject value with the base struck through (#148)", () => {
+    useChallengeViewStore.setState({ viewMode: "list", expanded: ["web"] });
+    render(
+      <ChallengeList
+        challenges={[
+          mk({ id: "3", title: "Quiz", category_id: "web", value: 200, subject_value: 150 }),
+        ]}
+        categories={CATEGORIES}
+        onOpen={vi.fn()}
+      />,
+    );
+    // The live worth for the subject is 150 pts...
+    expect(screen.getByText(/150\s*pts/)).toBeInTheDocument();
+    // ...with the base value struck through beside it.
+    const base = screen.getByText("200");
+    expect(base).toHaveClass("line-through");
   });
 });

@@ -24,7 +24,7 @@ from __future__ import annotations
 import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select, update
+from sqlalchemy import case, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlalchemy.exc import IntegrityError
@@ -45,6 +45,7 @@ from utils.event_bus import event_bus
 from utils.flags import verify_regex_flag, verify_static_flag
 from utils.scoring import (
     challenge_value,
+    penalised_value,
     resolve_subject,
     solved_challenge_ids,
     subject_attempt_count,
@@ -184,6 +185,8 @@ async def submit_flag(
 
     is_first_blood = False
     points_awarded = 0
+    base_value = 0
+    mc_penalty = 0
     if award:
         # First blood = no subject has an awarded solve on this challenge yet.
         prior_solves = await db.scalar(
@@ -196,9 +199,22 @@ async def submit_flag(
         is_first_blood = prior_solves == 0
         # This solve makes the count `prior_solves + 1`; a dynamic challenge is
         # then worth less, and *every* solver converges to that current value.
-        points_awarded = challenge_value(challenge, prior_solves + 1)
+        base_value = challenge_value(challenge, prior_solves + 1)
+        points_awarded = base_value
+        # Multiple-choice wrong-guess penalty (#148): dock the award by
+        # mc_penalty_pct per prior incorrect guess. At this point every submission
+        # this subject has made against the challenge since its last reset is a
+        # wrong guess — the current correct one isn't inserted yet, and a prior
+        # correct one would have made this a duplicate (award would be False). So
+        # the reset-aware attempt count is exactly the wrong-guess count.
+        if challenge.flag_type == "multiple_choice" and competition.mc_penalty_pct:
+            wrong_guesses = await subject_attempt_count(db, challenge_id, subject)
+            points_awarded = penalised_value(
+                base_value, competition.mc_penalty_pct, wrong_guesses
+            )
+            mc_penalty = base_value - points_awarded
 
-    def _row(*, duplicate: bool, points: int) -> Submission:
+    def _row(*, duplicate: bool, points: int, penalty: int = 0) -> Submission:
         # Every attempt is logged — success, failure, or duplicate (§13.2).
         return Submission(
             competition_id=competition_id,
@@ -209,6 +225,7 @@ async def submit_flag(
             is_correct=correct,
             is_duplicate=duplicate,
             points_awarded=points,
+            mc_penalty=penalty,
         )
 
     if award:
@@ -220,7 +237,7 @@ async def submit_flag(
         # race into a 500.
         try:
             async with db.begin_nested():
-                db.add(_row(duplicate=False, points=points_awarded))
+                db.add(_row(duplicate=False, points=points_awarded, penalty=mc_penalty))
                 await db.flush()
         except IntegrityError:
             # Another submission for this subject got there first. Record what
@@ -235,8 +252,14 @@ async def submit_flag(
         db.add(_row(duplicate=correct and already_solved, points=points_awarded))
 
     if award and challenge.scoring_type == "dynamic":
-        # Re-value the prior solvers to the new (lower) worth so the board stays
-        # consistent — every solve of a dynamic challenge is worth the same now.
+        # Re-value the prior solvers to the new (lower) base worth so the board
+        # stays consistent — but preserve each solver's own multiple-choice
+        # penalty (#148) instead of collapsing everyone to a single value, which
+        # would overwrite a penalised solver's award with this solver's. For every
+        # non-penalised row mc_penalty is 0, so this stays exactly "converge to the
+        # new value", unchanged from before. Floored at 0 with a portable CASE
+        # (SQLite has no GREATEST); the current row nets back to points_awarded.
+        net = base_value - Submission.mc_penalty
         await db.execute(
             update(Submission)
             .where(
@@ -244,7 +267,7 @@ async def submit_flag(
                 Submission.is_correct.is_(True),
                 Submission.is_duplicate.is_(False),
             )
-            .values(points_awarded=points_awarded)
+            .values(points_awarded=case((net < 0, 0), else_=net))
         )
     await db.commit()
 
@@ -287,4 +310,7 @@ async def submit_flag(
         points_awarded=points_awarded,
         is_first_blood=is_first_blood,
         attempts_remaining=attempts_remaining,
+        # The pre-penalty worth, so the UI can show "reduced from N" — only when a
+        # multiple-choice penalty actually docked this solve (#148).
+        full_value=base_value if mc_penalty > 0 else None,
     )

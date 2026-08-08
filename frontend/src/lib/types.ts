@@ -46,6 +46,9 @@ export interface Competition {
   /** Competition-wide cap on guesses per subject per multiple-choice challenge
    *  (null = unlimited). */
   mc_guess_limit: number | null;
+  /** Percent of a multiple-choice challenge's value docked per wrong guess, for
+   *  the guessing subject (#148). 1–100; null = off. */
+  mc_penalty_pct: number | null;
   /** Whether solving a challenge prompts the competitor for a 1–5 rating. */
   challenge_ratings_enabled: boolean;
   /** Per-competition managed vocab: tag names + ordered difficulty tiers. */
@@ -485,6 +488,7 @@ export interface CompetitionCreate {
   registration_opens_at?: string | null;
   registration_closes_at?: string | null;
   mc_guess_limit?: number | null;
+  mc_penalty_pct?: number | null;
   challenge_ratings_enabled?: boolean;
   challenge_tags?: string[];
   difficulty_tiers?: string[];
@@ -695,6 +699,10 @@ export interface Challenge {
   /** Guesses left for the subject on a multiple-choice challenge under the
    *  competition cap; null = no cap / not multiple-choice / already solved. */
   attempts_remaining: number | null;
+  /** The multiple-choice challenge's current worth for the requesting subject
+   *  after their wrong guesses so far, under the competition's wrong-guess
+   *  penalty (#148). Null unless a penalty has already reduced it below `value`. */
+  subject_value: number | null;
   /** The requesting user's own 1–5 rating, or null if unrated (post-solve prompt). */
   my_rating: number | null;
   /** Whether the requesting subject (team or user) has solved this (§13.2). */
@@ -755,6 +763,9 @@ export interface SubmitResult {
   is_first_blood: boolean;
   /** Guesses left on a multiple-choice challenge after this attempt (null = no cap). */
   attempts_remaining: number | null;
+  /** Base worth before the multiple-choice wrong-guess penalty (#148), so the
+   *  result can show "reduced from N". Null unless a penalty lowered this award. */
+  full_value: number | null;
 }
 
 /** One ranked row on the scoreboard (Phase 7). The subject is the team in

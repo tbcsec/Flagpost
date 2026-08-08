@@ -31,9 +31,16 @@ async def _assign_participant(user_id: str, competition_id: str) -> None:
         await session.commit()
 
 
-async def _mc_competition(client, token, *, limit: int | None) -> str:
+async def _mc_competition(
+    client, token, *, limit: int | None, penalty: int | None = None
+) -> str:
     # Always send the key: the default is now 2, so "unlimited" needs explicit null.
-    body = {"name": "MC", "participation_mode": "individual", "mc_guess_limit": limit}
+    body = {
+        "name": "MC",
+        "participation_mode": "individual",
+        "mc_guess_limit": limit,
+        "mc_penalty_pct": penalty,
+    }
     resp = await client.post("/api/competitions", json=body, headers=_auth(token))
     assert resp.status_code == 201, resp.text
     return resp.json()["id"]
@@ -49,7 +56,7 @@ async def test_default_guess_limit_is_two(client):
     assert resp.json()["mc_guess_limit"] == 2
 
 
-async def _mc_challenge(client, token, comp, *, correct="Paris") -> str:
+async def _mc_challenge(client, token, comp, *, correct="Paris", **extra) -> str:
     resp = await client.post(
         f"/api/competitions/{comp}/challenges",
         json={
@@ -57,6 +64,7 @@ async def _mc_challenge(client, token, comp, *, correct="Paris") -> str:
             "flag_type": "multiple_choice",
             "choices": ["London", "Paris", "Berlin", "Madrid"],
             "flag": correct,
+            **extra,
         },
         headers=_auth(token),
     )
@@ -237,3 +245,202 @@ async def test_validation(client):
         headers=_auth(admin),
     )
     assert r.status_code == 400
+
+
+# --- Wrong-guess point penalty (#148) ----------------------------------------
+
+
+async def test_penalty_pct_validation(client):
+    admin = await admin_token(client)
+    # Out of range → 422 (1–100).
+    for bad in (0, 101, -5):
+        r = await client.post(
+            "/api/competitions",
+            json={"name": "X", "participation_mode": "individual", "mc_penalty_pct": bad},
+            headers=_auth(admin),
+        )
+        assert r.status_code == 422, f"{bad}: {r.text}"
+    # In range accepted; the default is off (null).
+    ok = await client.post(
+        "/api/competitions",
+        json={"name": "Y", "participation_mode": "individual", "mc_penalty_pct": 30},
+        headers=_auth(admin),
+    )
+    assert ok.status_code == 201 and ok.json()["mc_penalty_pct"] == 30
+    default = await client.post(
+        "/api/competitions",
+        json={"name": "Z", "participation_mode": "individual"},
+        headers=_auth(admin),
+    )
+    assert default.json()["mc_penalty_pct"] is None
+
+
+async def test_wrong_guess_penalty_reduces_award(client):
+    admin = await admin_token(client)
+    comp = await _mc_competition(client, admin, limit=None, penalty=25)
+    cid = await _mc_challenge(client, admin, comp, points=200)
+    ptoken, puid = await _register(client, "p@example.com")
+    await _assign_participant(puid, comp)
+    auth = _auth(ptoken)
+    submit = f"/api/competitions/{comp}/challenges/{cid}/submit"
+
+    # Two wrong guesses, each docking 25% of 200 (=50), then the correct answer.
+    await client.post(submit, json={"flag": "London"}, headers=auth)
+    await client.post(submit, json={"flag": "Berlin"}, headers=auth)
+    win = (await client.post(submit, json={"flag": "Paris"}, headers=auth)).json()
+    assert win["correct"] is True
+    assert win["points_awarded"] == 100  # 200 - 2*50
+    assert win["full_value"] == 200
+
+
+async def test_penalty_floors_at_zero_but_still_solves(client):
+    admin = await admin_token(client)
+    comp = await _mc_competition(client, admin, limit=None, penalty=40)
+    cid = await _mc_challenge(client, admin, comp, points=100)
+    ptoken, puid = await _register(client, "p@example.com")
+    await _assign_participant(puid, comp)
+    auth = _auth(ptoken)
+    submit = f"/api/competitions/{comp}/challenges/{cid}/submit"
+
+    # Three wrong guesses = 120% penalty, floored at 0.
+    for wrong in ("London", "Berlin", "Madrid"):
+        await client.post(submit, json={"flag": wrong}, headers=auth)
+    win = (await client.post(submit, json={"flag": "Paris"}, headers=auth)).json()
+    assert win["correct"] is True
+    assert win["points_awarded"] == 0
+    assert win["full_value"] == 100
+    # A zero-point solve still counts as a solve.
+    ch = (await client.get(f"/api/competitions/{comp}/challenges/{cid}", headers=auth)).json()
+    assert ch["solved"] is True
+
+
+async def test_penalty_ignores_non_multiple_choice(client):
+    admin = await admin_token(client)
+    # Penalty set, but a static challenge is unaffected — the penalty is MC-only.
+    comp = await _mc_competition(client, admin, limit=None, penalty=50)
+    resp = await client.post(
+        f"/api/competitions/{comp}/challenges",
+        json={"title": "Static", "points": 100, "flag": "flag{win}"},
+        headers=_auth(admin),
+    )
+    cid = resp.json()["id"]
+    await client.post(f"/api/competitions/{comp}/challenges/{cid}/publish", headers=_auth(admin))
+    ptoken, puid = await _register(client, "p@example.com")
+    await _assign_participant(puid, comp)
+    auth = _auth(ptoken)
+    submit = f"/api/competitions/{comp}/challenges/{cid}/submit"
+
+    await client.post(submit, json={"flag": "flag{nope}"}, headers=auth)
+    win = (await client.post(submit, json={"flag": "flag{win}"}, headers=auth)).json()
+    assert win["points_awarded"] == 100
+    assert win["full_value"] is None
+
+
+async def test_penalty_off_awards_full_value(client):
+    admin = await admin_token(client)
+    comp = await _mc_competition(client, admin, limit=None, penalty=None)  # off
+    cid = await _mc_challenge(client, admin, comp, points=100)
+    ptoken, puid = await _register(client, "p@example.com")
+    await _assign_participant(puid, comp)
+    auth = _auth(ptoken)
+    submit = f"/api/competitions/{comp}/challenges/{cid}/submit"
+
+    await client.post(submit, json={"flag": "London"}, headers=auth)
+    win = (await client.post(submit, json={"flag": "Paris"}, headers=auth)).json()
+    assert win["points_awarded"] == 100
+    assert win["full_value"] is None
+
+
+async def test_guess_reset_restores_full_value(client):
+    admin = await admin_token(client)
+    comp = await _mc_competition(client, admin, limit=None, penalty=50)
+    cid = await _mc_challenge(client, admin, comp, points=100)
+    ptoken, puid = await _register(client, "p@example.com")
+    await _assign_participant(puid, comp)
+    auth = _auth(ptoken)
+    submit = f"/api/competitions/{comp}/challenges/{cid}/submit"
+    reset = f"/api/competitions/{comp}/challenges/{cid}/reset-guesses"
+
+    # A wrong guess would halve the award...
+    await client.post(submit, json={"flag": "London"}, headers=auth)
+    # ...but a reset clears the wrong-guess count (same cutoff the cap uses), so
+    # the value is restored along with the attempts (#148 reuses the reset).
+    assert (
+        await client.post(reset, json={"user_id": puid}, headers=_auth(admin))
+    ).status_code == 204
+    win = (await client.post(submit, json={"flag": "Paris"}, headers=auth)).json()
+    assert win["points_awarded"] == 100
+    assert win["full_value"] is None
+
+
+async def test_subject_value_shown_before_solving(client):
+    admin = await admin_token(client)
+    comp = await _mc_competition(client, admin, limit=None, penalty=25)
+    cid = await _mc_challenge(client, admin, comp, points=200)
+    ptoken, puid = await _register(client, "p@example.com")
+    await _assign_participant(puid, comp)
+    auth = _auth(ptoken)
+    submit = f"/api/competitions/{comp}/challenges/{cid}/submit"
+
+    # No wrong guesses yet → the base value stands, nothing reduced.
+    ch = (await client.get(f"/api/competitions/{comp}/challenges/{cid}", headers=auth)).json()
+    assert ch["value"] == 200 and ch["subject_value"] is None
+
+    # After one wrong guess, the reduced worth surfaces on both detail and list.
+    await client.post(submit, json={"flag": "London"}, headers=auth)
+    ch = (await client.get(f"/api/competitions/{comp}/challenges/{cid}", headers=auth)).json()
+    assert ch["subject_value"] == 150  # 200 - 25%
+    listed = (await client.get(f"/api/competitions/{comp}/challenges", headers=auth)).json()[0]
+    assert listed["subject_value"] == 150
+
+
+async def test_dynamic_mc_penalty_preserves_each_subject_on_revalue(client):
+    """The corner case the stored per-row penalty exists for: when a new solve
+    re-values a dynamic MC challenge, each earlier solver keeps their own penalty
+    rather than being collapsed to the newest solver's award (#148)."""
+    from models.submission import Submission
+    from utils.scoring import dynamic_value, penalised_value
+
+    admin = await admin_token(client)
+    initial, minp, decay, pct = 200, 20, 10, 25
+    comp = await _mc_competition(client, admin, limit=None, penalty=pct)
+    cid = await _mc_challenge(
+        client, admin, comp,
+        points=initial, scoring_type="dynamic", min_points=minp, decay=decay,
+    )
+    submit = f"/api/competitions/{comp}/challenges/{cid}/submit"
+
+    async def solve(email, wrongs):
+        t, uid = await _register(client, email)
+        await _assign_participant(uid, comp)
+        for w in wrongs:
+            await client.post(submit, json={"flag": w}, headers=_auth(t))
+        r = await client.post(submit, json={"flag": "Paris"}, headers=_auth(t))
+        assert r.json()["correct"] is True
+        return uid
+
+    a = await solve("a@example.com", ["London", "Berlin"])  # 2 wrong, solve #1
+    b = await solve("b@example.com", [])                     # 0 wrong, solve #2
+    c = await solve("c@example.com", ["Madrid"])             # 1 wrong, solve #3
+
+    base1 = dynamic_value(initial, minp, decay, 1)
+    base3 = dynamic_value(initial, minp, decay, 3)
+    # Each solver's penalty was frozen (in points) at their own solve-time base.
+    pen_a = base1 - penalised_value(base1, pct, 2)
+    pen_c = base3 - penalised_value(base3, pct, 1)
+
+    async with SessionLocal() as db:
+        rows = (
+            await db.execute(
+                select(Submission).where(
+                    Submission.challenge_id == cid,
+                    Submission.is_correct.is_(True),
+                    Submission.is_duplicate.is_(False),
+                )
+            )
+        ).scalars().all()
+    awarded = {r.user_id: r.points_awarded for r in rows}
+    # After the third solve re-values everyone to base3, each keeps their own penalty.
+    assert awarded[a] == max(0, base3 - pen_a)
+    assert awarded[b] == base3
+    assert awarded[c] == max(0, base3 - pen_c)

@@ -44,6 +44,7 @@ from utils.flags import hash_static_flag, make_salt
 from utils.scoreboard import visible_solve_cutoff
 from utils.scoring import (
     challenge_value,
+    penalised_value,
     resolve_subject,
     solve_counts,
     solved_challenge_ids,
@@ -306,11 +307,14 @@ async def list_challenges(
         if subject is not None
         else set()
     )
-    # Multiple-choice guesses remaining (competition-wide cap), per subject.
+    # Multiple-choice per-subject guess counts, needed for the guesses-remaining
+    # cap and/or the wrong-guess penalty's reduced value (#148) — fetch them once
+    # if either is active.
     limit = competition.mc_guess_limit if competition is not None else None
+    penalty_pct = competition.mc_penalty_pct if competition is not None else None
     attempts = (
         await subject_attempt_counts(db, competition_id, subject)
-        if subject is not None and limit is not None
+        if subject is not None and (limit is not None or penalty_pct)
         else {}
     )
     # The requesting user's own ratings (for the post-solve prompt), when enabled.
@@ -337,12 +341,15 @@ async def list_challenges(
             not can_edit and subject is not None and _is_locked(challenge, solved)
         )
         challenge.my_rating = ratings.get(challenge.id)
-        if challenge.flag_type == "multiple_choice" and limit is not None:
-            challenge.attempts_remaining = (
-                None
-                if challenge.id in solved
-                else max(0, limit - attempts.get(challenge.id, 0))
-            )
+        if challenge.flag_type == "multiple_choice" and challenge.id not in solved:
+            wrong = attempts.get(challenge.id, 0)
+            if limit is not None:
+                challenge.attempts_remaining = max(0, limit - wrong)
+            if penalty_pct:
+                reduced = penalised_value(challenge.value, penalty_pct, wrong)
+                challenge.subject_value = (
+                    reduced if reduced < challenge.value else None
+                )
     return challenges
 
 
@@ -448,14 +455,20 @@ async def get_challenge(
             solved_ids = await solved_challenge_ids(db, competition_id, subject)
             challenge.locked = _is_locked(challenge, solved_ids)
     limit = competition.mc_guess_limit if competition is not None else None
+    penalty_pct = competition.mc_penalty_pct if competition is not None else None
     if (
         challenge.flag_type == "multiple_choice"
-        and limit is not None
         and subject is not None
         and not challenge.solved
+        and (limit is not None or penalty_pct)
     ):
         used = await subject_attempt_count(db, challenge_id, subject)
-        challenge.attempts_remaining = max(0, limit - used)
+        if limit is not None:
+            challenge.attempts_remaining = max(0, limit - used)
+        if penalty_pct:
+            # Reduced worth for this subject after their wrong guesses so far (#148).
+            reduced = penalised_value(challenge.value, penalty_pct, used)
+            challenge.subject_value = reduced if reduced < challenge.value else None
     if competition is not None and competition.challenge_ratings_enabled:
         challenge.my_rating = await db.scalar(
             select(ChallengeRating.rating).where(

@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import user_has_permission
@@ -152,7 +153,15 @@ async def accept_rules(
     if await has_accepted(db, competition_id, user_id):
         return False
     db.add(RulesAcceptance(competition_id=competition_id, user_id=user_id))
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Lost a race with a concurrent accept (e.g. two tabs): both requests
+        # passed the exists-check and the other one committed first. The row
+        # existing is exactly the outcome the caller wanted, so resolve to the
+        # already-accepted path — the winning request alone emits the event.
+        await db.rollback()
+        return False
     await event_bus.emit(
         "competition.rules_accepted",
         {"competition_id": competition_id, "user_id": user_id},

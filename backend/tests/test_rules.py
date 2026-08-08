@@ -265,6 +265,37 @@ async def test_accept_is_idempotent_and_audited(client):
     assert events[0].payload["competition_id"] == comp["id"]
 
 
+async def test_accept_losing_the_insert_race_is_idempotent(client, monkeypatch):
+    """Two concurrent accepts (e.g. two tabs) can both pass the exists-check;
+    the loser's INSERT then hits the unique constraint. That must resolve to
+    the already-accepted path — no 500, no duplicate row, no second event."""
+    admin = await admin_token(client)
+    await _set_global_rules(client, admin)
+    comp = await _make_competition(client, admin)
+    token, user_id = await _register(client, "racer@example.com")
+
+    resp = await client.post(
+        f"/api/competitions/{comp['id']}/rules/accept", headers=_auth(token)
+    )
+    assert resp.status_code == 200, resp.text
+
+    # Replay the losing request: it ran its exists-check before the winner
+    # committed, so pin that stale answer and let the INSERT collide.
+    from utils import rules as rules_util
+
+    async def stale_check(db, competition_id, user_id):
+        return False
+
+    monkeypatch.setattr(rules_util, "has_accepted", stale_check)
+    async with SessionLocal() as db:
+        assert await rules_util.accept_rules(db, comp["id"], user_id) is False
+
+    rows = await _acceptance_rows(comp["id"])
+    assert len(rows) == 1
+    events = await _audit_events("competition.rules_accepted")
+    assert len(events) == 1  # only the winning request emitted
+
+
 async def test_accept_without_rules_is_rejected(client):
     admin = await admin_token(client)
     comp = await _make_competition(client, admin)

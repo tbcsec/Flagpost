@@ -83,6 +83,17 @@ class Competition(Base, TimestampMixin):
     # challenges (static/regex are covered by the submission rate limiter). Not
     # scoped per-challenge by design (owner decision).
     mc_guess_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Anti-brute-force penalty riding alongside the guess limit (#148): each
+    # *incorrect* guess on a multiple-choice challenge lowers that challenge's
+    # value **for the guessing subject** by this percentage of its base value, so
+    # a later correct answer awards less. Linear in the base value, floored at 0
+    # (owner decision). 1–100; null = off. Defaults **off** for new competitions
+    # (unlike mc_guess_limit's default of 2) so enabling it is an explicit opt-in
+    # that never silently changes an existing competition's scoring. Applies only
+    # to multiple_choice challenges; competition-wide, not per-challenge (mirrors
+    # mc_guess_limit). The per-subject wrong-guess count reuses the reset-aware
+    # counter, so a MCGuessReset restores the value along with the attempts.
+    mc_penalty_pct: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Whether solving a challenge prompts the competitor for a 1–5 rating (Phase 9,
     # feedback module). Per-competition so it can be toggled between events.
     challenge_ratings_enabled: Mapped[bool] = mapped_column(

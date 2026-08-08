@@ -184,6 +184,7 @@ async def create_competition(
         participation_mode=body.participation_mode,
         visibility=body.visibility,
         mc_guess_limit=body.mc_guess_limit,
+        mc_penalty_pct=body.mc_penalty_pct,
         challenge_ratings_enabled=body.challenge_ratings_enabled,
         challenge_tags=body.challenge_tags or None,
         difficulty_tiers=body.difficulty_tiers or None,

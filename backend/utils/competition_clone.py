@@ -48,6 +48,7 @@ async def clone_competition(
         participation_mode=source.participation_mode,
         visibility=source.visibility,
         mc_guess_limit=source.mc_guess_limit,
+        mc_penalty_pct=source.mc_penalty_pct,
         challenge_ratings_enabled=source.challenge_ratings_enabled,
         challenge_tags=source.challenge_tags,
         difficulty_tiers=source.difficulty_tiers,

@@ -63,6 +63,17 @@ class Submission(Base, CompetitionScopedMixin, TimestampMixin):
     points_awarded: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0
     )
+    # Points deducted from this solve by the multiple-choice wrong-guess penalty
+    # (#148): the difference between the base value and what was actually awarded,
+    # driven by the subject's incorrect guesses and the competition's
+    # ``mc_penalty_pct``. 0 for every non-penalised solve (static/regex, penalty
+    # off, or a clean first-guess correct answer). Stored — rather than recomputed
+    # — so the dynamic re-value can keep each solver's own penalty when a new solve
+    # lowers a dynamic challenge's base value (a single portable UPDATE), instead
+    # of collapsing every solver to one value.
+    mc_penalty: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
 
 
 # At most one *awarded* row per (challenge, subject). COALESCE picks the credited

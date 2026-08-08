@@ -14,16 +14,18 @@ import {
 import { submissionsApi } from "@/lib/api";
 import type { SubmissionQuery, SubmitResult } from "@/lib/types";
 
-/** Submit a flag for a challenge. On a correct solve, the challenge list/detail
- *  are invalidated so solve state + counts refresh. RBAC, rate limiting and
- *  scoring are all enforced server-side (§13.2); errors surface to the caller. */
+/** Submit a flag for a challenge. The challenge list/detail are invalidated when
+ *  solve state changes (a correct solve) or when a wrong multiple-choice guess
+ *  dropped the subject's value under the penalty (#148), so the card grid
+ *  reflects the reduced worth. RBAC, rate limiting and scoring are all enforced
+ *  server-side (§13.2); errors surface to the caller. */
 export function useSubmitFlag(competitionId: string, challengeId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (flag: string) =>
       submissionsApi.submit(competitionId, challengeId, flag),
     onSuccess: (result: SubmitResult) => {
-      if (result.correct) {
+      if (result.correct || result.subject_value != null) {
         queryClient.invalidateQueries({
           queryKey: ["challenges", competitionId],
         });

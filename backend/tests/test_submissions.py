@@ -386,6 +386,7 @@ async def test_incorrect_submission_is_logged_and_awards_nothing(client):
         "is_first_blood": False,
         "attempts_remaining": None,
         "full_value": None,
+        "subject_value": None,
     }
     # Every attempt is logged, failures included (§13.2).
     subs = await _submissions(chal)

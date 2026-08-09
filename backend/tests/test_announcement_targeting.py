@@ -235,6 +235,26 @@ async def test_announcement_notifies_recipients_only(client):
     assert await _notifications(client, bob) == []
 
 
+async def test_user_targeted_announcement_ignores_out_of_competition_ids(client):
+    """A users-targeted list can't deliver a notification to a user outside the
+    competition (#5) — resolve_recipients scopes the raw ids to members."""
+    admin = await admin_token(client)
+    comp = await _competition(client, admin, mode="individual")
+    member = await _joined(client, comp, "member@example.com")
+    member_id = await _me_id(client, member)
+    # An outsider: registered, but never joined this competition.
+    outsider = await _register(client, "outsider@example.com")
+    outsider_id = await _me_id(client, outsider)
+
+    await _post(
+        client, comp, admin, title="Targeted",
+        audience_type="users", audience_ids=[member_id, outsider_id],
+    )
+
+    assert [n["title"] for n in await _notifications(client, member)] == ["Targeted"]
+    assert await _notifications(client, outsider) == []
+
+
 async def test_critical_overrides_a_muted_category(client):
     admin = await admin_token(client)
     comp = await _competition(client, admin, mode="individual")

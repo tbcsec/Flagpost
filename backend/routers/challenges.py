@@ -421,17 +421,24 @@ async def get_challenge(
     challenge = await load_visible_challenge(
         db, competition_id, challenge_id, current_user
     )
-    challenge.solve_count = (
-        await db.scalar(
-            select(func.count(Submission.id)).where(
-                Submission.challenge_id == challenge_id,
-                Submission.is_correct.is_(True),
-                Submission.is_duplicate.is_(False),
-            )
-        )
-    ) or 0
-    challenge.value = challenge_value(challenge, challenge.solve_count)
     competition = await db.get(Competition, competition_id)
+    # Honour the scoreboard freeze on this read too: a frozen-out competitor must
+    # not learn the live solve count (or decayed value) via the detail endpoint
+    # (#11) — every other solve-count read already clamps to visible_solve_cutoff.
+    cutoff = (
+        await visible_solve_cutoff(db, competition, current_user)
+        if competition is not None
+        else None
+    )
+    count_stmt = select(func.count(Submission.id)).where(
+        Submission.challenge_id == challenge_id,
+        Submission.is_correct.is_(True),
+        Submission.is_duplicate.is_(False),
+    )
+    if cutoff is not None:
+        count_stmt = count_stmt.where(Submission.created_at <= cutoff)
+    challenge.solve_count = (await db.scalar(count_stmt)) or 0
+    challenge.value = challenge_value(challenge, challenge.solve_count)
     subject = (
         await resolve_subject(db, competition, current_user)
         if competition is not None

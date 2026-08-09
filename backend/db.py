@@ -93,7 +93,17 @@ class CompetitionScopedMixin:
     )
 
 
-engine = create_async_engine(settings.database_url, future=True)
+# pool_pre_ping validates a pooled connection at checkout and transparently
+# replaces a dead one, so the first requests after a Postgres restart/failover/
+# idle-kill don't 500; pool_recycle retires connections below common middlebox
+# idle timeouts. Skipped for SQLite (the infra-free test/dev stack, ADR-0006),
+# where a per-checkout ping on a local file DB is pointless.
+_engine_kwargs: dict = (
+    {}
+    if settings.database_url.startswith("sqlite")
+    else {"pool_pre_ping": True, "pool_recycle": 1800}
+)
+engine = create_async_engine(settings.database_url, future=True, **_engine_kwargs)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 if engine.dialect.name == "sqlite":

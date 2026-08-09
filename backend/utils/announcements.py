@@ -112,7 +112,14 @@ async def resolve_recipients(
     """
     competition_id = announcement.competition_id
     if announcement.audience_type == "users":
-        return set(announcement.audience_ids or ())
+        targeted = set(announcement.audience_ids or ())
+        if not targeted:
+            return set()
+        # Scope the raw client-supplied list to competition members, so a
+        # targeted announcement can't deliver a notification to users outside
+        # this competition (#5) — mirrors the "teams"/"all" branches.
+        members = await users_with_permission(db, "challenge_view", competition_id)
+        return targeted & members
     if announcement.audience_type == "teams":
         target_teams = list(announcement.audience_ids or ())
         if not target_teams:

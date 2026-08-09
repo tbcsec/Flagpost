@@ -21,6 +21,7 @@ from routers import auth as auth_router
 from routers import modules as modules_router
 from utils import automation_scheduler
 from utils.audit_log import register_audit_log
+from utils.body_limit import BodySizeLimitMiddleware
 from utils.event_bus import event_bus
 
 logger = logging.getLogger("startup")
@@ -86,6 +87,9 @@ app.add_middleware(
 # highly repetitive JSON that deflates ~10x). Small responses skip it so the
 # hot small endpoints don't pay the header/CPU overhead.
 app.add_middleware(GZipMiddleware, minimum_size=1024)
+# Added last = outermost, so an oversized body is refused before CORS/GZip or any
+# route reads it (#3). Backstops the per-route upload guards for JSON endpoints.
+app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_request_body_bytes)
 
 
 # Auth, the real-time WebSocket endpoint, and the per-competition module

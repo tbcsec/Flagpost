@@ -279,6 +279,15 @@ async def test_freeze_covers_every_endpoint_that_exposes_solve_data(client):
     counts = {c["title"]: c["solve_count"] for c in listing}
     assert counts == {"Chal flag{a}": 1, "Chal flag{b}": 0}, counts
 
+    # 5. Challenge detail — the single-challenge read exposed a raw, cutoff-less
+    # count (#11); the frozen player must see 0 here too.
+    detail = (
+        await client.get(
+            f"/api/competitions/{comp}/challenges/{c2}", headers=_auth(player)
+        )
+    ).json()
+    assert detail["solve_count"] == 0, "post-freeze solve leaked via challenge detail"
+
     # Staff keep the true picture on every one of them.
     staff_solves = (
         await client.get(
@@ -295,6 +304,12 @@ async def test_freeze_covers_every_endpoint_that_exposes_solve_data(client):
         "Chal flag{a}": 1,
         "Chal flag{b}": 1,
     }
+    staff_detail = (
+        await client.get(
+            f"/api/competitions/{comp}/challenges/{c2}", headers=_auth(admin)
+        )
+    ).json()
+    assert staff_detail["solve_count"] == 1
 
     # Unfreezing restores it for competitors too.
     await client.post(

@@ -15,6 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs } from "@/components/ui/tabs";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
 import { useEnabledModules } from "@/lib/hooks/use-modules";
+import { useAccess } from "@/lib/hooks/use-permissions";
 
 type Tab = SettingsSection | "modules" | "assistant";
 
@@ -38,8 +39,18 @@ export default function CompetitionSettingsPage() {
   // off, nothing on the tab would work (§11.3, same treatment as the nav).
   const enabledModules = useEnabledModules(competitionId ?? "", Boolean(competitionId));
   const aiEnabled = !enabledModules.data || enabledModules.data.includes("ai");
-  const visibleTabs = TABS.filter((t) => t.value !== "assistant" || aiEnabled);
-  const activeTab: Tab = tab === "assistant" && !aiEnabled ? "general" : tab;
+  // The Modules tab needs its own permission (#168) — hide it for a manager who
+  // can edit settings but wasn't granted module management.
+  const canManageModules = useAccess().has("manage_modules");
+  const visibleTabs = TABS.filter(
+    (t) =>
+      (t.value !== "assistant" || aiEnabled) &&
+      (t.value !== "modules" || canManageModules),
+  );
+  const activeTab: Tab =
+    (tab === "assistant" && !aiEnabled) || (tab === "modules" && !canManageModules)
+      ? "general"
+      : tab;
 
   if (!competitionId) {
     return <NoCompetition />;

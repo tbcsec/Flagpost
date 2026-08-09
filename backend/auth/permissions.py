@@ -48,6 +48,10 @@ PERMISSIONS: tuple[Permission, ...] = (
     Permission("edit_competition", "Competition Management", Scope.COMPETITION),
     Permission("delete_competition", "Competition Management", Scope.COMPETITION),
     Permission("manage_schedule", "Competition Management", Scope.COMPETITION),
+    # Enable/disable optional modules for a competition (#168). Split out of
+    # edit_competition so module management can be delegated (or withheld)
+    # independently of general competition settings.
+    Permission("manage_modules", "Competition Management", Scope.COMPETITION),
     # Challenges
     Permission("challenge_view", "Challenges", Scope.COMPETITION),
     Permission("challenge_create", "Challenges", Scope.COMPETITION),
@@ -151,6 +155,7 @@ ADMINISTRATOR_PERMISSIONS: list[str] = [p.key for p in PERMISSIONS]
 JUDGE_PERMISSIONS: list[str] = [
     "edit_competition",
     "manage_schedule",
+    "manage_modules",
     "challenge_view",
     "challenge_create",
     "challenge_edit",

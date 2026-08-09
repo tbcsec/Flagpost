@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
 import { Badge } from "@/components/ui/badge";
@@ -219,47 +219,90 @@ export default function AdminEventLogPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Time (UTC)</TableHead>
-                <TableHead>Event</TableHead>
-                <TableHead>Competition</TableHead>
+                {/* w-px pins the metadata columns at their (nowrap) content
+                    width so every spare pixel goes to the Payload preview;
+                    Competition gets a fixed lane and truncates instead, since
+                    a long name shouldn't steal the payload's space either. */}
+                <TableHead className="w-px">Time (UTC)</TableHead>
+                <TableHead className="w-px">Event</TableHead>
+                <TableHead className="w-44">Competition</TableHead>
                 <TableHead>Payload</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {log.data?.items.map((entry) => (
-                <TableRow
-                  key={entry.id}
-                  className="cursor-pointer align-top"
-                  onClick={() => setExpanded((id) => (id === entry.id ? null : entry.id))}
-                >
-                  <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
-                    {parseServerDate(entry.created_at).toISOString().slice(0, 19).replace("T", " ")}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{entry.event_name}</Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {competitionName(entry.competition_id)}
-                  </TableCell>
-                  {/* max-w-0 lets the auto-layout table give this column the
-                      leftover width instead of sizing it to the payload's full
-                      intrinsic width; the inner truncate then clips to that
-                      width. Without it a long single-line payload (e.g.
-                      competition.updated) stretches the whole table off-screen
-                      (#157). */}
-                  <TableCell className="max-w-0">
-                    {expanded === entry.id ? (
-                      <pre className="max-w-xl overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs">
-                        {JSON.stringify(entry.payload, null, 2)}
-                      </pre>
-                    ) : (
-                      <div className="truncate font-mono text-xs text-muted-foreground">
-                        {JSON.stringify(entry.payload)}
-                      </div>
+              {log.data?.items.map((entry) => {
+                const open = expanded === entry.id;
+                const toggle = () =>
+                  setExpanded((id) => (id === entry.id ? null : entry.id));
+                return (
+                  <Fragment key={entry.id}>
+                    <TableRow
+                      className={
+                        open
+                          ? "cursor-pointer border-0 bg-muted/30"
+                          : "cursor-pointer"
+                      }
+                      tabIndex={0}
+                      aria-expanded={open}
+                      aria-controls={open ? `event-payload-${entry.id}` : undefined}
+                      onClick={toggle}
+                      onKeyDown={(e) => {
+                        // Rows aren't natively interactive — mirror a button's
+                        // keyboard contract so the toggle isn't mouse-only.
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          toggle();
+                        }
+                      }}
+                    >
+                      <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
+                        {parseServerDate(entry.created_at).toISOString().slice(0, 19).replace("T", " ")}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <Badge variant="secondary">{entry.event_name}</Badge>
+                      </TableCell>
+                      {/* title recovers what the truncation hides. */}
+                      <TableCell
+                        className="max-w-44 truncate text-muted-foreground"
+                        title={competitionName(entry.competition_id)}
+                      >
+                        {competitionName(entry.competition_id)}
+                      </TableCell>
+                      {/* max-w-0 lets the auto-layout table give this column
+                          the leftover width instead of sizing it to the
+                          payload's full intrinsic width; the inner truncate
+                          then clips to that width. Without it a long
+                          single-line payload (e.g. competition.updated)
+                          stretches the whole table off-screen (#157). */}
+                      <TableCell className="max-w-0">
+                        <div className="truncate font-mono text-xs text-muted-foreground">
+                          {JSON.stringify(entry.payload)}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    {/* The full payload gets its own row under the entry rather
+                        than squeezing into the #157-constrained Payload column.
+                        max-w-0 on the colSpan cell keeps this row out of the
+                        table's width calculation (the same #157 trick), so a
+                        payload with one long unbreakable line scrolls inside
+                        the <pre> instead of stretching the table. Not a toggle
+                        target, so selecting/copying JSON can't collapse it. */}
+                    {open && (
+                      <TableRow className="hover:bg-transparent">
+                        <TableCell
+                          colSpan={4}
+                          id={`event-payload-${entry.id}`}
+                          className="max-w-0 pt-0"
+                        >
+                          <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs">
+                            {JSON.stringify(entry.payload, null, 2)}
+                          </pre>
+                        </TableCell>
+                      </TableRow>
                     )}
-                  </TableCell>
-                </TableRow>
-              ))}
+                  </Fragment>
+                );
+              })}
               {log.data && log.data.items.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">

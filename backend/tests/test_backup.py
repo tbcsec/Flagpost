@@ -12,6 +12,7 @@ from db import SessionLocal, utcnow
 from models.api_token import ApiToken
 from models.challenge import Category, Challenge
 from models.competition import Competition
+from models.role import Role, RoleAssignment
 from models.submission import Submission
 from models.user import User
 from storage.memory import InMemoryStorage
@@ -218,3 +219,120 @@ async def test_export_import_endpoints_round_trip(client):
     assert imported.status_code == 200
     # Nothing new — the data already exists (additive).
     assert imported.json()["competitions"]["created"] == 0
+
+
+# --- Backup grant containment (backup escalation guard, review H1) ------------
+
+
+async def _register(client, name):
+    reg = await client.post(
+        "/api/auth/register",
+        json={"display_name": name, "password": "password123"},
+    )
+    return reg.json()["access_token"], reg.json()["user"]["id"]
+
+
+async def _grant_global_role(user_id: str, name: str, perms: list[str]) -> str:
+    async with SessionLocal() as db:
+        role = Role(name=name, scope="global", permissions=perms)
+        db.add(role)
+        await db.flush()
+        db.add(RoleAssignment(user_id=user_id, role_id=role.id, competition_id=None))
+        await db.commit()
+        return role.id
+
+
+async def test_import_export_roles_users_sections_require_dedicated_grants(client):
+    """Primary fix: a manage_site_settings-only delegate cannot read or write the
+    roles/users sections — the path that let import mint a global Administrator."""
+    token, uid = await _register(client, "sitedelegate")
+    await _grant_global_role(uid, "Site delegate", ["manage_site_settings"])
+    auth = {"Authorization": f"Bearer {token}"}
+    payload = {"flagpost_export": True, "schema_version": backup.SCHEMA_VERSION, "data": {}}
+
+    for section in ("roles", "users"):
+        imp = await client.post(
+            "/api/site-settings/import",
+            json={"sections": [section], "payload": payload},
+            headers=auth,
+        )
+        assert imp.status_code == 403, (section, imp.text)
+        exp = await client.post(
+            "/api/site-settings/export", json={"sections": [section]}, headers=auth
+        )
+        assert exp.status_code == 403, (section, exp.text)
+
+    # A section they *are* entitled to still works (no over-broad block).
+    ok = await client.post(
+        "/api/site-settings/import",
+        json={"sections": ["site_settings"], "payload": payload},
+        headers=auth,
+    )
+    assert ok.status_code == 200, ok.text
+
+
+async def test_import_cannot_grant_permissions_the_actor_lacks(client):
+    """Defense-in-depth: even holding manage_roles, an import can't create a role
+    carrying permissions beyond the actor's own global set (grant containment)."""
+    token, uid = await _register(client, "roleadmin")
+    await _grant_global_role(
+        uid, "Role admin", ["manage_site_settings", "manage_roles", "manage_users"]
+    )
+    auth = {"Authorization": f"Bearer {token}"}
+    payload = {
+        "flagpost_export": True,
+        "schema_version": backup.SCHEMA_VERSION,
+        "data": {
+            "roles": [
+                {
+                    "id": "src-role-1",
+                    "name": "Imported power",
+                    "description": "",
+                    "is_system": False,
+                    "scope": "global",
+                    "permissions": ["edit_competition"],
+                }
+            ]
+        },
+    }
+    imp = await client.post(
+        "/api/site-settings/import",
+        json={"sections": ["roles"], "payload": payload},
+        headers=auth,
+    )
+    assert imp.status_code == 403, imp.text
+    async with SessionLocal() as db:
+        created = await db.scalar(
+            select(func.count()).select_from(Role).where(Role.name == "Imported power")
+        )
+    assert created == 0
+
+
+async def test_admin_import_of_roles_is_unaffected_by_containment(client):
+    """A full Administrator holds the whole catalog, so containment never blocks
+    a legitimate restore."""
+    admin = await admin_token(client)
+    auth = {"Authorization": f"Bearer {admin}"}
+    payload = {
+        "flagpost_export": True,
+        "schema_version": backup.SCHEMA_VERSION,
+        "data": {
+            "roles": [
+                {
+                    "id": "src-role-2",
+                    "name": "Imported power two",
+                    "description": "",
+                    "is_system": False,
+                    "scope": "global",
+                    "permissions": ["edit_competition"],
+                }
+            ]
+        },
+    }
+    imp = await client.post(
+        "/api/site-settings/import",
+        json={"sections": ["roles"], "payload": payload},
+        headers=auth,
+    )
+    assert imp.status_code == 200, imp.text
+    assert imp.json()["roles"]["created"] == 1

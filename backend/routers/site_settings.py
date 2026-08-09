@@ -18,7 +18,7 @@ from sqlalchemy import String, select, type_coerce
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 
-from auth.deps import require_permission
+from auth.deps import require_permission, user_has_permission
 from config import settings as app_config
 from db import get_db, utcnow
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
@@ -183,10 +183,34 @@ async def backup_sections(
     return list(backup.SECTIONS)
 
 
+async def _require_section_permissions(
+    db: AsyncSession, user: User, sections: list[str]
+) -> None:
+    """The roles and users sections carry the RBAC graph and account rows, so
+    reading or writing them requires the dedicated global grants — not just
+    manage_site_settings. Without this gate, a site-settings delegate could
+    import a global Administrator role assignment and self-escalate (the import
+    path has no equivalent of the role editor's grant containment)."""
+    if "roles" in sections and not await user_has_permission(
+        db, user.id, "manage_roles", None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The roles section requires the Manage roles permission",
+        )
+    if "users" in sections and not await user_has_permission(
+        db, user.id, "manage_users", None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The users section requires the Manage users permission",
+        )
+
+
 @router.post("/export")
 async def export_backup(
     body: BackupExportRequest,
-    _user: User = Depends(require_permission("manage_site_settings")),
+    current_user: User = Depends(require_permission("manage_site_settings")),
     db: AsyncSession = Depends(get_db),
     storage: ObjectStorage = Depends(get_storage),
 ) -> Response:
@@ -195,6 +219,7 @@ async def export_backup(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Select at least one section to export",
         )
+    await _require_section_permissions(db, current_user, body.sections)
     document = await backup.export_data(db, storage, body.sections)
     import json
 
@@ -220,8 +245,15 @@ async def import_backup(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Select at least one section to import",
         )
+    await _require_section_permissions(db, current_user, body.sections)
     try:
-        result = await backup.import_data(db, storage, body.payload, body.sections)
+        result = await backup.import_data(
+            db, storage, body.payload, body.sections, actor=current_user
+        )
+    except backup.ImportForbidden as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
+        ) from exc
     except backup.ImportError_ as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)

@@ -186,3 +186,19 @@ async def test_empty_file_rejected(client):
     admin, comp, chal = await _setup_challenge(client)
     resp = await _upload(client, comp, chal, admin, content=b"")
     assert resp.status_code == 400
+
+
+async def test_signed_url_forces_safe_download(client):
+    """The download URL forces a neutral content-type + attachment disposition,
+    so a file uploaded as text/html or image/svg+xml can't render inline (#8)."""
+    admin, comp, chal = await _setup_challenge(client, publish=True)
+    attachment = (await _upload(client, comp, chal, admin, name="handout.zip")).json()
+    resp = await client.get(
+        f"/api/competitions/{comp}/challenges/{chal}/attachments/{attachment['id']}/url",
+        headers=_auth(admin),
+    )
+    url = resp.json()["url"]
+    # Signed overrides (MinIO and the in-memory double both put them in the URL).
+    assert "response-content-type=application%2Foctet-stream" in url
+    assert "response-content-disposition=attachment" in url
+    assert "handout.zip" in url  # download keeps a friendly filename

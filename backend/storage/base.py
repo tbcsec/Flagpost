@@ -25,10 +25,21 @@ class ObjectStorage(Protocol):
         """Remove the object at ``key`` (a no-op if it doesn't exist)."""
         ...
 
-    def presigned_get_url(self, key: str, expires_seconds: int) -> str:
+    def presigned_get_url(
+        self,
+        key: str,
+        expires_seconds: int,
+        response_headers: dict[str, str] | None = None,
+    ) -> str:
         """Return a short-lived, self-authorizing download URL for ``key``.
 
         Signing is a pure/offline operation — it must not require the object to
         exist or hit the network.
+
+        ``response_headers`` overrides response headers the store serves the
+        object with (e.g. ``response-content-disposition`` /
+        ``response-content-type``), signed into the URL — used to force a neutral
+        content-type + attachment disposition so a stored file can't render as
+        active content inline.
         """
         ...

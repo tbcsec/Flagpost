@@ -136,6 +136,14 @@ class Settings(BaseSettings):
     submission_rate_limit: int = 10
     submission_rate_window_seconds: int = 30
 
+    # Hard cap on request body size, enforced by an ASGI middleware before route
+    # auth runs — otherwise an oversized body (e.g. to /site-settings/import) is
+    # buffered + JSON-decoded before the 401/403, amplifying into transient heap
+    # (an unauthenticated memory-DoS, #3). Generous by default so it clears the
+    # 50 MB file/import routes and typical backups; raise it for very large
+    # backup restores. Bytes.
+    max_request_body_bytes: int = 100 * 1024 * 1024
+
     # --- Unauthenticated credential endpoints ---
     # Login, registration, password reset and email verification. Without this
     # there is no throttle and no lockout anywhere in the auth path: a breach

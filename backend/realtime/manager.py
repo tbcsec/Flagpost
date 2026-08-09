@@ -48,17 +48,66 @@ class ConnectionManager:
         # Pending debounced-clear tasks, keyed (room_type, room_id, user_id), so
         # a reconnect inside the grace window can cancel the impending removal.
         self._expiries: dict[tuple[str, str, str], asyncio.Task] = {}
+        # Reverse indexes for server-driven eviction (#10): a user's open sockets,
+        # and each socket's owner + room (one room per socket). Handshake-time
+        # authorization can't drop a socket the user already holds when their
+        # access is revoked mid-session; these let a ban/removal close it.
+        self._user_sockets: dict[str, set[WebSocket]] = defaultdict(set)
+        self._socket_meta: dict[WebSocket, tuple[str, str, str]] = {}
 
-    def join(self, room_type: str, room_id: str, websocket: WebSocket) -> None:
+    def join(
+        self, room_type: str, room_id: str, websocket: WebSocket, user_id: str
+    ) -> None:
         self._rooms[(room_type, room_id)].add(websocket)
+        self._user_sockets[user_id].add(websocket)
+        self._socket_meta[websocket] = (user_id, room_type, room_id)
 
     def leave(self, room_type: str, room_id: str, websocket: WebSocket) -> None:
         room = self._rooms.get((room_type, room_id))
-        if room is None:
-            return
-        room.discard(websocket)
-        if not room:
-            del self._rooms[(room_type, room_id)]
+        if room is not None:
+            room.discard(websocket)
+            if not room:
+                del self._rooms[(room_type, room_id)]
+        meta = self._socket_meta.pop(websocket, None)
+        if meta is not None:
+            socks = self._user_sockets.get(meta[0])
+            if socks is not None:
+                socks.discard(websocket)
+                if not socks:
+                    del self._user_sockets[meta[0]]
+
+    async def close_user_sockets(
+        self,
+        user_id: str,
+        *,
+        room_type: str | None = None,
+        room_id_prefix: str | None = None,
+        code: int = 4403,
+    ) -> int:
+        """Force-close a user's open sockets — server-driven revocation (#10).
+
+        Optionally filter to one ``room_type`` and/or a ``room_id`` prefix (used
+        to target only a removed team's scratchpad docs). Returns the count
+        closed. The socket's own receive loop then unwinds and calls ``leave``,
+        which clears the indexes; closing here doesn't mutate them, so a slow
+        unwind can't corrupt state.
+        """
+        closed = 0
+        for websocket in list(self._user_sockets.get(user_id, ())):
+            meta = self._socket_meta.get(websocket)
+            if meta is None:
+                continue
+            _uid, rt, rid = meta
+            if room_type is not None and rt != room_type:
+                continue
+            if room_id_prefix is not None and not rid.startswith(room_id_prefix):
+                continue
+            try:
+                await websocket.close(code=code)
+            except Exception:  # noqa: BLE001 — already gone is fine
+                pass
+            closed += 1
+        return closed
 
     def room_size(self, room_type: str, room_id: str) -> int:
         return len(self._rooms.get((room_type, room_id), ()))

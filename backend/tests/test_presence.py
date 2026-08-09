@@ -35,10 +35,10 @@ async def test_presence_join_broadcasts_sorted_set() -> None:
     mgr = ConnectionManager()
     a, b = FakeSocket(), FakeSocket()
 
-    mgr.join("challenge", "c1", a)
+    mgr.join("challenge", "c1", a, "u-a")
     await mgr.presence_join("challenge", "c1", a, _member("u-a", "Zara"))
 
-    mgr.join("challenge", "c1", b)
+    mgr.join("challenge", "c1", b, "u-b")
     await mgr.presence_join("challenge", "c1", b, _member("u-b", "Ada"))
 
     # Both sockets are in the room, so both see the final set — ordered by name.
@@ -53,7 +53,7 @@ async def test_presence_join_broadcasts_sorted_set() -> None:
 async def test_presence_payload_shape_is_the_minimal_set() -> None:
     mgr = ConnectionManager()
     a = FakeSocket()
-    mgr.join("ticket", "t1", a)
+    mgr.join("ticket", "t1", a, "u-a")
     await mgr.presence_join(
         "ticket", "t1", a, _member("u-a", "Judge", role="staff", mode="edit")
     )
@@ -64,9 +64,9 @@ async def test_presence_payload_shape_is_the_minimal_set() -> None:
 async def test_multiple_tabs_dedupe_and_survive_one_closing() -> None:
     mgr = ConnectionManager()
     tab1, tab2 = FakeSocket(), FakeSocket()
-    mgr.join("challenge", "c1", tab1)
+    mgr.join("challenge", "c1", tab1, "u-a")
     await mgr.presence_join("challenge", "c1", tab1, _member("u-a", "Ada"))
-    mgr.join("challenge", "c1", tab2)
+    mgr.join("challenge", "c1", tab2, "u-a")
     await mgr.presence_join("challenge", "c1", tab2, _member("u-a", "Ada"))
 
     # One user, not two.
@@ -81,9 +81,9 @@ async def test_multiple_tabs_dedupe_and_survive_one_closing() -> None:
 async def test_presence_clear_is_debounced() -> None:
     mgr = ConnectionManager()
     watcher, leaver = FakeSocket(), FakeSocket()
-    mgr.join("challenge", "c1", watcher)
+    mgr.join("challenge", "c1", watcher, "u-w")
     await mgr.presence_join("challenge", "c1", watcher, _member("u-w", "Watcher"))
-    mgr.join("challenge", "c1", leaver)
+    mgr.join("challenge", "c1", leaver, "u-l")
     await mgr.presence_join("challenge", "c1", leaver, _member("u-l", "Leaver"))
 
     # The socket dropped, but leave() removes it from the room too (as the real
@@ -102,14 +102,14 @@ async def test_presence_clear_is_debounced() -> None:
 async def test_reconnect_within_grace_cancels_the_clear() -> None:
     mgr = ConnectionManager()
     sock = FakeSocket()
-    mgr.join("challenge", "c1", sock)
+    mgr.join("challenge", "c1", sock, "u-a")
     await mgr.presence_join("challenge", "c1", sock, _member("u-a", "Ada"))
 
     # Drop, then reconnect a new socket before the grace window elapses.
     mgr.leave("challenge", "c1", sock)
     await mgr.presence_leave("challenge", "c1", sock, "u-a", grace_seconds=0.1)
     reconnect = FakeSocket()
-    mgr.join("challenge", "c1", reconnect)
+    mgr.join("challenge", "c1", reconnect, "u-a")
     await mgr.presence_join("challenge", "c1", reconnect, _member("u-a", "Ada"))
 
     # Wait past the original grace — the pending clear must have been cancelled.

@@ -601,6 +601,34 @@ export interface UserAccount {
   created_at: string;
 }
 
+/** One CSV row's outcome in the mass user import report (#171). `row` is the
+ *  line number in the uploaded file (the header is line 1). */
+export interface UserImportRow {
+  row: number;
+  display_name: string;
+  email: string | null;
+  role: string | null;
+  competition: string | null;
+  status: "create" | "skip" | "error";
+  reason: string | null;
+  role_action: "assign" | "skip" | null;
+  role_reason: string | null;
+}
+
+/** The per-row report POST /api/users/import returns for both phases —
+ *  dry-run preview and the commit — so both screens render the same shape. */
+export interface UserImportReport {
+  dry_run: boolean;
+  total: number;
+  created: number;
+  skipped: number;
+  errors: number;
+  roles_assigned: number;
+  roles_skipped: number;
+  ignored_columns: string[];
+  rows: UserImportRow[];
+}
+
 /** A personal API token (issue #75) — never carries the raw value or its hash. */
 export interface ApiToken {
   id: string;

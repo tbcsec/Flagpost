@@ -17,19 +17,37 @@ side is enforced in ``auth/deps.get_current_user``).
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import asyncio
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import require_permission
 from auth.identity import display_name_taken, email_taken
 from auth.security import hash_password
 from db import get_db, utcnow
+from models.competition import Competition
 from models.role import Role, RoleAssignment
 from models.user import RefreshSession, User
-from schemas.user import UserAccountOut, UserCreate, UserUpdate
+from schemas.user import (
+    UserAccountOut,
+    UserCreate,
+    UserImportReport,
+    UserImportRowOut,
+    UserUpdate,
+)
 from utils.api_tokens import emit_revoked, revoke_user_api_tokens
 from utils.event_bus import event_bus
+from utils.uploads import read_upload_capped
+from utils.user_import import (
+    RowPlan,
+    UserImportError,
+    UserImportTooLarge,
+    parse_users_csv,
+    plan_user_import,
+)
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -152,6 +170,154 @@ async def create_user(
         {"user_id": user.id, "email": user.email, "actor_user_id": current_user.id},
     )
     return await _out(db, user)
+
+
+# A roster CSV is tiny — a few MB covers the row cap many times over; the cap
+# exists so the parse loop's peak allocation stays bounded (utils/uploads.py).
+_IMPORT_MAX_BYTES = 5 * 1024 * 1024
+
+
+@router.post("/import", response_model=UserImportReport)
+async def import_users(
+    file: UploadFile = File(...),
+    dry_run: bool = False,
+    default_competition_id: str | None = Form(default=None),
+    current_user: User = Depends(require_permission("manage_users")),
+    db: AsyncSession = Depends(get_db),
+) -> UserImportReport:
+    """Mass user import from CSV (#171) — the bulk counterpart to ``POST /``.
+
+    Two-phase: ``?dry_run=true`` validates and returns the per-row report with
+    **no writes**; the plain call re-runs the identical plan and commits the
+    valid rows in **one transaction** (so a preview→confirm race just turns a
+    row into a skip, and a mid-batch failure leaves nothing behind). Accounts
+    follow single-create semantics exactly (argon2 hash, email pre-verified,
+    no domain allowlist); role rows follow ``roles.assign_role`` semantics with
+    the same escalation containment, downgraded from a 403 to a per-row warning.
+
+    Event shape is the bulk-op convention: **no** per-row ``user.created``
+    flood, one ``users.imported`` summary — but every role grant still emits
+    its own ``role.assigned``, because privilege changes must stay individually
+    attributable in the audit log.
+    """
+    if default_competition_id is not None:
+        if await db.get(Competition, default_competition_id) is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"
+            )
+
+    blob = await read_upload_capped(file, _IMPORT_MAX_BYTES)
+    try:
+        rows, ignored_columns = parse_users_csv(blob)
+    except UserImportTooLarge as exc:
+        # Literal 413 (not status.HTTP_413_*) — the constant name churned across
+        # Starlette versions (same precedent as roles.py's literal 422).
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except UserImportError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+    plans = await plan_user_import(db, current_user, rows, default_competition_id)
+    to_create = [p for p in plans if p.status == "create"]
+    to_assign = [p for p in plans if p.role_action == "assign"]
+
+    granted: list[tuple[str, RowPlan]] = []  # (subject_user_id, plan)
+    if not dry_run:
+        if to_create or to_assign:
+            # argon2 is deliberately CPU-slow; hash the whole batch in one
+            # worker thread (sequentially — bounded memory) so the event loop
+            # stays free. Same treatment as routers/auth.py registration.
+            hashes = await asyncio.to_thread(
+                lambda: [hash_password(p.password) for p in to_create]
+            )
+            new_users: dict[int, User] = {}
+            for plan, pw_hash in zip(to_create, hashes):
+                account = User(
+                    email=plan.email,
+                    display_name=plan.display_name,
+                    password_hash=pw_hash,
+                    # Same vouching rule as single create (#74): the admin
+                    # minting the account is the verification step.
+                    email_verified_at=utcnow(),
+                )
+                db.add(account)
+                new_users[plan.line] = account
+            await db.flush()
+            for plan in to_assign:
+                subject_id = plan.existing_user_id or new_users[plan.line].id
+                db.add(
+                    RoleAssignment(
+                        user_id=subject_id,
+                        competition_id=plan.target_competition_id,
+                        role_id=plan.role_id,
+                    )
+                )
+                granted.append((subject_id, plan))
+            try:
+                await db.commit()
+            except IntegrityError as exc:
+                # The plan is checked against a snapshot; a concurrent write
+                # between plan and commit can still trip a unique constraint.
+                # Atomic by design: nothing landed, and a re-run turns the
+                # conflicting rows into skips.
+                await db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "A conflicting account appeared while importing — "
+                        "nothing was created. Re-run the import; existing "
+                        "rows will be skipped."
+                    ),
+                ) from exc
+
+        # Commit before emitting (the audit consumer opens its own session).
+        # Role grants are audited individually — who got what, granted by whom.
+        for subject_id, plan in granted:
+            await event_bus.emit(
+                "role.assigned",
+                {
+                    "user_id": current_user.id,
+                    "subject_user_id": subject_id,
+                    "role_id": plan.role_id,
+                    "role_name": plan.role_name,
+                    "competition_id": plan.target_competition_id,
+                },
+            )
+        await event_bus.emit(
+            "users.imported",
+            {
+                "user_id": current_user.id,
+                "created": len(to_create),
+                "skipped": sum(p.status == "skip" for p in plans),
+                "roles_assigned": len(granted),
+            },
+        )
+
+    return UserImportReport(
+        dry_run=dry_run,
+        total=len(plans),
+        created=len(to_create),
+        skipped=sum(p.status == "skip" for p in plans),
+        errors=sum(p.status == "error" for p in plans),
+        roles_assigned=len(to_assign),
+        roles_skipped=sum(p.role_action == "skip" for p in plans),
+        ignored_columns=ignored_columns,
+        rows=[
+            UserImportRowOut(
+                row=p.line,
+                display_name=p.display_name,
+                email=p.email,
+                role=p.role_name,
+                competition=p.competition_name,
+                status=p.status,
+                reason=p.reason,
+                role_action=p.role_action,
+                role_reason=p.role_reason,
+            )
+            for p in plans
+        ],
+    )
 
 
 @router.patch("/{user_id}", response_model=UserAccountOut)

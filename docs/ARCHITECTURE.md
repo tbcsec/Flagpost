@@ -133,7 +133,7 @@ category.created            category.deleted
 user.registered              user.password_changed
 user.email_verified
 user.created                 user.updated               user.banned
-user.unbanned                user.deleted
+user.unbanned                user.deleted               users.imported
 role.created                 role.updated               role.deleted
 role.assigned                role.unassigned
 api_token.created            api_token.revoked
@@ -176,7 +176,11 @@ automation's side effects are events like any other mutation's.
 `automation.*` family, `platform.*` events are site-wide (null tenant) and
 **excluded from automation triggers** — they are not competition events, so
 nothing automates on them (`TRIGGERABLE_EVENTS` in `event_catalog.py` drops both
-prefixes). `module.enabled` / `module.disabled` record the per-competition
+prefixes). `users.imported` is the mass CSV user import's single summary
+(#171): per the bulk-op convention it replaces a per-row `user.created` flood,
+but each role grant in the file still emits its own `role.assigned` — privilege
+changes stay individually attributable. Unlike `platform.*` it remains
+automation-triggerable, gated `manage_users` like the rest of the user family. `module.enabled` / `module.disabled` record the per-competition
 optional-module toggle (§11.3); the canonical vocabulary above is mirrored in
 code by `backend/utils/event_catalog.py`, which is also what validates an
 automation rule's `trigger_type` (§5.1).

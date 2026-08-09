@@ -37,6 +37,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("uq_users_display_name_lower", table_name="users")
+    # A later SQLite batch table-rebuild drops this functional index (reflection
+    # can't round-trip lower(display_name)), so it may already be gone by the time
+    # a downgrade reaches here (#7) — tolerate that rather than wedging.
+    try:
+        op.drop_index("uq_users_display_name_lower", table_name="users")
+    except sa.exc.OperationalError:
+        pass
     with op.batch_alter_table("users") as batch:
         batch.alter_column("email", existing_type=sa.String(), nullable=False)

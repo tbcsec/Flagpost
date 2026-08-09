@@ -69,4 +69,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("uq_submissions_awarded_subject", table_name="submissions")
+    # A later SQLite batch table-rebuild (e.g. a drop_column on submissions)
+    # silently drops this expression/partial index — SQLAlchemy's reflection
+    # can't round-trip it — so by the time a downgrade reaches here it may already
+    # be gone (#7). Tolerate that instead of wedging the whole downgrade chain.
+    try:
+        op.drop_index("uq_submissions_awarded_subject", table_name="submissions")
+    except sa.exc.OperationalError:
+        pass

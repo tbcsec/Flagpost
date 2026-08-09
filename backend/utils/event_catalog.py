@@ -59,6 +59,11 @@ EVENT_TYPES: tuple[str, ...] = (
     "user.banned",
     "user.unbanned",
     "user.deleted",
+    # Mass CSV import's single summary (#171) — bulk ops deliberately don't
+    # flood `user.created` per row, though each role grant in the file still
+    # emits its own `role.assigned`. Stays automation-triggerable (unlike
+    # `platform.*`), gated `manage_users` like the rest of the user family.
+    "users.imported",
     # Personal API tokens (issue #75) — administrator mint/revoke.
     "api_token.created",
     "api_token.revoked",

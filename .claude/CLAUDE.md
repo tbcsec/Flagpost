@@ -81,7 +81,7 @@ Subsystem by subsystem, with the non-obvious bits called out:
   scope. System roles **re-sync from the catalog on every startup**
   (`seed_system_roles`), so a new permission reaches an already-migrated
   Administrator without a migration.
-- **Events** — `utils/event_bus`, 67 event types in `utils/event_catalog.py`.
+- **Events** — `utils/event_bus`, 72 event types in `utils/event_catalog.py`.
   `emit()` awaits foreground handlers (audit + WS broadcasts) and schedules
   `background=True` ones fire-and-forget (ADR-0012) — that's the lane
   webhooks/email use.

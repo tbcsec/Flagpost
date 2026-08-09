@@ -113,6 +113,23 @@ export function useDeleteUser() {
   return useMutation({ mutationFn: (id: string) => usersApi.remove(id), onSuccess: invalidate });
 }
 
+/** Mass CSV import (#171). One mutation drives both phases — `dryRun: true`
+ *  previews without writing, the plain call commits — so the dialog's preview
+ *  and confirm steps can't drift apart. Only a commit refreshes the table. */
+export function useImportUsers() {
+  const invalidate = useUsersInvalidate();
+  return useMutation({
+    mutationFn: (input: { file: File; dryRun: boolean; defaultCompetitionId?: string }) =>
+      usersApi.importCsv(input.file, {
+        dryRun: input.dryRun,
+        defaultCompetitionId: input.defaultCompetitionId,
+      }),
+    onSuccess: (_report, input) => {
+      if (!input.dryRun) invalidate();
+    },
+  });
+}
+
 /** Exchange the httpOnly refresh cookie for an in-memory access token.
  *  Used by the SSO callback page, which lands holding only the cookie the
  *  backend set — the access token is deliberately never put in a URL. */

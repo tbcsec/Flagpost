@@ -68,6 +68,7 @@ import type {
   ApiToken,
   ApiTokenCreated,
   UserAccount,
+  UserImportReport,
   Permissions,
   PermissionEntry,
   Role,
@@ -529,6 +530,22 @@ export const usersApi = {
   unban: (id: string) =>
     apiFetch<UserAccount>(`/api/users/${id}/unban`, { method: "POST" }),
   remove: (id: string) => apiFetch<void>(`/api/users/${id}`, { method: "DELETE" }),
+  // Mass CSV import (#171). Two-phase: dryRun previews (no writes), the plain
+  // call commits atomically. Same report shape both ways.
+  importCsv: (
+    file: File,
+    opts: { dryRun: boolean; defaultCompetitionId?: string },
+  ) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (opts.defaultCompetitionId) {
+      form.append("default_competition_id", opts.defaultCompetitionId);
+    }
+    return apiFetch<UserImportReport>(
+      `/api/users/import${opts.dryRun ? "?dry_run=true" : ""}`,
+      { method: "POST", body: form },
+    );
+  },
 };
 
 export const apiTokensApi = {

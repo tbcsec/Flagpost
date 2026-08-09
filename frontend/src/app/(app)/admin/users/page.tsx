@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { SectionHeader } from "@/components/app/section-header";
 import { ApiTokensPanel } from "@/components/admin/api-tokens-panel";
 import { UserFormDialog } from "@/components/admin/user-form-dialog";
+import { UserImportDialog } from "@/components/admin/user-import-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -54,6 +55,7 @@ export default function AdminUsersPage() {
   const del = useDeleteUser();
 
   const [dialog, setDialog] = useState<{ mode: "create" } | { mode: "edit"; user: UserAccount } | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const confirm = useConfirm();
 
   // Sort + pagination (#16 #17) over the (backend-searched) directory. Search
@@ -125,7 +127,15 @@ export default function AdminUsersPage() {
         title="Admin — Users"
         subtitle="Global — every account on the platform"
         actions={
-          canManage ? <Button onClick={() => setDialog({ mode: "create" })}>Create account</Button> : undefined
+          canManage ? (
+            <div className="flex gap-2">
+              {/* Bulk CSV roster import (#171) — the mass counterpart. */}
+              <Button variant="outline" onClick={() => setImportOpen(true)}>
+                Import CSV
+              </Button>
+              <Button onClick={() => setDialog({ mode: "create" })}>Create account</Button>
+            </div>
+          ) : undefined
         }
       />
 
@@ -235,6 +245,8 @@ export default function AdminUsersPage() {
           onOpenChange={(o) => !o && setDialog(null)}
         />
       )}
+
+      <UserImportDialog open={importOpen} onOpenChange={setImportOpen} />
 
       {access.has("manage_api_tokens") && <ApiTokensPanel />}
     </>

@@ -7,6 +7,7 @@ The account directory + create/edit surface an Administrator uses (gated on
 """
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -38,3 +39,39 @@ class UserUpdate(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=120)
     email: EmailStr | None = None
     password: str | None = Field(default=None, min_length=8, max_length=256)
+
+
+class UserImportRowOut(BaseModel):
+    """One CSV row's outcome in the mass-import report (#171). ``row`` is the
+    line number in the uploaded file (the header is line 1). Deliberately no
+    password field — the report echoes everything about a row *except* its
+    credential."""
+
+    row: int
+    display_name: str
+    email: str | None
+    role: str | None
+    competition: str | None
+    status: Literal["create", "skip", "error"]
+    reason: str | None = None
+    # The role half of the row: assigned, or skipped with a warning (actor
+    # can't grant it / already held). None when the row carries no role.
+    role_action: Literal["assign", "skip"] | None = None
+    role_reason: str | None = None
+
+
+class UserImportReport(BaseModel):
+    """The full per-row report for both phases — ``dry_run`` preview and the
+    commit — so the confirm screen and the final toast render the same shape."""
+
+    dry_run: bool
+    total: int
+    created: int
+    skipped: int
+    errors: int
+    roles_assigned: int
+    roles_skipped: int
+    # Header names present in the file but not part of the format — surfaced so
+    # a typo'd optional column (``rolle``) is visible, not silently dropped.
+    ignored_columns: list[str]
+    rows: list[UserImportRowOut]

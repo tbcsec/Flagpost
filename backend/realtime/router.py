@@ -155,7 +155,7 @@ async def room_socket(websocket: WebSocket, room_type: str, room_id: str) -> Non
                 mode = "view"
             member = await room.presence_member(db, user, room_id, mode)
 
-    manager.join(room_type, room_id, websocket)
+    manager.join(room_type, room_id, websocket, user.id)
     if member is not None:
         await manager.presence_join(room_type, room_id, websocket, member)
     try:

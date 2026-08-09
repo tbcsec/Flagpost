@@ -17,6 +17,7 @@ from config import settings
 from db import SessionLocal
 from plugins.loader import load_modules
 from realtime import router as realtime_router
+from realtime.eviction import register_ws_eviction
 from routers import auth as auth_router
 from routers import modules as modules_router
 from utils import automation_scheduler
@@ -29,6 +30,9 @@ logger = logging.getLogger("startup")
 # Importing the audit-log module registers its wildcard event-bus subscriber
 # (§3.3): from here on, every emitted event is persisted.
 register_audit_log()
+# Close a user's live WebSockets when they're banned/deleted or leave a team —
+# handshake-only authorization can't revoke an already-open socket (#10).
+register_ws_eviction(event_bus)
 
 
 @asynccontextmanager

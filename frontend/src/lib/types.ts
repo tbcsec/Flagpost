@@ -132,11 +132,14 @@ export interface MyStanding {
   solved_count: number;
 }
 
-/** Per-user dashboard layout customization (§10.2–10.5). */
+/** Per-user dashboard layout customization (§10.2–10.5). Positions are 2D grid
+ *  coordinates on a 12-column grid (issue #21). */
 export interface DashboardLayoutEntry {
   widget_id: string;
-  cols: number;
-  rows: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
   hidden: boolean;
 }
 

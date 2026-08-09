@@ -42,18 +42,23 @@ class MyStanding(BaseModel):
     solved_count: int
 
 
-# --- Dashboard layout customization (§10.2–10.5) ---------------------------
+# --- Dashboard layout customization (§10.2–10.5, issue #21) -----------------
 # The layout is opaque to the backend (§10.3): the frontend registry owns the
-# widget catalog and legitimate sizes, so we only validate shape and bounds.
-# `cols`/`rows` are grid units on the fixed-column dashboard grid (§10.2).
+# widget catalog and per-widget minimum sizes, so we only validate shape and
+# bounds. Entries are 2D placements on a 12-column grid: (x, y) position and
+# (w, h) span in grid cells. `y`/`h` are unbounded in principle (the grid grows
+# downward), so they carry a generous row cap only to reject absurd blobs.
 
-_MAX_GRID = 12  # generous ceiling; the real grid is 4 columns
+_MAX_GRID = 12  # the dashboard grid is 12 columns wide
+_MAX_ROWS = 200  # generous row ceiling — just a sanity bound, not a real limit
 
 
 class LayoutEntry(BaseModel):
     widget_id: str = Field(min_length=1, max_length=64)
-    cols: int = Field(ge=1, le=_MAX_GRID)
-    rows: int = Field(ge=1, le=_MAX_GRID)
+    x: int = Field(ge=0, le=_MAX_GRID)
+    y: int = Field(ge=0, le=_MAX_ROWS)
+    w: int = Field(ge=1, le=_MAX_GRID)
+    h: int = Field(ge=1, le=_MAX_ROWS)
     hidden: bool = False
 
 

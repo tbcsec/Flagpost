@@ -1,0 +1,50 @@
+/* react-grid-layout theming for the customizable dashboard (issue #21).
+   Uses design tokens (ARCHITECTURE.md §9) — no raw hex. Scoped under
+   `.dashboard-grid` so it can't leak into any other RGL usage. */
+
+/* The drop preview shown while dragging/resizing. */
+.dashboard-grid .react-grid-item.react-grid-placeholder {
+  background: hsl(var(--primary));
+  opacity: 0.16;
+  border-radius: var(--radius);
+}
+
+/* Lift the item being moved/resized above its neighbours. */
+.dashboard-grid .react-grid-item.react-grid-item--resizing,
+.dashboard-grid .react-grid-item.react-draggable-dragging {
+  z-index: 30;
+}
+
+/* Smooth position/size transitions for the fluid feel the issue asks for
+   (RGL animates non-dragged items via CSS transitions on transform/w/h). */
+.dashboard-grid.dashboard-grid--editing .react-grid-item {
+  transition: transform 160ms ease, width 160ms ease, height 160ms ease;
+}
+.dashboard-grid .react-grid-item.react-draggable-dragging,
+.dashboard-grid .react-grid-item.react-grid-item--resizing {
+  transition: none;
+}
+
+/* Corner resize handle — themed to the design tokens (issue #21 asks for a
+   corner drag element). RGL's default is a faint background-image data-URI. */
+.dashboard-grid .react-resizable-handle {
+  background-image: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+}
+.dashboard-grid .react-resizable-handle::after {
+  content: "";
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid hsl(var(--primary));
+  border-bottom: 2px solid hsl(var(--primary));
+  border-bottom-right-radius: 3px;
+  opacity: 0.7;
+}
+.dashboard-grid .react-grid-item:hover .react-resizable-handle::after {
+  opacity: 1;
+}

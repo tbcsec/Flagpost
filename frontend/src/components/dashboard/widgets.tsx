@@ -49,7 +49,10 @@ function ListCard({
         <CardTitle>{title}</CardTitle>
         {description && <CardDescription>{description}</CardDescription>}
       </CardHeader>
-      <CardContent className="max-h-72 flex-1 overflow-y-auto">{children}</CardContent>
+      {/* min-h-0 lets this flex child shrink below its content so the grid cell's
+          height governs and the body scrolls internally; it grows to fill a
+          taller cell (issue #21 free resize). */}
+      <CardContent className="min-h-0 flex-1 overflow-y-auto">{children}</CardContent>
     </Card>
   );
 }

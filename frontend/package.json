@@ -26,6 +26,7 @@
     "next": "^15.5.21",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-grid-layout": "^2.2.4",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.6.0",

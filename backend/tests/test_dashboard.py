@@ -178,8 +178,8 @@ async def test_layout_defaults_to_null_then_round_trips(client):
     assert got.json() is None
 
     entries = [
-        {"widget_id": "stats", "cols": 4, "rows": 1, "hidden": False},
-        {"widget_id": "activity", "cols": 2, "rows": 2, "hidden": True},
+        {"widget_id": "stats", "x": 0, "y": 0, "w": 12, "h": 2, "hidden": False},
+        {"widget_id": "activity", "x": 0, "y": 2, "w": 6, "h": 5, "hidden": True},
     ]
     put = await client.put(
         f"/api/competitions/{comp}/dashboard/layout",
@@ -202,8 +202,8 @@ async def test_layout_defaults_to_null_then_round_trips(client):
 async def test_layout_put_is_upsert(client):
     comp = await _competition(client)
     admin = await admin_token(client)
-    first = [{"widget_id": "stats", "cols": 4, "rows": 1, "hidden": False}]
-    second = [{"widget_id": "standing", "cols": 2, "rows": 1, "hidden": False}]
+    first = [{"widget_id": "stats", "x": 0, "y": 0, "w": 12, "h": 2, "hidden": False}]
+    second = [{"widget_id": "standing", "x": 0, "y": 0, "w": 12, "h": 2, "hidden": False}]
     await client.put(
         f"/api/competitions/{comp}/dashboard/layout",
         json={"entries": first},
@@ -227,7 +227,7 @@ async def test_layout_reset_deletes_saved(client):
     admin = await admin_token(client)
     await client.put(
         f"/api/competitions/{comp}/dashboard/layout",
-        json={"entries": [{"widget_id": "stats", "cols": 4, "rows": 1}]},
+        json={"entries": [{"widget_id": "stats", "x": 0, "y": 0, "w": 12, "h": 2}]},
         headers=_auth(admin),
     )
     delete = await client.delete(
@@ -250,7 +250,7 @@ async def test_layout_is_per_user(client):
     admin = await admin_token(client)
     await client.put(
         f"/api/competitions/{comp}/dashboard/layout",
-        json={"entries": [{"widget_id": "stats", "cols": 4, "rows": 1}]},
+        json={"entries": [{"widget_id": "stats", "x": 0, "y": 0, "w": 12, "h": 2}]},
         headers=_auth(admin),
     )
     # A Judge (holds customize_dashboard) sees their own empty layout, not admin's.
@@ -291,3 +291,34 @@ async def test_layout_rejects_unknown_key(client):
         headers=_auth(admin),
     )
     assert resp.status_code == 400
+
+
+async def test_layout_get_drops_pre_2d_shape_instead_of_500(client):
+    """A layout saved before issue #21 (the {cols,rows} flow shape) must not
+    500 on read: get_layout drops the unrecognized entries so the client falls
+    back to the default (backward-compat reset)."""
+    comp = await _competition(client)
+    admin = await admin_token(client)
+    me = (await client.get("/api/auth/me", headers=_auth(admin))).json()
+
+    from db import SessionLocal
+    from models.dashboard_layout import DashboardLayout
+
+    async with SessionLocal() as db:
+        db.add(
+            DashboardLayout(
+                user_id=me["id"],
+                dashboard_key="manager",
+                layout_json=[
+                    {"widget_id": "stats", "cols": 4, "rows": 1, "hidden": False},
+                    {"widget_id": "activity", "cols": 2, "rows": 2, "hidden": True},
+                ],
+            )
+        )
+        await db.commit()
+
+    got = await client.get(
+        f"/api/competitions/{comp}/dashboard/layout", headers=_auth(admin)
+    )
+    assert got.status_code == 200
+    assert got.json() == {"dashboard_key": "manager", "entries": []}

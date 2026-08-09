@@ -29,11 +29,14 @@ from models.role import Role, RoleAssignment
 from models.submission import Submission
 from models.team import Team
 from models.user import User
+from pydantic import ValidationError
+
 from schemas.dashboard import (
     ChallengeHealth,
     DashboardLayoutOut,
     DashboardLayoutUpdate,
     DashboardStats,
+    LayoutEntry,
     MyStanding,
     RecentSolve,
 )
@@ -274,7 +277,16 @@ async def get_layout(
     row = await _get_layout_row(db, current_user.id, dashboard_key)
     if row is None:
         return None
-    return DashboardLayoutOut(dashboard_key=dashboard_key, entries=row.layout_json)
+    # Drop any entry that isn't in the current 2D shape rather than 500 on a
+    # stored pre-#21 {cols,rows} layout: the client treats the remainder like a
+    # partial save and fills in defaults, so an old layout cleanly resets.
+    entries = []
+    for raw in row.layout_json or []:
+        try:
+            entries.append(LayoutEntry.model_validate(raw))
+        except ValidationError:
+            continue
+    return DashboardLayoutOut(dashboard_key=dashboard_key, entries=entries)
 
 
 @router.put("/layout", response_model=DashboardLayoutOut)

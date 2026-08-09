@@ -4,7 +4,7 @@
 // module state is competition-scoped, so it belongs with the competition's other
 // configuration rather than the global Admin section. Lists the full inventory
 // (required-core locked, optional toggleable) off GET/PUT
-// /api/competitions/{id}/modules, gated on edit_competition.
+// /api/competitions/{id}/modules, gated on manage_modules (#168).
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,12 +17,12 @@ import { toast } from "@/stores/toast";
 
 export function ModulesPanel({ competitionId }: { competitionId: string }) {
   const access = useAccess();
-  const canManage = access.has("edit_competition");
+  const canManage = access.has("manage_modules");
   const modules = useModules(competitionId, canManage);
   const toggle = useToggleModule(competitionId);
 
-  // Managing modules needs edit_competition specifically; hide the section for a
-  // narrower manager (e.g. a challenge-author) who can see settings but not this.
+  // Managing modules needs manage_modules specifically (#168); hide the section
+  // for a manager who can see settings but wasn't granted module management.
   if (!canManage) return null;
 
   function onToggle(m: ModuleState) {

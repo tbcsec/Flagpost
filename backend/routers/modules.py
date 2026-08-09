@@ -9,7 +9,8 @@ precedent as auth/realtime).
 Rules enforced here:
 - required-core modules aren't toggleable (409) — §11.3;
 - unknown module ids 404 (only loaded manifests exist to toggle);
-- gated on ``edit_competition`` (it's competition configuration);
+- gated on ``manage_modules`` (#168) — a competition-scoped permission split
+  out of ``edit_competition`` so module management can be delegated on its own;
 - every flip emits ``module.enabled`` / ``module.disabled`` (§3.2).
 """
 
@@ -49,7 +50,7 @@ async def enabled_modules(
     db: AsyncSession = Depends(get_db),
 ) -> list[str]:
     """The enabled **optional** module ids for this competition — a lightweight,
-    member-readable read (``challenge_view``, unlike the ``edit_competition``
+    member-readable read (``challenge_view``, unlike the ``manage_modules``
     management list) so the client can hide the nav entries of disabled modules
     for every viewer, not just admins. Required-core modules are always on, so
     they're not listed here (nothing gates them)."""
@@ -72,7 +73,7 @@ async def enabled_modules(
 @router.get("", response_model=list[ModuleStateOut])
 async def list_modules(
     competition_id: str,
-    current_user: User = Depends(require_permission("edit_competition")),
+    current_user: User = Depends(require_permission("manage_modules")),
     db: AsyncSession = Depends(get_db),
 ) -> list[ModuleStateOut]:
     """The full module inventory for this competition — required-core modules
@@ -108,7 +109,7 @@ async def toggle_module(
     competition_id: str,
     module_id: str,
     body: ModuleToggle,
-    current_user: User = Depends(require_permission("edit_competition")),
+    current_user: User = Depends(require_permission("manage_modules")),
     db: AsyncSession = Depends(get_db),
 ) -> ModuleStateOut:
     await _competition_or_404(db, competition_id)

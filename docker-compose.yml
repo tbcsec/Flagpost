@@ -146,7 +146,12 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     ports:
-      - "9000:9000"     # S3 API — the browser fetches attachments via signed URLs
+      # S3 API, bound to loopback only. Browsers on the host still reach signed
+      # URLs at localhost:9000; a remote/multi-host deploy must publish this
+      # deliberately AND set MINIO_PUBLIC_ENDPOINT (a non-loopback value trips the
+      # default-credential guard in config.py, forcing real creds). Binding
+      # 0.0.0.0 here exposed the S3 API with vendor-default creds outside RBAC.
+      - "127.0.0.1:9000:9000"
     volumes:
       - minio-data:/data
     healthcheck:

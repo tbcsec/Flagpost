@@ -64,6 +64,7 @@ from sqlalchemy import DateTime, LargeBinary, func, inspect as sa_inspect, selec
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 
+from auth.membership import effective_permissions
 from db import UtcDateTime, utcnow
 from models.announcement import Announcement
 from models.attachment import Attachment
@@ -387,8 +388,45 @@ class ImportError_(ValueError):
     """Raised for a malformed or unsupported export document."""
 
 
+class ImportForbidden(Exception):
+    """Raised when an import would grant permissions the actor doesn't hold.
+
+    Distinct from :class:`ImportError_` (a bad document, 400) — this is an
+    authorization refusal (403): the import path must honour the same grant
+    containment ``routers.roles._assert_may_grant`` enforces interactively, or
+    ``manage_roles`` becomes a delegation of everything.
+    """
+
+
+async def _assert_import_within_grant(
+    db: AsyncSession, spec: "Spec", obj, actor_global: set[str]
+) -> None:
+    """Refuse to import a role or role-assignment carrying permissions beyond the
+    actor's own global set (backup escalation guard). Mirrors the bound in
+    ``routers.roles._assert_may_grant``; a full Administrator holds the whole
+    catalog, so their restores are unaffected."""
+    if spec.table == "roles":
+        excess = set(obj.permissions or ()) - actor_global
+        target = f"role {obj.name!r}"
+    elif spec.table == "role_assignments":
+        role = await db.get(Role, obj.role_id)
+        excess = set(role.permissions or ()) - actor_global if role is not None else set()
+        target = "a role assignment"
+    else:
+        return
+    if excess:
+        raise ImportForbidden(
+            f"This import would grant permissions you don't hold yourself via "
+            f"{target}: " + ", ".join(sorted(excess))
+        )
+
+
 async def import_data(
-    db: AsyncSession, storage: ObjectStorage, payload: dict, sections: list[str]
+    db: AsyncSession,
+    storage: ObjectStorage,
+    payload: dict,
+    sections: list[str],
+    actor: User | None = None,
 ) -> dict[str, dict[str, int]]:
     if not isinstance(payload, dict) or not payload.get("flagpost_export"):
         raise ImportError_("Not a Flagpost export file")
@@ -401,6 +439,14 @@ async def import_data(
     picked = [s for s in SECTIONS if s in sections]
     state = _State()
     result: dict[str, dict[str, int]] = {}
+
+    # Grant containment: when importing the roles section, no imported role or
+    # assignment may carry permissions beyond the actor's own global set — the
+    # same bound the interactive role editor enforces, which the generic import
+    # would otherwise bypass. Skipped when no actor is supplied (internal callers).
+    actor_global: set[str] | None = None
+    if actor is not None and "roles" in picked:
+        actor_global = set((await effective_permissions(db, actor.id)).get("global", ()))
 
     for spec in SPECS:
         if spec.section not in picked:
@@ -444,6 +490,8 @@ async def import_data(
                 row["object_key"] = spec.object_key_for(row)
 
             obj = spec.model(**load_row(spec.model, row))
+            if actor_global is not None:
+                await _assert_import_within_grant(db, spec, obj, actor_global)
             db.add(obj)
             await db.flush()
 

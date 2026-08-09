@@ -39,6 +39,7 @@ from utils import backup, mailer
 from utils.event_bus import event_bus
 from utils.image_sniff import exceeds_pixel_budget, sniff_logo_type
 from utils.update_check import notice_dismissed, update_available
+from utils.uploads import read_upload_capped
 
 router = APIRouter(prefix="/api/site-settings", tags=["site-settings"])
 
@@ -106,15 +107,10 @@ async def upload_logo(
     """Store a custom org logo that replaces the built-in mark in the lockup.
     Kept in the DB (not object storage) so branding works on the infra-free
     stack and pre-auth. Emits ``site.settings_updated`` like any branding change."""
-    data = await file.read()
+    data = await read_upload_capped(file, MAX_LOGO_BYTES)
     if len(data) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Empty file"
-        )
-    if len(data) > MAX_LOGO_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"Logo exceeds {MAX_LOGO_BYTES // (1024 * 1024)} MB limit",
         )
 
     # Derive the type from the bytes, never the client's Content-Type (#114): a

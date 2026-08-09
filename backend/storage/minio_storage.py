@@ -60,7 +60,15 @@ class MinioStorage:
     def delete(self, key: str) -> None:
         self._client.remove_object(self._bucket, key)
 
-    def presigned_get_url(self, key: str, expires_seconds: int) -> str:
+    def presigned_get_url(
+        self,
+        key: str,
+        expires_seconds: int,
+        response_headers: dict[str, str] | None = None,
+    ) -> str:
         return self._presign_client.presigned_get_object(
-            self._bucket, key, expires=timedelta(seconds=expires_seconds)
+            self._bucket,
+            key,
+            expires=timedelta(seconds=expires_seconds),
+            response_headers=response_headers,
         )

@@ -52,6 +52,7 @@ from utils.scoring import (
     subject_attempt_counts,
     subject_has_solved,
 )
+from utils.uploads import read_upload_capped
 
 router = APIRouter(
     prefix="/api/competitions/{competition_id}/challenges", tags=["challenges"]
@@ -397,12 +398,7 @@ async def import_challenges_zip(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"
         )
-    blob = await file.read()
-    if len(blob) > _IMPORT_MAX_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Import bundle is too large (50 MB max)",
-        )
+    blob = await read_upload_capped(file, _IMPORT_MAX_BYTES)
     try:
         result = await import_challenges(db, competition, blob, storage)
     except ValueError as exc:

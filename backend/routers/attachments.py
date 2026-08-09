@@ -33,6 +33,7 @@ from schemas.attachment import AttachmentOut, SignedUrlOut
 from storage import get_storage
 from storage.base import ObjectStorage
 from utils.event_bus import event_bus
+from utils.uploads import read_upload_capped
 
 router = APIRouter(
     prefix="/api/competitions/{competition_id}/challenges/{challenge_id}/attachments",
@@ -93,15 +94,11 @@ async def upload_attachment(
     # draft-hiding one) is correct here.
     await _get_scoped_challenge(db, competition_id, challenge_id)
 
-    data = await file.read()
+    # Bounded read: abort at the cap instead of buffering the whole body first.
+    data = await read_upload_capped(file, MAX_ATTACHMENT_BYTES)
     if len(data) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Empty file"
-        )
-    if len(data) > MAX_ATTACHMENT_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File exceeds {MAX_ATTACHMENT_BYTES // (1024 * 1024)} MB limit",
         )
 
     filename = _safe_name(file.filename)
@@ -148,7 +145,20 @@ async def get_attachment_url(
     attachment = await _attachment_or_404(db, challenge_id, attachment_id)
 
     ttl = settings.signed_url_ttl_seconds
-    url = storage.presigned_get_url(attachment.object_key, ttl)
+    # Force a download of a neutral type regardless of the object's stored
+    # Content-Type, so a challenge file uploaded as text/html or image/svg+xml
+    # can't render as active content inline (#8). Signed into the URL, so it
+    # holds even when MinIO is served from another origin. The stored filename
+    # is already _safe_name'd; strip quotes/CR/LF as belt-and-suspenders.
+    safe = attachment.filename.replace('"', "").replace("\r", "").replace("\n", "")
+    url = storage.presigned_get_url(
+        attachment.object_key,
+        ttl,
+        response_headers={
+            "response-content-type": "application/octet-stream",
+            "response-content-disposition": f'attachment; filename="{safe}"',
+        },
+    )
     return SignedUrlOut(url=url, expires_in_seconds=ttl)
 
 

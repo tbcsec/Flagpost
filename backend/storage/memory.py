@@ -8,6 +8,7 @@ issued and honoured the requested TTL.
 from __future__ import annotations
 
 import time
+from urllib.parse import urlencode
 
 
 class InMemoryStorage:
@@ -23,9 +24,19 @@ class InMemoryStorage:
     def delete(self, key: str) -> None:
         self._objects.pop(key, None)
 
-    def presigned_get_url(self, key: str, expires_seconds: int) -> str:
+    def presigned_get_url(
+        self,
+        key: str,
+        expires_seconds: int,
+        response_headers: dict[str, str] | None = None,
+    ) -> str:
         expires_at = int(time.time()) + expires_seconds
-        return f"memory://challenge-files/{key}?expires={expires_at}"
+        url = f"memory://challenge-files/{key}?expires={expires_at}"
+        if response_headers:
+            # Mirror MinIO, which signs overrides in as query params — lets tests
+            # assert the forced disposition/type without a real object store.
+            url += "&" + urlencode(response_headers)
+        return url
 
     # Test-only helpers -----------------------------------------------------
     def exists(self, key: str) -> bool:

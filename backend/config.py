@@ -127,6 +127,20 @@ class Settings(BaseSettings):
     # a Postgres reachable on localhost for native `uvicorn` runs.
     database_url: str = "postgresql+asyncpg://flagpost:flagpost@localhost:5432/flagpost"
 
+    # Connection-pool sizing for the Postgres engine (#174). SQLAlchemy's stock
+    # defaults (pool_size 5 + max_overflow 10 = 15 checkouts) are the concurrency
+    # ceiling under a live event: a 200-user load test pinned the pool at 15
+    # while the backend sat well under half its CPU — concurrency-bound, not
+    # CPU-bound. These raise the ceiling. Keep pool_size + max_overflow comfortably
+    # under Postgres' server-side max_connections (default 100) so the pool can't
+    # oversubscribe the database — the single backend process (ADR-0005) is the
+    # only pool, so 80 total leaves ample headroom. Ignored for SQLite (ADR-0006).
+    db_pool_size: int = 20
+    db_max_overflow: int = 20
+    # Seconds a request waits for a free connection before erroring, rather than
+    # blocking forever, so pool exhaustion surfaces as a fast 500 not a hang.
+    db_pool_timeout: int = 30
+
     redis_url: str | None = None
 
     # --- Flag submission rate limit (§13.2) ---

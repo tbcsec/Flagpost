@@ -98,12 +98,28 @@ class CompetitionScopedMixin:
 # idle-kill don't 500; pool_recycle retires connections below common middlebox
 # idle timeouts. Skipped for SQLite (the infra-free test/dev stack, ADR-0006),
 # where a per-checkout ping on a local file DB is pointless.
-_engine_kwargs: dict = (
-    {}
-    if settings.database_url.startswith("sqlite")
-    else {"pool_pre_ping": True, "pool_recycle": 1800}
+def build_engine_kwargs(database_url: str) -> dict:
+    """Pooling kwargs for ``create_async_engine`` (#174).
+
+    SQLite (the infra-free test/dev stack, ADR-0006) gets none — a per-checkout
+    ping on a local file DB is pointless and the pool-size knobs don't apply.
+    Postgres gets pre-ping + recycle (survives restart/failover/idle-kill) plus
+    an explicit pool bigger than SQLAlchemy's 5+10 default, which is the
+    concurrency ceiling under load."""
+    if database_url.startswith("sqlite"):
+        return {}
+    return {
+        "pool_pre_ping": True,
+        "pool_recycle": 1800,
+        "pool_size": settings.db_pool_size,
+        "max_overflow": settings.db_max_overflow,
+        "pool_timeout": settings.db_pool_timeout,
+    }
+
+
+engine = create_async_engine(
+    settings.database_url, future=True, **build_engine_kwargs(settings.database_url)
 )
-engine = create_async_engine(settings.database_url, future=True, **_engine_kwargs)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 if engine.dialect.name == "sqlite":

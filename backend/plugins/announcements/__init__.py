@@ -95,7 +95,12 @@ def setup(app, event_bus, db_factory) -> None:
 
     register_room_type("announcements", authorize=authorize, snapshot=snapshot)
 
-    @event_bus.on("announcement.published", owner="announcements")
+    # Background lane (#176, ADR-0012): fan-out is per-recipient row creation +
+    # WS sends, which for an all-participants announcement was a 24s foreground
+    # block on the POST. The Announcement row itself is committed by the route
+    # before this event is emitted, so it stays durable; only the per-user
+    # notification rows + WS delivery are deferred (best-effort, ms later).
+    @event_bus.on("announcement.published", owner="announcements", background=True)
     async def deliver_announcement(event_name: str, payload: dict) -> None:
         competition_id = payload.get("competition_id")
         announcement_id = payload.get("announcement_id")

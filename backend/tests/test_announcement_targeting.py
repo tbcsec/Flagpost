@@ -12,6 +12,7 @@ import pytest
 
 from tests.conftest import admin_token
 from tests.ws_client import WsTestClient
+from utils.event_bus import event_bus
 
 import main  # noqa: E402
 
@@ -75,9 +76,13 @@ async def _member_with_team(client, comp: str, email: str, team: str) -> tuple[s
 
 async def _post(client, comp: str, token: str, **kwargs):
     body = {"title": "T", "body": "B", **kwargs}
-    return await client.post(
+    resp = await client.post(
         f"/api/competitions/{comp}/announcements", json=body, headers=_auth(token)
     )
+    # Delivery (notification rows + WS fan-out) is on the background lane now
+    # (#176), so drain it before asserting on the delivered effects.
+    await event_bus.wait_for_background()
+    return resp
 
 
 async def _titles(client, comp: str, token: str) -> list[str]:

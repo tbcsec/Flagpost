@@ -19,9 +19,9 @@ One endpoint serves every room type. The lifecycle, per §4.1 / ADR-0003:
    persist lane.
 
 Close codes mirror HTTP: 4401 auth failed/timeout, 4403 not allowed, 4404
-unknown room type. Room types are registered by the modules that own them
-(e.g. the scoring module registers "scoreboard"), keeping this endpoint free
-of feature knowledge.
+unknown room type, 4429 handshake rate limit exceeded (#178). Room types are
+registered by the modules that own them (e.g. the scoring module registers
+"scoreboard"), keeping this endpoint free of feature knowledge.
 """
 
 from __future__ import annotations
@@ -34,13 +34,15 @@ from dataclasses import dataclass
 from typing import Any
 
 import jwt
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.security import decode_access_token
 from config import settings
 from db import SessionLocal
 from models.user import User
+from ratelimit import get_rate_limiter
+from ratelimit.base import RateLimiter
 from realtime.manager import manager
 
 logger = logging.getLogger("realtime")
@@ -94,7 +96,12 @@ def register_room_type(
 
 
 @router.websocket("/ws/{room_type}/{room_id}")
-async def room_socket(websocket: WebSocket, room_type: str, room_id: str) -> None:
+async def room_socket(
+    websocket: WebSocket,
+    room_type: str,
+    room_id: str,
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
+) -> None:
     await websocket.accept()
 
     room = _room_types.get(room_type)
@@ -122,6 +129,19 @@ async def room_socket(websocket: WebSocket, room_type: str, room_id: str) -> Non
         payload = decode_access_token(token)
     except jwt.PyJWTError:
         await websocket.close(code=4401, reason="Invalid or expired token")
+        return
+
+    # Throttle the handshake per authenticated user (#178), before the DB lookup
+    # + room authorize (+ any snapshot recompute) below — those are the cost an
+    # abusive reconnect loop would amplify. Keyed on the token subject; a real
+    # client's burst of shell + presence sockets stays well under the limit.
+    subject = payload.get("sub")
+    if subject and not await rate_limiter.hit(
+        f"ws-handshake:{subject}",
+        limit=settings.ws_handshake_rate_limit,
+        window_seconds=settings.ws_handshake_rate_window_seconds,
+    ):
+        await websocket.close(code=4429, reason="Too many connection attempts")
         return
 
     member: dict[str, Any] | None = None

@@ -134,9 +134,11 @@ class Settings(BaseSettings):
     # CPU-bound. These raise the ceiling. Keep pool_size + max_overflow comfortably
     # under Postgres' server-side max_connections (default 100) so the pool can't
     # oversubscribe the database — the single backend process (ADR-0005) is the
-    # only pool, so 80 total leaves ample headroom. Ignored for SQLite (ADR-0006).
-    db_pool_size: int = 20
-    db_max_overflow: int = 20
+    # only pool. 30 + 30 = 60 total leaves headroom while giving the read-fan-out
+    # more room: the post-fix re-run touched the previous 40 cap (peaked at 41),
+    # so this is cheap insurance ahead of #87 stage 2 reducing that load at source.
+    db_pool_size: int = 30
+    db_max_overflow: int = 30
     # Seconds a request waits for a free connection before erroring, rather than
     # blocking forever, so pool exhaustion surfaces as a fast 500 not a hang.
     db_pool_timeout: int = 30

@@ -16,6 +16,7 @@ the board is alive from the moment people join, not only after first blood.
 
 from __future__ import annotations
 
+import time
 from datetime import datetime
 from typing import Any
 
@@ -23,6 +24,7 @@ from sqlalchemy import func, select, type_coerce
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import user_has_permission
+from config import settings
 from db import UtcDateTime, ensure_aware_utc, utcnow
 from models.automation import Achievement
 from models.challenge import Challenge
@@ -317,3 +319,54 @@ async def compute_scoreboard(
         "frozen_at": as_of.isoformat() if as_of is not None else None,
         "brackets": list(competition.brackets or []),
     }
+
+
+# --- Cached read model (#87 stage 1) ----------------------------------------
+#
+# ``compute_scoreboard`` runs 4-6 aggregate queries + a full sort; a reconnect
+# herd recomputes it once per joining socket, and spectator pages poll it. This
+# process-global cache (single process, ADR-0005) collapses those onto one
+# compute per competition: keyed by ``(live, bracket)`` so freeze and division
+# variants don't collide, TTL-bounded as a backstop for changes that don't emit
+# a scoring event (a new participant joining), and cleared outright by
+# ``invalidate_scoreboard`` on every scoreboard-moving event (wired in the
+# scoring plugin). Because a scoring event always invalidates, a cache *hit*
+# only ever serves a board that genuinely hasn't changed — the caching is
+# correctness-preserving, not just best-effort.
+#
+# The authoritative recompute-and-broadcast on a scoring event stays uncached
+# (it must reflect the change that just happened); this serves the read-heavy
+# join/REST/spectator paths. Callers must treat the returned dict as read-only —
+# it is shared across hits.
+#
+# Stage 2 (delta / top-N broadcasts) and stage 3 (Redis fan-out) remain open on
+# #87; this is the cached read model only.
+
+_scoreboard_cache: dict[str, dict[tuple[bool, str | None], tuple[float, dict[str, Any]]]] = {}
+
+
+def invalidate_scoreboard(competition_id: str) -> None:
+    """Drop every cached board (all live/bracket variants) for a competition."""
+    _scoreboard_cache.pop(competition_id, None)
+
+
+async def cached_scoreboard(
+    db: AsyncSession,
+    competition: Competition,
+    *,
+    live: bool = False,
+    bracket: str | None = None,
+) -> dict[str, Any]:
+    """A TTL + event-invalidated wrapper over :func:`compute_scoreboard` for the
+    read-heavy paths (WS join snapshot, REST read, public spectator + CTFtime)."""
+    key = (live, bracket)
+    now = time.monotonic()
+    entry = _scoreboard_cache.get(competition.id, {}).get(key)
+    if entry is not None and entry[0] > now:
+        return entry[1]
+    board = await compute_scoreboard(db, competition, live=live, bracket=bracket)
+    _scoreboard_cache.setdefault(competition.id, {})[key] = (
+        now + settings.scoreboard_cache_ttl_seconds,
+        board,
+    )
+    return board

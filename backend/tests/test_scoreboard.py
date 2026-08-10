@@ -61,6 +61,47 @@ async def _submit(client, comp: str, chal: str, token: str, flag: str):
     )
 
 
+async def test_cached_board_reflects_a_new_solve(client):
+    """#87 cache correctness: priming a read then solving must not serve a
+    stale board — the solve's challenge.solved event invalidates the cache."""
+    comp = await _make_competition(client)
+    chal = await _published_challenge(client, comp, "flag{win}", 100)
+    alice = await _team_member(client, comp, "alice@example.com", "Alpha")
+
+    # Prime the cache: nobody has scored yet.
+    before = (
+        await client.get(f"/api/competitions/{comp}/scoreboard", headers=_auth(alice))
+    ).json()
+    assert all(e["points"] == 0 for e in before["entries"])
+
+    await _submit(client, comp, chal, alice, "flag{win}")
+
+    # The next read must reflect the solve, not the primed zero-point board.
+    after = (
+        await client.get(f"/api/competitions/{comp}/scoreboard", headers=_auth(alice))
+    ).json()
+    assert any(e["points"] == 100 for e in after["entries"])
+
+
+async def test_cached_board_reflects_a_new_team(client):
+    """#87 invalidation covers roster changes, not just scoring: a team forming
+    after a read must appear, not be hidden behind the cached board."""
+    comp = await _make_competition(client)
+    alice = await _team_member(client, comp, "alice@example.com", "Alpha")
+
+    before = (
+        await client.get(f"/api/competitions/{comp}/scoreboard", headers=_auth(alice))
+    ).json()
+    assert len(before["entries"]) == 1
+
+    await _team_member(client, comp, "bob@example.com", "Bravo")  # emits team.created
+
+    after = (
+        await client.get(f"/api/competitions/{comp}/scoreboard", headers=_auth(alice))
+    ).json()
+    assert len(after["entries"]) == 2  # new team not hidden by a stale cache
+
+
 async def test_team_scoreboard_ranks_by_points(client):
     comp = await _make_competition(client)
     c1 = await _published_challenge(client, comp, "flag{a}", 100)

@@ -1,0 +1,23 @@
+# Load-test overlay for the 200-user capacity simulation. NOT committed — passed
+# explicitly with `-f docker-compose.yml -f loadtest.override.yml`.
+#
+# Two changes vs. production:
+#  1. Publish the backend port to the host so the harness has a direct line
+#     (bootstrap + a fallback if Caddy/frontend aren't up). The real client
+#     traffic still goes through Caddy :8080 when it's available.
+#  2. Constrain the backend to a realistic modest event VPS (4 vCPU / 4 GB).
+#     The host has 16 cores, which would hide the single-event-loop bottleneck
+#     that ADR-0005's in-process design creates; 4 cores is a fair mid-size
+#     deployment and still leaves the argon2 threadpool room for a login storm.
+#     Postgres/Redis are left unconstrained so the backend is the thing measured
+#     (a true all-in-one VPS would share cores with the DB — noted in the report).
+
+services:
+  backend:
+    ports:
+      - "127.0.0.1:8001:8000"
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 4g

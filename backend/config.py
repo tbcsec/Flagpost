@@ -204,6 +204,17 @@ class Settings(BaseSettings):
     # message before the server closes it (the token is never in the URL,
     # ADR-0003).
     ws_auth_timeout_seconds: float = 5.0
+    # Per-user rate limit on the WS handshake (#178). The /ws endpoint was the
+    # one authenticated surface with no throttle: an abusive client could loop
+    # reconnects, each forcing a token decode + DB lookup + room authorize (+ a
+    # scoreboard snapshot recompute). Keyed on the token subject, not the IP —
+    # behind the single-origin Caddy proxy (uvicorn runs without --proxy-headers)
+    # every client shares the proxy's IP, so a per-IP bucket would throttle the
+    # whole event as one. Generous enough for a real client opening its handful
+    # of shell + challenge-presence sockets on load (and re-opening them after a
+    # reconnect); tight enough to stop a hammering loop.
+    ws_handshake_rate_limit: int = 60
+    ws_handshake_rate_window_seconds: int = 30
     # Per-socket send timeout for a room broadcast (#177). A slow/stalled client
     # (full TCP send buffer) must not hold up delivery to the rest of the room:
     # the send is bounded by this timeout, and a socket that exceeds it is

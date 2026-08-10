@@ -150,6 +150,13 @@ class Settings(BaseSettings):
     submission_rate_limit: int = 10
     submission_rate_window_seconds: int = 30
 
+    # Server-side coalescing window for the per-competition activity room (#175).
+    # A burst of same-event pings (mass solves) within this window collapses to
+    # one leading + one trailing broadcast; a lone event still fires instantly.
+    # Each broadcast is an N-client refetch, so this caps burst width without
+    # adding latency to steady, well-spaced events.
+    activity_coalesce_window_seconds: float = 0.5
+
     # Hard cap on request body size, enforced by an ASGI middleware before route
     # auth runs — otherwise an oversized body (e.g. to /site-settings/import) is
     # buffered + JSON-decoded before the 401/403, amplifying into transient heap

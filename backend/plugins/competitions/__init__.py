@@ -59,8 +59,12 @@ def setup(app, event_bus, db_factory) -> None:
     # Imported lazily so discovery can read the manifest without importing the
     # whole domain, and to keep module wiring out of import time.
     from auth.deps import user_has_permission
+    from db import ensure_aware_utc, utcnow
+    from models.challenge import Challenge
     from models.competition import Competition
     from realtime import manager, register_room_type
+    from utils.scoreboard import freeze_cutoff
+    from utils.scoring import challenge_value, solve_counts
     from routers.awards import router as awards_router
     from routers.brackets import router as brackets_router
     from routers.competitions import router
@@ -93,8 +97,8 @@ def setup(app, event_bus, db_factory) -> None:
     # tells clients *when* to reload.
     register_room_type("activity", authorize=authorize_activity)
 
-    async def _send_activity(key, challenge_id) -> None:
-        competition_id, event_name = key
+    async def _send_activity(key, team_id=None) -> None:
+        competition_id, event_name, challenge_id = key
         # Nobody watching → skip building/sending the frame (scoreboard idiom).
         if manager.room_size("activity", competition_id) == 0:
             return
@@ -102,20 +106,56 @@ def setup(app, event_bus, db_factory) -> None:
         # The one id worth carrying: lets clients target per-challenge caches.
         if challenge_id:
             frame["challenge_id"] = challenge_id
+        # Solve delta (#188): carry the challenge's *new public* solve_count +
+        # value so the ~N watching clients patch that card in place instead of
+        # each refetching the whole list (the 4:1 refetch storm), plus the
+        # solving team_id so a *teammate* — whose shared solved/locked state
+        # changed — knows to refetch (only they do). All three are public: the
+        # solves list already discloses which team solved what. Gated on:
+        # - the challenge being competitor-visible (don't disclose a draft/
+        #   unreleased challenge's count to those who 404 on it), and
+        # - the board not being *actively* frozen (solve_count is per-viewer
+        #   then — clients fall back to refetching their own frozen slice).
+        if event_name == "challenge.solved" and challenge_id:
+            async with db_factory() as db:
+                competition = await db.get(Competition, competition_id)
+                challenge = await db.get(Challenge, challenge_id)
+                visible = (
+                    challenge is not None
+                    and challenge.state == "published"
+                    and (
+                        challenge.release_at is None
+                        or ensure_aware_utc(challenge.release_at) <= utcnow()
+                    )
+                )
+                if (
+                    competition is not None
+                    and visible
+                    and freeze_cutoff(competition) is None
+                ):
+                    count = (await solve_counts(db, competition_id)).get(challenge_id, 0)
+                    frame["solve_count"] = count
+                    frame["value"] = challenge_value(challenge, count)
+                    if team_id:
+                        frame["team_id"] = team_id
         await manager.broadcast("activity", competition_id, frame)
 
-    # Coalesce per (competition, event) so a burst of same-event pings (mass
-    # solves at the start/end of a competition) collapses to one leading + one
-    # trailing broadcast instead of one per event — each broadcast is an
-    # N-client refetch, so this caps the storm's width under a burst (#175). A
-    # lone, well-spaced event still fires immediately on the leading edge.
+    # Coalesce per (competition, event, challenge) so a burst collapses to one
+    # leading + one trailing broadcast instead of one per event — each broadcast
+    # is an N-client refetch/patch, so this caps the storm's width under a burst
+    # (#175). Keyed by challenge too (#188) so solves on *different* challenges
+    # keep their own deltas rather than collapsing to one; a lone, well-spaced
+    # event still fires immediately on the leading edge.
     activity = Coalescer(settings.activity_coalesce_window_seconds, _send_activity)
 
     async def broadcast_activity(event_name: str, payload: dict) -> None:
         competition_id = payload.get("competition_id")
         if not competition_id:
             return
-        await activity.hit((competition_id, event_name), payload.get("challenge_id"))
+        await activity.hit(
+            (competition_id, event_name, payload.get("challenge_id")),
+            payload.get("team_id"),
+        )
 
     for _event in ACTIVITY_EVENTS:
         event_bus.subscribe(_event, broadcast_activity, owner="competitions")

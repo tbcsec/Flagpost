@@ -4,6 +4,7 @@ import type { QueryKey } from "@tanstack/react-query";
 
 import {
   ACTIVITY_THROTTLE_MS,
+  applyChallengeDelta,
   createThrottledInvalidator,
   keysForActivity,
 } from "@/lib/live";
@@ -11,9 +12,11 @@ import {
 const CID = "comp-1";
 
 describe("keysForActivity", () => {
-  it("maps a solve to the play surfaces", () => {
+  it("maps a solve to the standings surfaces but NOT the challenge list", () => {
+    // The challenge list is patched in place from the solve delta (#188), so a
+    // solve must no longer trigger a full ["challenges"] refetch across watchers.
     const keys = keysForActivity("challenge.solved", CID);
-    expect(keys).toContainEqual(["challenges", CID]);
+    expect(keys).not.toContainEqual(["challenges", CID]);
     expect(keys).toContainEqual(["dashboard", CID, "stats"]);
     expect(keys).toContainEqual(["dashboard", CID, "recent-solves"]);
     expect(keys).toContainEqual(["dashboard", CID, "me"]);
@@ -54,6 +57,36 @@ describe("keysForActivity", () => {
   it("returns nothing for unmapped events (frontend allowlist)", () => {
     expect(keysForActivity("user.banned", CID)).toEqual([]);
     expect(keysForActivity("something.new", CID)).toEqual([]);
+  });
+});
+
+describe("applyChallengeDelta (#188)", () => {
+  const list = [
+    { id: "a", solve_count: 1, value: 500 },
+    { id: "b", solve_count: 3, value: 420 },
+  ];
+
+  it("patches solve_count and value on the matching challenge only", () => {
+    const next = applyChallengeDelta(list, "b", 4, 380);
+    expect(next).not.toBe(list); // new reference → triggers a render
+    expect(next).toEqual([
+      { id: "a", solve_count: 1, value: 500 },
+      { id: "b", solve_count: 4, value: 380 },
+    ]);
+    expect(next![0]).toBe(list[0]); // untouched row keeps its reference
+  });
+
+  it("leaves value untouched when the delta omits it (static scoring)", () => {
+    const next = applyChallengeDelta(list, "a", 2, undefined);
+    expect(next![0]).toEqual({ id: "a", solve_count: 2, value: 500 });
+  });
+
+  it("returns the same reference when nothing matches (no needless render)", () => {
+    expect(applyChallengeDelta(list, "missing", 9, 9)).toBe(list);
+  });
+
+  it("is a no-op on an unpopulated cache", () => {
+    expect(applyChallengeDelta(undefined, "a", 2, 1)).toBeUndefined();
   });
 });
 

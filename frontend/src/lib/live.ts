@@ -53,10 +53,14 @@ function rosters(cid: string): QueryKey[] {
 // An event absent here is a no-op — the map is the frontend's allowlist, so a
 // future backend event degrades to nothing rather than a wild refetch.
 const ACTIVITY_INVALIDATIONS: Record<string, (cid: string) => QueryKey[]> = {
-  // A solve moves nearly everything: cards (solve_count, dynamic value, the
-  // dialog's solver list), the dashboard widgets, analytics, and standings.
+  // A solve moves the dashboard widgets, analytics and standings — but NOT the
+  // challenge list: that card's public solve_count + value now arrive as a
+  // delta on the ping and are patched in place (#188, applyChallengeDelta), so
+  // the ~N watchers don't each refetch the whole list (the 4:1 refetch storm).
+  // The solver still refreshes its own per-user state (solved/locked) via the
+  // submit mutation. Under a freeze the delta is omitted and use-activity falls
+  // back to refetching ["challenges", cid].
   "challenge.solved": (cid) => [
-    ["challenges", cid],
     ...dashboardData(cid),
     ["analytics", cid],
     ["participants", cid],
@@ -120,6 +124,29 @@ const ACTIVITY_INVALIDATIONS: Record<string, (cid: string) => QueryKey[]> = {
 /** The query keys an activity event invalidates; empty for unknown events. */
 export function keysForActivity(event: string, competitionId: string): QueryKey[] {
   return ACTIVITY_INVALIDATIONS[event]?.(competitionId) ?? [];
+}
+
+/** Patch a cached challenge list in place from a solve delta (#188): update the
+ *  affected challenge's public `solve_count` (and `value`, for dynamic scoring)
+ *  without refetching the whole list. Returns the original reference when
+ *  nothing matches, so React Query skips a needless re-render. Generic over the
+ *  row shape so it stays pure and unit-testable. */
+export function applyChallengeDelta<
+  T extends { id: string; solve_count: number; value: number },
+>(
+  list: T[] | undefined,
+  challengeId: string,
+  solveCount: number,
+  value: number | undefined,
+): T[] | undefined {
+  if (!list) return list;
+  let changed = false;
+  const next = list.map((c) => {
+    if (c.id !== challengeId) return c;
+    changed = true;
+    return { ...c, solve_count: solveCount, ...(value != null ? { value } : {}) };
+  });
+  return changed ? next : list;
 }
 
 export interface ThrottledInvalidator {

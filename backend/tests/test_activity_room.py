@@ -137,6 +137,137 @@ async def test_correct_submission_pings_attempted_then_solved(client):
         first = await ws.receive_json()
         assert first["event"] == "challenge.attempted"
         second = await ws.receive_json()
+        # The solved ping now carries the challenge's new public solve_count +
+        # value as a delta (#188), so watchers patch the card in place instead
+        # of refetching the whole list. Static 100-pt challenge → value stays 100.
+        # Team mode → the solving team_id rides along so a teammate knows to
+        # refetch their shared solved/locked state (public via the solves list).
+        assert second["type"] == "activity"
+        assert second["event"] == "challenge.solved"
+        assert second["challenge_id"] == chal
+        assert second["solve_count"] == 1
+        assert second["value"] == 100
+        assert isinstance(second["team_id"], str) and second["team_id"]
+
+
+async def test_solve_delta_carries_decayed_value_for_dynamic(client):
+    """#188: the delta reflects dynamic re-valuation — a watcher patches the
+    lower worth in place without refetching."""
+    admin = await admin_token(client)
+    comp = (
+        await client.post(
+            "/api/competitions",
+            json={"name": "Dyn", "participation_mode": "team"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    chal = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges",
+            json={
+                "title": "D",
+                "points": 500,
+                "scoring_type": "dynamic",
+                "min_points": 100,
+                "decay": 10,
+                "flag": "flag{d}",
+            },
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    await client.post(
+        f"/api/competitions/{comp}/challenges/{chal}/publish", headers=_auth(admin)
+    )
+    watcher = await _joined_participant(client, comp, "dw@example.com", "DW")
+    actor = await _joined_participant(client, comp, "da@example.com", "DA")
+
+    async with WsTestClient(main.app, f"/ws/activity/{comp}") as ws:
+        await ws.send_json({"token": watcher})
+        assert (await ws.receive_json())["type"] == "auth_ok"
+        await client.post(
+            f"/api/competitions/{comp}/challenges/{chal}/submit",
+            json={"flag": "flag{d}"},
+            headers=_auth(actor),
+        )
+        assert (await ws.receive_json())["event"] == "challenge.attempted"
+        second = await ws.receive_json()
+        assert second["event"] == "challenge.solved"
+        assert second["solve_count"] == 1
+        assert 100 <= second["value"] < 500  # decayed after the first solve, floored
+
+
+async def test_solve_delta_omitted_under_freeze(client):
+    """#188: under a freeze the visible solve_count is per-viewer (staff live vs
+    competitor frozen), which one broadcast can't serve — so the delta is
+    omitted and clients fall back to refetching their own frozen slice."""
+    comp, chal = await _competition_with_challenge(client)
+    admin = await admin_token(client)
+    watcher = await _joined_participant(client, comp, "fw@example.com", "FW")
+    actor = await _joined_participant(client, comp, "fa@example.com", "FA")
+
+    r = await client.post(
+        f"/api/competitions/{comp}/scoreboard/freeze", json={}, headers=_auth(admin)
+    )
+    assert r.status_code == 200
+
+    async with WsTestClient(main.app, f"/ws/activity/{comp}") as ws:
+        await ws.send_json({"token": watcher})
+        assert (await ws.receive_json())["type"] == "auth_ok"
+        await client.post(
+            f"/api/competitions/{comp}/challenges/{chal}/submit",
+            json={"flag": "flag{win}"},
+            headers=_auth(actor),
+        )
+        assert (await ws.receive_json())["event"] == "challenge.attempted"
+        second = await ws.receive_json()
+        assert second == {
+            "type": "activity",
+            "event": "challenge.solved",
+            "challenge_id": chal,
+        }
+
+
+async def test_solve_delta_omitted_for_a_hidden_challenge(client):
+    """#188 visibility gate: an editor can solve a draft/unreleased challenge,
+    but its solve_count/value must not be disclosed to competitors who 404 on
+    it — the delta is omitted (the id ping is pre-existing behaviour)."""
+    admin = await admin_token(client)
+    comp = (
+        await client.post(
+            "/api/competitions",
+            json={
+                "name": "CTF",
+                "participation_mode": "individual",
+                "visibility": "public",
+            },
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    # A DRAFT challenge (never published) — hidden from competitors.
+    chal = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges",
+            json={"title": "Secret", "points": 100, "flag": "flag{draft}"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    # A competitor who joined (Participant → challenge_view → can watch activity).
+    watcher = await _register(client, "hw@example.com")
+    await client.post(f"/api/competitions/{comp}/join", headers=_auth(watcher))
+
+    async with WsTestClient(main.app, f"/ws/activity/{comp}") as ws:
+        await ws.send_json({"token": watcher})
+        assert (await ws.receive_json())["type"] == "auth_ok"
+        # The admin (an editor) solves the draft — allowed for editors.
+        r = await client.post(
+            f"/api/competitions/{comp}/challenges/{chal}/submit",
+            json={"flag": "flag{draft}"},
+            headers=_auth(admin),
+        )
+        assert r.json()["correct"] is True
+        # attempted, then solved — but with NO delta (hidden challenge).
+        assert (await ws.receive_json())["event"] == "challenge.attempted"
+        second = await ws.receive_json()
         assert second == {
             "type": "activity",
             "event": "challenge.solved",

@@ -21,7 +21,14 @@ from typing import Any
 
 from fastapi import WebSocket
 
+from config import settings
+
 logger = logging.getLogger("realtime")
+
+# Cap on concurrent sends within a single broadcast (#177). High enough that a
+# few-hundred-socket room fans out in one wave, bounded so a huge room can't
+# open an unbounded burst of send tasks at once.
+_BROADCAST_CONCURRENCY = 64
 
 
 @dataclass
@@ -126,15 +133,36 @@ class ConnectionManager:
         doesn't receive an echo of the update it just sent. A socket that fails
         to send (client vanished mid-broadcast) is dropped from the room rather
         than failing the broadcast for its neighbours.
+
+        Sends run concurrently (bounded by ``_BROADCAST_CONCURRENCY``), each
+        under ``ws_send_timeout_seconds`` (#177): the old sequential loop let a
+        single slow client — a full TCP send buffer on a congested link — stall
+        delivery to the whole room. A socket that times out is treated as gone,
+        like one that errors.
         """
+        targets = [
+            ws
+            for ws in list(self._rooms.get((room_type, room_id), ()))
+            if ws is not exclude
+        ]
+        if not targets:
+            return
+
+        semaphore = asyncio.Semaphore(_BROADCAST_CONCURRENCY)
         dead: list[WebSocket] = []
-        for websocket in list(self._rooms.get((room_type, room_id), ())):
-            if websocket is exclude:
-                continue
-            try:
-                await websocket.send_json(message)
-            except Exception:  # noqa: BLE001 — any send failure means "gone"
-                dead.append(websocket)
+
+        async def _send(websocket: WebSocket) -> None:
+            async with semaphore:
+                try:
+                    await asyncio.wait_for(
+                        websocket.send_json(message),
+                        timeout=settings.ws_send_timeout_seconds,
+                    )
+                except Exception:  # noqa: BLE001 — timeout (TimeoutError) or send failure = gone
+                    dead.append(websocket)
+
+        await asyncio.gather(*(_send(ws) for ws in targets))
+
         for websocket in dead:
             self.leave(room_type, room_id, websocket)
             logger.debug("dropped dead socket from %s/%s", room_type, room_id)

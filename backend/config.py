@@ -197,6 +197,11 @@ class Settings(BaseSettings):
     # message before the server closes it (the token is never in the URL,
     # ADR-0003).
     ws_auth_timeout_seconds: float = 5.0
+    # Per-socket send timeout for a room broadcast (#177). A slow/stalled client
+    # (full TCP send buffer) must not hold up delivery to the rest of the room:
+    # the send is bounded by this timeout, and a socket that exceeds it is
+    # treated as gone and reaped, exactly like a send that errors.
+    ws_send_timeout_seconds: float = 5.0
     # Grace period before a departed presence member is cleared from a room's
     # "who's here" set (§4.1 "debounced presence clearing"): a brief reconnect
     # inside this window doesn't flicker the presence list.

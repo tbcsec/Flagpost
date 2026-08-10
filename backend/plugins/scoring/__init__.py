@@ -74,4 +74,11 @@ def setup(app, event_bus, db_factory) -> None:
         "scoreboard.frozen",
         "scoreboard.unfrozen",
     ):
-        event_bus.subscribe(_event, broadcast_scoreboard, owner="scoring")
+        # Background lane (#176, ADR-0012): the board is a computed read model,
+        # not durable state, so recompute + fan-out must not block the mutation
+        # (a solve awaited the full recompute + broadcast before responding).
+        # #87 tackles the recompute cost itself; this just gets it off the
+        # request path.
+        event_bus.subscribe(
+            _event, broadcast_scoreboard, owner="scoring", background=True
+        )

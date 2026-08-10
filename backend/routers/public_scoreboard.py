@@ -23,7 +23,7 @@ from schemas.scoreboard import (
     PublicScoreboardOut,
 )
 from utils.public_insights import public_insights, recent_activity
-from utils.scoreboard import compute_scoreboard
+from utils.scoreboard import cached_scoreboard
 
 router = APIRouter(prefix="/api/public", tags=["public"])
 
@@ -77,7 +77,7 @@ async def public_scoreboard(
     competition_id: str, db: AsyncSession = Depends(get_db)
 ) -> dict:
     competition = await _load_public_competition(db, competition_id)
-    board = await compute_scoreboard(db, competition)  # spectator = non-staff
+    board = await cached_scoreboard(db, competition)  # spectator = non-staff
     return {
         **board,
         "name": competition.name,
@@ -132,7 +132,7 @@ async def ctftime_feed(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Feed not found"
         )
-    board = await compute_scoreboard(db, competition)
+    board = await cached_scoreboard(db, competition)
     return {
         "standings": [
             {"pos": e["rank"], "team": e["name"], "score": e["points"]}

@@ -157,6 +157,12 @@ class Settings(BaseSettings):
     # adding latency to steady, well-spaced events.
     activity_coalesce_window_seconds: float = 0.5
 
+    # TTL backstop for the cached scoreboard read model (#87 stage 1). The cache
+    # is cleared on every scoreboard-moving event, so a hit only serves an
+    # unchanged board; this bounds staleness for the rare change that emits no
+    # such event (a new participant joining) to a few seconds.
+    scoreboard_cache_ttl_seconds: float = 5.0
+
     # Hard cap on request body size, enforced by an ASGI middleware before route
     # auth runs — otherwise an oversized body (e.g. to /site-settings/import) is
     # buffered + JSON-decoded before the 401/403, amplifying into transient heap

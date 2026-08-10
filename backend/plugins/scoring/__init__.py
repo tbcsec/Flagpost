@@ -22,7 +22,11 @@ def setup(app, event_bus, db_factory) -> None:
     from realtime import manager, register_room_type
     from routers.public_scoreboard import router as public_router
     from routers.scoreboard import router as scoreboard_router
-    from utils.scoreboard import compute_scoreboard
+    from utils.scoreboard import (
+        cached_scoreboard,
+        compute_scoreboard,
+        invalidate_scoreboard,
+    )
 
     app.include_router(scoreboard_router)
     # The unauthenticated spectator board for public competitions (Phase 9).
@@ -40,7 +44,9 @@ def setup(app, event_bus, db_factory) -> None:
 
     async def snapshot(db, user, competition_id: str) -> dict:
         competition = await db.get(Competition, competition_id)
-        board = await compute_scoreboard(db, competition)
+        # Cached read model (#87): a reconnect herd computes the board once, not
+        # once per joining socket.
+        board = await cached_scoreboard(db, competition)
         return {"type": "scoreboard", **board}
 
     register_room_type("scoreboard", authorize=authorize, snapshot=snapshot)
@@ -61,24 +67,45 @@ def setup(app, event_bus, db_factory) -> None:
             "scoreboard", competition_id, {"type": "scoreboard", **board}
         )
 
-    # A solve changes totals; a hint reveal deducts its cost; a score adjustment
-    # (§5.3 update_score) or an award (create_award / manual awards) adds/removes
-    # points; and a freeze/unfreeze switches between the live and frozen board —
-    # all of these move what the board shows, so each triggers a recompute +
-    # live broadcast (which serves the frozen snapshot while a freeze is on).
-    for _event in (
+    async def invalidate_cache(event_name: str, payload: dict) -> None:
+        competition_id = payload.get("competition_id")
+        if competition_id:
+            invalidate_scoreboard(competition_id)
+
+    # What moves the *scoreboard WS room*: a solve changes totals, a hint reveal
+    # deducts its cost, a score adjustment (§5.3 update_score) or award adds/
+    # removes points, and a freeze/unfreeze switches between the live and frozen
+    # board. These recompute + rebroadcast the shared board.
+    scoring_events = (
         "challenge.solved",
         "challenge.hint_requested",
         "score.adjusted",
         "achievement.awarded",
         "scoreboard.frozen",
         "scoreboard.unfrozen",
-    ):
-        # Background lane (#176, ADR-0012): the board is a computed read model,
-        # not durable state, so recompute + fan-out must not block the mutation
-        # (a solve awaited the full recompute + broadcast before responding).
-        # #87 tackles the recompute cost itself; this just gets it off the
-        # request path.
+    )
+    # What invalidates the cached read model (#87): the scoring events above,
+    # PLUS everything else that changes what a *read* of the board returns — a
+    # subject appearing/disappearing (roster) or a challenge's value/existence
+    # changing. Broader than the broadcast set so a cache hit only ever serves a
+    # board that genuinely hasn't changed; the TTL is only a backstop for the
+    # rare change with no event. Over-invalidating is a cheap dict delete.
+    invalidating_events = scoring_events + (
+        "competition.member_joined",  # individual-mode: a new participant row
+        "team.created",  # team-mode: a new team row
+        "team.deleted",  # a team row removed
+        "challenge.updated",  # points / dynamic-scoring value edit
+        "challenge.deleted",  # its solves stop counting
+    )
+    for _event in invalidating_events:
+        # Foreground (a cheap dict delete, no room check) so the next reader —
+        # and the background broadcast below — recomputes fresh.
+        event_bus.subscribe(_event, invalidate_cache, owner="scoring")
+    for _event in scoring_events:
+        # Recompute + fan out on the background lane (#176, ADR-0012): the board
+        # is a computed read model, not durable state, so this must not block
+        # the mutation (a solve awaited the full recompute + broadcast before
+        # responding).
         event_bus.subscribe(
             _event, broadcast_scoreboard, owner="scoring", background=True
         )

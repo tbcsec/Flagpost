@@ -23,7 +23,7 @@ from models.competition import Competition
 from models.user import User
 from schemas.scoreboard import FreezeRequest, ScoreboardOut
 from utils.event_bus import event_bus
-from utils.scoreboard import compute_scoreboard
+from utils.scoreboard import cached_scoreboard, compute_scoreboard
 
 router = APIRouter(
     prefix="/api/competitions/{competition_id}/scoreboard", tags=["scoreboard"]
@@ -52,7 +52,8 @@ async def get_scoreboard(
     allow_live = live and await user_has_permission(
         db, current_user.id, "scoreboard_freeze", competition_id
     )
-    return await compute_scoreboard(
+    # Cached read model (#87): repeated reads collapse to one compute per window.
+    return await cached_scoreboard(
         db, competition, live=allow_live, bracket=bracket or None
     )
 

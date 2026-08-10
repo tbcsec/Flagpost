@@ -120,3 +120,36 @@ describe("createThrottledInvalidator", () => {
     expect(fired).toHaveLength(1);
   });
 });
+
+describe("createThrottledInvalidator jitter (#175)", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("delays the refetch by random()*jitterMs instead of firing synchronously", () => {
+    const fired: QueryKey[] = [];
+    const inv = createThrottledInvalidator((k) => fired.push(k), ACTIVITY_THROTTLE_MS, {
+      jitterMs: 500,
+      random: () => 0.5, // deterministic: fire at 250ms
+    });
+
+    inv.push([["challenges", CID]]);
+    expect(fired).toHaveLength(0); // not synchronous — jittered
+    vi.advanceTimersByTime(249);
+    expect(fired).toHaveLength(0);
+    vi.advanceTimersByTime(1);
+    expect(fired).toEqual([["challenges", CID]]); // fired at 250ms
+    inv.dispose();
+  });
+
+  it("dispose clears a pending jittered refetch", () => {
+    const fired: QueryKey[] = [];
+    const inv = createThrottledInvalidator((k) => fired.push(k), ACTIVITY_THROTTLE_MS, {
+      jitterMs: 500,
+      random: () => 0.9,
+    });
+    inv.push([["challenges", CID]]);
+    inv.dispose();
+    vi.advanceTimersByTime(500);
+    expect(fired).toHaveLength(0);
+  });
+});

@@ -10,7 +10,12 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
-import { createThrottledInvalidator, keysForActivity } from "@/lib/live";
+import {
+  ACTIVITY_JITTER_MS,
+  ACTIVITY_THROTTLE_MS,
+  createThrottledInvalidator,
+  keysForActivity,
+} from "@/lib/live";
 import { openRoomSocket } from "@/lib/ws";
 import { useAuthStore } from "@/stores/auth";
 
@@ -22,8 +27,12 @@ export function useActivityLive(competitionId: string | null | undefined) {
 
   useEffect(() => {
     if (!isAuthenticated || !competitionId) return;
-    const invalidator = createThrottledInvalidator((key) =>
-      queryClient.invalidateQueries({ queryKey: key }),
+    // Jitter the refetches: a solve pings every client at once, so without it
+    // all N fire their REST refetch simultaneously and hammer the DB pool (#175).
+    const invalidator = createThrottledInvalidator(
+      (key) => queryClient.invalidateQueries({ queryKey: key }),
+      ACTIVITY_THROTTLE_MS,
+      { jitterMs: ACTIVITY_JITTER_MS },
     );
     const socket = openRoomSocket("activity", competitionId, {
       onMessage: (data) => {

@@ -16,6 +16,9 @@ belongs to the tenancy root, not to any one feature module.
 
 from __future__ import annotations
 
+from config import settings
+from utils.coalesce import Coalescer
+
 # Events fanned out to the activity room. A curated allowlist, not "*": frames
 # carry the event name + ids only — never payload bodies — so a frame can't
 # leak anything the member couldn't refetch anyway. Deliberately absent:
@@ -90,18 +93,29 @@ def setup(app, event_bus, db_factory) -> None:
     # tells clients *when* to reload.
     register_room_type("activity", authorize=authorize_activity)
 
-    async def broadcast_activity(event_name: str, payload: dict) -> None:
-        competition_id = payload.get("competition_id")
-        if not competition_id:
-            return
+    async def _send_activity(key, challenge_id) -> None:
+        competition_id, event_name = key
         # Nobody watching → skip building/sending the frame (scoreboard idiom).
         if manager.room_size("activity", competition_id) == 0:
             return
         frame: dict = {"type": "activity", "event": event_name}
         # The one id worth carrying: lets clients target per-challenge caches.
-        if payload.get("challenge_id"):
-            frame["challenge_id"] = payload["challenge_id"]
+        if challenge_id:
+            frame["challenge_id"] = challenge_id
         await manager.broadcast("activity", competition_id, frame)
+
+    # Coalesce per (competition, event) so a burst of same-event pings (mass
+    # solves at the start/end of a competition) collapses to one leading + one
+    # trailing broadcast instead of one per event — each broadcast is an
+    # N-client refetch, so this caps the storm's width under a burst (#175). A
+    # lone, well-spaced event still fires immediately on the leading edge.
+    activity = Coalescer(settings.activity_coalesce_window_seconds, _send_activity)
+
+    async def broadcast_activity(event_name: str, payload: dict) -> None:
+        competition_id = payload.get("competition_id")
+        if not competition_id:
+            return
+        await activity.hit((competition_id, event_name), payload.get("challenge_id"))
 
     for _event in ACTIVITY_EVENTS:
         event_bus.subscribe(_event, broadcast_activity, owner="competitions")

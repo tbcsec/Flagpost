@@ -19,6 +19,13 @@ import type { QueryKey } from "@tanstack/react-query";
  *  one refetch per key per window. */
 export const ACTIVITY_THROTTLE_MS = 2_500;
 
+/** Spread each invalidation's refetch across a random 0..N ms so an event that
+ *  pings every connected client (a solve → all N clients) doesn't fire N
+ *  simultaneous REST requests at the backend (#175). The per-key throttle caps
+ *  *how often* a client refetches; the jitter smooths *when* the whole room
+ *  does, flattening the concurrency spike that saturated the DB pool. */
+export const ACTIVITY_JITTER_MS = 500;
+
 /** The dashboard's data widgets — deliberately excludes the layout key, so a
  *  live ping never touches an in-progress layout edit. */
 function dashboardData(cid: string): QueryKey[] {
@@ -126,18 +133,42 @@ interface Window_ {
   pending: QueryKey | null;
 }
 
+/** Optional tuning. `jitterMs` (default 0) spreads each invalidation across a
+ *  random 0..jitterMs delay so a room-wide ping doesn't fire N simultaneous
+ *  refetches; `random` is injectable so the jitter is deterministic in tests. */
+export interface ThrottleOptions {
+  jitterMs?: number;
+  random?: () => number;
+}
+
 /** Per-key leading+trailing throttle: the first hit invalidates immediately;
  *  further hits inside the window coalesce into one trailing invalidation
  *  (which reopens the window, so a steady stream fires at most once per
- *  `throttleMs` per key and the last event is never lost). */
+ *  `throttleMs` per key and the last event is never lost). With `jitterMs`,
+ *  each invalidation is delayed a random 0..jitterMs to flatten the room-wide
+ *  refetch spike (#175). */
 export function createThrottledInvalidator(
   invalidate: (key: QueryKey) => void,
   throttleMs: number = ACTIVITY_THROTTLE_MS,
+  { jitterMs = 0, random = Math.random }: ThrottleOptions = {},
 ): ThrottledInvalidator {
   const windows = new Map<string, Window_>();
+  const jitterTimers = new Set<ReturnType<typeof setTimeout>>();
+
+  function fire(key: QueryKey): void {
+    if (jitterMs <= 0) {
+      invalidate(key);
+      return;
+    }
+    const t = setTimeout(() => {
+      jitterTimers.delete(t);
+      invalidate(key);
+    }, random() * jitterMs);
+    jitterTimers.add(t);
+  }
 
   function open(id: string, key: QueryKey): void {
-    invalidate(key);
+    fire(key);
     windows.set(id, {
       timer: setTimeout(() => close(id), throttleMs),
       pending: null,
@@ -161,6 +192,8 @@ export function createThrottledInvalidator(
     },
     dispose(): void {
       for (const window of windows.values()) clearTimeout(window.timer);
+      for (const t of jitterTimers) clearTimeout(t);
+      jitterTimers.clear();
       windows.clear();
     },
   };

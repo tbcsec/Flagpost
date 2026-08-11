@@ -177,6 +177,63 @@ class PublicProviderOut(BaseModel):
     slug: str
     name: str
     kind: str
+    # Well-known-IdP marker ("google" / "microsoft") so the login page can draw
+    # the right button art. Derived server-side from the stored issuer at read
+    # time (utils/provider_presets.brand_for_provider, ADR-0024) — it reveals
+    # nothing the branded button itself wouldn't.
+    brand: str | None = None
+
+
+class PresetParamOut(BaseModel):
+    """One admin-supplied input a preset needs to resolve its issuer template
+    (Microsoft's tenant id). ``pattern`` is a client-side hint only — the
+    resolved issuer still goes through the normal write-time OIDC validation."""
+
+    key: str
+    label: str
+    placeholder: str
+    pattern: str
+    # Canonicalization applied to the value before it is substituted into the
+    # issuer template. Entra lowercases the tenant GUID in its discovery
+    # document and id_token ``iss``, and the issuer-equality checks in
+    # ``utils/oidc.py`` are case-sensitive — an uppercase paste would save
+    # fine and then fail at first sign-in, the exact silent misconfiguration
+    # presets exist to prevent.
+    normalize: Literal["lowercase"] | None = None
+    help: str
+
+
+class ProviderPresetOut(BaseModel):
+    """A built-in provider preset (ADR-0024): form-prefill for the admin
+    "add provider" flow, served from ``utils/provider_presets``. Configuration
+    defaults only, never credentials — each install registers its own upstream
+    OAuth app."""
+
+    id: str
+    name: str
+    kind: str
+    # Exactly one of the two is set: a fixed issuer, or a template whose
+    # ``{key}`` placeholders are filled from ``params``.
+    issuer: str | None = None
+    issuer_template: str | None = None
+    params: list[PresetParamOut] = Field(default_factory=list)
+    scopes: str
+    default_slug: str
+    posture: str
+    setup_url: str
+    notes: str
+
+    @model_validator(mode="after")
+    def _issuer_xor_template(self) -> "ProviderPresetOut":
+        # Enforce the docstring's contract: both set is ambiguous, neither set
+        # is a dead setup card (the frontend gates the form on a resolved
+        # issuer). A bad future catalog entry should fail at the route, loudly,
+        # not ship as a button that does nothing.
+        if (self.issuer is None) == (self.issuer_template is None):
+            raise ValueError(
+                "exactly one of issuer / issuer_template must be set"
+            )
+        return self
 
 
 class ProviderOut(BaseModel):

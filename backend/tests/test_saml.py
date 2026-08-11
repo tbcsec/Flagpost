@@ -273,7 +273,9 @@ async def test_saml_appears_in_the_unified_provider_list(client):
     admin = await admin_token(client)
     await _create_provider(client, admin)
     listed = (await client.get("/api/auth/providers")).json()
-    assert {"slug": SLUG, "name": "Campus IdP", "kind": "saml"} in listed
+    # brand is None for every SAML provider — it's an OIDC-issuer marker
+    # (utils/provider_presets.brand_for_provider, ADR-0024).
+    assert {"slug": SLUG, "name": "Campus IdP", "kind": "saml", "brand": None} in listed
 
 
 async def test_valid_assertion_jit_provisions_a_user(client):

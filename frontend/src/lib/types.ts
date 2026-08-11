@@ -155,6 +155,10 @@ export interface AuthProviderPublic {
   name: string;
   /** Which transport — drives the login URL `/api/auth/{kind}/{slug}/login`. */
   kind: string;
+  /** A well-known upstream ("google" | "microsoft"), derived server-side from
+   *  the stored issuer, so the login button can carry the official brand mark.
+   *  Null for everything else — the button then renders exactly as before. */
+  brand: string | null;
 }
 
 /** Admin view of a provider. The client secret is write-only: only whether one
@@ -181,6 +185,44 @@ export interface AuthProvider {
    *  since it depends on PUBLIC_BASE_URL — a mismatch is the commonest setup
    *  failure. Empty for non-OIDC kinds. */
   redirect_uri: string;
+}
+
+/** An input a provider preset needs from the admin before its issuer template
+ *  can be resolved (e.g. Microsoft's tenant GUID). `pattern` is a regex the
+ *  value must match; `help` explains where to find it. */
+export interface PresetParam {
+  key: string;
+  label: string;
+  placeholder: string;
+  pattern: string;
+  /** Canonicalization applied before the value is substituted into the issuer
+   *  template. Entra lowercases the tenant GUID in its discovery doc and `iss`
+   *  claim, and the backend's issuer checks are case-sensitive — so an
+   *  uppercase paste must be normalized, not saved verbatim to fail at first
+   *  sign-in. */
+  normalize?: "lowercase" | null;
+  help: string;
+}
+
+/** A built-in one-click setup recipe for a well-known IdP (Google, Microsoft
+ *  Entra), served by GET /api/admin/auth-providers/presets. Purely form-prefill
+ *  data — creation still flows through the ordinary provider POST, so a preset
+ *  is not a write path. Exactly one of `issuer` / `issuer_template` is set:
+ *  a template carries `{key}` placeholders resolved from `params`. */
+export interface ProviderPreset {
+  id: string;
+  name: string;
+  kind: string;
+  issuer: string | null;
+  issuer_template: string | null;
+  params: PresetParam[];
+  scopes: string;
+  default_slug: string;
+  posture: string;
+  /** Where the admin registers the upstream OAuth app (console/portal URL). */
+  setup_url: string;
+  /** 1–2 sentences of guidance shown on the quick-setup card. */
+  notes: string;
 }
 
 /** Support tickets (§4.4, ROADMAP #18). */

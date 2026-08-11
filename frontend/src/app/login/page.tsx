@@ -6,6 +6,7 @@ import { Suspense, useState } from "react";
 
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
+import { SsoBrandIcon } from "@/components/brand/sso-brand-icons";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -108,8 +109,11 @@ function LoginForm() {
                 <a
                   key={p.slug}
                   href={p.login_url}
-                  className="flex w-full items-center justify-center rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground transition-colors hover:border-primary/50 hover:bg-accent"
+                  className="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground transition-colors hover:border-primary/50 hover:bg-accent"
                 >
+                  {/* Renders null for an unbranded provider, so those buttons
+                      keep their exact previous appearance (gap needs 2 children). */}
+                  <SsoBrandIcon brand={p.brand} className="shrink-0" />
                   Sign in with {p.name}
                 </a>
               ))}

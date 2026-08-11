@@ -23,6 +23,7 @@ from schemas.auth_providers import (
     PublicProviderOut,
     provider_config_or_none,
 )
+from utils.provider_presets import brand_for_provider
 
 logger = logging.getLogger("auth-providers")
 
@@ -52,6 +53,13 @@ async def public_providers(
             )
             continue
         providers.append(
-            PublicProviderOut(slug=provider.slug, name=provider.name, kind=provider.kind)
+            PublicProviderOut(
+                slug=provider.slug,
+                name=provider.name,
+                kind=provider.kind,
+                # Derived from the stored issuer at read time, never stored —
+                # see brand_for_provider (ADR-0024).
+                brand=brand_for_provider(provider.kind, provider.config),
+            )
         )
     return providers

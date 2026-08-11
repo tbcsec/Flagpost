@@ -173,6 +173,24 @@ export function useAdminAuthProviders() {
   });
 }
 
+/** Built-in provider presets (Google, Microsoft Entra) for the admin panel's
+ *  quick-setup cards. The catalog is static per build — cache it for the
+ *  session rather than refetching on focus like live data. An error just hides
+ *  the cards; the panel degrades to the plain "Add provider" flow. */
+export function useProviderPresets() {
+  const isAuthenticated = useAuthStore((s) => s.status === "authenticated");
+  return useQuery({
+    // Deliberately *outside* the ["auth-providers"] prefix that
+    // useInvalidateProviders sweeps on every provider mutation — the catalog
+    // is static per build, so an edit must not blow away its Infinity cache.
+    queryKey: ["auth-provider-presets"],
+    queryFn: authProvidersApi.presets,
+    enabled: isAuthenticated,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
 function useInvalidateProviders() {
   const queryClient = useQueryClient();
   return () => queryClient.invalidateQueries({ queryKey: ["auth-providers"] });

@@ -17,6 +17,7 @@
 
 import { useState } from "react";
 
+import { SsoBrandIcon } from "@/components/brand/sso-brand-icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,9 +36,15 @@ import {
   useAdminAuthProviders,
   useCreateAuthProvider,
   useDeleteAuthProvider,
+  useProviderPresets,
   useUpdateAuthProvider,
 } from "@/lib/hooks/use-users";
-import type { AuthProvider } from "@/lib/types";
+import {
+  presetToFormPrefill,
+  setupLinkLabel,
+  validatePresetParam,
+} from "@/lib/sso-presets";
+import type { AuthProvider, ProviderPreset } from "@/lib/types";
 import { toast } from "@/stores/toast";
 
 type Kind = "oidc" | "saml" | "ldap";
@@ -139,15 +146,20 @@ const TEXTAREA_CLASS =
 
 function ProviderForm({
   editing,
+  prefill = null,
   onDone,
 }: {
   editing: AuthProvider | null;
+  /** Seeds the create form from a quick-setup preset (presetToFormPrefill).
+   *  Same FormState shape, so the admin edits and submits exactly as if they'd
+   *  typed it — a preset is prefill, not a second write path. */
+  prefill?: Partial<FormState> | null;
   onDone: () => void;
 }) {
   const create = useCreateAuthProvider();
   const update = useUpdateAuthProvider();
   const [form, setForm] = useState<FormState>(
-    editing ? fromEditing(editing) : EMPTY,
+    editing ? fromEditing(editing) : prefill ? { ...EMPTY, ...prefill } : EMPTY,
   );
   const pending = create.isPending || update.isPending;
   const error = (create.error ?? update.error) as Error | null;
@@ -650,13 +662,101 @@ function ProviderForm({
   );
 }
 
+/** One quick-setup card (#preset). Google opens the prefilled form in one
+ *  click; Microsoft first collects its tenant GUID inline (its issuer is a
+ *  per-tenant template), then opens the form. Either way the admin still
+ *  pastes client ID + secret into the ordinary form and can edit anything. */
+function PresetCard({
+  preset,
+  onUse,
+}: {
+  preset: ProviderPreset;
+  onUse: (prefill: Partial<FormState>) => void;
+}) {
+  const [values, setValues] = useState<Record<string, string>>({});
+  // Param errors only show after a submit attempt — not while typing a GUID.
+  const [attempted, setAttempted] = useState(false);
+  const [collecting, setCollecting] = useState(false);
+
+  function start() {
+    if (preset.params.length > 0 && !collecting) {
+      setCollecting(true);
+      return;
+    }
+    const prefill = presetToFormPrefill(preset, values);
+    if (!prefill) {
+      setAttempted(true);
+      return;
+    }
+    onUse(prefill);
+  }
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-3 py-4">
+        <div className="flex items-center gap-2">
+          <SsoBrandIcon brand={preset.id} className="shrink-0" />
+          <span className="font-medium">{preset.name}</span>
+        </div>
+        <p className="text-xs text-muted-foreground">{preset.notes}</p>
+
+        {collecting &&
+          preset.params.map((param) => {
+            const value = values[param.key] ?? "";
+            const error = validatePresetParam(param, value);
+            const id = `preset-${preset.id}-${param.key}`;
+            return (
+              <div key={param.key} className="grid gap-2">
+                <Label htmlFor={id}>{param.label}</Label>
+                <Input
+                  id={id}
+                  value={value}
+                  onChange={(e) =>
+                    setValues((v) => ({ ...v, [param.key]: e.target.value }))
+                  }
+                  placeholder={param.placeholder}
+                  autoComplete="off"
+                />
+                {attempted && error ? (
+                  <p role="alert" className="text-xs text-destructive">
+                    {error}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">{param.help}</p>
+                )}
+              </div>
+            );
+          })}
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" variant="outline" size="sm" onClick={start}>
+            {collecting ? "Continue" : `Set up ${preset.name}`}
+          </Button>
+          <a
+            href={preset.setup_url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-muted-foreground hover:text-primary hover:underline"
+          >
+            {setupLinkLabel(preset)} ↗
+          </a>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function AuthProvidersPanel() {
   const { data: providers, isLoading, isError, error } = useAdminAuthProviders();
+  // Degrades gracefully: on error/loading `presets` is undefined and the
+  // quick-setup cards simply don't render — the panel works exactly as before.
+  const { data: presets } = useProviderPresets();
   const update = useUpdateAuthProvider();
   const remove = useDeleteAuthProvider();
   const confirm = useConfirm();
   const [editing, setEditing] = useState<AuthProvider | null>(null);
   const [adding, setAdding] = useState(false);
+  const [prefill, setPrefill] = useState<Partial<FormState> | null>(null);
 
   async function onDelete(provider: AuthProvider) {
     if (
@@ -699,12 +799,39 @@ export function AuthProvidersPanel() {
         )}
       </div>
 
+      {/* Quick set up — hidden while any form is open, just like the Add
+          provider button. Presets only prefill that same form. */}
+      {!adding && !editing && presets && presets.length > 0 && (
+        <div className="grid gap-2">
+          <h3 className="text-sm font-semibold">Quick set up</h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {presets.map((preset) => (
+              <PresetCard
+                key={preset.id}
+                preset={preset}
+                onUse={(seed) => {
+                  setPrefill(seed);
+                  setAdding(true);
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {(adding || editing) && (
         <ProviderForm
+          // Remount on target change so the form's useState initializer re-runs
+          // — otherwise switching from a preset-prefilled create to Edit (or
+          // Edit A to Edit B) keeps the old values under the new header and
+          // would PATCH them onto the wrong provider.
+          key={editing ? `edit-${editing.id}` : "create"}
           editing={editing}
+          prefill={prefill}
           onDone={() => {
             setAdding(false);
             setEditing(null);
+            setPrefill(null);
           }}
         />
       )}
@@ -769,7 +896,17 @@ export function AuthProvidersPanel() {
                   >
                     {p.enabled ? "Disable" : "Enable"}
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setEditing(p)}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      // Clear any half-started create/preset flow so a stale
+                      // prefill can't linger behind the edit form.
+                      setAdding(false);
+                      setPrefill(null);
+                      setEditing(p);
+                    }}
+                  >
                     Edit
                   </Button>
                   <Button

@@ -91,7 +91,12 @@ def _dash(cid):
 
 def keys_for_activity(event: str, cid: str) -> list[tuple]:
     if event == "challenge.solved":
-        return [("challenges", cid), *_dash(cid), ("analytics", cid), ("participants", cid)]
+        # #188: a solve carries a {solve_count, value} delta that the client
+        # patches into the cached challenge card in place — it no longer refetches
+        # the whole ["challenges"] list. (In team mode a teammate would refetch;
+        # this harness runs individual mode, so no client is a teammate.) The
+        # dashboard/analytics/standings keys are still invalidated.
+        return [*_dash(cid), ("analytics", cid), ("participants", cid)]
     if event == "challenge.attempted":
         return [("dashboard", cid, "stats"), ("dashboard", cid, "challenge-health"), ("analytics", cid)]
     if event == "competition.member_joined":

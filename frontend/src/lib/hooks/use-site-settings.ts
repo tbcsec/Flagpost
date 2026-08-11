@@ -28,6 +28,7 @@ export const FALLBACK_SETTINGS: SiteSettings = {
   platform_name: DEFAULT_PLATFORM_NAME,
   default_palette: DEFAULT_PALETTE,
   accent: DEFAULT_ACCENT,
+  background_style: "none",
   registration_open: true,
   logo_url: null,
   show_wordmark: true,
@@ -62,6 +63,7 @@ export function useUpdateSiteSettings() {
       platform_name: string;
       default_palette: string;
       accent: string;
+      background_style: string;
       show_wordmark: boolean;
     }) => siteSettingsApi.update(input),
     // The admin response is a superset of the public shape (adds updated_at);

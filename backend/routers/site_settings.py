@@ -82,6 +82,10 @@ async def update_site_settings(
     settings.platform_name = body.platform_name
     settings.default_palette = body.default_palette
     settings.accent = body.accent
+    # Omitted / null = leave unchanged (see SiteSettingsUpdate) — only an
+    # explicit value (including "none") writes.
+    if body.background_style is not None:
+        settings.background_style = body.background_style
     settings.show_wordmark = body.show_wordmark
     await db.commit()
     await db.refresh(settings)
@@ -93,6 +97,7 @@ async def update_site_settings(
             "platform_name": settings.platform_name,
             "default_palette": settings.default_palette,
             "accent": settings.accent,
+            "background_style": settings.background_style,
         },
     )
     return settings

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { RouteProgress } from "@/components/app/route-progress";
 import { SetupGuard } from "@/components/setup/setup-guard";
+import { SiteBackground } from "@/components/theme/site-background";
 import { ThemeApplier } from "@/components/theme/theme-applier";
 import { ConfirmProvider } from "@/components/ui/confirm";
 import { Toaster } from "@/components/ui/toaster";
@@ -41,6 +42,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <SessionRestorer />
       <ThemeApplier />
+      <SiteBackground />
       <SetupGuard />
       <RouteProgress />
       <ConfirmProvider>{children}</ConfirmProvider>

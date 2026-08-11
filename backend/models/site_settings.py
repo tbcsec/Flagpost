@@ -53,6 +53,14 @@ class SiteSettings(Base, TimestampMixin):
     accent: Mapped[str] = mapped_column(
         String, nullable=False, default=DEFAULT_ACCENT
     )
+    # Front-door animated background (#195) — a slug the frontend maps to a
+    # canvas renderer ("none" | "aurora" | "gradient" | "constellation"). Only
+    # shown on the out-of-shell pages (login/register/setup/public) and only on
+    # dark palettes; "none" (the default) is today's flat ground. A third
+    # theming axis alongside palette + accent (ADR-0011, site-wide).
+    background_style: Mapped[str] = mapped_column(
+        String, nullable=False, default="none", server_default="none"
+    )
     # --- Branding (Admin → Site settings → Appearance) ---
     # A custom organisation logo that replaces the built-in Flagpost mark in the
     # lockup (sidebar / login / register). Stored as a blob **in the DB**, not in

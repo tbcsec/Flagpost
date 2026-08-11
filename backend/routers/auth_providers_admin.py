@@ -34,6 +34,7 @@ from schemas.auth_providers import (
     OidcConfig,
     ProviderCreate,
     ProviderOut,
+    ProviderPresetOut,
     ProviderUpdate,
     parse_provider_config,
 )
@@ -41,6 +42,7 @@ from routers.oidc import redirect_uri_for
 from utils import oidc as oidc_utils
 from utils.event_bus import event_bus
 from utils.oidc import OidcError
+from utils.provider_presets import PROVIDER_PRESETS
 
 router = APIRouter(prefix="/api/admin/auth-providers", tags=["auth-providers-admin"])
 
@@ -153,6 +155,18 @@ async def list_providers(
 ) -> list[ProviderOut]:
     rows = await db.scalars(select(IdentityProvider).order_by(IdentityProvider.name))
     return [_to_out(p, request) for p in rows]
+
+
+@router.get("/presets", response_model=list[ProviderPresetOut])
+async def list_provider_presets(
+    current_user: User = Depends(require_permission("manage_auth_providers")),
+) -> list[ProviderPresetOut]:
+    """Built-in presets (ADR-0024) — form-prefill for the create form, never a
+    write path of its own; creation still goes through ``POST`` above, so a
+    preset can't skip config validation or the invariants. Registered before
+    the ``/{provider_id}`` routes as ordering hygiene, though today's dynamic
+    siblings are PATCH/DELETE only, so this GET can't actually be shadowed."""
+    return [ProviderPresetOut.model_validate(p) for p in PROVIDER_PRESETS]
 
 
 @router.post("", response_model=ProviderOut, status_code=status.HTTP_201_CREATED)

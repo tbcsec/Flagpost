@@ -10,6 +10,7 @@ import { useAuthStore } from "@/stores/auth";
 import type {
   AuthProvider,
   AuthProviderPublic,
+  ProviderPreset,
   Announcement,
   AnnouncementCreate,
   AppNotification,
@@ -396,6 +397,11 @@ export const authProvidersApi = {
     }),
   remove: (id: string) =>
     apiFetch<void>(`${authProvidersApi.base}/${id}`, { method: "DELETE" }),
+  // Built-in quick-setup recipes (Google, Microsoft Entra). Read-only and
+  // static per build — a preset only prefills the create form; the write path
+  // stays the ordinary `create` above.
+  presets: () =>
+    apiFetch<ProviderPreset[]>(`${authProvidersApi.base}/presets`),
 };
 
 export const competitionsApi = {

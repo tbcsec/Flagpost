@@ -57,3 +57,4 @@ Status is one of:
 | [0021](0021-oidc-identity-provider-framework.md) | External identity via OIDC, with local login as break-glass | Accepted |
 | [0022](0022-saml-ldap-identity-providers.md) | SAML and LDAP identity providers — generalizing the provider model | Accepted |
 | [0023](0023-ai-assistant-provider-and-execution-model.md) | AI assistant provider integration and execution model | Accepted |
+| [0024](0024-builtin-sso-provider-presets.md) | Built-in SSO provider presets — configuration, never credentials | Accepted |

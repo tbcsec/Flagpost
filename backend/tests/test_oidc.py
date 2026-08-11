@@ -230,8 +230,9 @@ async def test_only_enabled_providers_are_public(client, idp):
 
     listed = (await client.get("/api/auth/providers")).json()
     assert [p["slug"] for p in listed] == ["on"]
-    # The public list exposes no issuer/client_id — just enough for a button.
-    assert set(listed[0]) == {"slug", "name", "kind"}
+    # The public list exposes no issuer/client_id — just enough for a button
+    # (`brand` is a derived well-known-IdP marker, not config; ADR-0024).
+    assert set(listed[0]) == {"slug", "name", "kind", "brand"}
     assert listed[0]["kind"] == "oidc"
 
 

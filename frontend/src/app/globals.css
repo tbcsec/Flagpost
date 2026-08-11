@@ -482,6 +482,18 @@
   }
 }
 
+/* ---- Front-door animated background (#195) ---------------------------------
+ *
+ * <SiteBackground> adds this class to <html> while an animated background is
+ * active on a front-door page. It makes the page ground transparent so the
+ * fixed z-index:-1 canvas shows through — the canvas repaints the palette base
+ * itself, so surfaces still read correctly, and only these out-of-shell pages
+ * are ever affected. Removed on unmount, so the app shell is untouched. */
+html.fp-animated-bg,
+html.fp-animated-bg body {
+  background-color: transparent;
+}
+
 /* ---- Rich-text / collab editor lists (#79) --------------------------------
  *
  * TipTap's bulletList/orderedList toggle correctly inserts real <ul>/<ol>

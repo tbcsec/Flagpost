@@ -986,6 +986,10 @@ export interface SiteSettings {
   platform_name: string;
   default_palette: string;
   accent: string;
+  // Front-door animated background slug (#195): "none" (flat), "aurora",
+  // "gradient", or "constellation". Public so the login/register/public pages
+  // render it before there's a session.
+  background_style: string;
   registration_open: boolean;
   // Path to the custom org logo (absolutized to the API origin by the hook), or
   // null to use the built-in Flagpost mark.

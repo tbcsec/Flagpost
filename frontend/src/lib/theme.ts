@@ -80,6 +80,26 @@ export const ACCENTS: AccentPreset[] = [
   { id: "gold", label: "Gold", description: "Bright amber", hex: "#E0A500" },
 ];
 
+export interface BackgroundPreset {
+  id: string;
+  label: string;
+  description: string;
+  // Whether it responds to the cursor — surfaced on the picker card.
+  interactive: boolean;
+}
+
+// The front-door animated backgrounds (#195) — a third theming axis alongside
+// palette + accent, shown only on the out-of-shell pages and only on dark
+// palettes. "none" (the default) is today's flat ground. Each id maps to a
+// renderer in lib/backgrounds.ts; keep the two in sync.
+export const DEFAULT_BACKGROUND = "none";
+export const BACKGROUNDS: BackgroundPreset[] = [
+  { id: "none", label: "None", description: "Flat brand ground (default)", interactive: false },
+  { id: "aurora", label: "Aurora", description: "Soft ribbons of light drifting behind the card", interactive: false },
+  { id: "gradient", label: "Gradient wash", description: "A slow, calm colour field from your accent", interactive: false },
+  { id: "constellation", label: "Constellation", description: "A living particle network that reacts to the cursor", interactive: true },
+];
+
 const ACCENTS_BY_ID = new Map(ACCENTS.map((a) => [a.id, a]));
 const PALETTE_IDS = new Set(PALETTES.map((p) => p.id));
 

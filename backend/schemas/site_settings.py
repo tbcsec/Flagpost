@@ -18,6 +18,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 PALETTE_PATTERN = r"^[a-z][a-z0-9-]{1,31}$"
 # An accent is either a preset slug or a #RRGGBB custom hex.
 ACCENT_PATTERN = r"^([a-z][a-z0-9-]{1,31}|#[0-9a-fA-F]{6})$"
+# A background style is a slug (matches a frontend renderer id). Same philosophy
+# as palette/accent: the frontend owns the actual set and renders "none" for
+# anything it doesn't know, so the guard here is only against injection.
+BACKGROUND_PATTERN = r"^[a-z][a-z0-9-]{1,31}$"
 
 # A bare domain: labels of 1-63 chars (no leading/trailing hyphen), at least one
 # dot. Deliberately rejects "@", a "://" scheme, and a "*." wildcard so a
@@ -44,6 +48,9 @@ class SiteSettingsOut(BaseModel):
     platform_name: str
     default_palette: str
     accent: str
+    # Front-door animated background slug (#195); "none" = flat. Public so the
+    # login/register/public pages can render it before there's a session.
+    background_style: str = "none"
     registration_open: bool
     # Public path to the custom org logo (with a cache-busting version), or None
     # when the built-in Flagpost mark should be used. Needed pre-auth so the
@@ -77,6 +84,12 @@ class SiteSettingsUpdate(BaseModel):
     platform_name: str = Field(min_length=1, max_length=64)
     default_palette: str = Field(pattern=PALETTE_PATTERN)
     accent: str = Field(pattern=ACCENT_PATTERN)
+    # **Omitted / null = leave unchanged** — the update_checks_enabled
+    # precedent, not `= "none"`. This PUT replaces the whole object, so a
+    # defaulted value would let a scripted client that changes the platform
+    # name and omits this field silently clear a configured background. An
+    # explicit "none" resets it; the Appearance form always sends it.
+    background_style: str | None = Field(default=None, pattern=BACKGROUND_PATTERN)
     show_wordmark: bool = True
 
 

@@ -28,6 +28,7 @@ async def test_public_read_returns_defaults_without_auth(client):
         "platform_name": DEFAULT_PLATFORM_NAME,
         "default_palette": DEFAULT_PALETTE,
         "accent": DEFAULT_ACCENT,
+        "background_style": "none",
         "registration_open": True,
         "logo_url": None,
         "show_wordmark": True,
@@ -61,6 +62,7 @@ async def test_admin_update_round_trips(client):
         "platform_name": "ACME CTF",
         "default_palette": "eclipse",
         "accent": "#A855F7",
+        "background_style": "none",
         "registration_open": True,
         "logo_url": None,
         "show_wordmark": True,
@@ -70,6 +72,61 @@ async def test_admin_update_round_trips(client):
         "email_required": False,
         "email_verification_enabled": False,
     }
+
+
+async def test_background_style_round_trips_and_is_public(client):
+    admin = await admin_token(client)
+    resp = await client.put(
+        "/api/site-settings",
+        json={
+            "platform_name": "ACME",
+            "default_palette": "harbor",
+            "accent": "signal",
+            "background_style": "aurora",
+        },
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["background_style"] == "aurora"
+    # Public read carries it (front-door pages render it pre-auth).
+    public = (await client.get("/api/site-settings")).json()
+    assert public["background_style"] == "aurora"
+
+
+async def test_background_style_omitted_leaves_it_unchanged(client):
+    # Omit = leave unchanged (the update_checks_enabled precedent): a scripted
+    # client changing the platform name must not silently clear a configured
+    # background. Resetting requires an explicit "none".
+    admin = await admin_token(client)
+    await client.put(
+        "/api/site-settings",
+        json={"platform_name": "A", "default_palette": "harbor", "accent": "signal", "background_style": "aurora"},
+        headers=_auth(admin),
+    )
+    await client.put(
+        "/api/site-settings",
+        json={"platform_name": "B", "default_palette": "harbor", "accent": "signal"},
+        headers=_auth(admin),
+    )
+    assert (await client.get("/api/site-settings")).json()["background_style"] == "aurora"
+
+    await client.put(
+        "/api/site-settings",
+        json={"platform_name": "B", "default_palette": "harbor", "accent": "signal", "background_style": "none"},
+        headers=_auth(admin),
+    )
+    assert (await client.get("/api/site-settings")).json()["background_style"] == "none"
+
+
+async def test_update_rejects_malformed_background_style(client):
+    admin = await admin_token(client)
+    for bad in ("Aurora", "aurora; }", "url(x)", "a" * 40):
+        resp = await client.put(
+            "/api/site-settings",
+            json={"platform_name": "X", "default_palette": "harbor", "accent": "signal", "background_style": bad},
+            headers=_auth(admin),
+        )
+        assert resp.status_code == 422, (bad, resp.text)
 
 
 async def test_update_requires_authentication(client):

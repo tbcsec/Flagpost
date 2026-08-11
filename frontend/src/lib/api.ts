@@ -881,6 +881,7 @@ export const siteSettingsApi = {
     platform_name: string;
     default_palette: string;
     accent: string;
+    background_style: string;
     show_wordmark: boolean;
   }) =>
     apiFetch<SiteSettingsAdmin>("/api/site-settings", {

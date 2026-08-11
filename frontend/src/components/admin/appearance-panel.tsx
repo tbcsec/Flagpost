@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SkeletonCards } from "@/components/ui/skeleton";
 import { FlagpostMark } from "@/components/brand/flagpost-mark";
+import { BackgroundPreview } from "@/components/theme/site-background";
 import {
   FALLBACK_SETTINGS,
   useDeleteLogo,
@@ -18,10 +19,12 @@ import {
 } from "@/lib/hooks/use-site-settings";
 import {
   ACCENTS,
+  BACKGROUNDS,
   PALETTES,
   accentSwatchHex,
   applyTheme,
   isCustomAccent,
+  paletteMode,
 } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
@@ -48,6 +51,7 @@ export function AppearancePanel({ active }: { active: boolean }) {
   const [platformName, setPlatformName] = useState(saved.platform_name);
   const [palette, setPalette] = useState(saved.default_palette);
   const [accent, setAccent] = useState(saved.accent);
+  const [background, setBackground] = useState(saved.background_style);
   const [showWordmark, setShowWordmark] = useState(saved.show_wordmark);
 
   // Seed the form once the settings load (they arrive async).
@@ -58,6 +62,7 @@ export function AppearancePanel({ active }: { active: boolean }) {
       setPlatformName(data.platform_name);
       setPalette(data.default_palette);
       setAccent(data.accent);
+      setBackground(data.background_style);
       setShowWordmark(data.show_wordmark);
     }
   }, [data]);
@@ -100,6 +105,7 @@ export function AppearancePanel({ active }: { active: boolean }) {
     platformName !== saved.platform_name ||
     palette !== saved.default_palette ||
     accent !== saved.accent ||
+    background !== saved.background_style ||
     showWordmark !== saved.show_wordmark;
 
   function onSave() {
@@ -108,6 +114,7 @@ export function AppearancePanel({ active }: { active: boolean }) {
         platform_name: platformName.trim(),
         default_palette: palette,
         accent,
+        background_style: background,
         show_wordmark: showWordmark,
       },
       {
@@ -259,6 +266,48 @@ export function AppearancePanel({ active }: { active: boolean }) {
                 </span>
               </label>
             </div>
+          </section>
+
+          <section className="grid gap-3">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Sign-in background
+            </h3>
+            <p className="max-w-prose text-xs text-muted-foreground">
+              An animated backdrop for the sign-in, registration and public
+              pages. It uses your accent colour, and only shows on dark palettes.
+            </p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {BACKGROUNDS.map((b) => (
+                <button
+                  key={b.id}
+                  onClick={() => setBackground(b.id)}
+                  className={cn(
+                    "grid gap-2 rounded-lg border p-3 text-left transition-colors",
+                    background === b.id ? "border-primary ring-1 ring-primary" : "border-border hover:border-primary/40",
+                  )}
+                >
+                  <BackgroundPreview
+                    style={b.id}
+                    animate={active}
+                    refreshKey={`${palette}:${accent}`}
+                    className="h-16 w-full overflow-hidden rounded-md border border-border"
+                  />
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-sm font-semibold">{b.label}</span>
+                    {background === b.id && <CheckIcon />}
+                  </div>
+                  <span className="text-[11px] leading-snug text-muted-foreground">
+                    {b.interactive ? "Reacts to the cursor" : b.description}
+                  </span>
+                </button>
+              ))}
+            </div>
+            {paletteMode(palette) === "light" && background !== "none" && (
+              <p className="text-xs text-warning">
+                The current palette is light, so this background won&apos;t show —
+                animated backgrounds are shown on dark palettes only.
+              </p>
+            )}
           </section>
 
           <section className="grid gap-3">

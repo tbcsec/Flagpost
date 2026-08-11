@@ -24,6 +24,7 @@ from auth.seed import (  # noqa: E402
 )
 from db import Base, SessionLocal, engine  # noqa: E402
 import models  # noqa: E402,F401  (populates Base.metadata)
+from utils.coalesce import reset_all_coalescers  # noqa: E402
 from utils.event_bus import event_bus  # noqa: E402
 
 
@@ -45,6 +46,9 @@ async def _create_schema():
     # automation engine on competition.created) *before* dropping the schema, so
     # a leaked task never runs against the next test's fresh DB and flakes it.
     await event_bus.wait_for_background()
+    # Likewise cancel any pending activity-coalescer windows (#175/#188), so a
+    # trailing broadcast armed in this test can't fire during the next.
+    reset_all_coalescers()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
 

@@ -97,11 +97,12 @@ def setup(app, event_bus, db_factory) -> None:
     # tells clients *when* to reload.
     register_room_type("activity", authorize=authorize_activity)
 
-    async def _send_activity(key, team_id=None) -> None:
+    async def _send_activity(key, team_id=None) -> bool:
         competition_id, event_name, challenge_id = key
-        # Nobody watching → skip building/sending the frame (scoreboard idiom).
+        # Nobody watching → don't send (and tell the coalescer nothing was
+        # delivered, so it doesn't buffer a trailing ping for a later joiner).
         if manager.room_size("activity", competition_id) == 0:
-            return
+            return False
         frame: dict = {"type": "activity", "event": event_name}
         # The one id worth carrying: lets clients target per-challenge caches.
         if challenge_id:
@@ -139,6 +140,7 @@ def setup(app, event_bus, db_factory) -> None:
                     if team_id:
                         frame["team_id"] = team_id
         await manager.broadcast("activity", competition_id, frame)
+        return True
 
     # Coalesce per (competition, event, challenge) so a burst collapses to one
     # leading + one trailing broadcast instead of one per event — each broadcast

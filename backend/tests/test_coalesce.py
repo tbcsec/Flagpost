@@ -5,11 +5,12 @@ import asyncio
 from utils.coalesce import Coalescer
 
 
-def _recorder():
+def _recorder(delivered: bool = True):
     calls: list[tuple] = []
 
     async def send(key, value):
         calls.append((key, value))
+        return delivered
 
     return calls, send
 
@@ -47,6 +48,20 @@ async def test_well_spaced_events_each_lead():
     await asyncio.sleep(0.05)  # window fully closes with nothing pending
     await c.hit("x", 2)
     assert calls == [("x", 1), ("x", 2)]
+
+
+async def test_undelivered_send_is_not_tracked():
+    # send reports "not delivered" (e.g. empty room) → the key isn't tracked, so
+    # the next hit is a fresh leading edge and no trailing fires for the burst
+    # that nobody received. This is the fix for the activity-room silence flake:
+    # events while the room is empty don't buffer a ping for a later connector.
+    calls, send = _recorder(delivered=False)
+    c = Coalescer(0.05, send)
+    await c.hit("x", 1)
+    await c.hit("x", 2)  # not coalesced — "x" was never tracked
+    assert calls == [("x", 1), ("x", 2)]
+    await asyncio.sleep(0.08)
+    assert calls == [("x", 1), ("x", 2)]  # no trailing
 
 
 async def test_steady_stream_fires_once_per_window():

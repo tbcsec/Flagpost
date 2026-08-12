@@ -41,9 +41,16 @@ from models.competition import Competition
 from models.role import Role, RoleAssignment
 from models.user import User
 
-# Bounds "how mass": argon2 hashing is deliberately CPU-slow (~tens of ms per
-# account), so the commit pass costs O(rows) hash time even off-thread.
-MAX_IMPORT_ROWS = 1000
+# Bounds "how mass": argon2 hashing is deliberately CPU-slow — the 500-user
+# load test measured ~64 ms/row on a 4-vCPU box — and the commit pass costs
+# O(rows) hash time even off-thread. The old 1000 cap was dishonest: a
+# full-size import ran ~64 s and blew past a 30 s client/proxy timeout while
+# *succeeding server-side*, so the operator saw a failure for an import that
+# actually landed (docs/load-testing/2026-08-12-500user-multicomp.md, #1). 200
+# rows ≈ 13 s — comfortably under a default timeout. Larger rosters are split
+# into batches by the caller (the load harness dogfoods this); a background
+# import job for bigger single uploads is the deferred follow-up (#189).
+MAX_IMPORT_ROWS = 200
 
 _KNOWN_COLUMNS = frozenset(
     {"display_name", "name", "email", "password", "role", "competition"}

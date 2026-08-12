@@ -361,12 +361,24 @@ async def test_missing_required_header_is_400(client):
 
 
 async def test_row_cap_is_413(client):
+    from utils.user_import import MAX_IMPORT_ROWS
+
     admin = await admin_token(client)
     lines = ["display_name,password"] + [
-        f"bulk{i},goodpassword{i}" for i in range(1001)
+        f"bulk{i},goodpassword{i}" for i in range(MAX_IMPORT_ROWS + 1)
     ]
     resp = await _import(client, admin, *lines, dry_run=True)
     assert resp.status_code == 413
+
+
+async def test_max_rows_import_stays_under_a_timeout_budget(client):
+    # The cap must stay honest: a *full-size* import has to complete well within
+    # a 30 s client/proxy timeout, or we recreate the 500-user run's finding #1
+    # (import succeeds server-side but the client times out). 200 rows ≈ 13 s of
+    # argon2 at the measured rate; assert the cap is set conservatively.
+    from utils.user_import import MAX_IMPORT_ROWS
+
+    assert MAX_IMPORT_ROWS <= 300
 
 
 async def test_unknown_default_competition_is_404(client):

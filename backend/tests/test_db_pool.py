@@ -29,3 +29,25 @@ def test_pool_defaults_beat_sqlalchemy_stock():
     total = settings.db_pool_size + settings.db_max_overflow
     assert total > 15
     assert total < 100
+
+
+def test_multiworker_splits_the_connection_budget(monkeypatch):
+    """#189 Phase 3: the engine pool is per-process, so N workers must divide a
+    fixed budget — not multiply a fixed 30 into Postgres max_connections."""
+    monkeypatch.setattr(settings, "web_concurrency", 5)
+    monkeypatch.setattr(settings, "db_connection_budget", 100)
+    kw = build_engine_kwargs("postgresql+asyncpg://u:p@host:5432/db")
+    assert kw["pool_size"] == 20  # 100 // 5
+    assert kw["max_overflow"] == 10  # half the slice
+
+    # The whole point: total connections across all workers stays bounded well
+    # under a bumped Postgres max_connections (200 in compose).
+    total = 5 * (kw["pool_size"] + kw["max_overflow"])
+    assert total <= 200
+
+
+def test_single_worker_pool_is_unchanged(monkeypatch):
+    monkeypatch.setattr(settings, "web_concurrency", 1)
+    kw = build_engine_kwargs("postgresql+asyncpg://u:p@host:5432/db")
+    assert kw["pool_size"] == settings.db_pool_size
+    assert kw["max_overflow"] == settings.db_max_overflow

@@ -72,9 +72,14 @@ async def lifespan(app: FastAPI):
     # audit-log consumer; the tick no-ops until a competition.time_remaining rule
     # exists. Not started under the test transport (no lifespan), so tests drive
     # run_time_rules directly.
-    automation_scheduler.start(
-        SessionLocal, settings.automation_scheduler_interval_seconds
-    )
+    # The time-trigger scheduler is a singleton: under multi-worker it runs as a
+    # sidecar process (scheduler.py), not in every web worker, or automations,
+    # the update check and retention would fire N× (#189 Phase 3). Single-worker
+    # keeps running it here — no sidecar needed.
+    if settings.web_concurrency <= 1:
+        automation_scheduler.start(
+            SessionLocal, settings.automation_scheduler_interval_seconds
+        )
     # Cross-worker realtime (#189, ADR-0025/0026): broadcast relay + shared
     # presence. A no-op single-worker; the guard inside refuses to boot a
     # multi-worker deployment with no Redis (broadcasts would otherwise reach

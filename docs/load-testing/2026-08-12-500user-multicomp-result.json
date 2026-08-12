@@ -1,0 +1,1372 @@
+{
+  "config": {
+    "users": 500,
+    "comps": 3,
+    "split": [
+      250,
+      150,
+      100
+    ],
+    "shards": 4,
+    "challenges_per_comp": 30,
+    "endpoint": "http://localhost:8080",
+    "smoke": false
+  },
+  "schedule": {
+    "t0": 1786559501.7612364,
+    "doors_end": 1786559658.4635758,
+    "announce_at": 1786559898.4635758,
+    "steady_end": 1786559958.4635758,
+    "burst_end": 1786560018.4635758,
+    "reconnect_at": 1786560021.4635758
+  },
+  "rest_latency": {
+    "setup": {
+      "n": 1,
+      "p50": 125.01810399407987,
+      "p95": 125.01810399407987,
+      "p99": 125.01810399407987,
+      "max": 125.01810399407987,
+      "status": {
+        "201": 1
+      }
+    },
+    "admin": {
+      "n": 183,
+      "p50": 8.951126001193188,
+      "p95": 13.22054900083458,
+      "p99": 16.957243002252653,
+      "max": 37.424739995913114,
+      "status": {
+        "201": 93,
+        "200": 90
+      }
+    },
+    "import": {
+      "n": 5,
+      "p50": 6353.400549000071,
+      "p95": 6595.89338999649,
+      "p99": 6595.89338999649,
+      "max": 6595.89338999649,
+      "status": {
+        "200": 5
+      }
+    },
+    "login": {
+      "n": 500,
+      "p50": 82.36586100247223,
+      "p95": 453.702732003876,
+      "p99": 1086.0712139983661,
+      "max": 1303.7951110018184,
+      "status": {
+        "200": 490,
+        "502": 10
+      }
+    },
+    "join": {
+      "n": 490,
+      "p50": 18.068225006572902,
+      "p95": 254.46360399655532,
+      "p99": 966.8457350053359,
+      "max": 1527.4772020056844,
+      "status": {
+        "200": 488,
+        "502": 2
+      }
+    },
+    "refetch": {
+      "n": 42576,
+      "p50": 76.17596100317314,
+      "p95": 291.087409001193,
+      "p99": 478.84460499335546,
+      "max": 1045.489092997741,
+      "status": {
+        "200": 21490,
+        "502": 21050,
+        "500": 34,
+        "403": 2
+      }
+    },
+    "submit": {
+      "n": 12360,
+      "p50": 77.17941200098721,
+      "p95": 686.4613439975074,
+      "p99": 1072.068837005645,
+      "max": 2001.1329900007695,
+      "status": {
+        "200": 7042,
+        "502": 5198,
+        "500": 116,
+        "429": 4
+      }
+    },
+    "announce": {
+      "n": 3,
+      "p50": 124.67337700218195,
+      "p95": 266.2921369992546,
+      "p99": 266.2921369992546,
+      "max": 266.2921369992546,
+      "status": {
+        "201": 3
+      }
+    }
+  },
+  "submissions": {
+    "attempts": 12322,
+    "solves": 1633,
+    "http_429": 4,
+    "per_comp": {
+      "c0": {
+        "attempts": 8268,
+        "solves": 914
+      },
+      "c1": {
+        "attempts": 2427,
+        "solves": 425
+      },
+      "c2": {
+        "attempts": 1627,
+        "solves": 294
+      }
+    },
+    "correct_submit_lat": {
+      "p50": 212.36578100069892,
+      "p95": 1053.106191997358,
+      "p99": 1545.5994030053262,
+      "max": 2001.1805670001195
+    }
+  },
+  "isolation": {
+    "c0": {
+      "steady": {
+        "n": 15986,
+        "p50": 95.7,
+        "p95": 225.4
+      },
+      "burst": {
+        "n": 3552,
+        "p50": 84.9,
+        "p95": 386.0
+      },
+      "steady_submit": {
+        "n": 3404,
+        "p50": 84.1,
+        "p95": 392.5
+      },
+      "burst_submit": {
+        "n": 4742,
+        "p50": 71.3,
+        "p95": 903.2
+      }
+    },
+    "c1": {
+      "steady": {
+        "n": 8944,
+        "p50": 54.8,
+        "p95": 193.3
+      },
+      "burst": {
+        "n": 1291,
+        "p50": 40.9,
+        "p95": 314.1
+      },
+      "steady_submit": {
+        "n": 1967,
+        "p50": 81.5,
+        "p95": 398.6
+      },
+      "burst_submit": {
+        "n": 390,
+        "p50": 69.2,
+        "p95": 894.9
+      }
+    },
+    "c2": {
+      "steady": {
+        "n": 5650,
+        "p50": 57.4,
+        "p95": 206.1
+      },
+      "burst": {
+        "n": 732,
+        "p50": 35.1,
+        "p95": 398.5
+      },
+      "steady_submit": {
+        "n": 1321,
+        "p50": 81.5,
+        "p95": 384.5
+      },
+      "burst_submit": {
+        "n": 259,
+        "p50": 66.2,
+        "p95": 823.1
+      }
+    }
+  },
+  "ws": {
+    "connect_lat": {
+      "scoreboard": {
+        "p50": 95.5122079976718,
+        "p95": 811.462223995477,
+        "max": 985.2662769990275
+      },
+      "activity": {
+        "p50": 183.2773400019505,
+        "p95": 528.9155139980721,
+        "max": 925.6535679960507
+      },
+      "announcements": {
+        "p50": 179.99890499777393,
+        "p95": 1169.3338460027007,
+        "max": 1329.773176999879
+      },
+      "user": {
+        "p50": 62.71466000180226,
+        "p95": 596.9502060033847,
+        "max": 923.4896229972946
+      },
+      "challenge": {
+        "p50": 63.6274680000497,
+        "p95": 261.5931879990967,
+        "max": 515.3746330033755
+      }
+    },
+    "frames": {
+      "scoreboard": 158542,
+      "announcements": 715,
+      "activity": 844596,
+      "challenge": 173,
+      "user": 237
+    },
+    "errors": {
+      "connect": 5352
+    }
+  },
+  "probe_lags_ms": {
+    "p50": 104.20021299796645,
+    "p95": 248.3640650025336,
+    "max": 829.923229997803,
+    "n": 38
+  },
+  "resources": {
+    "cpu_pct": {
+      "p50": 85.37,
+      "p95": 160.04,
+      "max": 354.13
+    },
+    "pg_conns_max": 42,
+    "harness_cpu_max": 64.6,
+    "samples": [
+      {
+        "t": 34.8,
+        "cpu": "154.74%",
+        "mem": "110.7MiB",
+        "pg_conns": "7",
+        "harness_cpu": 64.6
+      },
+      {
+        "t": 38.9,
+        "cpu": "354.13%",
+        "mem": "114.9MiB",
+        "pg_conns": "13",
+        "harness_cpu": 17.5
+      },
+      {
+        "t": 43.0,
+        "cpu": "324.06%",
+        "mem": "131.6MiB",
+        "pg_conns": "25",
+        "harness_cpu": 18.4
+      },
+      {
+        "t": 47.1,
+        "cpu": "63.77%",
+        "mem": "135.8MiB",
+        "pg_conns": "25",
+        "harness_cpu": 14.6
+      },
+      {
+        "t": 51.2,
+        "cpu": "94.19%",
+        "mem": "140.9MiB",
+        "pg_conns": "25",
+        "harness_cpu": 13.1
+      },
+      {
+        "t": 55.3,
+        "cpu": "31.96%",
+        "mem": "145.7MiB",
+        "pg_conns": "25",
+        "harness_cpu": 12.2
+      },
+      {
+        "t": 59.4,
+        "cpu": "127.11%",
+        "mem": "151.4MiB",
+        "pg_conns": "25",
+        "harness_cpu": 11.9
+      },
+      {
+        "t": 63.5,
+        "cpu": "202.14%",
+        "mem": "161.6MiB",
+        "pg_conns": "31",
+        "harness_cpu": 12.5
+      },
+      {
+        "t": 67.6,
+        "cpu": "76.97%",
+        "mem": "167.2MiB",
+        "pg_conns": "31",
+        "harness_cpu": 12.1
+      },
+      {
+        "t": 71.7,
+        "cpu": "58.63%",
+        "mem": "172.7MiB",
+        "pg_conns": "31",
+        "harness_cpu": 11.9
+      },
+      {
+        "t": 75.8,
+        "cpu": "242.27%",
+        "mem": "181MiB",
+        "pg_conns": "31",
+        "harness_cpu": 12.1
+      },
+      {
+        "t": 79.9,
+        "cpu": "85.87%",
+        "mem": "312.3MiB",
+        "pg_conns": "31",
+        "harness_cpu": 11.7
+      },
+      {
+        "t": 84.0,
+        "cpu": "193.60%",
+        "mem": "196.4MiB",
+        "pg_conns": "31",
+        "harness_cpu": 12.7
+      },
+      {
+        "t": 88.1,
+        "cpu": "75.44%",
+        "mem": "208.9MiB",
+        "pg_conns": "31",
+        "harness_cpu": 12.8
+      },
+      {
+        "t": 92.2,
+        "cpu": "242.30%",
+        "mem": "211MiB",
+        "pg_conns": "31",
+        "harness_cpu": 13.3
+      },
+      {
+        "t": 96.3,
+        "cpu": "122.65%",
+        "mem": "213.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 13.0
+      },
+      {
+        "t": 100.4,
+        "cpu": "105.35%",
+        "mem": "213.3MiB",
+        "pg_conns": "31",
+        "harness_cpu": 13.3
+      },
+      {
+        "t": 104.5,
+        "cpu": "43.23%",
+        "mem": "213.2MiB",
+        "pg_conns": "31",
+        "harness_cpu": 13.2
+      },
+      {
+        "t": 108.6,
+        "cpu": "134.77%",
+        "mem": "217.4MiB",
+        "pg_conns": "31",
+        "harness_cpu": 13.3
+      },
+      {
+        "t": 112.7,
+        "cpu": "34.64%",
+        "mem": "213.7MiB",
+        "pg_conns": "31",
+        "harness_cpu": 13.2
+      },
+      {
+        "t": 116.8,
+        "cpu": "130.37%",
+        "mem": "213.6MiB",
+        "pg_conns": "31",
+        "harness_cpu": 13.6
+      },
+      {
+        "t": 120.9,
+        "cpu": "48.64%",
+        "mem": "213.7MiB",
+        "pg_conns": "31",
+        "harness_cpu": 13.6
+      },
+      {
+        "t": 125.0,
+        "cpu": "107.89%",
+        "mem": "214.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 13.6
+      },
+      {
+        "t": 129.0,
+        "cpu": "127.04%",
+        "mem": "213.8MiB",
+        "pg_conns": "31",
+        "harness_cpu": 13.6
+      },
+      {
+        "t": 133.1,
+        "cpu": "155.93%",
+        "mem": "472.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 13.6
+      },
+      {
+        "t": 137.2,
+        "cpu": "181.59%",
+        "mem": "213.9MiB",
+        "pg_conns": "31",
+        "harness_cpu": 14.1
+      },
+      {
+        "t": 141.3,
+        "cpu": "190.92%",
+        "mem": "213.9MiB",
+        "pg_conns": "31",
+        "harness_cpu": 14.3
+      },
+      {
+        "t": 145.5,
+        "cpu": "160.04%",
+        "mem": "279.2MiB",
+        "pg_conns": "31",
+        "harness_cpu": 14.3
+      },
+      {
+        "t": 149.5,
+        "cpu": "28.26%",
+        "mem": "214.4MiB",
+        "pg_conns": "31",
+        "harness_cpu": 14.0
+      },
+      {
+        "t": 153.6,
+        "cpu": "103.94%",
+        "mem": "214.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 14.1
+      },
+      {
+        "t": 157.7,
+        "cpu": "9.79%",
+        "mem": "214.5MiB",
+        "pg_conns": "31",
+        "harness_cpu": 14.1
+      },
+      {
+        "t": 161.9,
+        "cpu": "51.43%",
+        "mem": "215.2MiB",
+        "pg_conns": "31",
+        "harness_cpu": 14.4
+      },
+      {
+        "t": 165.9,
+        "cpu": "71.01%",
+        "mem": "216.3MiB",
+        "pg_conns": "31",
+        "harness_cpu": 15.6
+      },
+      {
+        "t": 170.0,
+        "cpu": "101.40%",
+        "mem": "217MiB",
+        "pg_conns": "31",
+        "harness_cpu": 17.0
+      },
+      {
+        "t": 174.1,
+        "cpu": "72.12%",
+        "mem": "216.4MiB",
+        "pg_conns": "31",
+        "harness_cpu": 17.7
+      },
+      {
+        "t": 178.2,
+        "cpu": "104.67%",
+        "mem": "217.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 18.6
+      },
+      {
+        "t": 182.3,
+        "cpu": "69.61%",
+        "mem": "217.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 19.5
+      },
+      {
+        "t": 186.4,
+        "cpu": "71.78%",
+        "mem": "217.6MiB",
+        "pg_conns": "31",
+        "harness_cpu": 20.3
+      },
+      {
+        "t": 190.5,
+        "cpu": "84.01%",
+        "mem": "219MiB",
+        "pg_conns": "31",
+        "harness_cpu": 21.2
+      },
+      {
+        "t": 194.6,
+        "cpu": "91.80%",
+        "mem": "219.3MiB",
+        "pg_conns": "31",
+        "harness_cpu": 22.1
+      },
+      {
+        "t": 198.7,
+        "cpu": "82.80%",
+        "mem": "219.9MiB",
+        "pg_conns": "31",
+        "harness_cpu": 22.7
+      },
+      {
+        "t": 202.8,
+        "cpu": "89.52%",
+        "mem": "219.7MiB",
+        "pg_conns": "31",
+        "harness_cpu": 23.7
+      },
+      {
+        "t": 206.9,
+        "cpu": "48.75%",
+        "mem": "219.8MiB",
+        "pg_conns": "31",
+        "harness_cpu": 24.3
+      },
+      {
+        "t": 211.0,
+        "cpu": "83.33%",
+        "mem": "220MiB",
+        "pg_conns": "31",
+        "harness_cpu": 24.8
+      },
+      {
+        "t": 215.0,
+        "cpu": "101.73%",
+        "mem": "220.3MiB",
+        "pg_conns": "31",
+        "harness_cpu": 25.5
+      },
+      {
+        "t": 219.1,
+        "cpu": "103.08%",
+        "mem": "220.4MiB",
+        "pg_conns": "31",
+        "harness_cpu": 26.2
+      },
+      {
+        "t": 223.2,
+        "cpu": "72.29%",
+        "mem": "220.5MiB",
+        "pg_conns": "31",
+        "harness_cpu": 26.7
+      },
+      {
+        "t": 227.3,
+        "cpu": "82.54%",
+        "mem": "220.5MiB",
+        "pg_conns": "31",
+        "harness_cpu": 27.4
+      },
+      {
+        "t": 231.4,
+        "cpu": "77.73%",
+        "mem": "220.8MiB",
+        "pg_conns": "31",
+        "harness_cpu": 27.9
+      },
+      {
+        "t": 235.5,
+        "cpu": "100.40%",
+        "mem": "220.6MiB",
+        "pg_conns": "31",
+        "harness_cpu": 28.2
+      },
+      {
+        "t": 239.6,
+        "cpu": "63.97%",
+        "mem": "220.3MiB",
+        "pg_conns": "31",
+        "harness_cpu": 28.5
+      },
+      {
+        "t": 243.7,
+        "cpu": "88.11%",
+        "mem": "220.3MiB",
+        "pg_conns": "31",
+        "harness_cpu": 29.0
+      },
+      {
+        "t": 247.8,
+        "cpu": "95.28%",
+        "mem": "220.6MiB",
+        "pg_conns": "31",
+        "harness_cpu": 29.3
+      },
+      {
+        "t": 251.9,
+        "cpu": "97.39%",
+        "mem": "220.6MiB",
+        "pg_conns": "31",
+        "harness_cpu": 29.7
+      },
+      {
+        "t": 255.9,
+        "cpu": "65.02%",
+        "mem": "221.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 30.1
+      },
+      {
+        "t": 260.0,
+        "cpu": "60.52%",
+        "mem": "220.7MiB",
+        "pg_conns": "31",
+        "harness_cpu": 30.4
+      },
+      {
+        "t": 264.1,
+        "cpu": "92.35%",
+        "mem": "221.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 30.8
+      },
+      {
+        "t": 268.2,
+        "cpu": "80.28%",
+        "mem": "221.3MiB",
+        "pg_conns": "31",
+        "harness_cpu": 31.2
+      },
+      {
+        "t": 272.3,
+        "cpu": "82.06%",
+        "mem": "220.8MiB",
+        "pg_conns": "31",
+        "harness_cpu": 31.6
+      },
+      {
+        "t": 276.4,
+        "cpu": "100.39%",
+        "mem": "220.8MiB",
+        "pg_conns": "31",
+        "harness_cpu": 32.0
+      },
+      {
+        "t": 280.5,
+        "cpu": "100.80%",
+        "mem": "220.8MiB",
+        "pg_conns": "31",
+        "harness_cpu": 32.6
+      },
+      {
+        "t": 284.6,
+        "cpu": "101.37%",
+        "mem": "221MiB",
+        "pg_conns": "31",
+        "harness_cpu": 33.2
+      },
+      {
+        "t": 288.7,
+        "cpu": "80.36%",
+        "mem": "222MiB",
+        "pg_conns": "31",
+        "harness_cpu": 33.5
+      },
+      {
+        "t": 292.8,
+        "cpu": "77.61%",
+        "mem": "221.8MiB",
+        "pg_conns": "31",
+        "harness_cpu": 33.9
+      },
+      {
+        "t": 296.9,
+        "cpu": "102.05%",
+        "mem": "221.8MiB",
+        "pg_conns": "31",
+        "harness_cpu": 34.2
+      },
+      {
+        "t": 301.0,
+        "cpu": "81.41%",
+        "mem": "222MiB",
+        "pg_conns": "31",
+        "harness_cpu": 34.6
+      },
+      {
+        "t": 305.1,
+        "cpu": "100.76%",
+        "mem": "222MiB",
+        "pg_conns": "31",
+        "harness_cpu": 34.8
+      },
+      {
+        "t": 309.1,
+        "cpu": "101.68%",
+        "mem": "222MiB",
+        "pg_conns": "31",
+        "harness_cpu": 35.2
+      },
+      {
+        "t": 313.2,
+        "cpu": "85.37%",
+        "mem": "222.2MiB",
+        "pg_conns": "31",
+        "harness_cpu": 35.6
+      },
+      {
+        "t": 317.3,
+        "cpu": "98.17%",
+        "mem": "222.4MiB",
+        "pg_conns": "31",
+        "harness_cpu": 35.8
+      },
+      {
+        "t": 321.4,
+        "cpu": "88.91%",
+        "mem": "222.6MiB",
+        "pg_conns": "31",
+        "harness_cpu": 36.1
+      },
+      {
+        "t": 325.5,
+        "cpu": "99.21%",
+        "mem": "222.2MiB",
+        "pg_conns": "31",
+        "harness_cpu": 36.5
+      },
+      {
+        "t": 329.7,
+        "cpu": "86.19%",
+        "mem": "222MiB",
+        "pg_conns": "31",
+        "harness_cpu": 36.8
+      },
+      {
+        "t": 333.8,
+        "cpu": "101.37%",
+        "mem": "222.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 37.0
+      },
+      {
+        "t": 337.9,
+        "cpu": "101.44%",
+        "mem": "222.2MiB",
+        "pg_conns": "31",
+        "harness_cpu": 37.4
+      },
+      {
+        "t": 342.0,
+        "cpu": "77.61%",
+        "mem": "222.4MiB",
+        "pg_conns": "31",
+        "harness_cpu": 37.7
+      },
+      {
+        "t": 346.1,
+        "cpu": "98.22%",
+        "mem": "222.3MiB",
+        "pg_conns": "31",
+        "harness_cpu": 37.8
+      },
+      {
+        "t": 350.2,
+        "cpu": "78.55%",
+        "mem": "228.9MiB",
+        "pg_conns": "31",
+        "harness_cpu": 38.0
+      },
+      {
+        "t": 354.3,
+        "cpu": "58.73%",
+        "mem": "222.2MiB",
+        "pg_conns": "31",
+        "harness_cpu": 38.2
+      },
+      {
+        "t": 358.4,
+        "cpu": "89.44%",
+        "mem": "222.2MiB",
+        "pg_conns": "31",
+        "harness_cpu": 38.5
+      },
+      {
+        "t": 362.5,
+        "cpu": "84.37%",
+        "mem": "222.4MiB",
+        "pg_conns": "31",
+        "harness_cpu": 38.7
+      },
+      {
+        "t": 366.6,
+        "cpu": "82.14%",
+        "mem": "222.6MiB",
+        "pg_conns": "31",
+        "harness_cpu": 39.1
+      },
+      {
+        "t": 370.7,
+        "cpu": "113.44%",
+        "mem": "222.2MiB",
+        "pg_conns": "31",
+        "harness_cpu": 39.3
+      },
+      {
+        "t": 374.7,
+        "cpu": "75.86%",
+        "mem": "222.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 39.5
+      },
+      {
+        "t": 378.8,
+        "cpu": "92.17%",
+        "mem": "222.5MiB",
+        "pg_conns": "31",
+        "harness_cpu": 39.7
+      },
+      {
+        "t": 382.9,
+        "cpu": "72.94%",
+        "mem": "222.2MiB",
+        "pg_conns": "31",
+        "harness_cpu": 39.9
+      },
+      {
+        "t": 387.0,
+        "cpu": "72.57%",
+        "mem": "222.7MiB",
+        "pg_conns": "31",
+        "harness_cpu": 40.1
+      },
+      {
+        "t": 391.1,
+        "cpu": "98.78%",
+        "mem": "222.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 40.2
+      },
+      {
+        "t": 395.2,
+        "cpu": "95.36%",
+        "mem": "222.2MiB",
+        "pg_conns": "31",
+        "harness_cpu": 40.4
+      },
+      {
+        "t": 399.3,
+        "cpu": "82.47%",
+        "mem": "222.4MiB",
+        "pg_conns": "31",
+        "harness_cpu": 40.4
+      },
+      {
+        "t": 403.4,
+        "cpu": "99.02%",
+        "mem": "222.6MiB",
+        "pg_conns": "31",
+        "harness_cpu": 40.6
+      },
+      {
+        "t": 407.5,
+        "cpu": "76.39%",
+        "mem": "222.6MiB",
+        "pg_conns": "31",
+        "harness_cpu": 40.8
+      },
+      {
+        "t": 411.6,
+        "cpu": "74.23%",
+        "mem": "223.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 41.1
+      },
+      {
+        "t": 415.7,
+        "cpu": "92.58%",
+        "mem": "222.9MiB",
+        "pg_conns": "31",
+        "harness_cpu": 41.3
+      },
+      {
+        "t": 419.8,
+        "cpu": "70.84%",
+        "mem": "222.9MiB",
+        "pg_conns": "31",
+        "harness_cpu": 41.3
+      },
+      {
+        "t": 423.8,
+        "cpu": "84.80%",
+        "mem": "223.4MiB",
+        "pg_conns": "31",
+        "harness_cpu": 41.5
+      },
+      {
+        "t": 428.0,
+        "cpu": "81.11%",
+        "mem": "223MiB",
+        "pg_conns": "31",
+        "harness_cpu": 41.7
+      },
+      {
+        "t": 432.0,
+        "cpu": "93.22%",
+        "mem": "223MiB",
+        "pg_conns": "31",
+        "harness_cpu": 41.7
+      },
+      {
+        "t": 436.1,
+        "cpu": "91.98%",
+        "mem": "223.5MiB",
+        "pg_conns": "31",
+        "harness_cpu": 41.9
+      },
+      {
+        "t": 440.2,
+        "cpu": "97.09%",
+        "mem": "223MiB",
+        "pg_conns": "31",
+        "harness_cpu": 42.1
+      },
+      {
+        "t": 444.3,
+        "cpu": "99.14%",
+        "mem": "222.3MiB",
+        "pg_conns": "31",
+        "harness_cpu": 42.1
+      },
+      {
+        "t": 448.4,
+        "cpu": "97.07%",
+        "mem": "222.6MiB",
+        "pg_conns": "31",
+        "harness_cpu": 42.1
+      },
+      {
+        "t": 452.5,
+        "cpu": "98.18%",
+        "mem": "222.3MiB",
+        "pg_conns": "31",
+        "harness_cpu": 42.1
+      },
+      {
+        "t": 456.6,
+        "cpu": "77.98%",
+        "mem": "222.5MiB",
+        "pg_conns": "31",
+        "harness_cpu": 42.3
+      },
+      {
+        "t": 460.7,
+        "cpu": "101.00%",
+        "mem": "222.3MiB",
+        "pg_conns": "31",
+        "harness_cpu": 42.5
+      },
+      {
+        "t": 464.8,
+        "cpu": "101.75%",
+        "mem": "223.4MiB",
+        "pg_conns": "31",
+        "harness_cpu": 42.7
+      },
+      {
+        "t": 469.0,
+        "cpu": "101.28%",
+        "mem": "222.3MiB",
+        "pg_conns": "31",
+        "harness_cpu": 43.1
+      },
+      {
+        "t": 473.1,
+        "cpu": "104.75%",
+        "mem": "222.4MiB",
+        "pg_conns": "31",
+        "harness_cpu": 43.5
+      },
+      {
+        "t": 477.2,
+        "cpu": "101.44%",
+        "mem": "223.2MiB",
+        "pg_conns": "31",
+        "harness_cpu": 43.9
+      },
+      {
+        "t": 481.3,
+        "cpu": "100.42%",
+        "mem": "223.2MiB",
+        "pg_conns": "32",
+        "harness_cpu": 44.4
+      },
+      {
+        "t": 485.5,
+        "cpu": "99.01%",
+        "mem": "223.4MiB",
+        "pg_conns": "32",
+        "harness_cpu": 45.0
+      },
+      {
+        "t": 489.6,
+        "cpu": "100.66%",
+        "mem": "223.5MiB",
+        "pg_conns": "32",
+        "harness_cpu": 45.6
+      },
+      {
+        "t": 493.7,
+        "cpu": "101.30%",
+        "mem": "223.3MiB",
+        "pg_conns": "32",
+        "harness_cpu": 45.9
+      },
+      {
+        "t": 497.8,
+        "cpu": "101.63%",
+        "mem": "223.2MiB",
+        "pg_conns": "33",
+        "harness_cpu": 46.3
+      },
+      {
+        "t": 501.9,
+        "cpu": "101.48%",
+        "mem": "223.1MiB",
+        "pg_conns": "33",
+        "harness_cpu": 46.7
+      },
+      {
+        "t": 506.0,
+        "cpu": "101.79%",
+        "mem": "223MiB",
+        "pg_conns": "33",
+        "harness_cpu": 47.1
+      },
+      {
+        "t": 510.1,
+        "cpu": "100.80%",
+        "mem": "222.7MiB",
+        "pg_conns": "32",
+        "harness_cpu": 47.5
+      },
+      {
+        "t": 514.2,
+        "cpu": "101.13%",
+        "mem": "222.7MiB",
+        "pg_conns": "32",
+        "harness_cpu": 47.6
+      },
+      {
+        "t": 518.3,
+        "cpu": "100.65%",
+        "mem": "223.4MiB",
+        "pg_conns": "32",
+        "harness_cpu": 47.9
+      },
+      {
+        "t": 522.4,
+        "cpu": "39.60%",
+        "mem": "223.7MiB",
+        "pg_conns": "31",
+        "harness_cpu": 47.6
+      },
+      {
+        "t": 526.4,
+        "cpu": "31.63%",
+        "mem": "223.7MiB",
+        "pg_conns": "31",
+        "harness_cpu": 47.5
+      },
+      {
+        "t": 530.5,
+        "cpu": "20.74%",
+        "mem": "223.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 47.2
+      },
+      {
+        "t": 534.6,
+        "cpu": "2.88%",
+        "mem": "222.8MiB",
+        "pg_conns": "31",
+        "harness_cpu": 46.8
+      },
+      {
+        "t": 538.7,
+        "cpu": "0.38%",
+        "mem": "222.8MiB",
+        "pg_conns": "31",
+        "harness_cpu": 46.5
+      },
+      {
+        "t": 542.8,
+        "cpu": "101.86%",
+        "mem": "232.6MiB",
+        "pg_conns": "37",
+        "harness_cpu": 46.3
+      },
+      {
+        "t": 546.9,
+        "cpu": "100.35%",
+        "mem": "254.3MiB",
+        "pg_conns": "42",
+        "harness_cpu": 46.3
+      },
+      {
+        "t": 551.0,
+        "cpu": "59.63%",
+        "mem": "254.9MiB",
+        "pg_conns": "31",
+        "harness_cpu": 46.1
+      },
+      {
+        "t": 555.1,
+        "cpu": "70.97%",
+        "mem": "255MiB",
+        "pg_conns": "31",
+        "harness_cpu": 45.7
+      },
+      {
+        "t": 559.2,
+        "cpu": "56.15%",
+        "mem": "255MiB",
+        "pg_conns": "31",
+        "harness_cpu": 45.4
+      },
+      {
+        "t": 563.3,
+        "cpu": "48.53%",
+        "mem": "255.2MiB",
+        "pg_conns": "31",
+        "harness_cpu": 45.2
+      },
+      {
+        "t": 567.4,
+        "cpu": "36.60%",
+        "mem": "255.4MiB",
+        "pg_conns": "39",
+        "harness_cpu": 44.9
+      },
+      {
+        "t": 571.5,
+        "cpu": "16.15%",
+        "mem": "255.2MiB",
+        "pg_conns": "31",
+        "harness_cpu": 44.6
+      },
+      {
+        "t": 575.5,
+        "cpu": "3.50%",
+        "mem": "255.3MiB",
+        "pg_conns": "31",
+        "harness_cpu": 44.3
+      },
+      {
+        "t": 579.6,
+        "cpu": "4.15%",
+        "mem": "255.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 44.1
+      },
+      {
+        "t": 583.7,
+        "cpu": "1.43%",
+        "mem": "255.2MiB",
+        "pg_conns": "31",
+        "harness_cpu": 43.8
+      },
+      {
+        "t": 587.8,
+        "cpu": "0.19%",
+        "mem": "255.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 43.6
+      },
+      {
+        "t": 591.9,
+        "cpu": "4.48%",
+        "mem": "255.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 43.3
+      },
+      {
+        "t": 596.0,
+        "cpu": "8.12%",
+        "mem": "255.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 43.1
+      },
+      {
+        "t": 600.1,
+        "cpu": "22.72%",
+        "mem": "255.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 42.7
+      },
+      {
+        "t": 604.2,
+        "cpu": "23.23%",
+        "mem": "255.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 42.6
+      },
+      {
+        "t": 608.3,
+        "cpu": "5.30%",
+        "mem": "254.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 10.2
+      },
+      {
+        "t": 612.4,
+        "cpu": "5.93%",
+        "mem": "254.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 10.2
+      },
+      {
+        "t": 616.5,
+        "cpu": "4.58%",
+        "mem": "254.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 10.1
+      },
+      {
+        "t": 620.6,
+        "cpu": "5.25%",
+        "mem": "254.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 10.1
+      },
+      {
+        "t": 624.7,
+        "cpu": "9.67%",
+        "mem": "254.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 10.0
+      },
+      {
+        "t": 628.8,
+        "cpu": "0.17%",
+        "mem": "254.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 9.9
+      },
+      {
+        "t": 632.9,
+        "cpu": "0.26%",
+        "mem": "254.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 9.9
+      },
+      {
+        "t": 637.0,
+        "cpu": "2.40%",
+        "mem": "254.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 9.8
+      },
+      {
+        "t": 641.1,
+        "cpu": "0.16%",
+        "mem": "254.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 9.8
+      },
+      {
+        "t": 645.2,
+        "cpu": "12.02%",
+        "mem": "254.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 9.7
+      },
+      {
+        "t": 649.3,
+        "cpu": "0.20%",
+        "mem": "254.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 9.6
+      },
+      {
+        "t": 653.4,
+        "cpu": "0.17%",
+        "mem": "254.1MiB",
+        "pg_conns": "31",
+        "harness_cpu": 9.6
+      }
+    ]
+  },
+  "timeline": [
+    "[19:31:41] endpoint: Caddy :8080",
+    "[19:31:41] setup wizard: created owner",
+    "[19:31:42] competition 0: 4e36fce0-4f78-4040-b71d-af24e792c1c6 (Load Test Alpha 2026) with 30 challenges",
+    "[19:31:43] competition 1: 3f616de9-b372-4e82-9348-b2a749c12e47 (Load Test Bravo 2026) with 30 challenges",
+    "[19:31:43] competition 2: 4ed0d3f0-107e-4c80-b7a0-0e4c32eb7400 (Load Test Charlie 2026) with 30 challenges",
+    "[19:31:49] user import batch    0-  99: created=100 skipped=0 errors=0 in 6.4s",
+    "[19:31:56] user import batch  100- 199: created=100 skipped=0 errors=0 in 6.4s",
+    "[19:32:02] user import batch  200- 299: created=100 skipped=0 errors=0 in 6.6s",
+    "[19:32:09] user import batch  300- 399: created=100 skipped=0 errors=0 in 6.3s",
+    "[19:32:15] [shard0] PHASE 1 \u2014 doors open: 125 users over 123s",
+    "[19:32:15] [shard1] PHASE 1 \u2014 doors open: 125 users over 123s",
+    "[19:32:15] [shard2] PHASE 1 \u2014 doors open: 125 users over 123s",
+    "[19:32:15] [shard3] PHASE 1 \u2014 doors open: 125 users over 123s",
+    "[19:32:15] spawned 4 shard workers for 500 users across 3 comps (split [250, 150, 100])",
+    "[19:32:15] user import batch  400- 499: created=100 skipped=0 errors=0 in 6.2s",
+    "[19:32:15] user import total: created=500/500",
+    "[19:34:14] [shard3] PHASE 2 \u2014 steady play until T+457s, then PHASE 3b burst (comp 0 hot) until T+517s",
+    "[19:34:14] [shard3] doors-open done \u2014 62/125 onboarded, 247 sockets open",
+    "[19:34:15] [shard2] PHASE 2 \u2014 steady play until T+457s, then PHASE 3b burst (comp 0 hot) until T+517s",
+    "[19:34:15] [shard2] doors-open done \u2014 66/125 onboarded, 264 sockets open",
+    "[19:34:16] [shard0] PHASE 2 \u2014 steady play until T+457s, then PHASE 3b burst (comp 0 hot) until T+517s",
+    "[19:34:16] [shard0] doors-open done \u2014 57/125 onboarded, 228 sockets open",
+    "[19:34:17] [shard1] PHASE 2 \u2014 steady play until T+457s, then PHASE 3b burst (comp 0 hot) until T+517s",
+    "[19:34:17] [shard1] doors-open done \u2014 54/125 onboarded, 214 sockets open",
+    "[19:38:18] [shard0] PHASE 3 \u2014 announcement blast, one per competition",
+    "[19:38:18] [shard0] announcement comp0 -> 201 in 266ms",
+    "[19:38:23] [shard0] announcement comp1 -> 201 in 125ms",
+    "[19:38:28] [shard0] announcement comp2 -> 201 in 20ms",
+    "[19:40:41] [shard3] PHASE 4 \u2014 reconnect herd: dropping all sockets, reconnecting simultaneously",
+    "[19:40:41] [shard3] steady + burst complete",
+    "[19:40:42] [shard0] PHASE 4 \u2014 reconnect herd: dropping all sockets, reconnecting simultaneously",
+    "[19:40:42] [shard0] steady + burst complete",
+    "[19:40:43] [shard1] PHASE 4 \u2014 reconnect herd: dropping all sockets, reconnecting simultaneously",
+    "[19:40:43] [shard1] steady + burst complete",
+    "[19:40:43] [shard2] PHASE 4 \u2014 reconnect herd: dropping all sockets, reconnecting simultaneously",
+    "[19:40:43] [shard2] steady + burst complete",
+    "[19:40:43] [shard3] reconnect herd done in 1.7s \u2014 248 sockets re-established",
+    "[19:40:44] [shard0] PHASE 5 \u2014 slow-client probe: 8 congested readers + solve burst",
+    "[19:40:44] [shard0] reconnect herd done in 1.5s \u2014 228 sockets re-established",
+    "[19:40:48] [shard1] reconnect herd done in 3.4s \u2014 216 sockets re-established",
+    "[19:40:48] [shard2] reconnect herd done in 2.9s \u2014 218 sockets re-established",
+    "[19:42:05] [shard0] slow-client probe complete (38 probe solves)",
+    "[19:42:35] shards exited: [0, 0, 0, 0]"
+  ]
+}

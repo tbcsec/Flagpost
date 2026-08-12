@@ -1,18 +1,37 @@
-"""Flagpost 200-user live-event capacity simulation (issue-less capacity review).
+"""Flagpost live-event capacity simulation (multi-competition capable).
 
 Drives the REAL production docker stack (Caddy -> single-process backend ->
-Postgres/Redis/MinIO) with 200 simulated competitors, each behaving like a
-browser: 4 shell WebSockets (scoreboard, activity, announcements, user) held
-open, plus transient challenge-presence sockets while "viewing" a challenge, and
-— crucially — the exact frontend refetch behaviour (lib/live.ts): an activity
-ping maps to query keys, each on a 2.5s leading+trailing throttle, and only the
-keys mounted by the client's current page trigger a real REST GET.
+Postgres/Redis/MinIO) with N simulated competitors split across M concurrent
+competitions, each client behaving like a browser: 4 shell WebSockets
+(scoreboard, activity, announcements, user) held open, plus transient
+challenge-presence sockets while "viewing" a challenge, and — crucially — the
+exact frontend refetch behaviour (lib/live.ts): an activity ping maps to query
+keys, each on a 2.5s leading+trailing throttle, and only the keys mounted by
+the client's current page trigger a real REST GET.
 
-Five phases: doors-open login+connect storm, steady play, announcement blast,
-reconnect herd, slow-client head-of-line probe. Emits a JSON + text report.
+Phases:
+  1. doors open        — login + join + connect storm
+  2. steady play       — submits + navigation + presence churn (all comps)
+  3. announcements     — one all-participants blast per competition (mid-steady)
+  3b. hot-comp burst   — competition 0 submit-spams while the others keep
+                         playing normally: the tenancy-isolation probe. Per-comp
+                         windowed metrics let the report compare the quiet
+                         comps' latency during the burst vs during steady.
+  4. reconnect herd    — every socket dropped and re-established at once
+  5. slow-client probe — congested readers + solve burst (rank 0 only)
 
-Run:  .venv/bin/python sim.py            (full 200-user run)
-      SMOKE=1 .venv/bin/python sim.py    (10-user harness self-test)
+Scaling honestly: one asyncio loop saturates client-side well below 500
+simulated browsers, which would poison the numbers with harness queueing. So
+the run can be SHARDED across worker processes: the parent bootstraps the
+instance, writes a bootstrap file + an absolute epoch schedule, spawns SHARDS
+workers (each owning the user indices idx % SHARDS == rank, a stride that
+gives every shard users in every competition), samples docker/postgres/harness
+resources, then merges the shards' raw metrics into one report. Phases align
+across shards by sleeping to shared wall-clock epochs.
+
+Run:  .venv/bin/python sim.py                                (200 users, 1 comp)
+      USERS=500 COMPS=3 COMP_SPLIT=250,150,100 SHARDS=4 .venv/bin/python sim.py
+      SMOKE=1 COMPS=2 SHARDS=2 .venv/bin/python sim.py       (harness self-test)
 """
 
 from __future__ import annotations
@@ -21,7 +40,8 @@ import asyncio
 import json
 import os
 import random
-import statistics
+import statistics  # noqa: F401  (kept for ad-hoc analysis in the REPL)
+import sys
 import time
 from collections import Counter, defaultdict
 
@@ -29,32 +49,63 @@ import httpx
 import websockets
 
 SMOKE = os.environ.get("SMOKE") == "1"
+RANK = int(os.environ.get("RANK", "-1"))  # -1 = single process or parent
+SHARDS = int(os.environ.get("SHARDS", "1"))
 
 # ---- knobs ------------------------------------------------------------------
-N_USERS = 10 if SMOKE else 200
-N_CHALLENGES = 6 if SMOKE else 30
-N_DYNAMIC = 2 if SMOKE else 10  # of N_CHALLENGES, the rest static
+N_USERS = int(os.environ.get("USERS", "10" if SMOKE else "200"))
+N_COMPS = int(os.environ.get("COMPS", "1"))
+N_CHALLENGES = 6 if SMOKE else 30          # per competition
+N_DYNAMIC = 2 if SMOKE else 10             # of N_CHALLENGES, the rest static
 USER_PW = "loadtest-passw0rd"
 
 DOORS_OPEN_S = 15 if SMOKE else 120
 STEADY_S = 40 if SMOKE else 300
-ANNOUNCE_AT_S = 20 if SMOKE else 240      # offset into steady
-RECONNECT_AT_S = None                      # set = doors+steady (after steady)
+ANNOUNCE_AT_S = 20 if SMOKE else 240       # offset into steady
+BURST_S = 12 if SMOKE else 60              # hot-competition burst (phase 3b)
 SLOW_PROBE_S = 20 if SMOKE else 80
 
 SUBMIT_MIN_GAP, SUBMIT_MAX_GAP = (3.0, 9.0) if SMOKE else (6.0, 15.0)
+BURST_MIN_GAP, BURST_MAX_GAP = (0.6, 1.8)  # comp-0 cadence during the burst
 CORRECT_FRACTION = 0.25                    # of submissions that use a real flag
 NAV_MIN_GAP, NAV_MAX_GAP = (8.0, 20.0)
 PRESENCE_VIEW_MIN, PRESENCE_VIEW_MAX = (6.0, 14.0)
 N_SLOW_CLIENTS = 3 if SMOKE else 8
+# Rows per mass-import POST. Argon2 is ~100ms/row by design, so 500 in one
+# request runs past any sane client/proxy timeout (this run's finding #1).
+IMPORT_BATCH = int(os.environ.get("IMPORT_BATCH", "100"))
 
 ADMIN = {"display_name": "loadadmin", "email": "loadadmin@example.com", "password": "loadadmin-passw0rd"}
-COMP_NAME = "Load Test Open 2026"
+COMP_NAMES = ["Load Test Alpha", "Load Test Bravo", "Load Test Charlie",
+              "Load Test Delta", "Load Test Echo"]
+
+
+def comp_split() -> list[int]:
+    """Users per competition. COMP_SPLIT="250,150,100" or equal by default."""
+    raw = os.environ.get("COMP_SPLIT")
+    if raw:
+        parts = [int(x) for x in raw.split(",")]
+        if len(parts) != N_COMPS or sum(parts) != N_USERS:
+            sys.exit(f"COMP_SPLIT must have {N_COMPS} parts summing to {N_USERS}")
+        return parts
+    base, rem = divmod(N_USERS, N_COMPS)
+    return [base + (1 if i < rem else 0) for i in range(N_COMPS)]
+
+
+def comp_of(idx: int, split: list[int]) -> int:
+    """Deterministic user->competition assignment — identical in every shard."""
+    upto = 0
+    for ci, n in enumerate(split):
+        upto += n
+        if idx < upto:
+            return ci
+    return len(split) - 1
+
 
 # ---- endpoints --------------------------------------------------------------
 HTTP_CADDY, WS_CADDY = "http://localhost:8080", "ws://localhost:8080"
 HTTP_DIRECT, WS_DIRECT = "http://localhost:8001", "ws://localhost:8001"
-HTTP = WS = ""  # resolved in main()
+HTTP = WS = ""  # resolved in parent / read from bootstrap file in workers
 
 # ---- metrics ----------------------------------------------------------------
 rest_lat: dict[str, list[float]] = defaultdict(list)
@@ -67,6 +118,9 @@ counters = Counter()
 probe_lags: list[float] = []
 resource_samples: list[dict] = []
 timeline: list[str] = []
+# (epoch, comp_idx, cls, ms, status) — flat so shards merge by concatenation
+# and the report can slice by phase window for the isolation analysis.
+comp_events: list[list] = []
 
 
 def pct(xs: list[float], p: float) -> float:
@@ -78,9 +132,16 @@ def pct(xs: list[float], p: float) -> float:
 
 
 def note(msg: str) -> None:
-    stamp = f"[{time.strftime('%H:%M:%S')}] {msg}"
+    tag = f"[shard{RANK}] " if RANK >= 0 else ""
+    stamp = f"[{time.strftime('%H:%M:%S')}] {tag}{msg}"
     print(stamp, flush=True)
     timeline.append(stamp)
+
+
+async def sleep_until(epoch: float) -> None:
+    delay = epoch - time.time()
+    if delay > 0:
+        await asyncio.sleep(delay)
 
 
 # ---- activity -> query-key -> REST mapping (mirrors frontend/src/lib/live.ts)-
@@ -153,23 +214,29 @@ class Throttle:
 
 # ---- HTTP helper ------------------------------------------------------------
 async def req(client: httpx.AsyncClient, method: str, path: str, cls: str,
-              token: str | None = None, **kw) -> httpx.Response | None:
+              token: str | None = None, comp: int | None = None,
+              timeout: float = 30, **kw) -> httpx.Response | None:
     headers = kw.pop("headers", {})
     if token:
         headers["Authorization"] = f"Bearer {token}"
     t0 = time.monotonic()
     try:
-        r = await client.request(method, HTTP + path, headers=headers, timeout=30, **kw)
+        r = await client.request(method, HTTP + path, headers=headers, timeout=timeout, **kw)
     except Exception as e:  # noqa: BLE001
         rest_status[cls][type(e).__name__] += 1
+        if comp is not None:
+            comp_events.append([time.time(), comp, cls, None, type(e).__name__])
         return None
-    rest_lat[cls].append((time.monotonic() - t0) * 1000)
+    ms = (time.monotonic() - t0) * 1000
+    rest_lat[cls].append(ms)
     rest_status[cls][r.status_code] += 1
+    if comp is not None:
+        comp_events.append([time.time(), comp, cls, round(ms, 1), r.status_code])
     return r
 
 
-# ---- bootstrap (admin) ------------------------------------------------------
-async def bootstrap(client: httpx.AsyncClient) -> tuple[str, list[dict]]:
+# ---- bootstrap (admin, parent/rank-single only) ------------------------------
+async def bootstrap(client: httpx.AsyncClient) -> tuple[list[dict], str]:
     # 1. Setup wizard (fresh instance) or fall back to admin login.
     r = await req(client, "POST", "/api/setup", "setup", json={
         "admin": ADMIN, "platform_name": "LoadTest", "default_palette": "slate",
@@ -184,44 +251,64 @@ async def bootstrap(client: httpx.AsyncClient) -> tuple[str, list[dict]]:
                        json={"identifier": ADMIN["display_name"], "password": ADMIN["password"]})
         token = lr.json()["access_token"]
 
-    # 2. Competition (individual, public, always-on).
-    r = await req(client, "POST", "/api/competitions", "admin", token=token, json={
-        "name": COMP_NAME, "participation_mode": "individual", "visibility": "public",
-    })
-    cid = r.json()["id"]
-    note(f"competition {cid}")
+    # 2. Competitions (individual, public, always-on) with per-comp challenges.
+    comps: list[dict] = []
+    for ci in range(N_COMPS):
+        name = f"{COMP_NAMES[ci % len(COMP_NAMES)]} {time.strftime('%Y')}"
+        r = await req(client, "POST", "/api/competitions", "admin", token=token, json={
+            "name": name, "participation_mode": "individual", "visibility": "public",
+        })
+        cid = r.json()["id"]
+        challenges = []
+        for i in range(N_CHALLENGES):
+            dynamic = i < N_DYNAMIC
+            flag = f"flag{{loadtest-c{ci}-{i:03d}}}"
+            body = {"title": f"Challenge {i:03d}", "flag_type": "static", "flag": flag, "points": 500}
+            if dynamic:
+                body.update({"scoring_type": "dynamic", "min_points": 100, "decay": 50})
+            r = await req(client, "POST", f"/api/competitions/{cid}/challenges", "admin", token=token, json=body)
+            chid = r.json()["id"]
+            await req(client, "POST", f"/api/competitions/{cid}/challenges/{chid}/publish", "admin", token=token)
+            challenges.append({"id": chid, "flag": flag})
+        comps.append({"cid": cid, "name": name, "challenges": challenges})
+        note(f"competition {ci}: {cid} ({name}) with {len(challenges)} challenges")
 
-    # 3. Challenges (mix of static + dynamic decay), each published with a known flag.
-    challenges = []
-    for i in range(N_CHALLENGES):
-        dynamic = i < N_DYNAMIC
-        flag = f"flag{{loadtest-{i:03d}}}"
-        body = {"title": f"Challenge {i:03d}", "flag_type": "static", "flag": flag, "points": 500}
-        if dynamic:
-            body.update({"scoring_type": "dynamic", "min_points": 100, "decay": 50})
-        r = await req(client, "POST", f"/api/competitions/{cid}/challenges", "admin", token=token, json=body)
-        chid = r.json()["id"]
-        await req(client, "POST", f"/api/competitions/{cid}/challenges/{chid}/publish", "admin", token=token)
-        challenges.append({"id": chid, "flag": flag})
-    note(f"created + published {len(challenges)} challenges ({N_DYNAMIC} dynamic)")
-
-    # 4. Import 200 accounts via the mass-import CSV (dogfoods #171). No roles —
-    #    each self-joins in phase 1 (the real doors-open path).
-    lines = ["display_name,password"] + [f"loadtest{n:04d},{USER_PW}" for n in range(N_USERS)]
-    csv = ("\n".join(lines) + "\n").encode()
-    r = await req(client, "POST", "/api/users/import", "admin", token=token,
-                  files={"file": ("roster.csv", csv, "text/csv")})
-    rep = r.json()
-    note(f"user import: created={rep['created']} skipped={rep['skipped']} errors={rep['errors']}")
-    return cid, challenges, token
+    # 3. Import all accounts via the mass-import CSV (dogfoods #171). No roles —
+    #    each self-joins its assigned competition in phase 1 (the real
+    #    doors-open path).
+    #
+    #    Chunked at IMPORT_BATCH deliberately: argon2 is ~100ms/row by design,
+    #    so a single 500-row POST runs well past a 30s client/proxy timeout —
+    #    the first thing this run found (see the report). A real operator hits
+    #    the same wall, so the harness does what they'd have to do, and records
+    #    per-batch latency under "import" so the report can quantify it.
+    created = 0
+    for start in range(0, N_USERS, IMPORT_BATCH):
+        chunk = range(start, min(start + IMPORT_BATCH, N_USERS))
+        lines = ["display_name,password"] + [f"loadtest{n:04d},{USER_PW}" for n in chunk]
+        csv = ("\n".join(lines) + "\n").encode()
+        t0 = time.monotonic()
+        r = await req(client, "POST", "/api/users/import", "import", token=token,
+                      timeout=300, files={"file": ("roster.csv", csv, "text/csv")})
+        if r is None or r.status_code != 200:
+            note(f"user import batch @{start} FAILED ({getattr(r, 'status_code', 'timeout')})")
+            continue
+        rep = r.json()
+        created += rep["created"]
+        note(f"user import batch {start:4d}-{chunk[-1]:4d}: created={rep['created']} "
+             f"skipped={rep['skipped']} errors={rep['errors']} in {(time.monotonic()-t0):.1f}s")
+    note(f"user import total: created={created}/{N_USERS}")
+    return comps, token
 
 
 # ---- client -----------------------------------------------------------------
 class Client:
-    def __init__(self, idx: int, client: httpx.AsyncClient, cid: str, challenges: list[dict]):
+    def __init__(self, idx: int, client: httpx.AsyncClient, comp_idx: int,
+                 cid: str, challenges: list[dict]):
         self.idx = idx
         self.name = f"loadtest{idx:04d}"
         self.http = client
+        self.comp_idx = comp_idx
         self.cid = cid
         self.challenges = challenges
         self.token: str | None = None
@@ -248,19 +335,20 @@ class Client:
         return True
 
     async def join(self):
-        await req(self.http, "POST", f"/api/competitions/{self.cid}/join", "join", token=self.token)
+        await req(self.http, "POST", f"/api/competitions/{self.cid}/join", "join",
+                  token=self.token, comp=self.comp_idx)
 
     async def initial_fetch(self):
         for key in self.mounts:
             p = key_to_path(key, self.cid)
             if p:
-                await req(self.http, "GET", p, "refetch", token=self.token)
+                await req(self.http, "GET", p, "refetch", token=self.token, comp=self.comp_idx)
 
     async def _refetch(self, key: tuple):
         if key in self.mounts:
             p = key_to_path(key, self.cid)
             if p:
-                await req(self.http, "GET", p, "refetch", token=self.token)
+                await req(self.http, "GET", p, "refetch", token=self.token, comp=self.comp_idx)
 
     async def connect_shell(self):
         rooms = [("scoreboard", self.cid), ("activity", self.cid),
@@ -312,10 +400,12 @@ class Client:
         flag = ch["flag"] if correct else f"flag{{wrong-{random.randint(0, 1<<30)}}}"
         path = f"/api/competitions/{self.cid}/challenges/{ch['id']}/submit"
         t0 = time.monotonic()
-        r = await req(self.http, "POST", path, "submit", token=self.token, json={"flag": flag})
+        r = await req(self.http, "POST", path, "submit", token=self.token, comp=self.comp_idx,
+                      json={"flag": flag})
         if r is None:
             return
         counters["attempts"] += 1
+        counters[f"attempts_c{self.comp_idx}"] += 1
         if r.status_code == 429:
             counters["submit_429"] += 1
             return
@@ -324,6 +414,7 @@ class Client:
             if not r.json().get("already_solved"):
                 self.solved.add(ch["id"])
                 counters["solves"] += 1
+                counters[f"solves_c{self.comp_idx}"] += 1
                 submit_correct_lat.append(dt)
 
     async def presence_view(self):
@@ -337,14 +428,31 @@ class Client:
         if ws:
             await ws.close()
 
-    async def steady(self, until: float):
+    async def steady(self, until_epoch: float, burst_until_epoch: float | None = None):
+        """Normal play until ``until_epoch``; then, if this client's comp is the
+        hot one (comp 0) and a burst window follows, submit-spam through it —
+        every other comp keeps playing normally through the burst window, so
+        the report can compare their latency against the steady window."""
+
         async def submit_loop():
-            while self.alive and time.monotonic() < until:
+            while self.alive and time.time() < until_epoch:
                 await asyncio.sleep(random.uniform(SUBMIT_MIN_GAP, SUBMIT_MAX_GAP))
                 await self.submit_once()
+            if burst_until_epoch is None:
+                return
+            if self.comp_idx == 0:
+                while self.alive and time.time() < burst_until_epoch:
+                    await asyncio.sleep(random.uniform(BURST_MIN_GAP, BURST_MAX_GAP))
+                    await self.submit_once()
+            else:
+                while self.alive and time.time() < burst_until_epoch:
+                    await asyncio.sleep(random.uniform(SUBMIT_MIN_GAP, SUBMIT_MAX_GAP))
+                    await self.submit_once()
+
+        stop_epoch = burst_until_epoch or until_epoch
 
         async def nav_loop():
-            while self.alive and time.monotonic() < until:
+            while self.alive and time.time() < stop_epoch:
                 await asyncio.sleep(random.uniform(NAV_MIN_GAP, NAV_MAX_GAP))
                 self.page = random.choices(
                     ["challenges", "dashboard", "scoreboard", "participants"],
@@ -353,7 +461,7 @@ class Client:
                 await self.initial_fetch()
 
         async def presence_loop():
-            while self.alive and time.monotonic() < until:
+            while self.alive and time.time() < stop_epoch:
                 await asyncio.sleep(random.uniform(PRESENCE_VIEW_MIN, PRESENCE_VIEW_MAX))
                 await self.presence_view()
 
@@ -371,12 +479,12 @@ class Client:
         self.sockets.clear()
 
 
-# ---- resource sampler -------------------------------------------------------
-async def sample_resources(stop: asyncio.Event):
+# ---- resource sampler (parent / single-process only) --------------------------
+async def sample_resources(stop: asyncio.Event, harness_pids: list[int]):
     name_backend = "flagpost-backend-1"
     name_pg = "flagpost-postgres-1"
     while not stop.is_set():
-        cpu = mem = pg = None
+        cpu = mem = pg = harness_cpu = None
         try:
             p = await asyncio.create_subprocess_exec(
                 "docker", "stats", "--no-stream", "--format", "{{.CPUPerc}} {{.MemUsage}}",
@@ -397,20 +505,193 @@ async def sample_resources(stop: asyncio.Event):
             pg = out.decode().strip()
         except Exception:  # noqa: BLE001
             pass
-        resource_samples.append({"t": round(time.monotonic() - T0, 1), "cpu": cpu, "mem": mem, "pg_conns": pg})
+        if harness_pids:
+            # Honest-limits telemetry: if the harness itself pins its cores, the
+            # client-side tails are queueing artifacts, and the report must say so.
+            try:
+                p = await asyncio.create_subprocess_exec(
+                    "ps", "-o", "%cpu=", "-p", ",".join(str(x) for x in harness_pids),
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+                out, _ = await p.communicate()
+                vals = [float(v) for v in out.decode().split() if v]
+                harness_cpu = round(sum(vals), 1)
+            except Exception:  # noqa: BLE001
+                pass
+        resource_samples.append({"t": round(time.time() - T0, 1), "cpu": cpu, "mem": mem,
+                                 "pg_conns": pg, "harness_cpu": harness_cpu})
         try:
             await asyncio.wait_for(stop.wait(), timeout=3.0)
         except asyncio.TimeoutError:
             pass
 
 
-# ---- phases -----------------------------------------------------------------
+# ---- worker ------------------------------------------------------------------
 T0 = 0.0
 
 
+async def run_clients(comps: list[dict], admin_token: str, schedule: dict,
+                      my_indices: list[int], split: list[int], is_rank0: bool):
+    """The phase engine — runs in each shard (or inline for SHARDS=1)."""
+    limits = httpx.Limits(max_connections=max(64, len(my_indices) * 2),
+                          max_keepalive_connections=max(32, len(my_indices)))
+    client = httpx.AsyncClient(limits=limits)
+
+    clients = []
+    for idx in my_indices:
+        ci = comp_of(idx, split)
+        clients.append(Client(idx, client, ci, comps[ci]["cid"], comps[ci]["challenges"]))
+
+    # ---- Phase 1: doors open — spread onboarding across the window -----------
+    doors_end = schedule["doors_end"]
+    note(f"PHASE 1 — doors open: {len(clients)} users over {doors_end - time.time():.0f}s")
+
+    async def onboard(c: Client, at: float):
+        await sleep_until(at)
+        if not await c.login():
+            return
+        await c.join()
+        await c.connect_shell()
+        await c.initial_fetch()
+
+    now = time.time()
+    await asyncio.gather(*(onboard(c, random.uniform(now, doors_end - 1)) for c in clients))
+    live = [c for c in clients if c.token and c.sockets]
+    note(f"doors-open done — {len(live)}/{len(clients)} onboarded, "
+         f"{sum(len(c.sockets) for c in clients)} sockets open")
+
+    # ---- Phase 2/3/3b: steady play + announcements + hot-comp burst ----------
+    steady_end, burst_end = schedule["steady_end"], schedule["burst_end"]
+    note(f"PHASE 2 — steady play until T+{steady_end - T0:.0f}s, "
+         f"then PHASE 3b burst (comp 0 hot) until T+{burst_end - T0:.0f}s")
+
+    async def announce_later():
+        if not is_rank0:
+            return
+        await sleep_until(schedule["announce_at"])
+        note("PHASE 3 — announcement blast, one per competition")
+        for ci, comp in enumerate(comps):
+            t0 = time.monotonic()
+            r = await req(client, "POST", f"/api/competitions/{comp['cid']}/announcements",
+                          "announce", token=admin_token, comp=ci,
+                          json={"title": "Load test broadcast",
+                                "body": "All-participants announcement under load.",
+                                "severity": "info"})
+            note(f"announcement comp{ci} -> {getattr(r, 'status_code', 'ERR')} "
+                 f"in {(time.monotonic() - t0) * 1000:.0f}ms")
+            await asyncio.sleep(5.0)
+
+    await asyncio.gather(*(c.steady(steady_end, burst_end) for c in live), announce_later())
+    note("steady + burst complete")
+
+    # ---- Phase 4: reconnect herd ---------------------------------------------
+    await sleep_until(schedule["reconnect_at"])
+    note("PHASE 4 — reconnect herd: dropping all sockets, reconnecting simultaneously")
+    for c in live:
+        await c.close_sockets()
+    await sleep_until(schedule["reconnect_at"] + 1.0)
+    p4 = time.monotonic()
+
+    async def reconnect(c: Client):
+        await c.connect_shell()
+        await c.initial_fetch()
+
+    await asyncio.gather(*(reconnect(c) for c in live))
+    note(f"reconnect herd done in {time.monotonic() - p4:.1f}s — "
+         f"{sum(len(c.sockets) for c in live)} sockets re-established")
+
+    # ---- Phase 5: slow-client head-of-line probe (rank 0, comp 0) -------------
+    if is_rank0:
+        note(f"PHASE 5 — slow-client probe: {N_SLOW_CLIENTS} congested readers + solve burst")
+        c0 = [c for c in live if c.comp_idx == 0]
+        slow = c0[:N_SLOW_CLIENTS]
+        fast = c0[N_SLOW_CLIENTS:2 * N_SLOW_CLIENTS + 20]
+        cid0 = comps[0]["cid"]
+        for c in slow:
+            c.slow = True
+            old = c.sockets.pop(f"scoreboard:{cid0}", None)
+            if old:
+                await old.close()
+            await c._open("scoreboard", cid0)
+
+        end = time.time() + SLOW_PROBE_S
+        while time.time() < end:
+            solver = random.choice(fast) if fast else (c0[-1] if c0 else live[-1])
+            unsolved = [ch for ch in solver.challenges if ch["id"] not in solver.solved]
+            if not unsolved:
+                break
+            ch = random.choice(unsolved)
+            t0 = time.monotonic()
+            r = await req(client, "POST",
+                          f"/api/competitions/{solver.cid}/challenges/{ch['id']}/submit",
+                          "submit", token=solver.token, comp=solver.comp_idx,
+                          json={"flag": ch["flag"]})
+            if r is not None and r.status_code == 200 and r.json().get("correct"):
+                solver.solved.add(ch["id"])
+                probe_lags.append((time.monotonic() - t0) * 1000)
+            await asyncio.sleep(2.0)
+        note(f"slow-client probe complete ({len(probe_lags)} probe solves)")
+    else:
+        # Other shards idle through the probe window so sockets stay realistic.
+        await sleep_until(schedule["reconnect_at"] + 5.0 + SLOW_PROBE_S)
+
+    for c in live:
+        c.alive = False
+        await c.close_sockets()
+    await client.aclose()
+
+
+def dump_shard_metrics(path: str):
+    with open(path, "w") as f:
+        json.dump({
+            "rest_lat": {k: v for k, v in rest_lat.items()},
+            "rest_status": {k: dict(v) for k, v in rest_status.items()},
+            "submit_correct_lat": submit_correct_lat,
+            "ws_connect_lat": {k: v for k, v in ws_connect_lat.items()},
+            "ws_frames": dict(ws_frames),
+            "ws_errs": dict(ws_errs),
+            "counters": dict(counters),
+            "probe_lags": probe_lags,
+            "comp_events": comp_events,
+            "timeline": timeline,
+        }, f)
+
+
+def load_shard_metrics(path: str):
+    with open(path) as f:
+        d = json.load(f)
+    for k, v in d["rest_lat"].items():
+        rest_lat[k].extend(v)
+    for k, v in d["rest_status"].items():
+        rest_status[k].update(v)
+    submit_correct_lat.extend(d["submit_correct_lat"])
+    for k, v in d["ws_connect_lat"].items():
+        ws_connect_lat[k].extend(v)
+    ws_frames.update(d["ws_frames"])
+    ws_errs.update(d["ws_errs"])
+    counters.update(d["counters"])
+    probe_lags.extend(d["probe_lags"])
+    comp_events.extend(d["comp_events"])
+    timeline.extend(d["timeline"])
+
+
+# ---- orchestration -----------------------------------------------------------
 async def main():
     global HTTP, WS, T0
-    # resolve endpoint (prefer Caddy front door; fall back to direct backend)
+    split = comp_split()
+
+    if RANK >= 0:
+        # ---- worker: read bootstrap, run my slice, dump metrics --------------
+        with open(os.environ["BOOT"]) as f:
+            boot = json.load(f)
+        HTTP, WS = boot["http"], boot["ws"]
+        T0 = boot["schedule"]["t0"]
+        my_indices = [i for i in range(N_USERS) if i % SHARDS == RANK]
+        await run_clients(boot["comps"], boot["admin_token"], boot["schedule"],
+                          my_indices, split, is_rank0=(RANK == 0))
+        dump_shard_metrics(os.environ["OUT"])
+        return
+
+    # ---- parent (or single-process run) --------------------------------------
     async with httpx.AsyncClient() as probe:
         for h, w, label in [(HTTP_CADDY, WS_CADDY, "Caddy :8080"), (HTTP_DIRECT, WS_DIRECT, "direct :8001")]:
             try:
@@ -425,130 +706,85 @@ async def main():
         note("no reachable endpoint — is the stack up?")
         return
 
-    limits = httpx.Limits(max_connections=N_USERS * 2, max_keepalive_connections=N_USERS)
-    client = httpx.AsyncClient(limits=limits)
-    T0 = time.monotonic()
+    T0 = time.time()
+    boot_client = httpx.AsyncClient(limits=httpx.Limits(max_connections=16))
+    comps, admin_token = await bootstrap(boot_client)
+    await boot_client.aclose()
 
-    cid, challenges, admin_token = await bootstrap(client)
-    clients = [Client(i, client, cid, challenges) for i in range(N_USERS)]
+    start = time.time() + 3.0
+    schedule = {
+        "t0": T0,
+        "doors_end": start + DOORS_OPEN_S,
+        "announce_at": start + DOORS_OPEN_S + ANNOUNCE_AT_S,
+        "steady_end": start + DOORS_OPEN_S + STEADY_S,
+        "burst_end": start + DOORS_OPEN_S + STEADY_S + BURST_S,
+        "reconnect_at": start + DOORS_OPEN_S + STEADY_S + BURST_S + 3.0,
+    }
 
     stop = asyncio.Event()
-    sampler = asyncio.create_task(sample_resources(stop))
 
-    # ---- Phase 1: doors open --------------------------------------------------
-    note(f"PHASE 1 — doors open: {N_USERS} logins + {N_USERS*4} sockets + joins over {DOORS_OPEN_S}s")
-    p1 = time.monotonic()
+    if SHARDS <= 1:
+        sampler = asyncio.create_task(sample_resources(stop, [os.getpid()]))
+        await run_clients(comps, admin_token, schedule,
+                          list(range(N_USERS)), split, is_rank0=True)
+    else:
+        outdir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".shards")
+        os.makedirs(outdir, exist_ok=True)
+        boot_path = os.path.join(outdir, "boot.json")
+        with open(boot_path, "w") as f:
+            json.dump({"http": HTTP, "ws": WS, "comps": comps,
+                       "admin_token": admin_token, "schedule": schedule}, f)
 
-    async def onboard(c: Client, delay: float):
-        await asyncio.sleep(delay)
-        if not await c.login():
-            return
-        await c.join()
-        await c.connect_shell()
-        await c.initial_fetch()
+        procs = []
+        for k in range(SHARDS):
+            env = dict(os.environ, RANK=str(k), BOOT=boot_path,
+                       OUT=os.path.join(outdir, f"shard-{k}.json"))
+            procs.append(await asyncio.create_subprocess_exec(
+                sys.executable, os.path.abspath(__file__), env=env))
+        note(f"spawned {SHARDS} shard workers for {N_USERS} users across {N_COMPS} comps "
+             f"(split {split})")
+        sampler = asyncio.create_task(sample_resources(stop, [p.pid for p in procs]))
+        codes = await asyncio.gather(*(p.wait() for p in procs))
+        note(f"shards exited: {codes}")
+        for k in range(SHARDS):
+            sp = os.path.join(outdir, f"shard-{k}.json")
+            if os.path.exists(sp):
+                load_shard_metrics(sp)
+            else:
+                note(f"WARNING shard {k} left no metrics file")
 
-    await asyncio.gather(*(onboard(c, random.uniform(0, DOORS_OPEN_S)) for c in clients))
-    live = [c for c in clients if c.token and c.sockets]
-    note(f"doors-open done in {time.monotonic()-p1:.1f}s — {len(live)}/{N_USERS} fully onboarded, "
-         f"{sum(len(c.sockets) for c in clients)} sockets open")
-
-    # ---- Phase 2: steady state (+ Phase 3 announcement mid-way) ---------------
-    note(f"PHASE 2 — steady play for {STEADY_S}s (submits + navigation + presence churn)")
-    until = time.monotonic() + STEADY_S
-
-    async def announce_later():
-        await asyncio.sleep(ANNOUNCE_AT_S)
-        note("PHASE 3 — announcement blast to all participants")
-        t0 = time.monotonic()
-        r = await req(client, "POST", f"/api/competitions/{cid}/announcements", "announce",
-                      token=admin_token, json={"title": "Load test broadcast",
-                      "body": "All-participants announcement under load.", "severity": "info"})
-        note(f"announcement POST -> {getattr(r,'status_code','ERR')} in {(time.monotonic()-t0)*1000:.0f}ms "
-             f"(foreground fan-out to {len(live)} recipients)")
-
-    await asyncio.gather(*(c.steady(until) for c in live), announce_later())
-    note("steady state complete")
-
-    # ---- Phase 4: reconnect herd ---------------------------------------------
-    note("PHASE 4 — reconnect herd: dropping all sockets, reconnecting simultaneously")
-    for c in live:
-        await c.close_sockets()
-    await asyncio.sleep(1.0)
-    p4 = time.monotonic()
-
-    async def reconnect(c: Client):
-        await c.connect_shell()
-        await c.initial_fetch()
-
-    await asyncio.gather(*(reconnect(c) for c in live))
-    note(f"reconnect herd done in {time.monotonic()-p4:.1f}s — "
-         f"{sum(len(c.sockets) for c in live)} sockets re-established")
-
-    # ---- Phase 5: slow-client head-of-line probe ------------------------------
-    note(f"PHASE 5 — slow-client probe: {N_SLOW_CLIENTS} congested readers + solve burst")
-    slow = live[:N_SLOW_CLIENTS]
-    fast = live[N_SLOW_CLIENTS:2 * N_SLOW_CLIENTS + 20]
-    # make the slow clients congested: reconnect their scoreboard socket in slow mode
-    for c in slow:
-        c.slow = True
-        old = c.sockets.pop(f"scoreboard:{cid}", None)
-        if old:
-            await old.close()
-        await c._open("scoreboard", cid)
-
-    # probe: a fresh solver solves an unsolved challenge; measure how long until
-    # the fast clients' scoreboard sockets receive their next frame.
-    async def probe():
-        end = time.monotonic() + SLOW_PROBE_S
-        while time.monotonic() < end:
-            solver = random.choice(fast) if fast else live[-1]
-            unsolved = [ch for ch in challenges if ch["id"] not in solver.solved]
-            if not unsolved:
-                break
-            ch = random.choice(unsolved)
-            baseline = dict(ws_frames)
-            t0 = time.monotonic()
-            r = await req(client, "POST",
-                          f"/api/competitions/{cid}/challenges/{ch['id']}/submit",
-                          "submit", token=solver.token, json={"flag": ch["flag"]})
-            if r is not None and r.status_code == 200 and r.json().get("correct"):
-                solver.solved.add(ch["id"])
-                # scoreboard broadcast should now fan out; record submit latency
-                # (foreground includes the recompute+broadcast) as the signal.
-                probe_lags.append((time.monotonic() - t0) * 1000)
-            await asyncio.sleep(2.0)
-
-    await probe()
-    note(f"slow-client probe complete ({len(probe_lags)} probe solves)")
-
-    # ---- teardown -------------------------------------------------------------
     stop.set()
     await sampler
-    for c in live:
-        c.alive = False
-        await c.close_sockets()
-    await client.aclose()
-
-    report(cid)
+    report(schedule, split)
 
 
-def report(cid: str):
+# ---- report -------------------------------------------------------------------
+def window_stats(events: list[list], comp: int, cls: str,
+                 t_from: float, t_to: float) -> dict:
+    xs = [e[3] for e in events
+          if e[1] == comp and e[2] == cls and e[3] is not None and t_from <= e[0] < t_to]
+    return {"n": len(xs), "p50": pct(xs, 50), "p95": pct(xs, 95)}
+
+
+def report(schedule: dict, split: list[int]):
     def block(cls):
         xs = rest_lat.get(cls, [])
         return (f"  {cls:10s} n={len(xs):5d}  p50={pct(xs,50):7.0f}ms  p95={pct(xs,95):7.0f}ms  "
                 f"p99={pct(xs,99):7.0f}ms  max={max(xs) if xs else 0:7.0f}ms  status={dict(rest_status[cls])}")
 
     cpu_vals = [float(s["cpu"].rstrip('%')) for s in resource_samples if s.get("cpu") and s["cpu"].endswith('%')]
-    pg_vals = [int(s["pg_conns"]) for s in resource_samples if s.get("pg_conns", "").isdigit()]
+    pg_vals = [int(s["pg_conns"]) for s in resource_samples if (s.get("pg_conns") or "").isdigit()]
+    harness_vals = [s["harness_cpu"] for s in resource_samples if s.get("harness_cpu") is not None]
 
     lines = []
     lines.append("=" * 78)
-    lines.append(f"FLAGPOST 200-USER CAPACITY SIMULATION — {'SMOKE' if SMOKE else 'FULL'} RUN")
+    lines.append(f"FLAGPOST CAPACITY SIMULATION — {'SMOKE' if SMOKE else 'FULL'} RUN")
     lines.append("=" * 78)
-    lines.append(f"users={N_USERS} challenges={N_CHALLENGES} endpoint={HTTP}")
+    lines.append(f"users={N_USERS} comps={N_COMPS} split={split} shards={SHARDS} "
+                 f"challenges/comp={N_CHALLENGES} endpoint={HTTP}")
     lines.append("")
-    lines.append("REST latency by class:")
-    for cls in ["setup", "login", "join", "admin", "submit", "refetch", "announce"]:
+    lines.append("REST latency by class (all competitions):")
+    for cls in ["setup", "login", "join", "admin", "import", "submit", "refetch", "announce"]:
         if rest_lat.get(cls):
             lines.append(block(cls))
     lines.append("")
@@ -559,6 +795,35 @@ def report(cid: str):
                  f"p95={pct(submit_correct_lat,95):.0f}ms p99={pct(submit_correct_lat,99):.0f}ms "
                  f"max={max(submit_correct_lat) if submit_correct_lat else 0:.0f}ms")
     lines.append("")
+
+    if N_COMPS > 1:
+        lines.append("Per-competition (whole run):")
+        for ci in range(N_COMPS):
+            sub = window_stats(comp_events, ci, "submit", 0, float("inf"))
+            ref = window_stats(comp_events, ci, "refetch", 0, float("inf"))
+            lines.append(f"  comp{ci} users={split[ci]:4d} solves={counters[f'solves_c{ci}']:5d} "
+                         f"attempts={counters[f'attempts_c{ci}']:6d}  "
+                         f"submit p50/p95={sub['p50']:.0f}/{sub['p95']:.0f}ms  "
+                         f"refetch p50/p95={ref['p50']:.0f}/{ref['p95']:.0f}ms")
+        lines.append("")
+        lines.append("Tenancy isolation — quiet comps during comp-0 burst vs steady:")
+        s0, s1 = schedule["doors_end"], schedule["steady_end"]
+        b0, b1 = schedule["steady_end"], schedule["burst_end"]
+        for ci in range(1, N_COMPS):
+            st = window_stats(comp_events, ci, "refetch", s0, s1)
+            bu = window_stats(comp_events, ci, "refetch", b0, b1)
+            sts = window_stats(comp_events, ci, "submit", s0, s1)
+            bus = window_stats(comp_events, ci, "submit", b0, b1)
+            lines.append(f"  comp{ci}: refetch p50 {st['p50']:.0f} -> {bu['p50']:.0f}ms "
+                         f"(p95 {st['p95']:.0f} -> {bu['p95']:.0f}ms, n={st['n']}->{bu['n']}) | "
+                         f"submit p50 {sts['p50']:.0f} -> {bus['p50']:.0f}ms "
+                         f"(p95 {sts['p95']:.0f} -> {bus['p95']:.0f}ms)")
+        hot_st = window_stats(comp_events, 0, "submit", s0, s1)
+        hot_bu = window_stats(comp_events, 0, "submit", b0, b1)
+        lines.append(f"  comp0 (hot): submit p50 {hot_st['p50']:.0f} -> {hot_bu['p50']:.0f}ms "
+                     f"(p95 {hot_st['p95']:.0f} -> {hot_bu['p95']:.0f}ms, n={hot_st['n']}->{hot_bu['n']})")
+        lines.append("")
+
     lines.append("WebSockets:")
     for rt in ["scoreboard", "activity", "announcements", "user", "challenge"]:
         if ws_connect_lat.get(rt):
@@ -568,28 +833,46 @@ def report(cid: str):
     lines.append(f"  frames received: {dict(ws_frames)}")
     lines.append(f"  ws errors: {dict(ws_errs)}")
     lines.append("")
-    lines.append("Phase 5 slow-client probe (submit latency incl. foreground scoreboard broadcast):")
+    lines.append("Phase 5 slow-client probe (submit latency incl. scoreboard broadcast path):")
     lines.append(f"  probes={len(probe_lags)} p50={pct(probe_lags,50):.0f}ms "
                  f"p95={pct(probe_lags,95):.0f}ms max={max(probe_lags) if probe_lags else 0:.0f}ms")
     lines.append("")
     lines.append("Backend resource usage (docker stats sampled @3s):")
     lines.append(f"  CPU%: p50={pct(cpu_vals,50):.0f} p95={pct(cpu_vals,95):.0f} max={max(cpu_vals) if cpu_vals else 0:.0f}"
                  f"  (limit 400% = 4 cores)")
-    lines.append(f"  Postgres connections: max={max(pg_vals) if pg_vals else 0} (pool_size 5 + overflow 10 = 15 cap)")
+    lines.append(f"  Postgres connections: max={max(pg_vals) if pg_vals else 0} "
+                 f"(configured cap = db_pool_size + db_max_overflow; 60 in current defaults)")
+    if harness_vals:
+        lines.append(f"  Harness CPU% (all shards): p50={pct(harness_vals,50):.0f} "
+                     f"max={max(harness_vals):.0f}  (honest-limits telemetry: >~{SHARDS*90} "
+                     f"means client-side tails are queueing artifacts)")
     lines.append("=" * 78)
 
     text = "\n".join(lines)
     print("\n" + text)
     out = {
-        "config": {"users": N_USERS, "challenges": N_CHALLENGES, "endpoint": HTTP, "smoke": SMOKE},
+        "config": {"users": N_USERS, "comps": N_COMPS, "split": split, "shards": SHARDS,
+                   "challenges_per_comp": N_CHALLENGES, "endpoint": HTTP, "smoke": SMOKE},
+        "schedule": schedule,
         "rest_latency": {c: {"n": len(rest_lat[c]), "p50": pct(rest_lat[c], 50), "p95": pct(rest_lat[c], 95),
                              "p99": pct(rest_lat[c], 99), "max": max(rest_lat[c]) if rest_lat[c] else 0,
                              "status": dict(rest_status[c])} for c in rest_lat},
         "submissions": {"attempts": counters["attempts"], "solves": counters["solves"],
                         "http_429": counters["submit_429"],
+                        "per_comp": {f"c{ci}": {"attempts": counters[f"attempts_c{ci}"],
+                                                "solves": counters[f"solves_c{ci}"]}
+                                     for ci in range(N_COMPS)},
                         "correct_submit_lat": {"p50": pct(submit_correct_lat, 50), "p95": pct(submit_correct_lat, 95),
                                                "p99": pct(submit_correct_lat, 99),
                                                "max": max(submit_correct_lat) if submit_correct_lat else 0}},
+        "isolation": {
+            f"c{ci}": {
+                "steady": window_stats(comp_events, ci, "refetch", schedule["doors_end"], schedule["steady_end"]),
+                "burst": window_stats(comp_events, ci, "refetch", schedule["steady_end"], schedule["burst_end"]),
+                "steady_submit": window_stats(comp_events, ci, "submit", schedule["doors_end"], schedule["steady_end"]),
+                "burst_submit": window_stats(comp_events, ci, "submit", schedule["steady_end"], schedule["burst_end"]),
+            } for ci in range(N_COMPS)
+        } if N_COMPS > 1 else {},
         "ws": {"connect_lat": {rt: {"p50": pct(v, 50), "p95": pct(v, 95), "max": max(v)}
                                for rt, v in ws_connect_lat.items()},
                "frames": dict(ws_frames), "errors": dict(ws_errs)},
@@ -598,8 +881,9 @@ def report(cid: str):
         "resources": {"cpu_pct": {"p50": pct(cpu_vals, 50), "p95": pct(cpu_vals, 95),
                                   "max": max(cpu_vals) if cpu_vals else 0},
                       "pg_conns_max": max(pg_vals) if pg_vals else 0,
+                      "harness_cpu_max": max(harness_vals) if harness_vals else None,
                       "samples": resource_samples},
-        "timeline": timeline,
+        "timeline": sorted(timeline),
     }
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sim-result.json")
     with open(path, "w") as f:

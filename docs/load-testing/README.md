@@ -14,7 +14,7 @@ behind it.
 
 | File | What it is |
 |---|---|
-| `sim.py` | The simulator — one asyncio process driving N browser-like clients. |
+| `sim.py` | The simulator — drives N browser-like clients across M competitions, optionally sharded over several worker processes so the load generator itself never becomes the bottleneck. |
 | `loadtest.override.yml` | A compose overlay: publishes the backend port for the harness and caps the backend at a realistic event-VPS size. |
 | `<date>-baseline.md` | A written report for a run (verdict, results, bottlenecks, caveats). |
 | `<date>-*-result.json` | The raw metrics that report was written from. |
@@ -34,11 +34,25 @@ Each simulated user behaves like a browser, not a bare HTTP client:
   amplification is faithful, not guessed;
 - submits flags at a competitive cadence within the per-subject rate limit.
 
-It runs five phases: **doors open** (login + socket storm), **steady play**,
-**announcement blast**, **reconnect herd** (drop and re-establish every socket),
-and a **slow-client probe** (congested readers during a solve burst). It samples
-backend CPU/memory (`docker stats`) and the Postgres connection count
-(`pg_stat_activity`) throughout, and writes a JSON + printed summary.
+It runs these phases: **doors open** (login + socket storm), **steady play**,
+**announcement blast** (one per competition), a **hot-competition burst** (one
+competition submit-spams while the others play normally — the tenancy-isolation
+probe), **reconnect herd** (drop and re-establish every socket), and a
+**slow-client probe** (congested readers during a solve burst). It samples
+backend CPU/memory (`docker stats`), the Postgres connection count
+(`pg_stat_activity`), and — when sharded — the harness's own CPU, so a report can
+state whether the tails are the server's or the load generator's. Writes a JSON +
+printed summary, with per-competition and steady-vs-burst windowed breakdowns.
+
+### Multiple competitions and sharding
+
+A single asyncio loop saturates client-side well below ~500 browser-like
+clients, which would poison the numbers with harness queueing. So the run can be
+split across worker processes: the parent bootstraps the instance and an absolute
+epoch-aligned phase schedule, spawns `SHARDS` workers (each owning `idx % SHARDS`,
+a stride that puts users from every competition in every shard), and merges their
+raw metrics into one report. Users are assigned to competitions deterministically
+(same assignment in every shard) via `COMP_SPLIT`.
 
 ## Running it
 
@@ -54,18 +68,23 @@ docker compose -f docker-compose.yml -f docs/load-testing/loadtest.override.yml 
   up -d --build
 
 # 2. Run the simulator (from the repo root, using the backend venv).
-backend/.venv/bin/python docs/load-testing/sim.py            # full 200-user run
+backend/.venv/bin/python docs/load-testing/sim.py            # 200 users, 1 comp
 SMOKE=1 backend/.venv/bin/python docs/load-testing/sim.py    # 10-user self-test
+
+# 500 users across 3 competitions (250/150/100), 4 sharded workers:
+USERS=500 COMPS=3 COMP_SPLIT=250,150,100 SHARDS=4 \
+  backend/.venv/bin/python docs/load-testing/sim.py
 
 # 3. Tear the stack down when done.
 docker compose -f docker-compose.yml -f docs/load-testing/loadtest.override.yml \
   down -v
 ```
 
-Knobs (user count, challenge count, phase durations, submission cadence) are
-constants at the top of `sim.py`. It targets the Caddy front door
-(`:8080`) when reachable and falls back to the direct backend port
-(`:8001`, published by the overlay).
+Knobs are environment variables (`USERS`, `COMPS`, `COMP_SPLIT`, `SHARDS`,
+`IMPORT_BATCH`, `SMOKE`) plus constants at the top of `sim.py` (challenge count,
+phase durations, submission cadence). It targets the Caddy front door (`:8080`)
+when reachable and falls back to the direct backend port (`:8001`, published by
+the overlay).
 
 ## Honest limits of this harness
 
@@ -83,4 +102,9 @@ constants at the top of `sim.py`. It targets the Caddy front door
 ## Reports
 
 - [`2026-08-10-baseline.md`](2026-08-10-baseline.md) — first baseline at 200
-  users; motivated the v1.4.0 load-hardening work (#87, #174–#178).
+  users; motivated the v1.4.0 load-hardening work (#87, #174–#178). Includes the
+  post-fix and #188 stage-2 re-runs.
+- [`2026-08-12-500user-multicomp.md`](2026-08-12-500user-multicomp.md) — 500
+  users across 3 competitions. Found the single-process ceiling (a 45 % 502 storm
+  with DB-pool and CPU headroom to spare) — the concrete evidence for #189
+  (multi-worker), plus that concurrent competitions share one performance fate.

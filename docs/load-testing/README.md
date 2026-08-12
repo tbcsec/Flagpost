@@ -108,3 +108,7 @@ the overlay).
   users across 3 competitions. Found the single-process ceiling (a 45 % 502 storm
   with DB-pool and CPU headroom to spare) — the concrete evidence for #189
   (multi-worker), plus that concurrent competitions share one performance fate.
+- [`2026-08-12-multiworker-validation.md`](2026-08-12-multiworker-validation.md)
+  — 1,500-user A/B, single- vs 4-worker. Multi-worker eliminates the steady-state
+  502 storm (30–45 % → 0 %), but the argon2 login storm oversubscribes cores
+  under multiple workers — so the default flip is held pending that fix.

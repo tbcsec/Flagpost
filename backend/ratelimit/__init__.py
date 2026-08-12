@@ -20,7 +20,11 @@ def _rate_limiter() -> RateLimiter:
     if settings.redis_url:
         from ratelimit.redis_limiter import RedisRateLimiter
 
-        return RedisRateLimiter(settings.redis_url)
+        return RedisRateLimiter(
+            settings.redis_url,
+            max_connections=settings.redis_max_connections,
+            acquire_timeout_seconds=settings.redis_acquire_timeout_seconds,
+        )
     from ratelimit.memory import InMemoryRateLimiter
 
     return InMemoryRateLimiter()

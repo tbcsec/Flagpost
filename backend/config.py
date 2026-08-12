@@ -144,6 +144,15 @@ class Settings(BaseSettings):
     db_pool_timeout: int = 30
 
     redis_url: str | None = None
+    # Bounded client-side Redis pool (#189 interim hardening). redis.asyncio's
+    # default ConnectionPool is effectively uncapped and, under the 500-user
+    # load test's concurrent churn, raced into "IndexError: pop from empty
+    # list" (150 × HTTP 500). A BlockingConnectionPool with an explicit cap
+    # queues instead — the same "size the pool on purpose" move #187 made for
+    # Postgres. The acquire timeout bounds how long a request waits for a free
+    # connection so exhaustion degrades to added latency, not a hang.
+    redis_max_connections: int = 50
+    redis_acquire_timeout_seconds: float = 10.0
 
     # --- Flag submission rate limit (§13.2) ---
     # Per-subject (user or team) sliding window on the submit endpoint — tight

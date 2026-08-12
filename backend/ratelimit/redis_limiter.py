@@ -14,10 +14,29 @@ from uuid import uuid4
 
 
 class RedisRateLimiter:
-    def __init__(self, redis_url: str) -> None:
-        from redis.asyncio import from_url
+    def __init__(
+        self,
+        redis_url: str,
+        *,
+        max_connections: int = 50,
+        acquire_timeout_seconds: float = 10.0,
+    ) -> None:
+        from redis.asyncio import BlockingConnectionPool, Redis
 
-        self._redis = from_url(redis_url, encoding="utf-8", decode_responses=True)
+        # Bounded + blocking, never the default ConnectionPool: the default is
+        # effectively uncapped and races under heavy concurrent churn (the
+        # 500-user load test drove it into "IndexError: pop from empty list" —
+        # 150 × HTTP 500). BlockingConnectionPool makes an exhausted pool queue
+        # for ``timeout`` seconds instead, so a burst degrades to added latency
+        # rather than hard errors.
+        pool = BlockingConnectionPool.from_url(
+            redis_url,
+            max_connections=max_connections,
+            timeout=acquire_timeout_seconds,
+            encoding="utf-8",
+            decode_responses=True,
+        )
+        self._redis = Redis(connection_pool=pool)
 
     async def hit(self, key: str, *, limit: int, window_seconds: int) -> bool:
         now = time.time()

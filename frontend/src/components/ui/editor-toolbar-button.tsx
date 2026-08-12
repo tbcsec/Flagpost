@@ -11,10 +11,16 @@ export function ToolbarButton({
   active,
   onClick,
   label,
+  disabled = false,
+  title,
 }: {
   active: boolean;
   onClick: () => void;
   label: string;
+  /** Grey out actions that can't apply to the current selection (e.g.
+   *  alignment inside a list) instead of letting them silently no-op. */
+  disabled?: boolean;
+  title?: string;
 }) {
   return (
     <Button
@@ -22,6 +28,8 @@ export function ToolbarButton({
       variant={active ? "secondary" : "ghost"}
       size="sm"
       onClick={onClick}
+      disabled={disabled}
+      title={title}
       className={cn("h-7 px-2 text-xs", active && "font-semibold")}
     >
       {label}

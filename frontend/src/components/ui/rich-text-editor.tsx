@@ -45,6 +45,10 @@ export function RichTextEditor({
       italic: !!e?.isActive("italic"),
       codeBlock: !!e?.isActive("codeBlock"),
       bulletList: !!e?.isActive("bulletList"),
+      // Selected purely so a cursor move into/out of an ordered list (typed
+      // via "1. " — there's no toolbar button) still triggers a re-render for
+      // the alignment gating below.
+      orderedList: !!e?.isActive("orderedList"),
       heading2: !!e?.isActive("heading", { level: 2 }),
       // TextAlign stores "left" implicitly, so isActive matches it by default.
       alignLeft: !!e?.isActive({ textAlign: "left" }),
@@ -54,6 +58,19 @@ export function RichTextEditor({
   });
 
   if (!editor) return null;
+
+  // Alignment only exists on free-standing paragraphs/headings: inside a list
+  // the marker wouldn't travel with centered text (half-aligned mess) and a
+  // code block ignores the attribute entirely — grey the buttons out rather
+  // than let them silently no-op or half-apply (#197 follow-up). Computed
+  // from the live editor, not the useEditorState snapshot: the snapshot lags
+  // until the first transaction, which would wrongly disable the buttons on a
+  // freshly-mounted editor. The selector's flags still make selection moves
+  // re-render this component, so this stays current.
+  const alignable =
+    !editor.isActive("codeBlock") &&
+    !editor.isActive("bulletList") &&
+    !editor.isActive("orderedList");
 
   return (
     <div>
@@ -76,7 +93,12 @@ export function RichTextEditor({
         <ToolbarButton
           label="• List"
           active={active?.bulletList ?? false}
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
+          // Entering a list strips any alignment the paragraphs carried, so a
+          // previously-centered line can't smuggle the half-aligned state the
+          // disabled buttons exist to prevent.
+          onClick={() =>
+            editor.chain().focus().toggleBulletList().unsetTextAlign().run()
+          }
         />
         <ToolbarButton
           label="H2"
@@ -88,17 +110,23 @@ export function RichTextEditor({
         <span aria-hidden className="mx-1 w-px self-stretch bg-border" />
         <ToolbarButton
           label="Left"
-          active={active?.alignLeft ?? false}
+          active={(active?.alignLeft ?? false) && alignable}
+          disabled={!alignable}
+          title={alignable ? undefined : "Alignment doesn't apply inside lists or code blocks"}
           onClick={() => editor.chain().focus().setTextAlign("left").run()}
         />
         <ToolbarButton
           label="Center"
-          active={active?.alignCenter ?? false}
+          active={(active?.alignCenter ?? false) && alignable}
+          disabled={!alignable}
+          title={alignable ? undefined : "Alignment doesn't apply inside lists or code blocks"}
           onClick={() => editor.chain().focus().setTextAlign("center").run()}
         />
         <ToolbarButton
           label="Right"
-          active={active?.alignRight ?? false}
+          active={(active?.alignRight ?? false) && alignable}
+          disabled={!alignable}
+          title={alignable ? undefined : "Alignment doesn't apply inside lists or code blocks"}
           onClick={() => editor.chain().focus().setTextAlign("right").run()}
         />
       </div>

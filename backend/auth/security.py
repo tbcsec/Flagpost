@@ -18,26 +18,106 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import logging
 import secrets
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 import jwt
 from pwdlib import PasswordHash
+from pwdlib.hashers.argon2 import Argon2Hasher
 
 from config import settings
 
-_password_hasher = PasswordHash.recommended()
+logger = logging.getLogger("auth.security")
+
+# argon2id with parallelism=1 (#207): the OWASP-recommended server config —
+# throughput comes from hashing many logins concurrently, not from splitting one
+# hash across cores. pwdlib's default p=4 makes oversubscription unavoidable
+# under multi-worker on a box where cores≈workers (N workers × p lanes). Memory
+# and time stay at pwdlib's recommended values. Existing p=4 hashes still verify
+# — argon2 reads its params from the encoded hash, so only new hashes use p=1.
+_password_hasher = PasswordHash(
+    (
+        Argon2Hasher(
+            memory_cost=settings.argon2_memory_cost,
+            time_cost=settings.argon2_time_cost,
+            parallelism=settings.argon2_parallelism,
+        ),
+    )
+)
+
+
+def _effective_cores() -> int:
+    """The container's core allowance — cgroup quota (Phase 3) or host count."""
+    import os
+
+    from workers import detect_cpu_quota
+
+    quota = detect_cpu_quota()
+    return int(quota) if quota else (os.cpu_count() or 1)
+
+
+# Two bounded executors, sized for two different access patterns (#207) — both
+# replacing ``asyncio.to_thread``, whose default pool is ~min(32, cpu+4) threads
+# *per worker* (the login-storm oversubscription: N workers × that ≫ cores):
+#
+# - login/register/JIT hashing is spread across the N web workers, so each
+#   worker gets cores // workers slots → the total concurrent hashes across all
+#   workers is ~cores. No oversubscription during a doors-open login storm.
+# - a bulk import runs on a single worker and wants the whole box briefly, so it
+#   gets its own cores-sized pool — it's a rare admin op, not concurrent with a
+#   sustained login storm in practice.
+_cores = _effective_cores()
+_workers = settings.web_concurrency if settings.web_concurrency > 0 else 1
+# Floor of 2 per worker, not 1: a single hash thread per worker head-of-lines
+# the whole worker's logins during a storm (one in-flight hash blocks the rest),
+# which was worse than the mild 2x lane oversubscription two threads cause with
+# p=1. Only bites when workers ≈ cores; otherwise cores//workers dominates.
+_hash_executor = ThreadPoolExecutor(
+    max_workers=max(2, _cores // _workers), thread_name_prefix="pwhash"
+)
+_bulk_hash_executor = ThreadPoolExecutor(
+    max_workers=_cores, thread_name_prefix="pwhash-bulk"
+)
 
 
 # --- Passwords --------------------------------------------------------------
 
 def hash_password(raw: str) -> str:
+    """Synchronous hash — for one-off / non-async callers (change-password,
+    seed, tests). Hot async paths use :func:`ahash_password`."""
     return _password_hasher.hash(raw)
 
 
 def verify_password(raw: str, hashed: str) -> bool:
     return _password_hasher.verify(raw, hashed)
+
+
+async def ahash_password(raw: str) -> str:
+    """Hash off the event loop, on the login-bounded pool (#207)."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(_hash_executor, _password_hasher.hash, raw)
+
+
+async def averify_password(raw: str, hashed: str) -> bool:
+    """Verify off the event loop, on the login-bounded pool (#207)."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        _hash_executor, _password_hasher.verify, raw, hashed
+    )
+
+
+async def ahash_many(raws: list[str]) -> list[str]:
+    """Hash a batch (mass import) concurrently on the cores-sized bulk pool,
+    preserving input order (#207). Uses the whole box briefly rather than the
+    per-worker login slice, so a large import still finishes under a timeout."""
+    loop = asyncio.get_running_loop()
+    return await asyncio.gather(
+        *(loop.run_in_executor(_bulk_hash_executor, _password_hasher.hash, r) for r in raws)
+    )
 
 
 # --- Access tokens (JWT) ----------------------------------------------------

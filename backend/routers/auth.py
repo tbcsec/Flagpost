@@ -20,6 +20,8 @@ from auth.identity import display_name_taken, email_taken, find_by_identifier
 from auth.registration_policy import domain_allowed
 from auth.setup import instance_needs_setup
 from auth.security import (
+    ahash_password,
+    averify_password,
     create_access_token,
     generate_refresh_token,
     hash_password,
@@ -232,9 +234,10 @@ async def register(
     # from a RoleAssignment when a user joins a competition (§7.5).
     user = User(
         email=body.email,
-        # Offload argon2 to a thread so this unauthenticated endpoint can't be
-        # used to peg the event loop by flooding registrations.
-        password_hash=await asyncio.to_thread(hash_password, body.password),
+        # Offload argon2 to the bounded hashing pool (#207) so this
+        # unauthenticated endpoint can't peg the event loop or oversubscribe
+        # cores across workers under a registration flood.
+        password_hash=await ahash_password(body.password),
         display_name=body.display_name,
     )
     db.add(user)
@@ -348,10 +351,11 @@ async def login(
     user = await find_by_identifier(db, body.identifier)
     # Always run the (expensive) verify — against a dummy hash when the account
     # is missing — so a miss and a wrong password take the same time (no
-    # enumeration oracle). Offloaded to a thread so the argon2 work (which
-    # blocks for tens of ms) can't stall the event loop under a login flood.
+    # enumeration oracle). Offloaded to the bounded hashing pool (#207) so the
+    # argon2 work can't stall the event loop or oversubscribe cores across
+    # workers under a login storm.
     target_hash = user.password_hash if user is not None else _DUMMY_PASSWORD_HASH
-    password_ok = await asyncio.to_thread(verify_password, body.password, target_hash)
+    password_ok = await averify_password(body.password, target_hash)
     if user is None or not password_ok:
         # Local failure falls through to the directory before 401ing
         # (ADR-0022 §5). Both failure shapes take this branch, so the accepted

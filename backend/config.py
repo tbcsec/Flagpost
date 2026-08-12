@@ -168,6 +168,18 @@ class Settings(BaseSettings):
     # (N-1)/N of clients. Phase 3 computes a core-aware default in the
     # production image; it stays 1 here so nothing changes until then.
     web_concurrency: int = 1
+    # Password hashing (#207). argon2 parallelism=1 (one lane per hash) is the
+    # OWASP-recommended server config — throughput comes from hashing many
+    # logins *concurrently*, not from splitting one hash across cores. The
+    # pwdlib default (p=4) can't avoid oversubscribing a box where cores≈workers
+    # during a login storm (N workers × p lanes). Memory (64 MiB) and time (3)
+    # are kept at pwdlib's recommended values, well above OWASP's minimums, so
+    # this is not a weakening; existing p=4 hashes still verify (params are read
+    # from the stored hash). Concurrent hashes are bounded by a shared executor
+    # sized cores//web_concurrency, so N workers total ≈ cores worth of hashing.
+    argon2_parallelism: int = 1
+    argon2_memory_cost: int = 65536  # KiB (64 MiB) — pwdlib recommended
+    argon2_time_cost: int = 3        # iterations — pwdlib recommended
 
     # --- Flag submission rate limit (§13.2) ---
     # Per-subject (user or team) sliding window on the submit endpoint — tight

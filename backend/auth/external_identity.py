@@ -37,14 +37,13 @@ working when the IdP is down.
 
 from __future__ import annotations
 
-import asyncio
 import secrets
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.registration_policy import domain_allowed
-from auth.security import hash_password
+from auth.security import ahash_password
 from db import utcnow
 from models.identity_provider import IdentityProvider, UserExternalIdentity
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
@@ -71,12 +70,12 @@ async def unusable_password_hash() -> str:
     through every password path. Hashing fresh randomness keeps the column
     honest while guaranteeing no password can ever match it.
 
-    Offloaded to a thread for the same reason registration does it: argon2 is
-    ~80ms of CPU, and the callback that triggers it is reachable without
-    authentication, so running it inline would let a flood of logins stall the
-    event loop.
+    Offloaded to the bounded hashing pool (#207) for the same reason
+    registration does it: argon2 is tens of ms of CPU, and the callback that
+    triggers it is reachable without authentication, so running it inline would
+    let a flood stall the event loop or oversubscribe cores across workers.
     """
-    return await asyncio.to_thread(hash_password, secrets.token_urlsafe(32))
+    return await ahash_password(secrets.token_urlsafe(32))
 
 
 async def _unique_display_name(db: AsyncSession, preferred: str) -> str:

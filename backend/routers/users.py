@@ -17,8 +17,6 @@ side is enforced in ``auth/deps.get_current_user``).
 
 from __future__ import annotations
 
-import asyncio
-
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -26,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import require_permission
 from auth.identity import display_name_taken, email_taken
-from auth.security import hash_password
+from auth.security import ahash_many, hash_password
 from db import get_db, utcnow
 from models.competition import Competition
 from models.role import Role, RoleAssignment
@@ -225,12 +223,10 @@ async def import_users(
     granted: list[tuple[str, RowPlan]] = []  # (subject_user_id, plan)
     if not dry_run:
         if to_create or to_assign:
-            # argon2 is deliberately CPU-slow; hash the whole batch in one
-            # worker thread (sequentially — bounded memory) so the event loop
-            # stays free. Same treatment as routers/auth.py registration.
-            hashes = await asyncio.to_thread(
-                lambda: [hash_password(p.password) for p in to_create]
-            )
+            # argon2 is deliberately CPU-slow; hash the batch concurrently on
+            # the cores-sized bulk pool (#207) so a large import finishes under
+            # a timeout without oversubscribing the login pool. Order preserved.
+            hashes = await ahash_many([p.password for p in to_create])
             new_users: dict[int, User] = {}
             for plan, pw_hash in zip(to_create, hashes):
                 account = User(

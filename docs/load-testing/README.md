@@ -112,3 +112,9 @@ the overlay).
   — 1,500-user A/B, single- vs 4-worker. Multi-worker eliminates the steady-state
   502 storm (30–45 % → 0 %), but the argon2 login storm oversubscribes cores
   under multiple workers — so the default flip is held pending that fix.
+- [`2026-08-13-post207-flip-decision.md`](2026-08-13-post207-flip-decision.md)
+  — #207 (argon2 p=1 + bounded hashing) fixes onboarding (single-worker 1017 →
+  1416 onboarded). The core-aware default flip is **held**: multi-worker only
+  wins with idle cores (the event-loop-bound regime); at 1,500 users the box is
+  CPU-saturated at any worker count, and the closed-loop harness can't isolate
+  the flip's benefit there. Multi-worker stays opt-in.

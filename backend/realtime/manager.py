@@ -5,10 +5,13 @@ id>)`` — mirroring the ``wss://…/ws/<type>/<id>`` URL shape. The manager onl
 tracks membership and fans out JSON frames; *who may join a room* is decided by
 the room's registered authorizer (see ``realtime.router``), never here.
 
-Single-process by design: like the event bus (ADR-0005), this does not fan out
-across backend instances. Acceptable for the docker-compose deployment model;
-the seam to revisit for horizontal scaling is Redis pub/sub behind this same
-interface.
+Multi-worker aware (#189, ADR-0025): each worker owns its real WebSocket
+objects, so ``broadcast`` always delivers to *local* sockets, and — when a
+:class:`realtime.relay.RealtimeRelay` is attached at startup (workers > 1) —
+also publishes the frame so every other worker delivers it to *its* locals. A
+single-worker deployment attaches no relay and stays a pure in-process fan-out
+with no Redis round-trip, exactly as the original single-process design
+(ADR-0005).
 """
 
 from __future__ import annotations
@@ -17,11 +20,15 @@ import asyncio
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 from fastapi import WebSocket
 
 from config import settings
+
+if TYPE_CHECKING:
+    from realtime.relay import RealtimeRelay
 
 logger = logging.getLogger("realtime")
 
@@ -61,6 +68,38 @@ class ConnectionManager:
         # access is revoked mid-session; these let a ban/removal close it.
         self._user_sockets: dict[str, set[WebSocket]] = defaultdict(set)
         self._socket_meta: dict[WebSocket, tuple[str, str, str]] = {}
+        # Cross-worker fan-out (#189). None ⇒ single-worker: broadcast is a
+        # pure local fan-out. A per-process id tags outgoing relayed frames so
+        # this worker skips its own copy (it already delivered locally).
+        self._relay: RealtimeRelay | None = None
+        self._worker_id = uuid4().hex
+
+    def attach_relay(self, relay: RealtimeRelay) -> None:
+        """Wire a cross-worker relay (multi-worker mode). Call once at startup,
+        before :meth:`start_relay`."""
+        self._relay = relay
+
+    async def start_relay(self) -> None:
+        """Begin consuming relayed broadcasts from other workers. No-op when no
+        relay is attached (single-worker)."""
+        if self._relay is not None:
+            await self._relay.start(self._on_relayed)
+
+    async def stop_relay(self) -> None:
+        """Tear down the relay subscriber. Safe no-op when none is attached."""
+        if self._relay is not None:
+            await self._relay.stop()
+
+    async def _on_relayed(self, payload: dict[str, Any]) -> None:
+        """Deliver a broadcast published by another worker to our local sockets.
+
+        Skips frames this worker itself published — it already delivered those
+        locally, so re-delivering the relayed copy would double-send."""
+        if payload.get("origin") == self._worker_id:
+            return
+        await self._deliver_local(
+            payload["room_type"], payload["room_id"], payload["message"]
+        )
 
     def join(
         self, room_type: str, room_id: str, websocket: WebSocket, user_id: str
@@ -127,13 +166,38 @@ class ConnectionManager:
         *,
         exclude: WebSocket | None = None,
     ) -> None:
-        """Send ``message`` as JSON to every socket in the room.
+        """Send ``message`` as JSON to every socket in the room, across workers.
 
-        ``exclude`` skips one socket — used by the CRDT relay (§4.2) so a client
-        doesn't receive an echo of the update it just sent. A socket that fails
-        to send (client vanished mid-broadcast) is dropped from the room rather
-        than failing the broadcast for its neighbours.
+        Delivers to this worker's local sockets, then — when a relay is attached
+        (multi-worker) — publishes the frame so every other worker delivers it
+        to its own locals (#189). ``exclude`` skips one socket, used by the CRDT
+        relay (§4.2) so a client doesn't receive an echo of its own update; it's
+        always a socket on *this* worker, so it's applied to local delivery only
+        and never crosses the relay (the excluded socket can't exist elsewhere).
+        """
+        await self._deliver_local(room_type, room_id, message, exclude=exclude)
+        if self._relay is not None:
+            await self._relay.publish(
+                {
+                    "origin": self._worker_id,
+                    "room_type": room_type,
+                    "room_id": room_id,
+                    "message": message,
+                }
+            )
 
+    async def _deliver_local(
+        self,
+        room_type: str,
+        room_id: str,
+        message: dict[str, Any],
+        *,
+        exclude: WebSocket | None = None,
+    ) -> None:
+        """Fan ``message`` out to this worker's sockets in the room.
+
+        A socket that fails to send (client vanished mid-broadcast) is dropped
+        from the room rather than failing the broadcast for its neighbours.
         Sends run concurrently (bounded by ``_BROADCAST_CONCURRENCY``), each
         under ``ws_send_timeout_seconds`` (#177): the old sequential loop let a
         single slow client — a full TCP send buffer on a congested link — stall

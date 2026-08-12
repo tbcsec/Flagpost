@@ -28,6 +28,7 @@ from fastapi import WebSocket
 from config import settings
 
 if TYPE_CHECKING:
+    from realtime.presence_store import PresenceStore
     from realtime.relay import RealtimeRelay
 
 logger = logging.getLogger("realtime")
@@ -73,6 +74,19 @@ class ConnectionManager:
         # this worker skips its own copy (it already delivered locally).
         self._relay: RealtimeRelay | None = None
         self._worker_id = uuid4().hex
+        # Cross-worker presence (#189 Phase 2). None ⇒ single-worker: presence
+        # lives entirely in ``_presence`` below, exactly as before. When a store
+        # is attached, ``_presence`` stays the *local* view (socket tracking +
+        # grace debounce + heartbeat source) and the store holds the *global*
+        # membership that gets computed and broadcast.
+        self._presence_store: PresenceStore | None = None
+        self._heartbeat_task: asyncio.Task | None = None
+
+    @property
+    def worker_id(self) -> str:
+        """This process's stable id — tags relayed frames and presence liveness
+        so a worker can tell its own writes from its peers'."""
+        return self._worker_id
 
     def attach_relay(self, relay: RealtimeRelay) -> None:
         """Wire a cross-worker relay (multi-worker mode). Call once at startup,
@@ -89,6 +103,51 @@ class ConnectionManager:
         """Tear down the relay subscriber. Safe no-op when none is attached."""
         if self._relay is not None:
             await self._relay.stop()
+
+    def attach_presence_store(self, store: PresenceStore) -> None:
+        """Wire a cross-worker presence store (multi-worker). Call once at
+        startup, before :meth:`start_presence`."""
+        self._presence_store = store
+
+    async def start_presence(self, heartbeat_seconds: float) -> None:
+        """Start the presence heartbeat that keeps this worker's members alive in
+        the shared store. No-op when no store is attached (single-worker)."""
+        if self._presence_store is not None and self._heartbeat_task is None:
+            self._heartbeat_task = asyncio.ensure_future(
+                self._presence_heartbeat(heartbeat_seconds)
+            )
+
+    async def stop_presence(self) -> None:
+        """Stop the heartbeat and close the store. Safe no-op single-worker."""
+        if self._heartbeat_task is not None:
+            self._heartbeat_task.cancel()
+            try:
+                await self._heartbeat_task
+            except asyncio.CancelledError:
+                pass
+            self._heartbeat_task = None
+        if self._presence_store is not None:
+            await self._presence_store.close()
+
+    async def _presence_heartbeat(self, interval: float) -> None:
+        """Refresh the shared-store liveness of every (room, user) this worker
+        still holds a socket for, so a live-but-idle member never expires. A
+        crashed worker simply stops refreshing and its members age out."""
+        store = self._presence_store
+        assert store is not None
+        while True:
+            try:
+                await asyncio.sleep(interval)
+                entries = [
+                    (rt, rid, uid)
+                    for (rt, rid), members in list(self._presence.items())
+                    for uid in list(members.keys())
+                ]
+                await store.refresh_many(entries)
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001 — a dropped Redis conn mustn't kill the loop
+                logger.exception("presence heartbeat failed")
 
     async def _on_relayed(self, payload: dict[str, Any]) -> None:
         """Deliver a broadcast published by another worker to our local sockets.
@@ -249,11 +308,19 @@ class ConnectionManager:
             )
         ]
 
-    def _presence_frame(self, room_type: str, room_id: str) -> dict[str, Any]:
-        return {
-            "type": "presence",
-            "members": self.presence_members(room_type, room_id),
-        }
+    async def _publish_presence(self, room_type: str, room_id: str) -> None:
+        """Broadcast the room's presence set. Multi-worker uses the shared
+        store's *global* membership (computed once here, then relayed verbatim to
+        every worker's clients); single-worker uses the local set. Either way
+        the frame goes out through ``broadcast`` — so the Phase 1 relay carries
+        it cross-worker without a separate presence channel."""
+        if self._presence_store is not None:
+            members = await self._presence_store.members(room_type, room_id)
+        else:
+            members = self.presence_members(room_type, room_id)
+        await self.broadcast(
+            room_type, room_id, {"type": "presence", "members": members}
+        )
 
     async def presence_join(
         self, room_type: str, room_id: str, websocket: WebSocket, member: dict[str, Any]
@@ -261,7 +328,9 @@ class ConnectionManager:
         """Add ``websocket`` to the room's presence set under ``member['id']``.
 
         Cancels any pending debounced removal for that user (a reconnect inside
-        the grace window), then broadcasts the refreshed set to the room.
+        the grace window), records the socket in the local view, publishes the
+        member to the shared store when multi-worker, then broadcasts the
+        refreshed set to the room.
         """
         user_id = member["id"]
         pending = self._expiries.pop((room_type, room_id, user_id), None)
@@ -274,9 +343,9 @@ class ConnectionManager:
             members[user_id] = _PresenceMember(payload=member, sockets={websocket})
         else:
             existing.sockets.add(websocket)
-        await self.broadcast(
-            room_type, room_id, self._presence_frame(room_type, room_id)
-        )
+        if self._presence_store is not None:
+            await self._presence_store.add(room_type, room_id, user_id, member)
+        await self._publish_presence(room_type, room_id)
 
     async def presence_leave(
         self,
@@ -327,9 +396,11 @@ class ConnectionManager:
         del members[user_id]
         if not members:
             del self._presence[(room_type, room_id)]
-        await self.broadcast(
-            room_type, room_id, self._presence_frame(room_type, room_id)
-        )
+        # Drop this worker's shared-store liveness; the store keeps the user
+        # present only if another worker still holds them.
+        if self._presence_store is not None:
+            await self._presence_store.remove(room_type, room_id, user_id)
+        await self._publish_presence(room_type, room_id)
 
 
 # Module-level singleton, like the event bus (§3.1).

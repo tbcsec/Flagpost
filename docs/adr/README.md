@@ -59,3 +59,4 @@ Status is one of:
 | [0023](0023-ai-assistant-provider-and-execution-model.md) | AI assistant provider integration and execution model | Accepted |
 | [0024](0024-builtin-sso-provider-presets.md) | Built-in SSO provider presets — configuration, never credentials | Accepted |
 | [0025](0025-multi-worker-broadcast-relay.md) | Multi-worker via a Redis broadcast relay behind the connection manager | Accepted |
+| [0026](0026-cross-worker-presence.md) | Cross-worker presence via heartbeat-TTL liveness in Redis | Accepted |

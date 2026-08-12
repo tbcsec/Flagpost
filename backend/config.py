@@ -142,6 +142,12 @@ class Settings(BaseSettings):
     # Seconds a request waits for a free connection before erroring, rather than
     # blocking forever, so pool exhaustion surfaces as a fast 500 not a hang.
     db_pool_timeout: int = 30
+    # Total steady pool connections to share across workers when multi-worker
+    # (#189 Phase 3). The per-process engine pool is per-worker, so N workers ×
+    # a fixed 30 would blow past Postgres max_connections; instead each worker
+    # gets budget // workers. Single-worker ignores this and uses db_pool_size
+    # unchanged. Keep it ≤ Postgres max_connections minus overflow + headroom.
+    db_connection_budget: int = 100
 
     redis_url: str | None = None
     # Bounded client-side Redis pool (#189 interim hardening). redis.asyncio's

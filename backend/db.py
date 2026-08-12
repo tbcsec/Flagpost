@@ -108,11 +108,19 @@ def build_engine_kwargs(database_url: str) -> dict:
     concurrency ceiling under load."""
     if database_url.startswith("sqlite"):
         return {}
+    pool_size = settings.db_pool_size
+    max_overflow = settings.db_max_overflow
+    if settings.web_concurrency > 1:
+        # Multi-worker (#189 Phase 3): the engine pool is per-process, so split a
+        # fixed total budget across workers rather than letting N × 30 exhaust
+        # Postgres max_connections. Overflow scales with the per-worker slice.
+        pool_size = max(5, settings.db_connection_budget // settings.web_concurrency)
+        max_overflow = max(5, pool_size // 2)
     return {
         "pool_pre_ping": True,
         "pool_recycle": 1800,
-        "pool_size": settings.db_pool_size,
-        "max_overflow": settings.db_max_overflow,
+        "pool_size": pool_size,
+        "max_overflow": max_overflow,
         "pool_timeout": settings.db_pool_timeout,
     }
 

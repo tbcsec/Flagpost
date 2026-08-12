@@ -55,10 +55,17 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
-    # Apply migrations (creates tables + seeds the built-in roles) before serving.
-    # Single process by design (ADR-0005): the WebSocket layer is in-process.
-    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"
+    # Migrate, then serve. docker-entrypoint.sh resolves the worker count from
+    # WEB_CONCURRENCY (default 1 until #189 Phase 4 flips it core-aware) and,
+    # when multi-worker, starts the singleton scheduler sidecar. Multi-worker
+    # needs REDIS_URL (set below) for the broadcast relay + presence (ADR-0025/
+    # 0026); the app refuses to boot multi-worker without it.
+    command: sh docker-entrypoint.sh
     environment:
+      # Worker count (#189). Default 1 (single-process, no Redis needed for the
+      # realtime layer) until Phase 4 flips the default core-aware. Set >1 to run
+      # multi-worker now (requires REDIS_URL, set below).
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-flagpost}:${POSTGRES_PASSWORD:-flagpost}@postgres:5432/${POSTGRES_DB:-flagpost}
       REDIS_URL: redis://redis:6379/0
       MINIO_ENDPOINT: minio:9000
@@ -117,6 +124,11 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    # Headroom for the multi-worker connection budget (#189 Phase 3): N workers ×
+    # (per-worker pool + overflow) must fit. Postgres' default is 100; 200 covers
+    # up to ~8 workers on the db_connection_budget=100 split with margin. Harmless
+    # single-worker.
+    command: ["postgres", "-c", "max_connections=200"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-flagpost}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-flagpost}

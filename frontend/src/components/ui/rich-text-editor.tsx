@@ -1,10 +1,10 @@
 "use client";
 
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
 import { useEffect } from "react";
 
 import { ToolbarButton } from "@/components/ui/editor-toolbar-button";
+import { richTextExtensions } from "@/components/ui/rich-text-extensions";
 import type { RichTextDoc } from "@/lib/types";
 
 // Rich-text primitive (TipTap, §2) emitting a ProseMirror JSON doc — the same
@@ -18,7 +18,7 @@ export function RichTextEditor({
   onChange: (doc: RichTextDoc) => void;
 }) {
   const editor = useEditor({
-    extensions: [StarterKit],
+    extensions: richTextExtensions(),
     // Avoid an SSR/CSR hydration mismatch in the App Router.
     immediatelyRender: false,
     content: hasContent(value) ? value : undefined,
@@ -46,6 +46,10 @@ export function RichTextEditor({
       codeBlock: !!e?.isActive("codeBlock"),
       bulletList: !!e?.isActive("bulletList"),
       heading2: !!e?.isActive("heading", { level: 2 }),
+      // TextAlign stores "left" implicitly, so isActive matches it by default.
+      alignLeft: !!e?.isActive({ textAlign: "left" }),
+      alignCenter: !!e?.isActive({ textAlign: "center" }),
+      alignRight: !!e?.isActive({ textAlign: "right" }),
     }),
   });
 
@@ -80,6 +84,22 @@ export function RichTextEditor({
           onClick={() =>
             editor.chain().focus().toggleHeading({ level: 2 }).run()
           }
+        />
+        <span aria-hidden className="mx-1 w-px self-stretch bg-border" />
+        <ToolbarButton
+          label="Left"
+          active={active?.alignLeft ?? false}
+          onClick={() => editor.chain().focus().setTextAlign("left").run()}
+        />
+        <ToolbarButton
+          label="Center"
+          active={active?.alignCenter ?? false}
+          onClick={() => editor.chain().focus().setTextAlign("center").run()}
+        />
+        <ToolbarButton
+          label="Right"
+          active={active?.alignRight ?? false}
+          onClick={() => editor.chain().focus().setTextAlign("right").run()}
         />
       </div>
       <EditorContent editor={editor} />

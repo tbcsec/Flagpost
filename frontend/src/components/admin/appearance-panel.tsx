@@ -7,9 +7,12 @@ import { useConfirm } from "@/components/ui/confirm";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { SkeletonCards } from "@/components/ui/skeleton";
 import { FlagpostMark } from "@/components/brand/flagpost-mark";
 import { BackgroundPreview } from "@/components/theme/site-background";
+import { richTextToPlain } from "@/lib/rich-text";
+import type { RichTextDoc } from "@/lib/types";
 import {
   FALLBACK_SETTINGS,
   useDeleteLogo,
@@ -52,6 +55,7 @@ export function AppearancePanel({ active }: { active: boolean }) {
   const [palette, setPalette] = useState(saved.default_palette);
   const [accent, setAccent] = useState(saved.accent);
   const [background, setBackground] = useState(saved.background_style);
+  const [notice, setNotice] = useState<RichTextDoc>(saved.login_notice ?? {});
   const [showWordmark, setShowWordmark] = useState(saved.show_wordmark);
 
   // Seed the form once the settings load (they arrive async).
@@ -63,6 +67,7 @@ export function AppearancePanel({ active }: { active: boolean }) {
       setPalette(data.default_palette);
       setAccent(data.accent);
       setBackground(data.background_style);
+      setNotice(data.login_notice ?? {});
       setShowWordmark(data.show_wordmark);
     }
   }, [data]);
@@ -101,11 +106,15 @@ export function AppearancePanel({ active }: { active: boolean }) {
     };
   }, [active]);
 
+  // An editor doc with no text normalizes to null — "delete everything" means
+  // "no notice", the rules-settings precedent.
+  const noticeValue = richTextToPlain(notice).trim() ? notice : null;
   const dirty =
     platformName !== saved.platform_name ||
     palette !== saved.default_palette ||
     accent !== saved.accent ||
     background !== saved.background_style ||
+    JSON.stringify(noticeValue) !== JSON.stringify(saved.login_notice) ||
     showWordmark !== saved.show_wordmark;
 
   function onSave() {
@@ -115,6 +124,7 @@ export function AppearancePanel({ active }: { active: boolean }) {
         default_palette: palette,
         accent,
         background_style: background,
+        login_notice: noticeValue,
         show_wordmark: showWordmark,
       },
       {
@@ -308,6 +318,19 @@ export function AppearancePanel({ active }: { active: boolean }) {
                 animated backgrounds are shown on dark palettes only.
               </p>
             )}
+          </section>
+
+          <section className="grid gap-3">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Sign-in notice
+            </h3>
+            <p className="max-w-prose text-xs text-muted-foreground">
+              Shown above the sign-in card — event instructions, which account
+              to use, who to contact. Visible to anyone who can reach the
+              sign-in page, so keep it public information. Delete all the text
+              to remove the notice.
+            </p>
+            <RichTextEditor value={notice} onChange={setNotice} />
           </section>
 
           <section className="grid gap-3">

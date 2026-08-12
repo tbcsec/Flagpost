@@ -61,6 +61,11 @@ class SiteSettings(Base, TimestampMixin):
     background_style: Mapped[str] = mapped_column(
         String, nullable=False, default="none", server_default="none"
     )
+    # Custom sign-in notice (#197): a rich-text (ProseMirror JSON) document
+    # rendered above the sign-in card on /login. Null = no notice. The same
+    # opaque shape as ``rules_text`` — stored, never interpreted server-side;
+    # the read-only TipTap view renders it as a React tree (no raw HTML path).
+    login_notice: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # --- Branding (Admin → Site settings → Appearance) ---
     # A custom organisation logo that replaces the built-in Flagpost mark in the
     # lockup (sidebar / login / register). Stored as a blob **in the DB**, not in

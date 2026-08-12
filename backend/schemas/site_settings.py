@@ -9,10 +9,32 @@ below (a slug, or a ``#RRGGBB`` hex for a custom accent) block attribute/CSS
 injection regardless of what the frontend offers.
 """
 
+import json
 import re
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+# Serialized-size cap for the sign-in notice (#197). It rides the public,
+# unauthenticated GET that every login page load fetches, so an unbounded
+# ProseMirror doc would tax exactly the page that must stay light. 20 KB is
+# roughly two screens of formatted text — far beyond a reasonable notice.
+MAX_LOGIN_NOTICE_BYTES = 20_000
+
+
+def _doc_text(node: object) -> str:
+    """Flatten a ProseMirror node to its text — the Python analogue of the
+    frontend's ``richTextToPlain``, used only to detect visually-empty docs."""
+    if not isinstance(node, dict):
+        return ""
+    parts: list[str] = []
+    text = node.get("text")
+    if isinstance(text, str):
+        parts.append(text)
+    content = node.get("content")
+    if isinstance(content, list):
+        parts.extend(_doc_text(child) for child in content)
+    return "".join(parts)
 
 # A palette id is a lowercase slug (matches `data-palette="<id>"`).
 PALETTE_PATTERN = r"^[a-z][a-z0-9-]{1,31}$"
@@ -51,6 +73,10 @@ class SiteSettingsOut(BaseModel):
     # Front-door animated background slug (#195); "none" = flat. Public so the
     # login/register/public pages can render it before there's a session.
     background_style: str = "none"
+    # Custom sign-in notice (#197): an opaque ProseMirror JSON doc rendered
+    # above the sign-in card, or null. Public by necessity — the login page is
+    # its whole audience — so it must never carry non-public information.
+    login_notice: dict | None = None
     registration_open: bool
     # Public path to the custom org logo (with a cache-busting version), or None
     # when the built-in Flagpost mark should be used. Needed pre-auth so the
@@ -90,7 +116,38 @@ class SiteSettingsUpdate(BaseModel):
     # name and omits this field silently clear a configured background. An
     # explicit "none" resets it; the Appearance form always sends it.
     background_style: str | None = Field(default=None, pattern=BACKGROUND_PATTERN)
+    # Sign-in notice (#197). Omitted = leave unchanged; an explicit null clears
+    # it (unlike background_style, null is this field's meaningful empty state,
+    # so the router distinguishes the two via ``model_fields_set``).
+    login_notice: dict | None = None
     show_wordmark: bool = True
+
+    @field_validator("login_notice")
+    @classmethod
+    def _login_notice_doc(cls, v: dict | None) -> dict | None:
+        if v is None:
+            return None
+        # Must at least look like a ProseMirror doc. The server never
+        # *interprets* the doc (the rules_text stance), but the login page
+        # feeds it straight to the read-only renderer, so a shapeless payload
+        # from a scripted client must 422 here rather than degrade the one
+        # page every visitor sees.
+        if v.get("type") != "doc" or not isinstance(v.get("content"), list):
+            raise ValueError(
+                "login notice must be a rich-text document "
+                '({"type": "doc", "content": [...]})'
+            )
+        if len(json.dumps(v, separators=(",", ":"))) > MAX_LOGIN_NOTICE_BYTES:
+            raise ValueError(
+                "login notice is too large — it renders on every login page "
+                "load, keep it to a short announcement"
+            )
+        # A doc with no visible text normalizes to None so "empty = no notice"
+        # holds for every client, not just the admin form (which does the same
+        # normalization client-side before sending).
+        if not _doc_text(v).strip():
+            return None
+        return v
 
 
 class SiteSettingsAdminOut(SiteSettingsOut):

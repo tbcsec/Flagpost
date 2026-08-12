@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { RichTextView } from "@/components/ui/rich-text-view";
 import { richTextToPlain } from "@/lib/rich-text";
 import type { RulesPromptMode } from "@/lib/rules-prompt";
 import type { RichTextDoc } from "@/lib/types";
@@ -53,7 +54,8 @@ export function RulesAcceptModal({
   }
 
   const mustAccept = mode === "accept";
-  const text = richTextToPlain(rules);
+  // Plain text only for the emptiness check — the body renders rich (#197).
+  const hasText = richTextToPlain(rules).trim().length > 0;
 
   return (
     <Dialog
@@ -80,9 +82,16 @@ export function RulesAcceptModal({
         </DialogHeader>
 
         <div className="max-h-80 overflow-y-auto rounded-md border border-border bg-muted/30 p-4">
-          <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">
-            {text || "No rules text."}
-          </p>
+          {hasText ? (
+            // The rules are authored in the rich-text editor; render them with
+            // the matching read-only view instead of flattening to plain text,
+            // so headings/lists/alignment survive to the reader (#197).
+            <RichTextView value={rules} className="leading-relaxed" />
+          ) : (
+            <p className="text-sm leading-relaxed text-foreground">
+              No rules text.
+            </p>
+          )}
         </div>
 
         {mustAccept && (

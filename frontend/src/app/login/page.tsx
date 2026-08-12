@@ -17,8 +17,19 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import dynamic from "next/dynamic";
+
 import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
 import { useAuthProviders, useLogin } from "@/lib/hooks/use-users";
+
+// Loaded on demand, deliberately: the read-only TipTap renderer costs ~126 kB
+// of first-load JS, and most installs never configure a notice — every
+// visitor's sign-in page must not pay for the feature's mere existence. The
+// chunk is only fetched when a notice actually exists (see below).
+const RichTextView = dynamic(
+  () => import("@/components/ui/rich-text-view").then((m) => m.RichTextView),
+  { ssr: false },
+);
 import { useSearchParams } from "next/navigation";
 
 // The callback redirects here with a short code rather than the provider's own
@@ -86,6 +97,15 @@ function LoginForm() {
           showWordmark={brand.show_wordmark}
         />
       </div>
+      {/* Admin-authored sign-in notice (#197) — above the card so it's read
+          before signing in (event instructions, "use your work account", …). */}
+      {brand.login_notice && (
+        <Card>
+          <CardContent className="py-4">
+            <RichTextView value={brand.login_notice} />
+          </CardContent>
+        </Card>
+      )}
       <Card>
         <CardHeader>
           <CardTitle>Sign in</CardTitle>

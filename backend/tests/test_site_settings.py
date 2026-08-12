@@ -29,6 +29,7 @@ async def test_public_read_returns_defaults_without_auth(client):
         "default_palette": DEFAULT_PALETTE,
         "accent": DEFAULT_ACCENT,
         "background_style": "none",
+        "login_notice": None,
         "registration_open": True,
         "logo_url": None,
         "show_wordmark": True,
@@ -63,6 +64,7 @@ async def test_admin_update_round_trips(client):
         "default_palette": "eclipse",
         "accent": "#A855F7",
         "background_style": "none",
+        "login_notice": None,
         "registration_open": True,
         "logo_url": None,
         "show_wordmark": True,
@@ -639,3 +641,97 @@ async def test_show_wordmark_round_trips(client):
     assert resp.status_code == 200, resp.text
     assert resp.json()["show_wordmark"] is False
     assert (await client.get("/api/site-settings")).json()["show_wordmark"] is False
+
+
+# --- custom sign-in notice (#197) ------------------------------------------
+
+# A minimal ProseMirror doc, the shape the TipTap editor emits.
+NOTICE_DOC = {
+    "type": "doc",
+    "content": [
+        {
+            "type": "paragraph",
+            "attrs": {"textAlign": "center"},
+            "content": [{"type": "text", "text": "Use your university account."}],
+        }
+    ],
+}
+
+_BASE_PUT = {"platform_name": "A", "default_palette": "harbor", "accent": "signal"}
+
+
+async def test_login_notice_defaults_to_null_and_is_public(client):
+    body = (await client.get("/api/site-settings")).json()
+    assert body["login_notice"] is None
+
+
+async def test_login_notice_round_trips_and_clears_explicitly(client):
+    admin = await admin_token(client)
+    resp = await client.put(
+        "/api/site-settings",
+        json={**_BASE_PUT, "login_notice": NOTICE_DOC},
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 200, resp.text
+    # Public — the login page is the audience, and it renders pre-auth.
+    assert (await client.get("/api/site-settings")).json()["login_notice"] == NOTICE_DOC
+
+    # Omitted = leave unchanged (a scripted PUT that only renames the platform
+    # must not silently clear the notice).
+    await client.put("/api/site-settings", json=_BASE_PUT, headers=_auth(admin))
+    assert (await client.get("/api/site-settings")).json()["login_notice"] == NOTICE_DOC
+
+    # Explicit null = clear (null is the notice's meaningful empty state).
+    await client.put(
+        "/api/site-settings",
+        json={**_BASE_PUT, "login_notice": None},
+        headers=_auth(admin),
+    )
+    assert (await client.get("/api/site-settings")).json()["login_notice"] is None
+
+
+async def test_login_notice_rejects_a_shapeless_payload(client):
+    """The login page feeds this straight to the renderer, so a scripted
+    client must not be able to store something that isn't a ProseMirror doc."""
+    admin = await admin_token(client)
+    for bad in ({}, {"foo": 1}, {"type": "paragraph"}, {"type": "doc"}):
+        resp = await client.put(
+            "/api/site-settings",
+            json={**_BASE_PUT, "login_notice": bad},
+            headers=_auth(admin),
+        )
+        assert resp.status_code == 422, (bad, resp.text)
+
+
+async def test_login_notice_empty_doc_normalizes_to_null(client):
+    """'Empty = no notice' must hold for every client, not just the admin form
+    (which normalizes client-side): a doc with no visible text stores as null."""
+    admin = await admin_token(client)
+    empty = {"type": "doc", "content": [{"type": "paragraph"}]}
+    resp = await client.put(
+        "/api/site-settings",
+        json={**_BASE_PUT, "login_notice": empty},
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 200, resp.text
+    assert (await client.get("/api/site-settings")).json()["login_notice"] is None
+
+
+async def test_login_notice_rejects_an_oversized_doc(client):
+    admin = await admin_token(client)
+    huge = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": "x" * 25_000}],
+            }
+        ],
+    }
+    resp = await client.put(
+        "/api/site-settings",
+        json={**_BASE_PUT, "login_notice": huge},
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 422
+    assert "too large" in resp.text

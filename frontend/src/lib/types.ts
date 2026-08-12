@@ -990,6 +990,10 @@ export interface SiteSettings {
   // "gradient", or "constellation". Public so the login/register/public pages
   // render it before there's a session.
   background_style: string;
+  // Custom sign-in notice (#197): a ProseMirror doc rendered above the sign-in
+  // card via RichTextView, or null for none. Public — the login page is its
+  // whole audience.
+  login_notice: RichTextDoc | null;
   registration_open: boolean;
   // Path to the custom org logo (absolutized to the API origin by the hook), or
   // null to use the built-in Flagpost mark.

@@ -153,6 +153,15 @@ class Settings(BaseSettings):
     # connection so exhaustion degrades to added latency, not a hang.
     redis_max_connections: int = 50
     redis_acquire_timeout_seconds: float = 10.0
+    # Number of uvicorn worker processes (reads the conventional WEB_CONCURRENCY
+    # env var). 1 = single process: in-process broadcast, no Redis required —
+    # today's behaviour and the dev/test/single-box default. >1 activates the
+    # cross-worker broadcast relay (#189, ADR-0025) and REQUIRES redis_url; the
+    # startup guard refuses to boot otherwise, so a misconfigured multi-worker
+    # deployment fails loudly instead of silently dropping broadcasts to
+    # (N-1)/N of clients. Phase 3 computes a core-aware default in the
+    # production image; it stays 1 here so nothing changes until then.
+    web_concurrency: int = 1
 
     # --- Flag submission rate limit (§13.2) ---
     # Per-subject (user or team) sliding window on the submit endpoint — tight

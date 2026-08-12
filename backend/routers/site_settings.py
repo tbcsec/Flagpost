@@ -86,6 +86,10 @@ async def update_site_settings(
     # explicit value (including "none") writes.
     if body.background_style is not None:
         settings.background_style = body.background_style
+    # For the notice null is meaningful (= clear it), so omitted and null must
+    # be told apart: only a field the client actually sent writes (#197).
+    if "login_notice" in body.model_fields_set:
+        settings.login_notice = body.login_notice
     settings.show_wordmark = body.show_wordmark
     await db.commit()
     await db.refresh(settings)
@@ -98,6 +102,9 @@ async def update_site_settings(
             "default_palette": settings.default_palette,
             "accent": settings.accent,
             "background_style": settings.background_style,
+            # The doc itself stays out of the event — audit rows shouldn't
+            # carry page-sized payloads; set/cleared is the auditable fact.
+            "login_notice_set": settings.login_notice is not None,
         },
     )
     return settings

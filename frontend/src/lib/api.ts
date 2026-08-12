@@ -10,6 +10,7 @@ import { useAuthStore } from "@/stores/auth";
 import type {
   AuthProvider,
   AuthProviderPublic,
+  RichTextDoc,
   ProviderPreset,
   Announcement,
   AnnouncementCreate,
@@ -882,6 +883,9 @@ export const siteSettingsApi = {
     default_palette: string;
     accent: string;
     background_style: string;
+    // null clears the sign-in notice; the form always sends the field, so the
+    // backend's omit-leaves-unchanged case never applies from this client (#197).
+    login_notice: RichTextDoc | null;
     show_wordmark: boolean;
   }) =>
     apiFetch<SiteSettingsAdmin>("/api/site-settings", {

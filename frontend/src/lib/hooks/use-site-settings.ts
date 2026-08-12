@@ -15,6 +15,7 @@ import {
 import type {
   BackupDocument,
   OperationalSettingsUpdate,
+  RichTextDoc,
   SiteSettings,
 } from "@/lib/types";
 import { useAuthStore } from "@/stores/auth";
@@ -29,6 +30,7 @@ export const FALLBACK_SETTINGS: SiteSettings = {
   default_palette: DEFAULT_PALETTE,
   accent: DEFAULT_ACCENT,
   background_style: "none",
+  login_notice: null,
   registration_open: true,
   logo_url: null,
   show_wordmark: true,
@@ -64,6 +66,8 @@ export function useUpdateSiteSettings() {
       default_palette: string;
       accent: string;
       background_style: string;
+      // null clears the sign-in notice (#197); the form always sends it.
+      login_notice: RichTextDoc | null;
       show_wordmark: boolean;
     }) => siteSettingsApi.update(input),
     // The admin response is a superset of the public shape (adds updated_at);

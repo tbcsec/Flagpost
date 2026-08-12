@@ -17,7 +17,7 @@ from config import settings
 from db import SessionLocal
 from plugins.loader import load_modules
 from realtime import router as realtime_router
-from realtime import manager, start_broadcast_relay
+from realtime import start_realtime, stop_realtime
 from realtime.eviction import register_ws_eviction
 from routers import auth as auth_router
 from routers import modules as modules_router
@@ -75,12 +75,13 @@ async def lifespan(app: FastAPI):
     automation_scheduler.start(
         SessionLocal, settings.automation_scheduler_interval_seconds
     )
-    # Cross-worker broadcast relay (#189, ADR-0025): a no-op single-worker, and
-    # the guard inside refuses to boot a multi-worker deployment with no Redis
-    # (broadcasts would otherwise reach only the emitting worker's clients).
-    await start_broadcast_relay()
+    # Cross-worker realtime (#189, ADR-0025/0026): broadcast relay + shared
+    # presence. A no-op single-worker; the guard inside refuses to boot a
+    # multi-worker deployment with no Redis (broadcasts would otherwise reach
+    # only the emitting worker's clients and presence would fragment).
+    await start_realtime()
     yield
-    await manager.stop_relay()
+    await stop_realtime()
     automation_scheduler.stop()
 
 

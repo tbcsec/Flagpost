@@ -250,6 +250,13 @@ class Settings(BaseSettings):
     # "who's here" set (§4.1 "debounced presence clearing"): a brief reconnect
     # inside this window doesn't flicker the presence list.
     ws_presence_grace_seconds: float = 5.0
+    # Multi-worker presence (#189 Phase 2, ADR-0026). A worker refreshes the
+    # shared-store liveness of its members every heartbeat; an entry lives for
+    # ttl. ttl must exceed heartbeat + grace so a live-but-idle member never
+    # expires between refreshes (30 > 10 + 5). Only used when multi-worker
+    # (web_concurrency > 1); single-worker presence is purely in-process.
+    ws_presence_ttl_seconds: float = 30.0
+    ws_presence_heartbeat_seconds: float = 10.0
 
     # --- Outbound email (§5.3 send_email action) ---
     # Unset host = email delivery disabled (the action logs and no-ops). Email

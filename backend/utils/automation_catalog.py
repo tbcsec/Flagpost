@@ -249,6 +249,24 @@ _FIELD_LABELS: dict[str, str] = {
     "competition_name": "Competition name",
 }
 
+# Which entity an id-shaped payload field points at, so a *condition value* on
+# that field is chosen from a name dropdown instead of typed as a raw id (§9,
+# "ids are internal"). Only types with a scoped list hook on the frontend are
+# mapped; the rest stay plain inputs. Keyed on the payload field name.
+_FIELD_ENTITY_TYPES: dict[str, str] = {
+    "competition_id": "competition",
+    "challenge_id": "challenge",
+    "survey_id": "survey",
+    "hint_id": "hint",
+    "team_id": "team",
+    "user_id": "user",
+    "opener_user_id": "user",
+    "assignee_user_id": "user",
+    "author_user_id": "user",
+    "actor_user_id": "user",
+    "created_by_user_id": "user",
+}
+
 _OPERATOR_LABELS = {
     "equals": "equals",
     "not_equals": "does not equal",
@@ -272,6 +290,7 @@ def _field(
     options: list[str] | None = None,
     placeholder: str | None = None,
     templateable: bool = False,
+    entity_type: str | None = None,
 ) -> dict:
     return {
         "key": key,
@@ -281,6 +300,10 @@ def _field(
         "options": options,
         "placeholder": placeholder,
         "templateable": templateable,
+        # For kind="entity": which entity this id references, so the builder
+        # renders a name-search dropdown (never a raw id box). The picker maps
+        # the type to its list hook + scope on the frontend.
+        "entity_type": entity_type,
     }
 
 
@@ -323,9 +346,11 @@ ACTION_FIELDS: dict[str, list[dict]] = {
             templateable=True, placeholder='{"text":"Solved {challenge_id}"}',
         ),
     ],
-    "release_hint": [_field("hint_id", "Hint ID")],
-    "unlock_challenge": [_field("challenge_id", "Challenge ID")],
-    "open_survey": [_field("survey_id", "Survey ID")],
+    "release_hint": [_field("hint_id", "Hint", "entity", entity_type="hint")],
+    "unlock_challenge": [
+        _field("challenge_id", "Challenge", "entity", entity_type="challenge"),
+    ],
+    "open_survey": [_field("survey_id", "Survey", "entity", entity_type="survey")],
     "create_ticket": [
         _field("subject", "Subject", templateable=True),
         _field("body", "Body", "textarea", templateable=True),
@@ -384,7 +409,11 @@ def build_catalog() -> dict:
                 "event": event,
                 "label": _titleize(event),
                 "fields": [
-                    {"key": key, "label": _field_label(key)}
+                    {
+                        "key": key,
+                        "label": _field_label(key),
+                        "entity_type": _FIELD_ENTITY_TYPES.get(key),
+                    }
                     for key in _with_friendly(TRIGGER_FIELDS.get(event, _COMMON_FIELDS))
                 ],
             }

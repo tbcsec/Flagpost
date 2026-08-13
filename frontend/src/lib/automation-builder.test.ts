@@ -16,9 +16,9 @@ const catalog: AutomationCatalog = {
       event: "challenge.solved",
       label: "Challenge solved",
       fields: [
-        { key: "points", label: "Points" },
-        { key: "is_first_blood", label: "First blood" },
-        { key: "user_id", label: "User" },
+        { key: "points", label: "Points", entity_type: null },
+        { key: "is_first_blood", label: "First blood", entity_type: null },
+        { key: "user_id", label: "User", entity_type: "user" },
       ],
     },
   ],
@@ -33,9 +33,9 @@ const catalog: AutomationCatalog = {
       label: "Notify",
       personal_allowed: true,
       fields: [
-        { key: "target", label: "Notify", kind: "select", required: true, options: ["event_user", "event_team", "role", "self"], placeholder: null, templateable: false },
-        { key: "title", label: "Title", kind: "text", required: true, options: null, placeholder: null, templateable: true },
-        { key: "body", label: "Body", kind: "textarea", required: false, options: null, placeholder: null, templateable: true },
+        { key: "target", label: "Notify", kind: "select", required: true, options: ["event_user", "event_team", "role", "self"], placeholder: null, templateable: false, entity_type: null },
+        { key: "title", label: "Title", kind: "text", required: true, options: null, placeholder: null, templateable: true, entity_type: null },
+        { key: "body", label: "Body", kind: "textarea", required: false, options: null, placeholder: null, templateable: true, entity_type: null },
       ],
     },
     {
@@ -43,8 +43,8 @@ const catalog: AutomationCatalog = {
       label: "Update score",
       personal_allowed: false,
       fields: [
-        { key: "points", label: "Points", kind: "number", required: true, options: null, placeholder: null, templateable: false },
-        { key: "reason", label: "Reason", kind: "text", required: true, options: null, placeholder: null, templateable: true },
+        { key: "points", label: "Points", kind: "number", required: true, options: null, placeholder: null, templateable: false, entity_type: null },
+        { key: "reason", label: "Reason", kind: "text", required: true, options: null, placeholder: null, templateable: true, entity_type: null },
       ],
     },
     {
@@ -52,9 +52,9 @@ const catalog: AutomationCatalog = {
       label: "Webhook",
       personal_allowed: false,
       fields: [
-        { key: "url", label: "URL", kind: "text", required: true, options: null, placeholder: null, templateable: false },
-        { key: "headers", label: "Headers", kind: "keyvalue", required: false, options: null, placeholder: null, templateable: false },
-        { key: "send_to", label: "Recipients", kind: "string_list", required: false, options: null, placeholder: null, templateable: false },
+        { key: "url", label: "URL", kind: "text", required: true, options: null, placeholder: null, templateable: false, entity_type: null },
+        { key: "headers", label: "Headers", kind: "keyvalue", required: false, options: null, placeholder: null, templateable: false, entity_type: null },
+        { key: "send_to", label: "Recipients", kind: "string_list", required: false, options: null, placeholder: null, templateable: false, entity_type: null },
       ],
     },
   ],

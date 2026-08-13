@@ -278,6 +278,24 @@ async def test_catalog_generates_the_builder(client):
     assert notify_fields["target"]["kind"] == "select"
     assert notify_fields["title"]["templateable"] is True
 
+    # Id action params are entity references (name-search dropdowns), not raw id
+    # text boxes — and carry which entity they point at (#212, §9 "ids are
+    # internal"). The label drops "ID" for the same reason.
+    hint_field = by_type["release_hint"]["fields"][0]
+    assert hint_field["kind"] == "entity" and hint_field["entity_type"] == "hint"
+    assert hint_field["label"] == "Hint"
+    chal_field = by_type["unlock_challenge"]["fields"][0]
+    assert chal_field["kind"] == "entity" and chal_field["entity_type"] == "challenge"
+    survey_field = by_type["open_survey"]["fields"][0]
+    assert survey_field["kind"] == "entity" and survey_field["entity_type"] == "survey"
+
+    # A condition value on an id payload field is likewise entity-typed, so the
+    # builder can offer a name dropdown for it.
+    solved_by_key = {f["key"]: f for f in solved["fields"]}
+    assert solved_by_key["challenge_id"]["entity_type"] == "challenge"
+    assert solved_by_key["team_id"]["entity_type"] == "team"
+    assert solved_by_key["points"]["entity_type"] is None
+
 
 def test_catalog_covers_every_action_without_drift():
     # The hand-authored field descriptors must stay in lockstep with the

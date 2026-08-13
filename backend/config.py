@@ -114,7 +114,7 @@ def _resolve_jwt_secret(configured: str) -> str:
 # **Bump this when tagging a release.** A tag-push check in release-images.yml
 # fails the release if it disagrees with the tag, so a forgotten bump is a red
 # build rather than months of quietly wrong data.
-SOURCE_BUILD_VERSION = "1.3.0-src"
+SOURCE_BUILD_VERSION = "1.4.0-src"
 
 
 class Settings(BaseSettings):

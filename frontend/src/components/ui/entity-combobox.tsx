@@ -55,10 +55,17 @@ export function EntityCombobox({
   const optionId = (i: number) => `${listId}-opt-${i}`;
 
   const selected = options.find((o) => o.value === value);
-  // Closed: show the selected label (or the raw id if unresolved). Open: show
-  // what's being typed to filter. Free-text mode has no separate "resolved
-  // label" — the value itself is always what's displayed/typed.
-  const displayValue = freeText ? value : open ? query : (selected?.label ?? value);
+  // Closed: show the selected option's label — so a condition field reads
+  // "Minutes remaining", not the raw `minutes_remaining` key it stores — falling
+  // back to the raw value when it resolves to no option (a free-text field path,
+  // or an id whose option list hasn't loaded yet). Open: show what's being typed
+  // — in free-text mode the raw value itself (the field key is edited directly),
+  // otherwise the filter query.
+  const displayValue = open
+    ? freeText
+      ? value
+      : query
+    : (selected?.label ?? value);
 
   const filterQuery = freeText ? value : query;
   const filtered = React.useMemo(() => {
@@ -66,7 +73,9 @@ export function EntityCombobox({
     const match = q
       ? options.filter(
           (o) =>
-            o.label.toLowerCase().includes(q) || o.hint?.toLowerCase().includes(q),
+            o.label.toLowerCase().includes(q) ||
+            o.value.toLowerCase().includes(q) ||
+            o.hint?.toLowerCase().includes(q),
         )
       : options;
     return match.slice(0, 50); // cap the rendered list

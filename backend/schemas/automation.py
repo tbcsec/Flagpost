@@ -221,11 +221,20 @@ class CatalogField(BaseModel):
     templateable: bool = False
 
 
+class TriggerField(BaseModel):
+    """One payload field a trigger carries — its raw ``key`` (what conditions
+    store and templates interpolate as ``{key}``) plus a human ``label`` the
+    builder shows instead of the key (§5.5)."""
+
+    key: str
+    label: str
+
+
 class TriggerEntry(BaseModel):
     event: str
     label: str
     # Payload fields available for conditions / {placeholders}.
-    fields: list[str]
+    fields: list[TriggerField]
 
 
 class OperatorEntry(BaseModel):

@@ -15,7 +15,11 @@ const catalog: AutomationCatalog = {
     {
       event: "challenge.solved",
       label: "Challenge solved",
-      fields: ["points", "is_first_blood", "user_id"],
+      fields: [
+        { key: "points", label: "Points" },
+        { key: "is_first_blood", label: "First blood" },
+        { key: "user_id", label: "User" },
+      ],
     },
   ],
   operators: [

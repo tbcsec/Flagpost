@@ -370,10 +370,17 @@ export interface CatalogField {
   templateable: boolean;
 }
 
+/** A trigger payload field: `key` is stored/interpolated as `{key}`; `label` is
+ *  the human name the builder shows in the condition field picker (§5.5). */
+export interface TriggerField {
+  key: string;
+  label: string;
+}
+
 export interface TriggerEntry {
   event: string;
   label: string;
-  fields: string[];
+  fields: TriggerField[];
 }
 
 export interface OperatorEntry {

@@ -36,6 +36,7 @@ import type {
   AutomationRule,
   AutomationRuleInput,
   CatalogField,
+  TriggerField,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -176,10 +177,10 @@ export function RuleBuilder({
                   const op = catalog.operators.find((o) => o.value === c.operator);
                   return (
                     <div key={i} className="flex flex-wrap items-center gap-2">
-                      <div className="w-36">
+                      <div className="min-w-0 flex-1 basis-44">
                         <EntityCombobox
                           freeText
-                          options={triggerFields.map((f) => ({ value: f, label: f }))}
+                          options={triggerFields.map((f) => ({ value: f.key, label: f.label }))}
                           value={c.field}
                           onChange={(v) => updateCondition(i, { field: v })}
                           placeholder="field"
@@ -190,7 +191,7 @@ export function RuleBuilder({
                       <Select
                         value={c.operator}
                         onChange={(e) => updateCondition(i, { operator: e.target.value })}
-                        className="h-9 w-40"
+                        className="h-9 min-w-0 flex-1 basis-36"
                       >
                         {catalog.operators.map((o) => (
                           <option key={o.value} value={o.value}>
@@ -198,31 +199,33 @@ export function RuleBuilder({
                           </option>
                         ))}
                       </Select>
-                      {!op?.unary &&
-                        (() => {
-                          const kind = competitionId ? entityKind(c.field) : null;
-                          if (kind) {
-                            return (
-                              <div className="w-44">
+                      {!op?.unary && (
+                        <div className="min-w-0 flex-1 basis-40">
+                          {(() => {
+                            const kind = competitionId ? entityKind(c.field) : null;
+                            if (kind) {
+                              return (
                                 <EntityCombobox
                                   options={kind === "team" ? teamOptions : userOptions}
                                   value={c.value == null ? "" : String(c.value)}
                                   onChange={(v) => updateCondition(i, { value: v })}
                                   placeholder={kind === "team" ? "Pick a team" : "Pick a user"}
                                   emptyText={kind === "team" ? "No teams" : "No participants"}
+                                  className="h-9"
                                 />
-                              </div>
+                              );
+                            }
+                            return (
+                              <Input
+                                value={c.value == null ? "" : String(c.value)}
+                                onChange={(e) => updateCondition(i, { value: e.target.value })}
+                                placeholder="value"
+                                className="h-9 w-full"
+                              />
                             );
-                          }
-                          return (
-                            <Input
-                              value={c.value == null ? "" : String(c.value)}
-                              onChange={(e) => updateCondition(i, { value: e.target.value })}
-                              placeholder="value"
-                              className="h-9 w-36"
-                            />
-                          );
-                        })()}
+                          })()}
+                        </div>
+                      )}
                       <IconButton
                         label="Remove condition"
                         onClick={() =>
@@ -374,7 +377,7 @@ function FieldInput({
 }: {
   field: CatalogField;
   personal: boolean;
-  triggerFields: string[];
+  triggerFields: TriggerField[];
   value: string;
   onChange: (value: string) => void;
 }) {
@@ -434,7 +437,7 @@ function FieldInput({
       {control}
       {field.templateable && triggerFields.length > 0 && (
         <p className="text-[11px] text-muted-foreground">
-          Insert: {triggerFields.map((f) => `{${f}}`).join(" ")}
+          Insert: {triggerFields.map((f) => `{${f.key}}`).join(" ")}
         </p>
       )}
     </div>

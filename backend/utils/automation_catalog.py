@@ -48,6 +48,7 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "hint.released": [
         "competition_id", "challenge_id", "hint_id", "user_id", "team_id",
     ],
+    "hint.published": ["competition_id", "challenge_id", "hint_id"],
     "ticket.created": ["competition_id", "ticket_id", "opener_user_id", "subject"],
     "ticket.assigned": ["competition_id", "ticket_id", "assignee_user_id"],
     "ticket.resolved": ["competition_id", "ticket_id"],
@@ -178,6 +179,7 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     "challenge.rated": "feedback_view_responses",
     "challenge.hint_requested": "challenge_view",
     "hint.released": "challenge_view",
+    "hint.published": "challenge_view",
     "score.adjusted": "challenge_view",
     "achievement.awarded": "challenge_view",
     "scoreboard.frozen": "scoreboard_freeze",
@@ -347,6 +349,7 @@ ACTION_FIELDS: dict[str, list[dict]] = {
         ),
     ],
     "release_hint": [_field("hint_id", "Hint", "entity", entity_type="hint")],
+    "publish_hint": [_field("hint_id", "Hint", "entity", entity_type="hint")],
     "unlock_challenge": [
         _field("challenge_id", "Challenge", "entity", entity_type="challenge"),
     ],

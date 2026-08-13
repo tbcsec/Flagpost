@@ -38,6 +38,7 @@ from sqlalchemy import or_, select
 from db import ensure_aware_utc, utcnow
 from models.automation import AutomationRule
 from models.competition import Competition
+from models.hint import Hint
 from plugins.loader import is_module_enabled
 from utils.automation_engine import evaluate_conditions, run_rule
 from utils.event_bus import event_bus
@@ -138,6 +139,45 @@ async def emit_lifecycle_events(db_factory, *, now: datetime | None = None) -> N
         await event_bus.emit(name, payload)
 
 
+async def publish_scheduled_hints(db_factory, *, now: datetime | None = None) -> None:
+    """Publish every hidden hint whose scheduled ``release_at`` has arrived
+    (#213): flip it visible and emit ``hint.published`` (what the release
+    automations subscribe to). Idempotent — once unhidden a hint no longer
+    matches. Compared in Python like the lifecycle tick, for tz correctness
+    across SQLite/Postgres. Fires for audit regardless of the module toggle;
+    the engine gates any rule on the module per-rule."""
+    now = ensure_aware_utc(now) if now is not None else utcnow()
+    to_emit: list[dict] = []
+    async with db_factory() as db:
+        hints = (
+            (
+                await db.execute(
+                    select(Hint).where(
+                        Hint.hidden.is_(True),
+                        Hint.release_at.is_not(None),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for hint in hints:
+            if now >= ensure_aware_utc(hint.release_at):
+                hint.hidden = False
+                to_emit.append(
+                    {
+                        "competition_id": hint.competition_id,
+                        "challenge_id": hint.challenge_id,
+                        "hint_id": hint.id,
+                    }
+                )
+        if to_emit:
+            await db.commit()
+    # Emit after commit so the unhide is durable before any handler runs.
+    for payload in to_emit:
+        await event_bus.emit("hint.published", payload)
+
+
 def start(db_factory, interval_seconds: float) -> None:
     """Launch the periodic tick (idempotent). Requires a running event loop."""
     global _task
@@ -163,6 +203,7 @@ async def _loop(db_factory, interval_seconds: float) -> None:
         try:
             await emit_lifecycle_events(db_factory)
             await run_time_rules(db_factory)
+            await publish_scheduled_hints(db_factory)
             # Archived-competition retention (#26) rides the same kernel tick —
             # platform housekeeping like the lifecycle events, active
             # regardless of any per-competition module toggle.

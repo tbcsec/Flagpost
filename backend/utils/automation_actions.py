@@ -249,6 +249,10 @@ async def _execute_release_hint(db, rule, event_name, payload, config) -> None:
     if hint is None or hint.competition_id != competition_id:
         logger.warning("release_hint: hint not in competition; rule %s", rule.id)
         return
+    if hint.hidden:
+        # Can't grant a hint that isn't published yet — publish_hint first (#213).
+        logger.info("release_hint: hint %s is hidden; skipping", hint.id)
+        return
 
     team_id = payload.get("team_id")
     # Idempotent per subject, like an explicit reveal: released once, not per event.
@@ -284,6 +288,30 @@ async def _execute_release_hint(db, rule, event_name, payload, config) -> None:
             "user_id": user_id,
             "team_id": team_id,
             "rule_id": rule.id,
+        },
+    )
+
+
+# --- publish_hint (§5.3): make a hidden hint available to everyone (#213) -----
+
+
+async def _execute_publish_hint(db, rule, event_name, payload, config) -> None:
+    competition_id = payload.get("competition_id")
+    hint = await db.get(Hint, config.get("hint_id"))
+    # Tenant guard: the configured hint must belong to the event's competition.
+    if hint is None or not competition_id or hint.competition_id != competition_id:
+        logger.warning("publish_hint: hint not in competition; rule %s", rule.id)
+        return
+    if not hint.hidden:
+        return  # already visible — idempotent
+    hint.hidden = False
+    await db.commit()
+    await event_bus.emit(
+        "hint.published",
+        {
+            "competition_id": competition_id,
+            "challenge_id": hint.challenge_id,
+            "hint_id": hint.id,
         },
     )
 
@@ -552,6 +580,7 @@ ACTIONS: dict[str, ActionSpec] = {
     "send_email": ActionSpec(_execute_send_email),
     "webhook": ActionSpec(_execute_webhook),
     "release_hint": ActionSpec(_execute_release_hint),
+    "publish_hint": ActionSpec(_execute_publish_hint),
     "unlock_challenge": ActionSpec(_execute_unlock_challenge),
     "open_survey": ActionSpec(_execute_open_survey),
     "create_ticket": ActionSpec(_execute_create_ticket),

@@ -5,6 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { hintsApi } from "@/lib/api";
+import type { HintUpdate } from "@/lib/types";
 import { useAuthStore } from "@/stores/auth";
 
 const hintKeys = {
@@ -45,8 +46,23 @@ export function useRevealHint(competitionId: string, challengeId: string) {
 export function useCreateHint(competitionId: string, challengeId: string) {
   const invalidate = useInvalidateHints(competitionId, challengeId);
   return useMutation({
-    mutationFn: (input: { body: string; cost: number }) =>
-      hintsApi.create(competitionId, challengeId, input),
+    mutationFn: (input: {
+      body: string;
+      cost: number;
+      hidden?: boolean;
+      release_at?: string | null;
+    }) => hintsApi.create(competitionId, challengeId, input),
+    onSuccess: invalidate,
+  });
+}
+
+/** Edit a hint, and/or publish it (#213): pass `{ hidden: false }` to release a
+ *  hidden hint. Refreshes the list so the badge and visibility update. */
+export function useUpdateHint(competitionId: string, challengeId: string) {
+  const invalidate = useInvalidateHints(competitionId, challengeId);
+  return useMutation({
+    mutationFn: ({ hintId, patch }: { hintId: string; patch: HintUpdate }) =>
+      hintsApi.update(competitionId, challengeId, hintId, patch),
     onSuccess: invalidate,
   });
 }

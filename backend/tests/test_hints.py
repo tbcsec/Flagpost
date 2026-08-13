@@ -102,7 +102,15 @@ async def test_body_hidden_until_revealed(client):
         )
     ).json()
     assert listed == [
-        {"id": hint, "challenge_id": chal, "cost": 0, "revealed": False, "body": None}
+        {
+            "id": hint,
+            "challenge_id": chal,
+            "cost": 0,
+            "revealed": False,
+            "body": None,
+            "hidden": False,
+            "release_at": None,
+        }
     ]
 
     revealed = await client.post(
@@ -285,3 +293,162 @@ async def test_non_editor_cannot_see_hints_on_a_draft(client):
         headers=_auth(competitor),
     )
     assert resp.status_code == 404
+
+
+# --- hidden / scheduled release (#213) ---------------------------------------
+
+
+async def _add_hidden_hint(client, comp, chal, *, body="Locked", cost=0, release_at=None):
+    admin = await admin_token(client)
+    payload: dict = {"body": body, "cost": cost, "hidden": True}
+    if release_at is not None:
+        payload["release_at"] = release_at
+    resp = await client.post(
+        f"/api/competitions/{comp}/challenges/{chal}/hints",
+        json=payload,
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
+async def _published_hint_events(hint_id: str) -> list:
+    async with SessionLocal() as session:
+        rows = (
+            await session.execute(
+                select(AuditLogEntry).where(
+                    AuditLogEntry.event_name == "hint.published"
+                )
+            )
+        ).scalars().all()
+    return [r for r in rows if r.payload.get("hint_id") == hint_id]
+
+
+async def test_hidden_hint_is_invisible_to_competitors_but_shown_to_staff(client):
+    comp = await _competition(client)
+    chal = await _published_challenge(client, comp)
+    hint = await _add_hidden_hint(client, comp, chal, body="Ssh, secret")
+    admin = await admin_token(client)
+    competitor = await _team_member(client, comp, "hid@example.com", "Hiders")
+
+    # Competitor: the hidden hint isn't listed at all — its existence never leaks.
+    listed = (
+        await client.get(
+            f"/api/competitions/{comp}/challenges/{chal}/hints",
+            headers=_auth(competitor),
+        )
+    ).json()
+    assert listed == []
+
+    # Staff: listed, flagged hidden, body visible for authoring.
+    staff = (
+        await client.get(
+            f"/api/competitions/{comp}/challenges/{chal}/hints", headers=_auth(admin)
+        )
+    ).json()
+    assert [h["id"] for h in staff] == [hint]
+    assert staff[0]["hidden"] is True
+    assert staff[0]["body"] == "Ssh, secret"
+
+
+async def test_reveal_rejects_a_hidden_hint(client):
+    comp = await _competition(client)
+    chal = await _published_challenge(client, comp)
+    hint = await _add_hidden_hint(client, comp, chal)
+    competitor = await _team_member(client, comp, "peek2@example.com", "Peek2")
+    resp = await client.post(
+        f"/api/competitions/{comp}/challenges/{chal}/hints/{hint}/reveal",
+        headers=_auth(competitor),
+    )
+    assert resp.status_code == 404
+
+
+async def test_publishing_via_patch_makes_visible_and_emits(client):
+    comp = await _competition(client)
+    chal = await _published_challenge(client, comp)
+    hint = await _add_hidden_hint(client, comp, chal, body="Now you see me")
+    admin = await admin_token(client)
+    competitor = await _team_member(client, comp, "pub@example.com", "Pubs")
+
+    resp = await client.patch(
+        f"/api/competitions/{comp}/challenges/{chal}/hints/{hint}",
+        json={"hidden": False},
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["hidden"] is False
+
+    listed = (
+        await client.get(
+            f"/api/competitions/{comp}/challenges/{chal}/hints",
+            headers=_auth(competitor),
+        )
+    ).json()
+    assert [h["id"] for h in listed] == [hint]  # now visible to the competitor
+    assert len(await _published_hint_events(hint)) == 1
+
+
+async def test_editing_a_visible_hint_does_not_emit_published(client):
+    comp = await _competition(client)
+    chal = await _published_challenge(client, comp)
+    hint = await _add_hint(client, comp, chal)  # visible by default
+    admin = await admin_token(client)
+    resp = await client.patch(
+        f"/api/competitions/{comp}/challenges/{chal}/hints/{hint}",
+        json={"cost": 25},
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["cost"] == 25
+    # No hidden->visible transition ⇒ no hint.published.
+    assert await _published_hint_events(hint) == []
+
+
+async def test_scheduled_release_publishes_when_due(client):
+    from utils.automation_scheduler import publish_scheduled_hints
+
+    comp = await _competition(client)
+    chal = await _published_challenge(client, comp)
+    hint = await _add_hidden_hint(
+        client, comp, chal, body="Timed", release_at="2020-01-01T00:00:00Z"
+    )
+    competitor = await _team_member(client, comp, "timed@example.com", "Timed")
+
+    before = (
+        await client.get(
+            f"/api/competitions/{comp}/challenges/{chal}/hints",
+            headers=_auth(competitor),
+        )
+    ).json()
+    assert before == []  # hidden until the scheduler runs
+
+    await publish_scheduled_hints(SessionLocal)
+
+    after = (
+        await client.get(
+            f"/api/competitions/{comp}/challenges/{chal}/hints",
+            headers=_auth(competitor),
+        )
+    ).json()
+    assert [h["id"] for h in after] == [hint]
+    assert len(await _published_hint_events(hint)) == 1
+
+
+async def test_future_scheduled_hint_stays_hidden(client):
+    from utils.automation_scheduler import publish_scheduled_hints
+
+    comp = await _competition(client)
+    chal = await _published_challenge(client, comp)
+    hint = await _add_hidden_hint(client, comp, chal, release_at="2999-01-01T00:00:00Z")
+    competitor = await _team_member(client, comp, "future@example.com", "Future")
+
+    await publish_scheduled_hints(SessionLocal)
+
+    listed = (
+        await client.get(
+            f"/api/competitions/{comp}/challenges/{chal}/hints",
+            headers=_auth(competitor),
+        )
+    ).json()
+    assert listed == []  # not due yet
+    assert await _published_hint_events(hint) == []

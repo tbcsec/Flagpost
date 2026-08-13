@@ -126,7 +126,23 @@ export function VenueMode({
     else document.documentElement.requestFullscreen().catch(() => {});
   }, []);
 
-  // Keyboard: arrows advance, space pauses, f toggles fullscreen, Esc exits.
+  // Fluid scaling (#214): the board sizes off the CSS `.venue-scale` root
+  // font-size, which grows with the display; --venue-zoom lets an operator nudge
+  // it (the +/- keys). The two icon marks take a px `size`, so we read the venue
+  // root's computed 1em and size them in lockstep with the em-based text.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState(1);
+  const [unitPx, setUnitPx] = useState(16);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const measure = () => setUnitPx(parseFloat(getComputedStyle(el).fontSize) || 16);
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [zoom]);
+
+  // Keyboard: arrows advance, space pauses, f fullscreen, +/- scale, Esc exits.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowRight") advance(1);
@@ -135,6 +151,8 @@ export function VenueMode({
         e.preventDefault();
         setPaused((p) => !p);
       } else if (e.key === "f" || e.key === "F") toggleFullscreen();
+      else if (e.key === "+" || e.key === "=") setZoom((z) => Math.min(2, z + 0.1));
+      else if (e.key === "-" || e.key === "_") setZoom((z) => Math.max(0.6, z - 0.1));
       else if (e.key === "Escape") onExit();
     };
     window.addEventListener("keydown", onKey);
@@ -142,34 +160,38 @@ export function VenueMode({
   }, [advance, toggleFullscreen, onExit]);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-background text-foreground">
-      <header className="flex items-center gap-4 border-b border-border px-8 py-4">
-        <span className="flex items-center gap-2 text-sm font-medium text-primary">
-          <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-primary" />
+    <div
+      ref={rootRef}
+      className="venue-scale fixed inset-0 z-50 flex flex-col bg-background text-foreground"
+      style={{ "--venue-zoom": zoom } as React.CSSProperties}
+    >
+      <header className="flex items-center gap-[1em] border-b border-border px-[2em] py-[1em]">
+        <span className="flex items-center gap-[0.5em] text-[0.875em] font-medium text-primary">
+          <span className="h-[0.625em] w-[0.625em] animate-pulse rounded-full bg-primary" />
           LIVE
         </span>
-        <span className="truncate text-xl font-semibold">{scoreboard.name}</span>
+        <span className="truncate text-[1.25em] font-semibold">{scoreboard.name}</span>
         <Countdown startAt={scoreboard.start_at} endAt={scoreboard.end_at} />
         {scoreboard.frozen && (
-          <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
+          <span className="rounded-full bg-secondary px-[0.75em] py-[0.25em] text-[0.75em] font-medium text-secondary-foreground">
             Frozen
           </span>
         )}
         <Lockup
-          size={28}
+          size={Math.round(1.75 * unitPx)}
           label={brand.platform_name}
           logoUrl={brand.logo_url}
           showWordmark={brand.show_wordmark}
         />
       </header>
 
-      <main className="relative flex-1 overflow-hidden px-8 py-6">
+      <main className="relative flex-1 overflow-hidden px-[2em] py-[1.5em]">
         {slides[current].node}
-        {splash && <FirstBloodSplash solve={splash} />}
+        {splash && <FirstBloodSplash solve={splash} unitPx={unitPx} />}
       </main>
 
-      <footer className="flex items-center gap-4 px-8 py-4">
-        <div className="flex flex-1 items-center gap-2" role="tablist" aria-label="Slides">
+      <footer className="flex items-center gap-[1em] px-[2em] py-[1em]">
+        <div className="flex flex-1 items-center gap-[0.5em]" role="tablist" aria-label="Slides">
           {slides.map((s, i) => (
             <button
               key={s.key}
@@ -179,8 +201,8 @@ export function VenueMode({
               aria-label={s.key}
               onClick={() => setIdx(i)}
               className={cn(
-                "h-2 rounded-full transition-all",
-                i === current ? "w-6 bg-primary" : "w-2 bg-muted-foreground/40",
+                "h-[0.5em] rounded-full transition-all",
+                i === current ? "w-[1.5em] bg-primary" : "w-[0.5em] bg-muted-foreground/40",
               )}
             />
           ))}
@@ -202,7 +224,7 @@ export function VenueMode({
 function VenueSlide({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="flex h-full flex-col">
-      <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+      <h2 className="mb-[1em] text-[0.875em] font-semibold uppercase tracking-wide text-muted-foreground">
         {title}
       </h2>
       <div className="min-h-0 flex-1">{children}</div>
@@ -215,29 +237,29 @@ function VenueBoard({ scoreboard }: { scoreboard: PublicScoreboard }) {
   return (
     <VenueSlide title="Scoreboard">
       {top.length === 0 ? (
-        <div className="grid h-full place-items-center text-2xl text-muted-foreground">
+        <div className="grid h-full place-items-center text-[1.5em] text-muted-foreground">
           No scores yet — the board fills in on the first solve.
         </div>
       ) : (
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-[0.375em]">
           {top.map((e) => (
             <div
               key={e.subject_id}
               className={cn(
-                "flex items-center gap-5 rounded-lg px-5 py-2.5",
+                "flex items-center gap-[1.25em] rounded-lg px-[1.25em] py-[0.625em]",
                 e.rank === 1 && "bg-primary/10",
               )}
             >
               <span
                 className={cn(
-                  "w-12 text-right font-mono text-2xl font-semibold tabular-nums",
+                  "w-[2em] text-right font-mono text-[1.5em] font-semibold tabular-nums",
                   e.rank === 1 ? "text-primary" : "text-muted-foreground",
                 )}
               >
                 {e.rank}
               </span>
-              <span className="flex-1 truncate text-2xl font-medium">{e.name}</span>
-              <span className="font-mono text-2xl font-semibold tabular-nums text-primary">
+              <span className="flex-1 truncate text-[1.5em] font-medium">{e.name}</span>
+              <span className="font-mono text-[1.5em] font-semibold tabular-nums text-primary">
                 {e.points.toLocaleString()}
               </span>
             </div>
@@ -250,7 +272,7 @@ function VenueBoard({ scoreboard }: { scoreboard: PublicScoreboard }) {
 
 function VenueInsights({ insights }: { insights: PublicInsights }) {
   return (
-    <div className="flex h-full flex-col justify-center gap-6">
+    <div className="flex h-full flex-col justify-center gap-[1.5em]">
       <StatTiles stats={insights.stats} />
       <Highlights highlights={insights.highlights} variant="row" />
     </div>
@@ -261,18 +283,20 @@ function VenueInsights({ insights }: { insights: PublicInsights }) {
  *  for first blood, blown up to full screen. */
 function FirstBloodSplash({
   solve,
+  unitPx,
 }: {
   solve: PublicActivity["recent_solves"][number];
+  unitPx: number;
 }) {
   return (
     <div
       role="alert"
-      className="anim-toast absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-warning/95 px-8 text-center text-warning-foreground"
+      className="anim-toast absolute inset-0 z-10 flex flex-col items-center justify-center gap-[1em] bg-warning/95 px-[2em] text-center text-warning-foreground"
     >
-      <FirstBloodIcon size={72} className="text-warning-foreground" />
-      <div className="text-sm font-semibold uppercase tracking-widest">First blood</div>
-      <div className="text-5xl font-semibold">{solve.subject_name}</div>
-      <div className="text-2xl">
+      <FirstBloodIcon size={Math.round(4.5 * unitPx)} className="text-warning-foreground" />
+      <div className="text-[0.875em] font-semibold uppercase tracking-widest">First blood</div>
+      <div className="text-[3em] font-semibold">{solve.subject_name}</div>
+      <div className="text-[1.5em]">
         first to solve <span className="font-semibold">{solve.title}</span>
       </div>
     </div>
@@ -307,9 +331,9 @@ function Countdown({
   if (value === null) return null;
 
   return (
-    <span className="ml-auto font-mono text-lg tabular-nums">
+    <span className="ml-auto font-mono text-[1.125em] tabular-nums">
       {value}
-      {label && <span className="ml-2 text-xs text-muted-foreground">{label}</span>}
+      {label && <span className="ml-[0.5em] text-[0.75em] text-muted-foreground">{label}</span>}
     </span>
   );
 }
@@ -343,9 +367,9 @@ function VenueControls({
   onExit: () => void;
 }) {
   const btn =
-    "rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground";
+    "rounded-md border border-border px-[0.75em] py-[0.375em] text-[0.875em] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground";
   return (
-    <div className="flex items-center gap-2 opacity-60 transition-opacity hover:opacity-100">
+    <div className="flex items-center gap-[0.5em] opacity-60 transition-opacity hover:opacity-100">
       <button type="button" className={btn} onClick={onPrev} aria-label="Previous slide">
         ←
       </button>

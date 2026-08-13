@@ -14,12 +14,12 @@ export function StatTiles({ stats }: { stats: PublicInsights["stats"] }) {
     { label: "Unsolved", value: stats.unsolved },
   ];
   return (
-    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+    <div className="grid grid-cols-2 gap-[1em] md:grid-cols-4">
       {tiles.map((tile) => (
         <Card key={tile.label}>
-          <CardContent className="p-4">
-            <div className="text-2xl font-semibold tabular-nums">{tile.value}</div>
-            <div className="text-xs text-muted-foreground">{tile.label}</div>
+          <CardContent className="p-[1em]">
+            <div className="text-[1.5em] font-semibold tabular-nums">{tile.value}</div>
+            <div className="text-[0.75em] text-muted-foreground">{tile.label}</div>
           </CardContent>
         </Card>
       ))}
@@ -70,18 +70,18 @@ export function Highlights({
   // Row: spread evenly across a full-width venue slide.
   const grid =
     variant === "row"
-      ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
-      : "grid gap-4 self-start sm:grid-cols-2 lg:grid-cols-1";
+      ? "grid gap-[1em] sm:grid-cols-2 lg:grid-cols-4"
+      : "grid gap-[1em] self-start sm:grid-cols-2 lg:grid-cols-1";
   return (
     <div className={grid}>
       {cards.map((card) => (
         <Card key={card.label}>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground">{card.label}</div>
-            <div className="mt-0.5 truncate font-medium" title={card.value}>
+          <CardContent className="p-[1em]">
+            <div className="text-[0.75em] text-muted-foreground">{card.label}</div>
+            <div className="mt-[0.125em] truncate font-medium" title={card.value}>
               {card.value}
             </div>
-            <div className="text-xs text-muted-foreground">{card.detail}</div>
+            <div className="text-[0.75em] text-muted-foreground">{card.detail}</div>
           </CardContent>
         </Card>
       ))}

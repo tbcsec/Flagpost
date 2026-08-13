@@ -207,7 +207,10 @@ async def test_run_rule_renders_friendly_fields_in_templates():
 
 
 def test_catalog_advertises_friendly_fields():
-    triggers = {t["event"]: t["fields"] for t in build_catalog()["triggers"]}
+    triggers = {
+        t["event"]: {f["key"] for f in t["fields"]}
+        for t in build_catalog()["triggers"]
+    }
     solved = triggers["challenge.solved"]
     for derived in ("user_name", "team_name", "challenge_title", "competition_name"):
         assert derived in solved

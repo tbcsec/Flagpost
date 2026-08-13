@@ -253,9 +253,13 @@ async def test_catalog_generates_the_builder(client):
     triggers = {t["event"] for t in catalog["triggers"]}
     assert "challenge.solved" in triggers
     assert not any(e.startswith("automation.") for e in triggers)
-    # Trigger carries its payload fields for condition/placeholder pickers.
+    # Trigger carries its payload fields for condition/placeholder pickers, each
+    # with a human label (never the raw key) — "First blood", not is_first_blood.
     solved = next(t for t in catalog["triggers"] if t["event"] == "challenge.solved")
-    assert "is_first_blood" in solved["fields"] and "points" in solved["fields"]
+    solved_fields = {f["key"]: f["label"] for f in solved["fields"]}
+    assert "is_first_blood" in solved_fields and "points" in solved_fields
+    assert solved_fields["is_first_blood"] == "First blood"
+    assert solved_fields["challenge_id"] == "Challenge"
 
     ops = {o["value"]: o for o in catalog["operators"]}
     assert ops["exists"]["unary"] is True

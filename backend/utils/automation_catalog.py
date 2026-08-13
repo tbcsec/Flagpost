@@ -201,6 +201,54 @@ def required_permission(event: str) -> str:
     return TRIGGER_PERMISSIONS.get(event, "manage_roles")
 
 
+# Human labels for trigger payload fields, so the condition builder shows
+# "Minutes remaining" / "First blood" instead of the raw key (§5.5). Anything
+# unmapped falls back to a humanized key (see `_field_label`), so a newly-added
+# trigger field is never surfaced as a bare `snake_case` key.
+_FIELD_LABELS: dict[str, str] = {
+    # Entity ids → the entity's human name (the id itself stays internal).
+    "competition_id": "Competition",
+    "challenge_id": "Challenge",
+    "user_id": "User",
+    "team_id": "Team",
+    "hint_id": "Hint",
+    "survey_id": "Survey",
+    "ticket_id": "Ticket",
+    "announcement_id": "Announcement",
+    "response_id": "Response",
+    "message_id": "Message",
+    "attachment_id": "Attachment",
+    "api_token_id": "API token",
+    "provider_id": "Provider",
+    # Role-qualified actor ids.
+    "actor_user_id": "Actor",
+    "opener_user_id": "Opener",
+    "assignee_user_id": "Assignee",
+    "author_user_id": "Author",
+    "created_by_user_id": "Created by",
+    # Scalars.
+    "points": "Points",
+    "cost": "Cost",
+    "rating": "Rating",
+    "minutes_remaining": "Minutes remaining",
+    "is_first_blood": "First blood",
+    "correct": "Correct",
+    "is_internal": "Internal",
+    "auto": "Automatic",
+    "frozen_at": "Frozen at",
+    "severity": "Severity",
+    "audience_type": "Audience",
+    "changed_fields": "Changed fields",
+    "roles_assigned": "Roles assigned",
+    # Friendly companion placeholders (#27) appended by `_with_friendly`.
+    "user_name": "User name",
+    "team_name": "Team name",
+    "challenge_title": "Challenge title",
+    "survey_title": "Survey title",
+    "ticket_subject": "Ticket subject",
+    "competition_name": "Competition name",
+}
+
 _OPERATOR_LABELS = {
     "equals": "equals",
     "not_equals": "does not equal",
@@ -308,6 +356,16 @@ def _titleize(event_or_type: str) -> str:
     return " ".join(event_or_type.replace(".", " ").replace("_", " ").split()).capitalize()
 
 
+def _field_label(key: str) -> str:
+    """Human label for a trigger payload field. Curated where it matters,
+    otherwise a humanized key (dropping a trailing ``_id``) so the builder never
+    shows a raw `snake_case` key."""
+    if key in _FIELD_LABELS:
+        return _FIELD_LABELS[key]
+    base = key[:-3] if key.endswith("_id") else key
+    return _titleize(base)
+
+
 def _with_friendly(fields: list[str]) -> list[str]:
     """Append the resolved friendly companions (#27) for every id field a
     trigger carries — {user_name}, {challenge_title}, … — so the builder
@@ -325,7 +383,10 @@ def build_catalog() -> dict:
             {
                 "event": event,
                 "label": _titleize(event),
-                "fields": _with_friendly(TRIGGER_FIELDS.get(event, _COMMON_FIELDS)),
+                "fields": [
+                    {"key": key, "label": _field_label(key)}
+                    for key in _with_friendly(TRIGGER_FIELDS.get(event, _COMMON_FIELDS))
+                ],
             }
             for event in TRIGGERABLE_EVENTS
         ],

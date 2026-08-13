@@ -135,6 +135,10 @@ async def clone_competition(
                 challenge_id=challenge_map[hint.challenge_id],
                 body=hint.body,
                 cost=hint.cost,
+                # Preserve the publish state (#213) — a hidden/scheduled hint must
+                # not become visible in the clone.
+                hidden=hint.hidden,
+                release_at=hint.release_at,
             )
         )
 

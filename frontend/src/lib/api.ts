@@ -61,6 +61,7 @@ import type {
   HelloResponse,
   Hint,
   HintAuthored,
+  HintUpdate,
   AdminOverview,
   Award,
   AwardInput,
@@ -974,11 +975,26 @@ export const hintsApi = {
   create: (
     competitionId: string,
     challengeId: string,
-    input: { body: string; cost: number },
+    input: {
+      body: string;
+      cost: number;
+      hidden?: boolean;
+      release_at?: string | null;
+    },
   ) =>
     apiFetch<HintAuthored>(
       `/api/competitions/${competitionId}/challenges/${challengeId}/hints`,
       { method: "POST", body: JSON.stringify(input) },
+    ),
+  update: (
+    competitionId: string,
+    challengeId: string,
+    hintId: string,
+    patch: HintUpdate,
+  ) =>
+    apiFetch<HintAuthored>(
+      `/api/competitions/${competitionId}/challenges/${challengeId}/hints/${hintId}`,
+      { method: "PATCH", body: JSON.stringify(patch) },
     ),
   remove: (competitionId: string, challengeId: string, hintId: string) =>
     apiFetch<void>(

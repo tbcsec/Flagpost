@@ -49,6 +49,10 @@ EVENT_TYPES: tuple[str, ...] = (
     "challenge.rated",
     "challenge.hint_requested",
     "hint.released",
+    # A hidden hint became available to everyone (#213) — manual publish, a
+    # scheduled release_at, or the publish_hint automation. Distinct from
+    # hint.released (grant to one subject); this is "now visible to all".
+    "hint.published",
     "category.created",
     "category.deleted",
     "user.registered",

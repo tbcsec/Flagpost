@@ -267,9 +267,10 @@ async def test_catalog_generates_the_builder(client):
 
     by_type = {a["type"]: a for a in catalog["actions"]}
     assert set(by_type) == {
-        "notify", "send_email", "webhook", "release_hint", "unlock_challenge",
-        "open_survey", "create_ticket", "update_score", "create_award",
-        "freeze_scoreboard", "unfreeze_scoreboard", "create_announcement",
+        "notify", "send_email", "webhook", "release_hint", "publish_hint",
+        "unlock_challenge", "open_survey", "create_ticket", "update_score",
+        "create_award", "freeze_scoreboard", "unfreeze_scoreboard",
+        "create_announcement",
     }
     assert by_type["notify"]["personal_allowed"] is True
     assert by_type["webhook"]["personal_allowed"] is False
@@ -654,6 +655,42 @@ async def test_release_hint_action_is_free_and_idempotent(client):
     async with SessionLocal() as session:
         count = await session.scalar(select(func.count(HintReveal.id)))
     assert count == 1
+
+
+async def test_publish_hint_action_makes_a_hidden_hint_visible(client):
+    comp = await _competition(client)
+    chal = await _challenge(client, comp)
+    admin = await admin_token(client)
+    ada = await _participant(client, comp, "ada@example.com")
+
+    # A hidden hint a rule publishes to everyone when the challenge is solved
+    # (distinct from release_hint, which grants it to just the solver).
+    hint = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges/{chal}/hints",
+            json={"body": "revealed later", "cost": 0, "hidden": True},
+            headers=_auth(admin),
+        )
+    ).json()
+    assert hint["hidden"] is True
+
+    await _create_rule(
+        client, admin, comp,
+        name="Publish hint on solve",
+        actions=[{"type": "publish_hint", "hint_id": hint["id"]}],
+    )
+    await _solve(client, comp, chal, ada)
+
+    # Now visible (staff list shows hidden=false) and hint.published fired.
+    staff_list = (
+        await client.get(
+            f"/api/competitions/{comp}/challenges/{chal}/hints", headers=_auth(admin)
+        )
+    ).json()
+    assert staff_list[0]["hidden"] is False
+    async with SessionLocal() as session:
+        names = (await session.scalars(select(AuditLogEntry.event_name))).all()
+    assert "hint.published" in names
 
 
 async def test_unlock_challenge_action_respects_tenancy(client):

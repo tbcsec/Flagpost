@@ -13,12 +13,13 @@ hint-cost total to subtract from points. Reveals come from an explicit request
 ``cost_charged=0`` — a granted hint costs nothing).
 """
 
+from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from db import Base, CompetitionScopedMixin, TimestampMixin
+from db import Base, CompetitionScopedMixin, TimestampMixin, UtcDateTime
 
 
 class Hint(Base, CompetitionScopedMixin, TimestampMixin):
@@ -33,6 +34,16 @@ class Hint(Base, CompetitionScopedMixin, TimestampMixin):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     # Points deducted from the revealing subject's score. 0 = free hint.
     cost: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Authoring gate (#213): a hidden hint is not shown to competitors at all
+    # (staff always see it), so a hint can be authored now and released later —
+    # manually, on a schedule, or by the `publish_hint` automation. Default false
+    # keeps every existing hint visible.
+    hidden: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    # Optional scheduled publish: when reached, the scheduler flips `hidden` off
+    # and emits `hint.published`. Null = no schedule.
+    release_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
 
 
 class HintReveal(Base, CompetitionScopedMixin, TimestampMixin):

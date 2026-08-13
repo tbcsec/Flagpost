@@ -64,6 +64,17 @@ async def test_clone_copies_config_with_new_name_and_clean_slate(client):
         json={"body": "look harder", "cost": 10},
         headers=_auth(admin),
     )
+    # A hidden, scheduled hint must clone as hidden/scheduled — never published (#213).
+    await client.post(
+        f"/api/competitions/{comp}/challenges/{chal}/hints",
+        json={
+            "body": "secret hint",
+            "cost": 0,
+            "hidden": True,
+            "release_at": "2030-01-01T00:00:00Z",
+        },
+        headers=_auth(admin),
+    )
 
     resp = await _clone(client, admin, comp, name="Round 2")
     assert resp.status_code == 201, resp.text
@@ -96,7 +107,11 @@ async def test_clone_copies_config_with_new_name_and_clean_slate(client):
             f"/api/competitions/{clone['id']}/challenges/{new_chal}/hints", headers=_auth(admin)
         )
     ).json()
-    assert len(hints) == 1
+    assert len(hints) == 2
+    hidden = next(h for h in hints if h["body"] == "secret hint")
+    assert hidden["hidden"] is True and hidden["release_at"] is not None
+    visible = next(h for h in hints if h["body"] == "look harder")
+    assert visible["hidden"] is False
 
 
 async def test_cloned_flag_still_solves(client):

@@ -994,15 +994,31 @@ export interface Hint {
   cost: number;
   revealed: boolean;
   body: string | null;
+  /** Authoring state (#213), populated for editors — competitors never receive
+   *  a hidden hint. `hidden` gates visibility; `release_at` is an optional
+   *  scheduled publish time. */
+  hidden: boolean;
+  release_at: string | null;
 }
 
-/** The authoring view returned when creating a hint. */
+/** The authoring view returned when creating or updating a hint. */
 export interface HintAuthored {
   id: string;
   challenge_id: string;
   body: string;
   cost: number;
+  hidden: boolean;
+  release_at: string | null;
   created_at: string;
+}
+
+/** Partial hint edit (#213). Only the provided fields change; setting `hidden`
+ *  false publishes a hidden hint. `release_at: null` clears a schedule. */
+export interface HintUpdate {
+  body?: string;
+  cost?: number;
+  hidden?: boolean;
+  release_at?: string | null;
 }
 
 // Site-wide theme + branding (§9). Public shape (login/register read it).

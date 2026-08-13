@@ -24,7 +24,7 @@ from models.competition import Competition
 from models.hint import Hint, HintReveal
 from models.user import User
 from routers.challenges import load_visible_challenge
-from schemas.hint import HintCreate, HintOut, HintRevealOut
+from schemas.hint import HintCreate, HintOut, HintRevealOut, HintUpdate
 from utils.event_bus import event_bus
 from utils.scoring import resolve_subject, revealed_hint_ids, subject_has_revealed
 
@@ -78,7 +78,8 @@ async def list_hints(
         db, current_user.id, "challenge_edit", competition_id
     )
     if is_editor:
-        # Authors see every body regardless of reveal state.
+        # Authors see every body regardless of reveal state, plus the publish
+        # state (hidden/scheduled) so the editor can show a badge (#213).
         return [
             HintRevealOut(
                 id=h.id,
@@ -86,6 +87,8 @@ async def list_hints(
                 cost=h.cost,
                 revealed=True,
                 body=h.body,
+                hidden=h.hidden,
+                release_at=h.release_at,
             )
             for h in hints
         ]
@@ -110,6 +113,8 @@ async def list_hints(
             body=h.body if h.id in revealed else None,
         )
         for h in hints
+        # A hidden hint is not shown to competitors at all until it's published.
+        if not h.hidden
     ]
 
 
@@ -128,6 +133,8 @@ async def create_hint(
         challenge_id=challenge_id,
         body=body.body,
         cost=body.cost,
+        hidden=body.hidden,
+        release_at=body.release_at,
     )
     db.add(hint)
     await db.commit()
@@ -136,6 +143,48 @@ async def create_hint(
         "challenge.updated",
         {"competition_id": competition_id, "challenge_id": challenge_id},
     )
+    return hint
+
+
+@router.patch("/{hint_id}", response_model=HintOut)
+async def update_hint(
+    competition_id: str,
+    challenge_id: str,
+    hint_id: str,
+    body: HintUpdate,
+    current_user: User = Depends(require_permission("challenge_edit")),
+    db: AsyncSession = Depends(get_db),
+) -> Hint:
+    """Edit a hint, and/or publish it. Only the fields actually sent change;
+    flipping ``hidden`` false publishes a hidden hint and emits
+    ``hint.published`` (the release automations subscribe to)."""
+    hint = await _get_scoped_hint(db, competition_id, challenge_id, hint_id)
+    fields = body.model_fields_set
+    was_hidden = hint.hidden
+    if "body" in fields and body.body is not None:
+        hint.body = body.body
+    if "cost" in fields and body.cost is not None:
+        hint.cost = body.cost
+    if "hidden" in fields and body.hidden is not None:
+        hint.hidden = body.hidden
+    if "release_at" in fields:  # explicit null clears the schedule
+        hint.release_at = body.release_at
+    await db.commit()
+    await db.refresh(hint)
+    # Commit before emit — the audit consumer opens its own session.
+    await event_bus.emit(
+        "challenge.updated",
+        {"competition_id": competition_id, "challenge_id": challenge_id},
+    )
+    if was_hidden and not hint.hidden:
+        await event_bus.emit(
+            "hint.published",
+            {
+                "competition_id": competition_id,
+                "challenge_id": challenge_id,
+                "hint_id": hint.id,
+            },
+        )
     return hint
 
 
@@ -166,6 +215,12 @@ async def reveal_hint(
 ) -> HintRevealOut:
     await load_visible_challenge(db, competition_id, challenge_id, current_user)
     hint = await _get_scoped_hint(db, competition_id, challenge_id, hint_id)
+    if hint.hidden:
+        # A hidden hint isn't visible to competitors — 404 as if it doesn't exist,
+        # so its existence never leaks and it can't be revealed before release.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Hint not found"
+        )
 
     competition = await db.get(Competition, competition_id)
     subject = await resolve_subject(db, competition, current_user)

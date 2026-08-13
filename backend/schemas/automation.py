@@ -85,6 +85,13 @@ class ReleaseHintAction(BaseModel):
     hint_id: str = Field(min_length=1)
 
 
+class PublishHintAction(BaseModel):
+    # Make a hidden hint available to everyone (#213) — distinct from
+    # release_hint, which grants a hint to a single event subject.
+    type: Literal["publish_hint"]
+    hint_id: str = Field(min_length=1)
+
+
 class UnlockChallengeAction(BaseModel):
     type: Literal["unlock_challenge"]
     challenge_id: str = Field(min_length=1)
@@ -138,6 +145,7 @@ Action = Annotated[
         SendEmailAction,
         WebhookAction,
         ReleaseHintAction,
+        PublishHintAction,
         UnlockChallengeAction,
         OpenSurveyAction,
         CreateTicketAction,

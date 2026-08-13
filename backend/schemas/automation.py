@@ -213,12 +213,17 @@ class CatalogField(BaseModel):
 
     key: str
     label: str
-    kind: Literal["text", "textarea", "number", "select", "string_list", "keyvalue"]
+    kind: Literal[
+        "text", "textarea", "number", "select", "string_list", "keyvalue", "entity"
+    ]
     required: bool = True
     options: list[str] | None = None
     placeholder: str | None = None
     # Supports {field} interpolation from the event payload — a UI hint.
     templateable: bool = False
+    # For kind="entity": the entity this id references ("challenge", "survey",
+    # "hint", …), so the builder renders a name-search dropdown, never a raw id.
+    entity_type: str | None = None
 
 
 class TriggerField(BaseModel):
@@ -228,6 +233,9 @@ class TriggerField(BaseModel):
 
     key: str
     label: str
+    # When the field is an id, which entity it references — so a *condition
+    # value* on it is picked from a name dropdown instead of typed as a raw id.
+    entity_type: str | None = None
 
 
 class TriggerEntry(BaseModel):

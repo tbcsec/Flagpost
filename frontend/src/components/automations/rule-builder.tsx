@@ -15,12 +15,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { EntityReferencePicker } from "@/components/automations/entity-reference-picker";
 import { EntityCombobox } from "@/components/ui/entity-combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { useParticipants } from "@/lib/hooks/use-participants";
-import { useTeams } from "@/lib/hooks/use-teams";
 import {
   actionsFor,
   blankAction,
@@ -36,6 +35,7 @@ import type {
   AutomationRule,
   AutomationRuleInput,
   CatalogField,
+  EntityRefType,
   TriggerField,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -43,13 +43,15 @@ import { cn } from "@/lib/utils";
 const TEXTAREA_CLASS =
   "flex min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
-/** Which team/user picker (if any) a condition field maps to, so the value is
- *  chosen by name rather than typed as an id. */
-function entityKind(field: string): "team" | "user" | null {
-  if (field === "team_id") return "team";
-  if (field.endsWith("user_id")) return "user"; // user_id, opener_user_id, …
-  return null;
-}
+// Entity references we offer as a name dropdown for a *condition value* (scoped
+// to the rule's competition). Hint needs a challenge parent and competition is
+// the scope itself, so neither is offered inline in a condition row.
+const CONDITION_VALUE_ENTITIES: ReadonlySet<EntityRefType> = new Set<EntityRefType>([
+  "challenge",
+  "survey",
+  "team",
+  "user",
+]);
 
 export function RuleBuilder({
   open,
@@ -90,19 +92,12 @@ export function RuleBuilder({
     }
   }
 
-  // Name pickers for team_id/user_id condition values (only when scoped to a
-  // competition). Teams + the participant roster of that competition.
-  const teams = useTeams(competitionId ?? "");
-  const participants = useParticipants(competitionId ?? "", Boolean(competitionId));
-  const teamOptions = (teams.data ?? []).map((t) => ({ value: t.id, label: t.name }));
-  const userOptions = (participants.data ?? []).map((p) => ({
-    value: p.user_id,
-    label: p.display_name,
-  }));
-
   const availableActions = actionsFor(catalog, personal);
   const trigger = catalog.triggers.find((t) => t.event === state.trigger_type);
   const triggerFields = trigger?.fields ?? [];
+  // The entity a condition field references (challenge_id → "challenge", …), so
+  // its value is chosen from a name dropdown instead of typed as a raw id.
+  const fieldEntityType = new Map(triggerFields.map((f) => [f.key, f.entity_type]));
   const actionByType = new Map(catalog.actions.map((a) => [a.type, a]));
 
   const isValid =
@@ -202,16 +197,19 @@ export function RuleBuilder({
                       {!op?.unary && (
                         <div className="min-w-0 flex-1 basis-40">
                           {(() => {
-                            const kind = competitionId ? entityKind(c.field) : null;
-                            if (kind) {
+                            // A condition value on an id field is picked by name,
+                            // scoped to the rule's competition. Global rules (no
+                            // competition) keep a plain input.
+                            const et = competitionId
+                              ? fieldEntityType.get(c.field)
+                              : null;
+                            if (et && CONDITION_VALUE_ENTITIES.has(et)) {
                               return (
-                                <EntityCombobox
-                                  options={kind === "team" ? teamOptions : userOptions}
+                                <EntityReferencePicker
+                                  entityType={et}
+                                  competitionId={competitionId}
                                   value={c.value == null ? "" : String(c.value)}
                                   onChange={(v) => updateCondition(i, { value: v })}
-                                  placeholder={kind === "team" ? "Pick a team" : "Pick a user"}
-                                  emptyText={kind === "team" ? "No teams" : "No participants"}
-                                  className="h-9"
                                 />
                               );
                             }
@@ -290,6 +288,7 @@ export function RuleBuilder({
                           key={field.key}
                           field={field}
                           personal={personal}
+                          competitionId={competitionId}
                           triggerFields={triggerFields}
                           value={action.config[field.key] ?? ""}
                           onChange={(v) =>
@@ -371,12 +370,14 @@ function Step({
 function FieldInput({
   field,
   personal,
+  competitionId,
   triggerFields,
   value,
   onChange,
 }: {
   field: CatalogField;
   personal: boolean;
+  competitionId?: string;
   triggerFields: TriggerField[];
   value: string;
   onChange: (value: string) => void;
@@ -385,7 +386,19 @@ function FieldInput({
   const controlId = `field-${React.useId()}`;
   let control: React.ReactNode;
 
-  if (field.kind === "select") {
+  if (field.kind === "entity" && field.entity_type) {
+    // An id reference → a name-search dropdown (never a raw id box). For a
+    // global rule the picker asks for a competition scope inline.
+    control = (
+      <EntityReferencePicker
+        id={controlId}
+        entityType={field.entity_type}
+        competitionId={competitionId}
+        value={value}
+        onChange={onChange}
+      />
+    );
+  } else if (field.kind === "select") {
     const options =
       field.key === "target" && field.options
         ? targetOptionsFor(field.options, personal)

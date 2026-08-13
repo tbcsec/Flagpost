@@ -359,15 +359,29 @@ export interface SurveyResults {
   questions: QuestionResults[];
 }
 
+/** Entities an automation id-field can reference — drives the name-search
+ *  dropdowns that replace raw id text boxes (#212). */
+export type EntityRefType =
+  | "competition"
+  | "challenge"
+  | "survey"
+  | "hint"
+  | "team"
+  | "user"
+  | "role";
+
 /** The editor catalog (§5.5) — the builder is generated from it. */
 export interface CatalogField {
   key: string;
   label: string;
-  kind: "text" | "textarea" | "number" | "select" | "string_list" | "keyvalue";
+  kind: "text" | "textarea" | "number" | "select" | "string_list" | "keyvalue" | "entity";
   required: boolean;
   options: string[] | null;
   placeholder: string | null;
   templateable: boolean;
+  /** For kind "entity": which entity this id references, so the builder renders
+   *  a name-search dropdown instead of a raw id box. */
+  entity_type: EntityRefType | null;
 }
 
 /** A trigger payload field: `key` is stored/interpolated as `{key}`; `label` is
@@ -375,6 +389,9 @@ export interface CatalogField {
 export interface TriggerField {
   key: string;
   label: string;
+  /** When the field is an id, which entity it references — so a condition value
+   *  on it becomes a name dropdown instead of a raw id box. */
+  entity_type: EntityRefType | null;
 }
 
 export interface TriggerEntry {

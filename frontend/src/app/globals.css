@@ -578,3 +578,15 @@ html.fp-animated-bg body {
   border-radius: 0;
   padding: 0;
 }
+
+/* Venue/projector mode (#214): one fluid root font-size drives the whole board,
+   so a large display shows large content instead of laptop-sized boxes. Every
+   size inside venue mode is expressed in em (off this font-size), so the board
+   scales as a single unit. The base grows with the viewport — near-neutral on a
+   laptop, ~2x on a 4K wall — and --venue-zoom (default 1) is an optional operator
+   nudge (the +/- keys). At the default 16px root, i.e. anywhere BUT venue mode,
+   1em == 1rem, so the shared insight/timeline cards render identically on the
+   static spectator page. */
+.venue-scale {
+  font-size: calc(clamp(0.85rem, 0.52rem + 0.57vw, 2rem) * var(--venue-zoom, 1));
+}

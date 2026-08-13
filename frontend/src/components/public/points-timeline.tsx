@@ -63,11 +63,11 @@ export function PointsTimeline({
           {frozen ? " · stops at the freeze" : ""}
         </CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-3">
+      <CardContent className="grid gap-[0.75em]">
         <svg
           viewBox={`0 0 ${width} ${height}`}
           width="100%"
-          className="h-64 w-full sm:h-80"
+          className="h-[16em] w-full sm:h-[20em]"
           role="img"
           aria-label={`Cumulative points over time for the top ${scored.length} entrants. ${leader.name} leads with ${
             leader.points[leader.points.length - 1]?.points ?? 0
@@ -125,7 +125,7 @@ export function PointsTimeline({
           ))}
         </svg>
 
-        <ul className="flex flex-wrap gap-x-4 gap-y-1.5">
+        <ul className="flex flex-wrap gap-x-[1em] gap-y-[0.375em]">
           {scored.map((s, index) => (
             <li key={s.subject_id}>
               <button
@@ -134,11 +134,11 @@ export function PointsTimeline({
                 onMouseLeave={() => setActive(null)}
                 onFocus={() => setActive(s.subject_id)}
                 onBlur={() => setActive(null)}
-                className="flex items-center gap-1.5 rounded text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                className="flex items-center gap-[0.375em] rounded text-[0.75em] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <span
                   aria-hidden
-                  className="h-2 w-2 flex-shrink-0 rounded-full"
+                  className="h-[0.5em] w-[0.5em] flex-shrink-0 rounded-full"
                   style={{ backgroundColor: seriesColor(index) }}
                 />
                 {s.name}

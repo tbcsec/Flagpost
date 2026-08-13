@@ -14,7 +14,7 @@ is now wired** (see below), so that scaffolding — the banner component and
 `placeholder-data.ts` — has since been removed.
 
 **Status: every surface in the mock is wired, and the platform has shipped
-through v1.3.0.** The tables below are kept
+through v1.4.0.** The tables below are kept
 current, so they double as a map of
 which hook and module back each screen — but this document is fundamentally a
 *record of the handoff*, not the feature list. For what the platform does today,
@@ -105,7 +105,7 @@ code.
 | Analytics | **Wired** (Tier 3 Phase 5, #23) — the `analytics` optional module (staff, `view_competition_analytics`): overview + per-challenge table (solves / attempts+fails / completion rate / avg solve time / hints / linked tickets) and a competitors/teams ranking (rank / points / solves / first bloods / tickets / last solve), read off existing submission data (`use-analytics`) |
 | Collaborative notes | **Wired** (Tier 3 Phase 7, §4.2, ADR-0014) — the required-core `collab` module: a **team per-challenge scratchpad** in the challenge dialog and **staff notes** on a ticket thread, both live-collaborative rich text (Y.js under TipTap over a `note/<doc_key>` WS room, dumb-relay transport + blob persistence). Scoped per-request — team membership / `ticket_view_internal_notes` (`CollabNote`, `lib/collab`). v1.1.0 added a **personal** `user_challenge:` scope so individual-mode competitors get the same surface (#47) |
 
-### Added after the handoff (v1.1.0 – v1.3.0)
+### Added after the handoff (v1.1.0 – v1.4.0)
 
 Surfaces with no counterpart in the original mock, listed so the table stays a
 complete map of the app.
@@ -130,6 +130,13 @@ complete map of the app.
 | Alternative challenge list view | **Wired** (v1.3.0, #55) — a compact list alternative to the card grid, toggled and remembered per user (`stores/challenge-view`, `ChallengeList`) |
 | Venue / projector mode | **Wired** (v1.3.0, #77) — a big-screen public view for live events (scoreboard, first-blood splashes, insight cards) under `/public`, outside the app shell (`components/public/venue`) |
 | Tabbed profile page | **Wired** (v1.3.0, #113) — `/profile` reorganised into tabs (account incl. email + password, notifications, API tokens) the way Admin → Site settings is, with the active tab in `?tab=` |
+| AI assistants | **Wired** (v1.4.0, #98, ADR-0023) — the optional `ai` module: an **administrator assistant** and an audience-aware **competitor assistant** over an operator-configured OpenAI-compatible provider, configured on Admin → Site settings → AI. Ships **inert** (`ai_settings.enabled` off by default); admin transcript oversight behind `ai_view_transcripts` |
+| Automations builder polish | **Wired** (v1.4.0, #210/#211/#212) — the visual rule builder's condition rows show human field labels (not raw keys) in roomier inputs, and id action/condition params are picked from **searchable name dropdowns** (challenge/survey/hint), never raw ids |
+| Hints — hidden / scheduled release | **Wired** (v1.4.0, #213) — the challenge editor's hints section grows a "Hidden until released" toggle + optional release time and a Publish button, so a hint can be authored hidden and released later (manually, on a schedule, or by the `publish_hint` automation) |
+| Sign-in personalization | **Wired** (v1.4.0, #195/#197) — admin-selectable **animated sign-in backgrounds** (Aurora/Gradient/Constellation) and a **custom rich-text sign-in notice** above the login card, both on Admin → Site settings → Appearance |
+| Built-in Google / Microsoft sign-in | **Wired** (v1.4.0, ADR-0024) — one-click OIDC provider presets on the Auth tab that prefill Google and single-tenant Microsoft Entra, with the official brand mark on the login button |
+| Mass CSV user import | **Wired** (v1.4.0, #171) — Admin → Users bulk-creates accounts from a CSV with optional role assignment |
+| Venue mode — responsive scaling | **Wired** (v1.4.0, #214) — the projector view now scales to the display (fluid root + em sizing) so a large screen fills instead of showing laptop-sized boxes |
 
 ## Formerly UI-only (now wired or deferred)
 
@@ -145,9 +152,11 @@ real backend, or the underlying feature deferred with the placeholder UI removed
   catch-all panel became a tabbed page (#104): **General** (registration policy,
   data retention, update checks), **Email** (SMTP), **Auth**, **Rules**,
   **Backup**, **Appearance**, **AI**. **SSO shipped in v1.2.0** on the Auth tab,
-  gated on its own `manage_auth_providers` permission (#58, ADR-0021). **AI is
-  the one surface still a stub** — the tab renders a disabled card, and the
-  feature is scheduled for v1.4.0 (#98) rather than abandoned.
+  gated on its own `manage_auth_providers` permission (#58, ADR-0021). **AI
+  shipped in v1.4.0** (#98, ADR-0023): the AI tab now carries the provider config
+  (OpenAI-compatible endpoint, model, write-only key, per-assistant system
+  prompts) behind the `ai_settings.enabled` master switch, and the two assistants
+  render in-app once an admin configures and enables it.
 
 ## Deliberately not carried over from the mock
 
@@ -182,8 +191,6 @@ None left — `frontend/src/lib/placeholder-data.ts` was **deleted** in Tier 3
 Phase 9 once its last consumers (the Admin → Dashboard global stats/module
 health and the Admin → Users directory) were wired to real endpoints. Every
 section listed above now reads live data; the remaining "not wired" surfaces are
-feature gaps (no fake data), not placeholder screens.
-
-The single exception is the **AI** tab on Admin → Site settings, which renders a
-disabled card because the feature genuinely doesn't exist yet (#98, v1.4.0). It
-shows no data, real or fake.
+feature gaps (no fake data), not placeholder screens. The **AI** tab on Admin →
+Site settings was the last stub; it wired up when the AI module shipped in
+v1.4.0 (#98, ADR-0023).

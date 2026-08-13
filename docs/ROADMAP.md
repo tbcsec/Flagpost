@@ -1,7 +1,7 @@
 # Roadmap
 
-Flagpost shipped **v1.0.0 on 2026-07-25**; the latest tag is **v1.3.0**
-(2026-08-04). `main` is now `1.3.0-src`, accumulating the **v1.4.0** milestone.
+Flagpost shipped **v1.0.0 on 2026-07-25**; the latest tag is **v1.4.0**
+(2026-08-13). `main` is now `1.4.0-src`, accumulating the **v1.5.0** milestone.
 This document has two halves:
 
 - **[Tiers 0–3](#tier-0--foundation)** — the pre-1.0 build order, breaking
@@ -32,8 +32,8 @@ tenancy — none of them were required for an organiser to run a competition
 better than a spreadsheet + Discord. Three of those exclusions have since
 lifted: the **automation engine** (with dashboard drag-and-drop and CRDT
 editing) was pulled into Tier 3, **external identity providers shipped** (OIDC
-in v1.2.0, then SAML and LDAP in v1.3.0), and **AI is scheduled for v1.4.0**.
-What's still deferred is listed at the bottom.
+in v1.2.0, then SAML and LDAP in v1.3.0), and the **AI assistants shipped in
+v1.4.0**. What's still deferred is listed at the bottom.
 
 ---
 
@@ -157,7 +157,7 @@ what we have."
     version history yet) — enough that a team of organisers isn't
     stepping on each other publishing half-finished challenges.
     **Deferred** (owner decision) — wants more design first. Still
-    unbuilt and unscheduled as of v1.3.0.
+    unbuilt and unscheduled as of v1.4.0.
 18. **Basic support tickets** — a competitor can ask a question tied to a
     challenge; a judge can respond and mark it resolved. No routing rules,
     no analytics on response time yet — just replacing the "ask in
@@ -346,29 +346,77 @@ mode so one image works behind any single-origin proxy without a rebuild.
   **tabbed profile page** (#113), a **magic-byte check on logo upload** (#114),
   and a single owner-provisioning helper that stamps `setup_completed_at` (#133).
 
+**v1.4.0** — AI assistance, scale-out and authoring/UX breadth
+([milestone](https://github.com/tbcsec/flagpost/milestone/4)). **Shipped**
+(tagged `v1.4.0`, 2026-08-13):
+
+- **AI assistants module** (#98, ADR-0023) — the headline feature and the last
+  item lifted off the deferred list below. A fourth optional module, and the
+  only one that ships **inert**: an administrator assistant and a competitor
+  assistant against an operator-configured OpenAI-compatible endpoint, with the
+  site master switch off by default so nothing happens until an admin turns it
+  on. Read-only tools, oversight surfaces, and a competitor disclosure gate.
+- **Scoreboard scale-out** (#87, #188) — a cached read model for the hot read
+  paths (#87) plus delta broadcasts that cut the per-solve refetch fan-out
+  (#188), lifting the known scaling limit off the unmilestoned list. The
+  remaining whole-board → delta/top-N broadcast optimization is tracked but
+  deliberately unbuilt (ARCHITECTURE §15).
+- **Realtime performance pass** (#174–#178) — configurable/raised connection
+  pool, background-lane announcement + scoreboard fan-out, parallel
+  timeout-bounded room broadcast, coalesced solve bursts, and a rate-limited WS
+  handshake.
+- **Opt-in multi-worker** (#189, ADR-0025 / ADR-0026) — a Redis broadcast relay
+  behind the connection manager plus cross-worker presence via heartbeat-TTL
+  liveness, so N uvicorn workers stay correct; core-aware workers, a shared
+  argon2 budget pool, and a scheduler sidecar. Off by default (single-worker
+  remains the zero-infra path).
+- **Automations UX** (#210, #211, #212) — human-readable condition labels,
+  roomier condition boxes, and searchable name dropdowns for id fields.
+- **Hidden / scheduled hints** (#213) — author a hint hidden up front, released
+  later by schedule or automation.
+- **Multiple-choice wrong-guess penalty** (#148) — an optional point cost on a
+  wrong MC answer, surfaced in the UI with a live value drop.
+- **Mass CSV user import** (#171) with optional role assignment, and a
+  **fluid drag-and-resize dashboard grid** (#21) with a 2D layout.
+- **Animated sign-in backgrounds** (aurora / gradient / constellation) and a
+  **custom rich-text sign-in notice** (#197).
+- **Built-in Google + Microsoft OIDC provider presets** (ADR-0024) — config
+  data feeding the existing provider CRUD, never bundled credentials.
+- **Responsive venue/projector mode** (#214), the competition-scoped
+  **`manage_modules`** permission (#168), and a batch of **security hardening**
+  (live-WebSocket eviction on ban/delete/team-removal, forced-safe attachment
+  downloads with bounded upload memory, contained backup-import grants, MinIO
+  bound to loopback, request-body cap, pool pre-ping, and announcement/freeze
+  scoping fixes).
+
 ### Planned
 
 Summarised from the open milestones; the milestone pages are authoritative.
 
-- **v1.4.0** — the **AI assistants module** (#98), lifting the deferral below,
-  and **dashboard drag-and-drop improvements** (#21).
-- **v1.5.0** — an **i18n pass** (#78) and **Major League Cyber integration**
-  (#59).
-- **Unmilestoned** — **scoreboard scale-out** (#87: a cached read model with
-  delta/top-N broadcasts) is the known scaling limit, waiting on an event large
-  enough to justify it.
+- **v1.5.0** — the live milestone. Headlined by an **i18n pass** (#78) and a
+  **Major League Cyber integration** (#59), alongside more built-in sign-in
+  options — a **generic OAuth2 provider kind → built-in GitHub + Discord**
+  (#193) and **multi-tenant Entra issuer-validation hardening** (#194) — plus
+  **admin-authored custom pages** (#198) and **post-event report generation**
+  (#134). See the
+  [milestone](https://github.com/tbcsec/flagpost/milestones) for the current
+  list.
 
 ---
 
 ## Explicitly Deferred Past MVP
 
 Real parts of the long-term vision that were deliberately left out of the
-pre-1.0 build. Two have since moved off the deferred list — kept here with their
+pre-1.0 build. Two of the items below have since moved off the deferred list
+(**AI integration** and **SSO / external identity**) — kept here with their
 status so the reasoning isn't lost.
 
 - **AI integration** (Architecture §12) — both the administrator and
-  competitor assistants. **Now scheduled for v1.4.0** (#98): the condition
-  stated here — real usage data and a settled event/data layer — is met.
+  competitor assistants. **Lifted, and now shipped in v1.4.0** (#98, ADR-0023):
+  the condition stated here — real usage data and a settled event/data layer —
+  was met, and it landed as a fourth optional module that ships inert (site
+  master switch off, bring-your-own OpenAI-compatible endpoint) so no other
+  feature depends on it.
 - **SSO / external identity providers** (Architecture §7.7) — **lifted, and now
   complete.** OIDC/OAuth2 shipped in v1.2.0 (#58, ADR-0021): the prediction here
   held, and it plugged into the §7.7 contract as a bolt-on rather than a

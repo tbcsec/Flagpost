@@ -82,9 +82,10 @@ With checks off you'll no longer be told about new releases; watch
   Content-Security-Policy blocks external scripts outright.
 - No crash or error reporting to any external service.
 - No outbound connection of any kind beyond the update check, and whatever *you*
-  configure: your SMTP server, your OIDC provider, any automation webhooks you
-  create, and — if you enable the optional AI assistant — the AI model endpoint
-  you point it at. All go wherever you tell them to.
+  configure: your SMTP server, any external identity provider you set up (OIDC,
+  SAML or LDAP), any automation webhooks you create, and — if you enable the
+  optional AI assistant — the AI model endpoint you point it at. All go wherever
+  you tell them to.
 - The **AI assistant is off by default**. When you enable it, the messages people
   send it (competitor and organiser chat, plus the competition/challenge details
   its read-only tools surface) are sent to the model endpoint you configure.

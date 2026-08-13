@@ -23,9 +23,10 @@ many competitions from a single install), real-time throughout (WebSockets, not
 polling), and ships as a one-command production stack.
 
 Sign-in is local (username + optional email) or an external directory —
-**OIDC/OAuth2** (Google, Okta, Keycloak, Entra, or anything with a discovery
-document), **SAML 2.0**, or **LDAP / Active Directory**. An AI assistant is on
-the roadmap but deliberately not built yet.
+**OIDC/OAuth2** (one-click Google & Microsoft presets, or Okta, Keycloak, Entra,
+or anything with a discovery document), **SAML 2.0**, or **LDAP / Active
+Directory**. Optional **AI assistants** (administrator + competitor) plug into an
+OpenAI-compatible provider you configure — off by default until you enable them.
 
 ## ✨ Highlights
 
@@ -42,6 +43,10 @@ The things that set Flagpost apart — every one of them **built and working tod
 - **📝 Live collaborative notes.** True CRDT (Y.js) co-editing: a shared scratchpad
   per team on each challenge, and private staff notes on each ticket — everyone
   types at once, conflict-free.
+- **🤖 Optional AI assistants.** An administrator assistant (query stats, triage
+  tickets, summarise feedback) and a competitor assistant, wired to an
+  OpenAI-compatible provider *you* configure. Ships inert — nothing calls out
+  until an admin turns it on.
 - **🛡️ Permissions as data.** RBAC that isn't hard-coded: a visual role editor
   lets you clone the built-ins and craft custom roles with granular, per-competition
   or site-wide scope.
@@ -55,11 +60,12 @@ The things that set Flagpost apart — every one of them **built and working tod
   **ctfcli YAML** format, plus a one-click, full-fidelity **platform backup**
   (export/import any section of your install).
 - **🔐 Bring your own identity provider.** **OIDC/OAuth2** (PKCE, sub-first
-  account linking, just-in-time provisioning), **SAML 2.0** (signature-before-
-  trust, SP-metadata endpoint), and **LDAP / Active Directory** (a directory
-  bind behind the ordinary login form) — alongside local accounts, so an
-  existing Google/Okta/Keycloak/Entra/Shibboleth or on-prem directory just
-  works, while local login stays as break-glass.
+  account linking, just-in-time provisioning, plus one-click **Google &
+  Microsoft** presets), **SAML 2.0** (signature-before-trust, SP-metadata
+  endpoint), and **LDAP / Active Directory** (a directory bind behind the
+  ordinary login form) — alongside local accounts, so an existing
+  Google/Okta/Keycloak/Entra/Shibboleth or on-prem directory just works, while
+  local login stays as break-glass.
 - **🔒 Secure by default.** argon2 hashing, a per-install auto-derived JWT secret
   (no shipped credentials — a first-run setup wizard creates your owner account),
   SSRF-hardened webhooks, ReDoS-contained regex flags, and timing-safe auth.
@@ -145,8 +151,11 @@ The things that set Flagpost apart — every one of them **built and working tod
 - Operational **dashboard** with drag-and-drop widgets
 
 **Administration**
-- **OIDC / SAML / LDAP** identity providers alongside local accounts
-- **Users** directory + soft-ban / lifecycle
+- **OIDC / SAML / LDAP** identity providers (incl. Google &
+  Microsoft presets) alongside local accounts
+- Optional **AI assistants** (admin + competitor, bring-your-own
+  OpenAI-compatible provider)
+- **Users** directory + soft-ban / lifecycle, **bulk CSV import**
 - Data-driven **roles & permissions** editor
 - Personal **API tokens** with platform-wide oversight
 - **Email verification** & registration domain allowlist
@@ -202,8 +211,11 @@ configuration in `.env` (copy `.env.example`):
 > first boot needs `docker compose up -d --force-recreate minio`, and a rotation
 > on a stack that already holds data has to be done inside MinIO too.
 
-The backend runs as a **single process by design** (the WebSocket layer is
-in-process). To run **without Docker**: build & serve the frontend with
+The backend runs as a **single process by default** (in-process WebSocket
+broadcast, no Redis required). For larger events it scales out to **multiple
+workers** — set `WEB_CONCURRENCY>1` and the real-time layer switches to a
+Redis-backed cross-worker relay (a startup guard refuses to boot multi-worker
+without Redis). To run **without Docker**: build & serve the frontend with
 `npm run build && npm run start`, and run the backend with `alembic upgrade head`
 then `uvicorn main:app` (no `--reload`) behind your own TLS-terminating proxy.
 
@@ -225,7 +237,7 @@ two-line override) to upgrade by tag instead of rebuilding from source.
 
 A release image reports its exact tag as the running version; a build from
 source reports the release it's based on with an `-src` suffix (e.g.
-`1.3.0-src`), since `main` starts accumulating the next version the moment a tag
+`1.4.0-src`), since `main` starts accumulating the next version the moment a tag
 is cut.
 
 ## 🛠️ Local development

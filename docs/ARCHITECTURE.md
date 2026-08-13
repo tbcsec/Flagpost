@@ -128,7 +128,7 @@ team.deleted
 challenge.created           challenge.updated          challenge.published
 challenge.deleted           challenge.solved           challenge.attempted
 challenge.guesses_reset     challenge.rated            challenge.hint_requested
-hint.released
+hint.released               hint.published
 category.created            category.deleted
 user.registered              user.password_changed
 user.email_verified
@@ -138,6 +138,8 @@ role.created                 role.updated               role.deleted
 role.assigned                role.unassigned
 api_token.created            api_token.revoked
 auth_provider.created        auth_provider.updated      auth_provider.deleted
+ai.settings_updated          ai.query                   ai.error
+ai.disclosure_accepted
 identity.linked              identity.unlinked
 ticket.created               ticket.assigned            ticket.resolved
 ticket.message_posted        ticket.attachment_added    ticket.attachment_deleted
@@ -453,6 +455,7 @@ participants". Global time rules are skipped (they'd need per-competition dedup)
 | `send_email` | templated, uses the event payload for interpolation |
 | `webhook` | outbound HTTP call, see hardening below |
 | `release_hint` | unlocks a hint for a team/competitor |
+| `publish_hint` | reveals a hidden hint to everyone (emits `hint.published`) — e.g. release a scheduled hint on a trigger |
 | `unlock_challenge` | e.g. unlock a bonus challenge on first blood |
 | `create_award` | grant a titled award (title/description) that also carries scoreboard points |
 | `create_ticket` | e.g. auto-flag a challenge with high fail rate |
@@ -589,7 +592,11 @@ the admin UI into sections rather than a long flat checklist:
 
 ```
 Competition Management   create_competition, edit_competition,
-                          delete_competition, manage_schedule
+                          delete_competition, manage_schedule,
+                          manage_modules  (enable/disable a competition's
+                          optional modules, issue #168 — split from
+                          edit_competition so module toggling can be delegated
+                          independently of general settings, §11.3)
 Challenges                challenge_view, challenge_create, challenge_edit,
                           challenge_delete, challenge_publish
 Scoring                   score_override, scoreboard_freeze
@@ -608,7 +615,11 @@ Site Settings             manage_site_settings  (global — the site-wide
                           manage_auth_providers  (global — external identity
                           providers, issue #58/ADR-0021; deliberately separate
                           from manage_site_settings, since who may sign in is
-                          higher-stakes than how the site looks, §7.7)
+                          higher-stakes than how the site looks, §7.7),
+                          manage_ai  (global — the AI provider config + master
+                          switch, issue #98/ADR-0023, §12)
+AI Assistants             ai_view_transcripts  (read others' assistant
+                          conversation history, issue #98/ADR-0023, §12)
 Analytics                 view_competition_analytics, view_global_analytics,
                           view_submissions  (raw submission payloads for
                           dispute resolution, issue #76 — narrower than
@@ -1162,12 +1173,16 @@ later. Modules split by **provenance and trust**, not by capability:
 - **Marketplace modules** are third-party, opt-in from the start, and need
   the stronger isolation story flagged in §15 before that ships.
 
-**What actually shipped**, against the prediction above. Nineteen modules load
-through §11.1; exactly **three are optional** (per-competition toggleable via
-`competition_modules`): `automations`, `feedback`, `analytics`. The other
+**What actually shipped**, against the prediction above. Twenty modules load
+through §11.1; exactly **four are optional** (per-competition toggleable via
+`competition_modules`): `automations`, `feedback`, `analytics`, `ai`. The other
 sixteen are required-core: `announcements`, `audit_log`, `challenges`,
 `collab`, `competitions`, `dashboard`, `hints`, `notifications`, `roles`,
-`scoring`, `setup`, `site_settings`, `sso`, `teams`, `tickets`, `users`.
+`scoring`, `setup`, `site_settings`, `sso`, `teams`, `tickets`, `users`. The
+`ai` module (§12) is the odd one out among the optional four: even when enabled
+for a competition it ships **inert** behind a site master switch
+(`ai_settings.enabled`, default off), so nothing runs until an administrator
+configures a provider and turns it on (ADR-0023).
 
 One prediction was wrong and is worth naming: this section listed **SSO
 providers as an optional/third-party module**, and it shipped **required-core**
@@ -1215,9 +1230,11 @@ uses. (This is the same toggle already scoped in `ROADMAP.md` #7.)
 
 ## 12. AI Integration
 
-**Status: not built.** Scheduled for v1.4.0 as an optional `ai` module
-(issue #98) — the design below is the binding constraint set for it, not a
-description of existing code.
+**Status: shipped in v1.4.0** as the optional `ai` module (issue #98,
+ADR-0023) — the constraints below are now binding on built code. The module
+ships **inert**: a site master switch (`ai_settings.enabled`, default off)
+means nothing runs until an administrator configures an OpenAI-compatible
+provider and turns it on, and no other feature may depend on it.
 
 Two distinct assistants, with different trust boundaries:
 
@@ -1234,6 +1251,23 @@ Two distinct assistants, with different trust boundaries:
 Both should be built as consumers of the same event/data layer as the rest
 of the app (via the domain hooks / internal APIs), not as a separate
 data-access path that has to be kept in sync by hand.
+
+**As built (v1.4.0, ADR-0023):** Flagpost ships **no model, no key, and no
+vendor SDK** — the operator points it at one OpenAI-compatible
+`POST {base_url}/chat/completions` endpoint (OpenAI, Azure, OpenRouter, or a
+self-hosted Ollama/vLLM/LM Studio), and the `api_key` is stored encrypted
+(ADR-0020), write-only over the API. Every assistant tool call runs **as the
+requesting user, under their RBAC permissions and `competition_id` scope**, and
+in v1 there are **no write tools** — a fully jailbroken assistant can at most
+read what the human asking could already read and mutate nothing, so the
+competitor-facing tools reuse the public serialization paths and flag material /
+hidden hints / unpublished challenges are structurally unreachable. The provider
+`base_url` is deliberately **exempt from the ADR-0013 webhook SSRF blocklist**
+(it's a trusted admin-only setting, in the class of the SMTP host and OIDC
+issuer, and a local inference server at a private address is the intended use).
+The module emits its own §3.2 events (`ai.settings_updated`, `ai.query`,
+`ai.error`, `ai.disclosure_accepted` — usage metadata only, never message
+content).
 
 ---
 
@@ -1490,20 +1524,30 @@ Keep this section honest — update as decisions are made:
   §3.1's "non-blocking emit" is real for the handlers that need it. A durable
   **outbox** for at-least-once delivery across a crash/restart was deliberately
   *not* built — it remains an additive layer behind the same `background` lane
-  if that requirement ever lands. ADR-0005's single-process scope is unchanged.
-- **Scoreboard scale-out** (issue #87). The board is recomputed from
-  submissions on every scoring event and broadcast in full to every subscriber
-  of the scoreboard room (§4.1). That is correct, easy to reason about, and
-  fine at the sizes the platform has been run at — but it's O(solves) work
-  fanned out O(spectators) wide, so a very large event would hit it first. The
-  shape of the fix is known (a cached read model updated incrementally, plus
-  delta or top-N broadcasts instead of whole-board frames); what's missing is a
-  real event big enough to calibrate against, so it stays deliberately unbuilt
-  rather than optimized speculatively.
-- **Horizontal scale.** The backend runs as a **single process by design** —
-  the WebSocket connection manager, presence sets, and the CRDT relay are all
-  in-process state (§4.1, ADR-0005, ADR-0014). Running replicas would need a
-  shared broker (Redis pub/sub is already a dependency) before any of that
-  works, and `JWT_SECRET` would have to be set explicitly so replicas accept
-  each other's tokens. Not a limitation that's been hit; recorded so it isn't
-  discovered mid-incident.
+  if that requirement ever lands. The event bus dispatch model is unchanged by
+  the multi-worker relay (ADR-0025 runs each event's handlers once, on the
+  emitting worker, and relays only the resulting frames — see "Horizontal scale"
+  below).
+- **Scoreboard scale-out** (issue #87). **Partly built.** The read-heavy paths
+  (WS join snapshot, REST read, public spectator + CTFtime feed) now go through
+  a **cached read model** (`cached_scoreboard`, TTL + event-invalidated, #87)
+  so a reconnect herd recomputes the board once rather than once per socket, and
+  the recompute-and-broadcast on a scoring event moved to the **background lane**
+  (#176, ADR-0012) so it no longer blocks the mutation. Still open on #87: the
+  authoritative broadcast is a **whole-board frame** to every subscriber, and
+  the shape of the remaining fix (delta or top-N broadcasts instead of whole-board
+  frames) stays deliberately unbuilt — what's missing is a real event big enough
+  to calibrate against rather than optimizing speculatively.
+- ~~**Horizontal scale.** The backend runs as a **single process by
+  design**~~ **(partly resolved, ADR-0025/0026, #189.)** Single-process
+  (`WEB_CONCURRENCY=1`) remains the **shipped default** and the zero-infra
+  story, but **multiple uvicorn workers on one box are now opt-in**: setting
+  `WEB_CONCURRENCY>1` (which requires `REDIS_URL`) attaches a Redis broadcast
+  relay so a frame raised on one worker reaches clients on the others
+  (ADR-0025), a heartbeat-TTL Redis presence store so the "who's here" set no
+  longer fragments across workers (ADR-0026), and a single scheduler sidecar
+  process so time-triggered automations / the update check / retention purge
+  fire once rather than once per worker. `JWT_SECRET` must be set explicitly so
+  workers accept each other's tokens (ADR-0019). The owner's goal is "low
+  thousands on one box", explicitly **not** multi-machine horizontal scaling,
+  which stays unbuilt.

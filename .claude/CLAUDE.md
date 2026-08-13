@@ -29,14 +29,14 @@ file, don't ignore it.
 ## Where the project is
 
 Tiers 0–3 are complete and the platform shipped **v1.0.0 on 2026-07-25**, then
-v1.1.0, v1.1.1, v1.2.0 and **v1.3.0 (2026-08-04)**. **The latest tag is
-`v1.3.0`; `main` is now `1.3.0-src`**, accumulating the not-yet-tagged v1.4.0
+v1.1.0, v1.1.1, v1.2.0, v1.3.0 and **v1.4.0 (2026-08-13)**. **The latest tag is
+`v1.4.0`; `main` is now `1.4.0-src`**, accumulating the not-yet-tagged v1.5.0
 milestone (`SOURCE_BUILD_VERSION` in `backend/config.py`, bumped at tag time;
 see CONTRIBUTING → "Cutting a release").
 
 The tier/phase plans in `docs/claude_plans/` are **finished and historical** —
 don't work "the next phase". Work is tracked as **GitHub issues against version
-milestones** (`gh issue list --milestone v1.4.0`); `docs/ROADMAP.md` →
+milestones** (`gh issue list --milestone v1.5.0`); `docs/ROADMAP.md` →
 "Post-1.0 releases" summarises them.
 
 Two things follow from that. First, this is **released software with real
@@ -52,11 +52,13 @@ mechanism that already solves your problem. It names *where* things live; the
 authority on *how* they work is `docs/ARCHITECTURE.md` and the code.
 
 **Backend** is a small kernel (auth/RBAC, the Competition tenancy root, the
-event bus, the module loader) plus **19 modules** in `backend/plugins/`, each a
+event bus, the module loader) plus **20 modules** in `backend/plugins/`, each a
 `plugin.yaml` manifest + a `setup()` that mounts routers and subscribes
-listeners (§11.1). Exactly **three are optional** — per-competition toggleable
-via `competition_modules`: **`automations`**, **`feedback`**, **`analytics`**.
-The other sixteen are required-core and always on: `announcements`, `audit_log`,
+listeners (§11.1). Exactly **four are optional** — per-competition toggleable
+via `competition_modules`: **`automations`**, **`feedback`**, **`analytics`**,
+and **`ai`** (the last additionally ships *inert* behind a site master switch —
+see the AI bullet below). The other sixteen are required-core and always on:
+`announcements`, `audit_log`,
 `challenges`, `collab`, `competitions`, `dashboard`, `hints`, `notifications`,
 `roles`, `scoring`, `setup`, `site_settings`, `sso`, `teams`, `tickets`,
 `users`.
@@ -76,12 +78,12 @@ Subsystem by subsystem, with the non-obvious bits called out:
   reset, email verification (admin-toggleable), self-service email change, a
   registration domain allowlist, and personal **API tokens** (`flp_`-prefixed,
   minting is self-only by route shape).
-- **RBAC** — permissions as data (ADR-0004), 38 of them in
+- **RBAC** — permissions as data (ADR-0004), 41 of them in
   `auth/permissions.py`, each with a category and a `global`/`competition`
   scope. System roles **re-sync from the catalog on every startup**
   (`seed_system_roles`), so a new permission reaches an already-migrated
   Administrator without a migration.
-- **Events** — `utils/event_bus`, 72 event types in `utils/event_catalog.py`.
+- **Events** — `utils/event_bus`, 73 event types in `utils/event_catalog.py`.
   `emit()` awaits foreground handlers (audit + WS broadcasts) and schedules
   `background=True` ones fire-and-forget (ADR-0012) — that's the lane
   webhooks/email use.
@@ -89,6 +91,9 @@ Subsystem by subsystem, with the non-obvious bits called out:
   tickets, per-user rooms, presence, a per-competition `activity` room (id-only
   pings so clients refetch their own permission-filtered slice), and the CRDT
   relay. Presence is WS-level state only: no event, no REST, no migration.
+  Single-worker is the default; **multi-worker is opt-in** (`WEB_CONCURRENCY>1`,
+  Redis required) and adds a cross-worker broadcast relay + TTL presence store so
+  rooms span workers, plus a scheduler sidecar (ADR-0025/0026, #189).
 - **Competitions** — the tenancy root. Team or individual mode, visibility,
   invite codes, schedule, **pause**, archive (with an opt-out retention policy
   that auto-purges), clone, hard delete, rules/CoC gate, brackets, and a
@@ -108,8 +113,14 @@ Subsystem by subsystem, with the non-obvious bits called out:
   and branding (custom logo in the DB, not object storage), SMTP, cross-
   competition audit log, a site overview, and a full **export/import backup**
   (ADR-0016 — additive, carries secrets, so the file is sensitive).
+- **AI assistants** — the optional `ai` module (ADR-0023): an administrator
+  assistant and an audience-aware competitor assistant over an operator-
+  configured OpenAI-compatible provider. Ships **inert** — the site master
+  switch (`ai_settings.enabled`) defaults off, so nothing calls out until an
+  admin configures + enables it, and no other feature may depend on it. Off by
+  default; carries chat content (`PRIVACY.md`).
 - **Frontend** — Next.js App Router. One hook module per domain in
-  `src/lib/hooks/` (~30 of them); components never touch `@/lib/api` directly
+  `src/lib/hooks/` (~32 of them); components never touch `@/lib/api` directly
   (ESLint-enforced). Auth screens, `/setup`, `/public/*` and the password/email
   flows live **outside** the `(app)` shell.
 
@@ -186,15 +197,16 @@ plus `DEMO_SIMULATOR=1`), uses only throwaway bot accounts, and touches only
 bot-opened tickets. Its answers live in `auth/demo_data.py`, **shared with the
 seed**, so the two can't drift.
 
-**Outbound calls** are only: operator-configured SMTP/webhooks, OIDC provider
-traffic, the operator-configured AI provider endpoint when the optional AI
+**Outbound calls** are only: operator-configured SMTP/webhooks, external
+identity-provider traffic (OIDC / SAML / LDAP), the operator-configured AI
+provider endpoint when the optional AI
 assistant is enabled (off by default; carries chat content — `PRIVACY.md`), and
 one daily version-only update check (`PRIVACY.md`, §13.4). Nothing else phones
 home — keep it that way.
 
 ## Read the ADR before touching
 
-`docs/adr/` — 21 records, indexed in `docs/adr/README.md`. The ones most likely
+`docs/adr/` — 26 records, indexed in `docs/adr/README.md`. The ones most likely
 to matter:
 
 | Area | ADR |
@@ -211,6 +223,10 @@ to matter:
 | Per-install JWT secret | 0019 |
 | Storing secrets (hash vs encrypt) | 0020 — facility is `utils/crypto.EncryptedString` |
 | OIDC identity framework | 0021 |
+| External auth: SAML + LDAP | 0022 |
+| AI assistant provider & execution model | 0023 |
+| Built-in SSO provider presets (Google/Microsoft) | 0024 |
+| Multi-worker relay & cross-worker presence | 0025, 0026 |
 
 If an ADR's decision looks wrong for what you're building, say so and propose a
 new one — don't quietly work around it.
@@ -252,9 +268,6 @@ Explicitly deferred past MVP (`docs/ROADMAP.md`, "Explicitly Deferred"
 section). If a task seems to need one of these, flag it and ask rather
 than quietly building a scoped-down version:
 
-- AI integration — administrator or competitor assistant. **Scheduled for
-  v1.4.0** (#98), so this is "not yet", not "never"; the Admin → Site
-  settings → AI tab is a deliberate stub.
 - Plugin marketplace / third-party modules — the module *mechanism* is
   used for required-core features starting in Tier 0, but the
   marketplace path (listing/discovery + untrusted-code sandboxing) stays
@@ -265,10 +278,11 @@ than quietly building a scoped-down version:
   (ADR-0011); the per-competition variant may return later.
 
 Note: the **automation engine**, **dashboard drag-and-drop**,
-**collaborative rich-text/CRDT editing**, and **SAML/LDAP** (#100/#101,
-ADR-0022) were all on this list once and have **shipped** — don't treat
-them as deferred. External auth is now OIDC + SAML + LDAP, one
-`IdentityProvider` framework; a new protocol is a new `kind`, not a fork.
+**collaborative rich-text/CRDT editing**, **SAML/LDAP** (#100/#101, ADR-0022),
+and the **AI assistants** module (#98, ADR-0023) were all on this list once and
+have **shipped** — don't treat them as deferred. External auth is now OIDC +
+SAML + LDAP, one `IdentityProvider` framework; a new protocol is a new `kind`,
+not a fork.
 
 ## Stack
 

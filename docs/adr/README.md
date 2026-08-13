@@ -60,3 +60,4 @@ Status is one of:
 | [0024](0024-builtin-sso-provider-presets.md) | Built-in SSO provider presets — configuration, never credentials | Accepted |
 | [0025](0025-multi-worker-broadcast-relay.md) | Multi-worker via a Redis broadcast relay behind the connection manager | Accepted |
 | [0026](0026-cross-worker-presence.md) | Cross-worker presence via heartbeat-TTL liveness in Redis | Accepted |
+| [0027](0027-certificate-rendering-server-side.md) | Certificate rendering — server-side Pillow → PNG, not a headless browser | Proposed |

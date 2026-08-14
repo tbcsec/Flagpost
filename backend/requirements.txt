@@ -32,7 +32,7 @@ python-multipart>=0.0.32,<0.1
 # Certificate rendering (#219, ADR-0027): server-side Pillow compositing → PNG,
 # no headless browser. Needed by the optional `certificates` module whenever it
 # is enabled, so imported normally rather than lazily. Ships manylinux wheels.
-Pillow>=10.3,<12.0
+Pillow>=12.3.0,<13.0
 
 # Submission rate limiting (§13.2) — Redis in production; lazily imported so the
 # test suite (in-memory limiter) and a redis-less dev run never need the client.

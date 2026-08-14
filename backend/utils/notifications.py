@@ -61,6 +61,11 @@ def inapp_key_for_type(type: str) -> str:
         return "inapp_tickets"
     if type.startswith("announcement."):
         return "inapp_announcements"
+    # A certificate release is a personal, organiser-driven milestone (not
+    # automation noise), so it rides the announcements category (#219) — a
+    # participant who muted "automations & alerts" still gets it.
+    if type.startswith("certificate."):
+        return "inapp_announcements"
     return "inapp_automations"
 
 

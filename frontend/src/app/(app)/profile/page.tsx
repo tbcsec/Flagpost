@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { SectionHeader } from "@/components/app/section-header";
+import { MyCertificatesCard } from "@/components/profile/certificates-card";
 import { MyApiTokensCard } from "@/components/profile/api-tokens-card";
 import { EmailCard } from "@/components/profile/email-card";
 import { NotificationPreferencesCard } from "@/components/profile/notification-preferences";
@@ -26,12 +27,13 @@ import { toast } from "@/stores/toast";
 // precedent: a half-typed password or an in-progress email edit survives a look
 // at another tab. The display name is still read-only — renaming has no endpoint
 // yet, and it's the primary login identifier (ADR-0015).
-type Tab = "account" | "notifications" | "tokens";
+type Tab = "account" | "notifications" | "tokens" | "certificates";
 
 const TABS: { value: Tab; label: string }[] = [
   { value: "account", label: "Account" },
   { value: "notifications", label: "Notifications" },
   { value: "tokens", label: "API tokens" },
+  { value: "certificates", label: "Certificates" },
 ];
 
 /** The tab named in `?tab=`, or the first one for a stale/absent value. */
@@ -203,6 +205,10 @@ function ProfileInner() {
 
       <div className={tab === "tokens" ? "" : "hidden"}>
         <MyApiTokensCard />
+      </div>
+
+      <div className={tab === "certificates" ? "" : "hidden"}>
+        <MyCertificatesCard />
       </div>
     </>
   );

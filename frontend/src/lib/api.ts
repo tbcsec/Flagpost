@@ -102,6 +102,13 @@ import type {
   TicketDetail,
   TokenResponse,
   User,
+  CertificateTemplate,
+  CertificateTemplateInput,
+  CertificateExportJob,
+  CertificateFont,
+  CertificateAvailability,
+  CertificateManifest,
+  MyCertificate,
 } from "@/lib/types";
 
 // Baked at build time. Three shapes:
@@ -1262,3 +1269,116 @@ export const feedbackApi = {
 /** Unauthenticated connectivity check (skeleton hello endpoint). */
 export const getHello = () =>
   apiFetch<HelloResponse>("/api/hello", {}, { auth: false });
+
+// Certificates (#219, ADR-0027) — optional `certificates` module.
+export const certificatesApi = {
+  base: (competitionId: string) =>
+    `/api/competitions/${competitionId}/certificates`,
+  getTemplate: (competitionId: string) =>
+    apiFetch<CertificateTemplate>(`${certificatesApi.base(competitionId)}/template`),
+  saveTemplate: (competitionId: string, input: CertificateTemplateInput) =>
+    apiFetch<CertificateTemplate>(`${certificatesApi.base(competitionId)}/template`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  uploadBackground: (competitionId: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiFetch<CertificateTemplate>(
+      `${certificatesApi.base(competitionId)}/background`,
+      { method: "POST", body: form },
+    );
+  },
+  uploadImage: (competitionId: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiFetch<{ image_key: string }>(
+      `${certificatesApi.base(competitionId)}/images`,
+      { method: "POST", body: form },
+    );
+  },
+  // Render the in-progress design with sample tokens through the real renderer.
+  preview: (competitionId: string, input: CertificateTemplateInput) =>
+    apiFetch<Blob>(
+      `${certificatesApi.base(competitionId)}/preview`,
+      { method: "POST", body: JSON.stringify(input) },
+      { parse: "blob" },
+    ),
+  release: (competitionId: string) =>
+    apiFetch<CertificateTemplate>(`${certificatesApi.base(competitionId)}/release`, {
+      method: "POST",
+    }),
+  createExport: (competitionId: string) =>
+    apiFetch<CertificateExportJob>(`${certificatesApi.base(competitionId)}/exports`, {
+      method: "POST",
+    }),
+  getExport: (competitionId: string, jobId: string) =>
+    apiFetch<CertificateExportJob>(
+      `${certificatesApi.base(competitionId)}/exports/${jobId}`,
+    ),
+  // Fetch a certificate element image as a blob for the editor.
+  media: (competitionId: string, key: string) =>
+    apiFetch<Blob>(
+      `${certificatesApi.base(competitionId)}/media?key=${encodeURIComponent(key)}`,
+      {},
+      { parse: "blob" },
+    ),
+  // The current uploaded background (keyless), as a blob for the editor canvas.
+  backgroundImage: (competitionId: string) =>
+    apiFetch<Blob>(
+      `${certificatesApi.base(competitionId)}/background-image`,
+      {},
+      { parse: "blob" },
+    ),
+  myAvailability: (competitionId: string) =>
+    apiFetch<CertificateAvailability>(`${certificatesApi.base(competitionId)}/me`),
+  downloadMine: (competitionId: string, filename: string) =>
+    downloadFile(`${certificatesApi.base(competitionId)}/me/download`, filename),
+  // Custom fonts (organiser-uploaded, per competition).
+  fonts: (competitionId: string) =>
+    apiFetch<CertificateFont[]>(`${certificatesApi.base(competitionId)}/fonts`),
+  uploadFont: (competitionId: string, file: File, name?: string) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (name) form.append("name", name);
+    return apiFetch<CertificateFont>(
+      `${certificatesApi.base(competitionId)}/fonts`,
+      { method: "POST", body: form },
+    );
+  },
+  deleteFont: (competitionId: string, fontId: string) =>
+    apiFetch<void>(`${certificatesApi.base(competitionId)}/fonts/${fontId}`, {
+      method: "DELETE",
+    }),
+  // A custom font's bytes as a blob, for the editor's @font-face (auth'd, like
+  // element images — @font-face can't carry the bearer token itself).
+  fontFile: (competitionId: string, fontId: string) =>
+    apiFetch<Blob>(
+      `${certificatesApi.base(competitionId)}/fonts/${fontId}/file`,
+      {},
+      { parse: "blob" },
+    ),
+  // Download the design as a portable JSON document (assets embedded).
+  exportTemplate: (competitionId: string, filename: string) =>
+    downloadFile(`${certificatesApi.base(competitionId)}/template/export`, filename),
+  // Replace the current design with a previously-exported document.
+  importTemplate: (competitionId: string, doc: unknown) =>
+    apiFetch<CertificateTemplate>(
+      `${certificatesApi.base(competitionId)}/template/import`,
+      { method: "POST", body: JSON.stringify(doc) },
+    ),
+};
+
+export const meCertificatesApi = {
+  list: () => apiFetch<MyCertificate[]>("/api/me/certificates"),
+};
+
+export const certificateAssetsApi = {
+  // Unauthenticated: bundled, non-sensitive editor configuration.
+  manifest: () =>
+    apiFetch<CertificateManifest>(
+      "/api/certificate-assets/manifest",
+      {},
+      { auth: false },
+    ),
+};

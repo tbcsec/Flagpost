@@ -311,6 +311,15 @@ class Settings(BaseSettings):
     # Lifetime of a signed download URL, in seconds (§13.3 — short-lived).
     signed_url_ttl_seconds: int = 300
 
+    # --- Certificates (optional module, ADR-0027) ---
+    # The "Made with Flagpost" footer is composited onto every certificate by the
+    # server and is un-removable by design (the marketing lever). This is the
+    # gated-off hook for a future paid "remove branding" tier: shipped False so
+    # the footer always renders; a licensed install would flip it. Deliberately a
+    # config/env flag, not an admin-editable setting, so it can't be turned off
+    # through the normal UI today.
+    certificate_branding_removable: bool = False
+
     # --- Auth (ARCHITECTURE.md §7.7, ADR-0003) ---
     # An unset (or known public-default) secret is resolved to a strong
     # per-install secret at startup — the app never signs tokens with a value

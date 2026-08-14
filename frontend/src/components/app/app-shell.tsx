@@ -7,6 +7,7 @@ import * as React from "react";
 import { AiAssistantMount } from "@/components/ai/ai-assistant";
 import { AnnouncementBanner } from "@/components/announcements/announcement-banner";
 import { DemoBanner } from "@/components/app/demo-banner";
+import { CertificateReleaseWatcher } from "@/components/certificates/certificate-release-watcher";
 import { UpdateNotice } from "@/components/admin/update-notice";
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
@@ -391,6 +392,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 children
               )}
             </div>
+            {/* One-time certificate-release celebration, once per release (#219). */}
+            <CertificateReleaseWatcher />
             <PoweredByFooter className="mt-auto" />
           </div>
         </main>

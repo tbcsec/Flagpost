@@ -1,0 +1,16 @@
+id: certificates
+name: Certificates
+version: 1.0.0
+# The fifth optional module (§11.3, ROADMAP #219, ADR-0027): not required-core,
+# so it carries the per-competition enable/disable toggle (competition_modules —
+# default ON). Every route 404s when disabled for the competition. Organisers
+# design a per-competition certificate; participants download a personalised PNG
+# once released. Depends on scoring (standings drive the tokens) and
+# notifications (the release alert) — both required-core, so always present.
+required_core: false
+provides:
+  routes: true
+dependencies:
+  - competitions
+  - scoring
+  - notifications

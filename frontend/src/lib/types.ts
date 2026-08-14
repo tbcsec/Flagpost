@@ -1302,3 +1302,124 @@ export interface AiTranscriptSummary {
 export interface AiTranscriptDetail extends AiTranscriptSummary {
   messages: AiMessage[];
 }
+
+// --- Certificates (#219, ADR-0027) -----------------------------------------
+
+export type CertBackgroundKind = "color" | "preset" | "upload";
+export type CertRecipientRule = "all" | "solvers";
+export type CertReleaseMode = "manual" | "on_end" | "end_delay";
+export type CertElementType = "token" | "text" | "image";
+export type CertAlign = "left" | "center" | "right";
+
+/** One drag-positioned element. Coordinates are % of the canvas; font_size is
+ *  % of canvas height — matching the server renderer (parity, ADR-0027). */
+export interface CertElement {
+  type: CertElementType;
+  x: number;
+  y: number;
+  width: number;
+  font?: string;
+  font_size?: number;
+  color?: string;
+  align?: CertAlign;
+  bold?: boolean;
+  italic?: boolean;
+  token?: string;
+  text?: string;
+  image_key?: string;
+}
+
+export interface CertificateTemplate {
+  id: string;
+  competition_id: string;
+  background_kind: CertBackgroundKind;
+  background_preset: string | null;
+  background_color: string;
+  preset_accent: string | null;
+  preset_base: string | null;
+  has_background_image: boolean;
+  elements: CertElement[];
+  recipient_rule: CertRecipientRule;
+  release_mode: CertReleaseMode;
+  release_delay_minutes: number;
+  released_at: string | null;
+  released: boolean;
+}
+
+export interface CertificateTemplateInput {
+  background_kind: CertBackgroundKind;
+  background_preset: string | null;
+  background_color: string;
+  preset_accent: string | null;
+  preset_base: string | null;
+  elements: CertElement[];
+  recipient_rule: CertRecipientRule;
+  release_mode: CertReleaseMode;
+  release_delay_minutes: number;
+}
+
+export interface MyCertificate {
+  competition_id: string;
+  competition_name: string;
+  released_at: string;
+}
+
+export interface CertificateAvailability {
+  available: boolean;
+  released_at: string | null;
+  competition_name: string | null;
+}
+
+export interface CertificateExportJob {
+  id: string;
+  status: "pending" | "running" | "done" | "failed";
+  total: number;
+  rendered: number;
+  error: string | null;
+  created_at: string;
+  completed_at: string | null;
+  download_url: string | null;
+}
+
+export interface CertManifestFont {
+  id: string;
+  label: string;
+}
+
+/** An organiser-uploaded custom font. Referenced by an element as
+ *  `font: "custom:<id>"`; `format` is "ttf" | "otf". */
+export interface CertificateFont {
+  id: string;
+  name: string;
+  format: string;
+}
+export interface CertManifestToken {
+  key: string;
+  label: string;
+  sample: string;
+}
+export interface CertManifestPreset {
+  id: string;
+  label: string;
+  accent: string;
+  base: string;
+}
+export interface CertificateManifest {
+  canvas: {
+    width: number;
+    height: number;
+    aspect_ratio: number;
+  };
+  fonts: CertManifestFont[];
+  default_font: string;
+  tokens: CertManifestToken[];
+  presets: CertManifestPreset[];
+  default_color: string;
+  bounds: {
+    max_elements: number;
+    max_text_len: number;
+    max_image_elements: number;
+    font_size_min: number;
+    font_size_max: number;
+  };
+}

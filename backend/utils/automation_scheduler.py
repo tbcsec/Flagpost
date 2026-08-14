@@ -31,17 +31,27 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import or_, select
 
+from config import settings
 from db import ensure_aware_utc, utcnow
 from models.automation import AutomationRule
+from models.certificate import CertificateExportJob, CertificateTemplate
 from models.competition import Competition
 from models.hint import Hint
 from plugins.loader import is_module_enabled
 from utils.automation_engine import evaluate_conditions, run_rule
+from utils.certificate_release import (
+    build_recipients,
+    gather_image_bytes,
+    load_custom_font_bytes,
+    release_template,
+    spec_from_template,
+)
 from utils.event_bus import event_bus
+from utils.notifications import broadcast_notifications
 
 logger = logging.getLogger("automation")
 
@@ -178,6 +188,182 @@ async def publish_scheduled_hints(db_factory, *, now: datetime | None = None) ->
         await event_bus.emit("hint.published", payload)
 
 
+async def release_scheduled_certificates(db_factory, *, now: datetime | None = None) -> None:
+    """Release every certificate template whose scheduled time has arrived (#219):
+    ``on_end`` at the competition's end, ``end_delay`` at end + N minutes. Sets
+    ``released_at``, notifies every recipient, and emits ``certificate.released``.
+    Idempotent via the ``released_at IS NULL`` guard. Skipped when the module is
+    disabled for the competition — a disabled module shows no certificates, so
+    releasing + deep-linking a participant to a 404 would be wrong."""
+    now = ensure_aware_utc(now) if now is not None else utcnow()
+    released: list[tuple[str, str, list]] = []  # (template_id, competition_id, notifications)
+    async with db_factory() as db:
+        templates = (
+            (
+                await db.execute(
+                    select(CertificateTemplate).where(
+                        CertificateTemplate.released_at.is_(None),
+                        CertificateTemplate.release_mode.in_(("on_end", "end_delay")),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for template in templates:
+            competition = await db.get(Competition, template.competition_id)
+            if competition is None or competition.end_at is None:
+                continue
+            target = ensure_aware_utc(competition.end_at)
+            if template.release_mode == "end_delay":
+                target = target + timedelta(minutes=template.release_delay_minutes)
+            if now < target:
+                continue
+            if not await is_module_enabled(db, "certificates", template.competition_id):
+                continue
+            made = await release_template(db, competition, template, now=now)
+            if made is not None:  # None ⇒ a concurrent caller already released it
+                released.append((template.id, template.competition_id, made))
+        if released:
+            await db.commit()
+    # Broadcast + emit after commit so the release is durable before any handler.
+    for template_id, competition_id, made in released:
+        await broadcast_notifications(made)
+        await event_bus.emit(
+            "certificate.released",
+            {"competition_id": competition_id, "certificate_template_id": template_id},
+        )
+
+
+# A single bulk export renders one PNG per recipient into one in-memory ZIP; cap
+# it so one click on a huge competition can't pin a core + spike RAM unboundedly.
+# Batched/streamed export for very large events is a follow-up (#219).
+MAX_EXPORT_RECIPIENTS = 3000
+# A job left "running" past this (a worker that died mid-render) is reclaimed as
+# failed so the organiser's poll doesn't hang forever.
+EXPORT_STUCK_MINUTES = 15
+
+
+def _render_export_zip(spec: dict, recipients: list, bg_bytes, images, fonts, branding) -> tuple[bytes, int]:
+    """Pure (no DB/ORM): render every recipient's PNG into a ZIP. Runs in a
+    worker thread — Pillow is CPU-bound and must not block the event loop. A
+    single recipient's failure is skipped (logged), never aborting the whole ZIP.
+    Returns (zip_bytes, rendered_count)."""
+    import io
+    import zipfile
+
+    from plugins.certificates.render import render_certificate_png
+
+    rendered = 0
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for i, r in enumerate(recipients):
+            try:
+                png = render_certificate_png(
+                    spec,
+                    r.tokens,
+                    background_bytes=bg_bytes,
+                    image_bytes=images,
+                    font_bytes=fonts,
+                    branding=branding,
+                )
+            except Exception:
+                logger.exception("certificate export: recipient %s render failed", r.user_id)
+                continue
+            safe = "".join(c if (c.isalnum() or c in "-_ ") else "_" for c in r.user_name).strip()
+            zf.writestr(f"{i + 1:04d}-{safe or 'certificate'}.png", png)
+            rendered += 1
+    return buf.getvalue(), rendered
+
+
+async def process_certificate_exports(db_factory) -> None:
+    """Render one pending bulk-export job into a ZIP in object storage (#219).
+    One job per tick bounds the work; the ORM stays out of the render thread —
+    the spec + resolved image bytes are extracted first, then handed to a pure
+    builder."""
+    async with db_factory() as db:
+        # Reclaim jobs a dead worker left stuck "running" (the tick awaits each
+        # render fully, so a live process never carries one across ticks).
+        stuck = (
+            await db.execute(
+                select(CertificateExportJob).where(
+                    CertificateExportJob.status == "running",
+                    CertificateExportJob.created_at
+                    < utcnow() - timedelta(minutes=EXPORT_STUCK_MINUTES),
+                )
+            )
+        ).scalars().all()
+        for s in stuck:
+            s.status = "failed"
+            s.error = "Export timed out"
+            s.completed_at = utcnow()
+        if stuck:
+            await db.commit()
+
+        job = await db.scalar(
+            select(CertificateExportJob)
+            .where(CertificateExportJob.status == "pending")
+            .order_by(CertificateExportJob.created_at)
+            .limit(1)
+        )
+        if job is None:
+            return
+        job.status = "running"
+        await db.commit()
+        try:
+            competition = await db.get(Competition, job.competition_id)
+            template = await db.scalar(
+                select(CertificateTemplate).where(
+                    CertificateTemplate.competition_id == job.competition_id
+                )
+            )
+            if competition is None or template is None:
+                raise RuntimeError("competition or template no longer exists")
+            recipients = await build_recipients(db, competition, template)
+            if len(recipients) > MAX_EXPORT_RECIPIENTS:
+                raise RuntimeError(
+                    f"Too many recipients ({len(recipients)}) for a single export; "
+                    f"the limit is {MAX_EXPORT_RECIPIENTS}."
+                )
+            job.total = len(recipients)
+            await db.commit()
+
+            from storage import get_storage
+
+            storage = get_storage()
+            # Shared spec/asset resolution so the ZIP renders identically to the
+            # single self-download — background (incl. preset accent/base overrides),
+            # image elements, and any custom fonts.
+            spec = spec_from_template(template)
+            bg_bytes = None
+            if spec["background_kind"] == "upload" and spec["background_object_key"]:
+                try:
+                    bg_bytes = storage.get(spec["background_object_key"])
+                except Exception:
+                    bg_bytes = None
+            images = gather_image_bytes(storage, spec["elements"], job.competition_id)
+            font_bytes = await load_custom_font_bytes(
+                db, storage, job.competition_id, spec["elements"]
+            )
+            branding = not settings.certificate_branding_removable
+            data, rendered = await asyncio.to_thread(
+                _render_export_zip, spec, recipients, bg_bytes, images, font_bytes, branding
+            )
+            key = f"{job.competition_id}/certificates/exports/{job.id}.zip"
+            await asyncio.to_thread(storage.put, key, data, "application/zip")
+            job.object_key = key
+            job.rendered = rendered
+            job.status = "done"
+            job.completed_at = utcnow()
+            await db.commit()
+        except Exception as exc:  # noqa: BLE001 — a bad job must not kill the loop
+            logger.exception("certificate export %s failed", job.id)
+            job.status = "failed"
+            job.error = str(exc)[:500]
+            job.completed_at = utcnow()
+            await db.commit()
+
+
 def start(db_factory, interval_seconds: float) -> None:
     """Launch the periodic tick (idempotent). Requires a running event loop."""
     global _task
@@ -204,6 +390,10 @@ async def _loop(db_factory, interval_seconds: float) -> None:
             await emit_lifecycle_events(db_factory)
             await run_time_rules(db_factory)
             await publish_scheduled_hints(db_factory)
+            # Scheduled certificate release + bulk-export processing (#219) ride
+            # the same kernel tick; both are no-ops when nothing is due/pending.
+            await release_scheduled_certificates(db_factory)
+            await process_certificate_exports(db_factory)
             # Archived-competition retention (#26) rides the same kernel tick —
             # platform housekeeping like the lifecycle events, active
             # regardless of any per-competition module toggle.

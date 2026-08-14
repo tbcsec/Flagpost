@@ -100,6 +100,12 @@ EVENT_TYPES: tuple[str, ...] = (
     "ticket.attachment_deleted",
     "survey.submitted",
     "survey.opened",
+    # Certificates (#219, ADR-0027, optional module). template_updated is the
+    # authoring event; released fires once a competition's certificates become
+    # downloadable (manual trigger or the scheduled release), driving the
+    # per-participant notification + celebratory modal.
+    "certificate.template_updated",
+    "certificate.released",
     "announcement.published",
     "site.settings_updated",
     "score.adjusted",

@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { AiCompetitionPanel } from "@/components/ai/ai-competition-panel";
 import { NoCompetition } from "@/components/app/no-competition";
+import { CertificateDesigner } from "@/components/certificates/certificate-designer";
 import { SectionHeader } from "@/components/app/section-header";
 import { CategoryManager } from "@/components/challenges/challenge-admin";
 import {
@@ -17,7 +18,7 @@ import { useActiveCompetition } from "@/lib/hooks/use-competitions";
 import { useEnabledModules } from "@/lib/hooks/use-modules";
 import { useAccess } from "@/lib/hooks/use-permissions";
 
-type Tab = SettingsSection | "modules" | "assistant";
+type Tab = SettingsSection | "modules" | "assistant" | "certificates";
 
 const TABS: { value: Tab; label: string }[] = [
   { value: "general", label: "General" },
@@ -25,6 +26,7 @@ const TABS: { value: Tab; label: string }[] = [
   { value: "challenges", label: "Challenges" },
   { value: "rules", label: "Rules" },
   { value: "assistant", label: "Assistant" },
+  { value: "certificates", label: "Certificates" },
   { value: "modules", label: "Modules" },
 ];
 
@@ -39,16 +41,26 @@ export default function CompetitionSettingsPage() {
   // off, nothing on the tab would work (§11.3, same treatment as the nav).
   const enabledModules = useEnabledModules(competitionId ?? "", Boolean(competitionId));
   const aiEnabled = !enabledModules.data || enabledModules.data.includes("ai");
+  // The Certificates tab, like Assistant, only exists while its module is on here
+  // and the manager holds manage_certificates (#219, §11.3).
+  const certificatesEnabled =
+    !enabledModules.data || enabledModules.data.includes("certificates");
+  const access = useAccess();
   // The Modules tab needs its own permission (#168) — hide it for a manager who
   // can edit settings but wasn't granted module management.
-  const canManageModules = useAccess().has("manage_modules");
+  const canManageModules = access.has("manage_modules");
+  const canManageCertificates = access.has("manage_certificates");
+  const certTabOn = certificatesEnabled && canManageCertificates;
   const visibleTabs = TABS.filter(
     (t) =>
       (t.value !== "assistant" || aiEnabled) &&
+      (t.value !== "certificates" || certTabOn) &&
       (t.value !== "modules" || canManageModules),
   );
   const activeTab: Tab =
-    (tab === "assistant" && !aiEnabled) || (tab === "modules" && !canManageModules)
+    (tab === "assistant" && !aiEnabled) ||
+    (tab === "certificates" && !certTabOn) ||
+    (tab === "modules" && !canManageModules)
       ? "general"
       : tab;
 
@@ -57,8 +69,11 @@ export default function CompetitionSettingsPage() {
   }
 
   // The settings form hosts the general/schedule/challenges/rules sections;
-  // assistant + modules are their own panels (own endpoints).
-  const isFormTab = activeTab !== "modules" && activeTab !== "assistant";
+  // assistant + certificates + modules are their own panels (own endpoints).
+  const isFormTab =
+    activeTab !== "modules" &&
+    activeTab !== "assistant" &&
+    activeTab !== "certificates";
 
   return (
     <>
@@ -90,6 +105,15 @@ export default function CompetitionSettingsPage() {
               unsaved state to preserve, and its queries then run on demand. */}
           {activeTab === "assistant" && (
             <AiCompetitionPanel competitionId={competitionId} />
+          )}
+
+          {/* Certificate designer — mounted only when shown (own queries). */}
+          {activeTab === "certificates" && (
+            <Card>
+              <CardContent className="pt-6">
+                <CertificateDesigner competitionId={competitionId} />
+              </CardContent>
+            </Card>
           )}
 
           <div className={activeTab === "modules" ? "grid gap-3" : "hidden"}>

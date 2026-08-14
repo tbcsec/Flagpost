@@ -39,6 +39,9 @@ vi.mock("@/components/profile/notification-preferences", () => ({
 vi.mock("@/components/profile/api-tokens-card", () => ({
   MyApiTokensCard: () => <div data-testid="tokens-card" />,
 }));
+vi.mock("@/components/profile/certificates-card", () => ({
+  MyCertificatesCard: () => <div data-testid="certificates-card" />,
+}));
 
 /** The wrapper div the panel content sits in — carries the `hidden` toggle. */
 function panelOf(testid: string): HTMLElement {
@@ -51,11 +54,12 @@ describe("ProfilePage tabs", () => {
     searchParams = new URLSearchParams();
   });
 
-  it("renders the three tabs", () => {
+  it("renders the four tabs", () => {
     render(<ProfilePage />);
     expect(screen.getByRole("tab", { name: "Account" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Notifications" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "API tokens" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Certificates" })).toBeInTheDocument();
   });
 
   it("defaults to the Account tab when no ?tab= is set", () => {

@@ -18,6 +18,7 @@ from models.attachment import Attachment
 from models.audit_log import AuditLogEntry
 from models.automation import Achievement, AutomationRule
 from models.bracket import BracketMembership
+from models.certificate import CertificateExportJob, CertificateFont, CertificateTemplate
 from models.challenge import Category, Challenge
 from models.collab import CollabDocument
 from models.competition import Competition
@@ -64,6 +65,9 @@ __all__ = [
     "AutomationRule",
     "BracketMembership",
     "Category",
+    "CertificateExportJob",
+    "CertificateFont",
+    "CertificateTemplate",
     "Challenge",
     "ChallengeRating",
     "CollabDocument",

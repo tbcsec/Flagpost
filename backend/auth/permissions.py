@@ -79,6 +79,10 @@ PERMISSIONS: tuple[Permission, ...] = (
     Permission("feedback_manage", "Feedback", Scope.COMPETITION),
     Permission("feedback_view_responses", "Feedback", Scope.COMPETITION),
     Permission("feedback_submit", "Feedback", Scope.COMPETITION),
+    # Certificates (optional module, #219, ADR-0027) — design the per-competition
+    # certificate template + configure release. Participants download their own
+    # via a self-scoped route (no permission), like API-token minting.
+    Permission("manage_certificates", "Certificates", Scope.COMPETITION),
     # Users & Roles
     Permission("manage_users", "Users & Roles", Scope.GLOBAL),
     Permission("manage_roles", "Users & Roles", Scope.GLOBAL),
@@ -177,6 +181,9 @@ JUDGE_PERMISSIONS: list[str] = [
     "feedback_manage",
     "feedback_view_responses",
     "feedback_submit",
+    # Certificates (#219): a Judge designs and releases their competition's
+    # certificate. Reaches existing installs via the startup role re-sync.
+    "manage_certificates",
     "view_competition_analytics",
     "view_submissions",
     # Review competitor-assistant transcripts in their competition (#98).

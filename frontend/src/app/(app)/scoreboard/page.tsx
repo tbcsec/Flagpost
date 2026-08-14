@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
 import { NoCompetition } from "@/components/app/no-competition";
+import { ScoreboardCertificateCard } from "@/components/certificates/scoreboard-certificate-card";
 import { RankBadge } from "@/components/scoreboard/rank-badge";
 import { TopChart } from "@/components/scoreboard/top-chart";
 import { Badge } from "@/components/ui/badge";
@@ -224,6 +225,8 @@ export default function ScoreboardPage() {
           )}
         </div>
       )}
+
+      <ScoreboardCertificateCard competitionId={competitionId} />
 
       {board.isLoading && (
         <div className="grid gap-4">

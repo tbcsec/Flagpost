@@ -77,3 +77,28 @@ downloaded PNG agree.
     typography, or CSS-driven layout would need a different engine (WeasyPrint,
     or the very headless browser we're declining here) — a future ADR if that
     requirement ever genuinely lands.
+
+## Later additions (v1.5.0)
+
+Two capabilities were layered on the same model after the initial build; neither
+changes the decision above.
+
+- **Organiser-uploaded custom fonts.** Beyond the bundled OFL set, an organiser
+  may upload a company/brand TTF/OTF (`CertificateFont`, stored per-competition
+  in object storage). An element references it as `font="custom:<id>"`; the
+  renderer resolves the bytes at render time (a new `font_bytes` map) and a
+  missing/deleted/foreign ref falls back to a bundled default, so a font never
+  breaks a render or leaks across tenants. Nothing is bundled or redistributed
+  — the *operator* is responsible for holding a licence, surfaced in the upload
+  UI. Editor↔render parity holds via a blob-loaded `@font-face` (auth'd, since a
+  `@font-face` request can't carry the bearer token) declaring all four
+  weight/style slots against the single uploaded file, matching Pillow (which
+  does no faux bold/italic).
+- **Portable template export/import.** A design exports as a **single
+  self-contained JSON** that embeds every referenced binary (uploaded
+  background, image elements, custom fonts) as base64, so a company can save a
+  certificate one year and re-import it into a brand-new instance the next.
+  Import re-uploads the assets into the target competition, rewrites the
+  references to fresh in-scope keys/ids, and re-runs the *normal* template
+  hardening — so an imported design is validated exactly like an authored one,
+  and no foreign object key can survive into the saved template.

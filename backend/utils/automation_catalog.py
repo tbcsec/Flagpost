@@ -86,6 +86,8 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     ],
     "survey.submitted": ["competition_id", "user_id", "survey_id", "response_id"],
     "survey.opened": ["competition_id", "survey_id", "title"],
+    "certificate.template_updated": ["competition_id", "certificate_template_id"],
+    "certificate.released": ["competition_id", "certificate_template_id"],
     "user.registered": ["user_id"],
     "user.email_verified": ["user_id"],
     "user.created": ["user_id", "email", "actor_user_id"],
@@ -163,6 +165,10 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     "ticket.attachment_added": "ticket_view",
     "ticket.attachment_deleted": "ticket_view",
     "survey.submitted": "feedback_view_responses",
+    # Certificate authoring is staff; release is member-visible (participants get
+    # a certificate), so it maps to the baseline a Participant holds.
+    "certificate.template_updated": "manage_certificates",
+    "certificate.released": "challenge_view",
     # Challenge authoring (draft/edit) is staff; play events are member-visible.
     "challenge.created": "challenge_edit",
     "challenge.updated": "challenge_edit",
@@ -222,6 +228,7 @@ _FIELD_LABELS: dict[str, str] = {
     "attachment_id": "Attachment",
     "api_token_id": "API token",
     "provider_id": "Provider",
+    "certificate_template_id": "Certificate",
     # Role-qualified actor ids.
     "actor_user_id": "Actor",
     "opener_user_id": "Opener",

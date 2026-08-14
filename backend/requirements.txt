@@ -29,6 +29,11 @@ regex>=2026.7.19,<2027.0
 minio>=7.2.20,<8.0
 python-multipart>=0.0.32,<0.1
 
+# Certificate rendering (#219, ADR-0027): server-side Pillow compositing → PNG,
+# no headless browser. Needed by the optional `certificates` module whenever it
+# is enabled, so imported normally rather than lazily. Ships manylinux wheels.
+Pillow>=10.3,<12.0
+
 # Submission rate limiting (§13.2) — Redis in production; lazily imported so the
 # test suite (in-memory limiter) and a redis-less dev run never need the client.
 redis>=8.1.0,<9.0

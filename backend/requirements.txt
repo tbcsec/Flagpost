@@ -5,7 +5,7 @@ pydantic-settings>=2.14.2,<3.0
 pydantic[email]>=2.13.4,<3.0
 
 # Persistence — SQLAlchemy 2.x async + asyncpg + Alembic (§2)
-sqlalchemy[asyncio]>=2.0.51,<2.1
+sqlalchemy[asyncio]>=2.0.52,<2.1
 asyncpg>=0.31.0,<0.32
 alembic>=1.19.0,<2.0
 

@@ -41,6 +41,7 @@ from ratelimit import get_rate_limiter
 from ratelimit.base import RateLimiter
 from routers.challenges import load_visible_challenge
 from schemas.submission import SubmitFlagRequest, SubmitResult
+from utils.competition_status import require_playable
 from utils.event_bus import event_bus
 from utils.flags import verify_regex_flag, verify_static_flag
 from utils.scoring import (
@@ -110,6 +111,11 @@ async def submit_flag(
         )
 
     competition = await db.get(Competition, competition_id)
+
+    # Competition status gate (#221): submissions are closed unless the competition
+    # is running (staff bypass) — checked before the pause gate so a not_started /
+    # ended competition gives the clearer "hasn't started / has ended" message.
+    await require_playable(db, competition, current_user.id)
 
     # Paused competition (§13.2): gameplay is halted — competitors can't submit.
     # Staff (challenge_edit) bypass so they can still test while paused.

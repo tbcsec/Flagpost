@@ -1,6 +1,8 @@
 """Site-admin overview (Phase 9): cross-competition totals + per-competition
 health, gated on view_global_analytics (Administrator-only)."""
 
+import pytest
+
 from tests.conftest import admin_token
 
 
@@ -62,19 +64,25 @@ async def test_overview_totals_and_health(client):
     assert overview["total_users"] >= 2
 
     (health,) = overview["competitions"]
-    assert health["status"] == "draft"  # no schedule set
+    # Running: gameplay happened, so the competition was started (#221).
+    assert health["status"] == "running"
     assert health["participants"] == 1  # one individual competitor
     assert health["published_challenges"] == 1
     assert health["solves"] == 1
     assert health["open_tickets"] == 1
 
 
+@pytest.mark.competition_lifecycle
 async def test_overview_status_and_archived(client):
+    # Drive statuses explicitly (opt out of the default-running fixture): the
+    # overview label now derives from the competition's status (#221), with a
+    # future start_at distinguishing "scheduled" from a "draft".
     admin = await admin_token(client)
-    running = await _competition(
-        client, admin, start_at="2020-01-01T00:00:00Z", end_at="2999-01-01T00:00:00Z"
-    )
-    ended = await _competition(client, admin, end_at="2020-01-01T00:00:00Z")
+    running = await _competition(client, admin)
+    await client.post(f"/api/competitions/{running}/start", headers=_auth(admin))
+    ended = await _competition(client, admin)
+    await client.post(f"/api/competitions/{ended}/start", headers=_auth(admin))
+    await client.post(f"/api/competitions/{ended}/stop", headers=_auth(admin))
     scheduled = await _competition(client, admin, start_at="2999-01-01T00:00:00Z")
     archived = await _competition(client, admin)
     await client.post(f"/api/competitions/{archived}/archive", headers=_auth(admin))

@@ -41,6 +41,7 @@ from routers.site_settings import get_or_create_settings
 from storage import get_storage
 from storage.base import ObjectStorage
 from utils.competition_clone import clone_competition
+from utils.competition_status import start_transition, stop_transition
 from utils.competitions import get_visible_competition
 from utils.event_bus import event_bus
 from utils.retention import delete_competition_tree
@@ -302,6 +303,42 @@ async def _competition_or_404(db: AsyncSession, competition_id: str) -> Competit
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"
         )
+    return competition
+
+
+@router.post("/{competition_id}/start", response_model=CompetitionOut)
+async def start_competition(
+    competition_id: str,
+    # manage_schedule (Judge/Administrator) governs when a competition runs (#221).
+    current_user: User = Depends(require_permission("manage_schedule")),
+    db: AsyncSession = Depends(get_db),
+) -> Competition:
+    """Open gameplay now: status → running (from not_started, or re-starting an
+    ended competition). Idempotent if already running. Emits competition.started,
+    so automations + the audit log see a manual start like a scheduled one."""
+    competition = await _competition_or_404(db, competition_id)
+    event = start_transition(competition)
+    await db.commit()
+    await db.refresh(competition)
+    if event is not None:
+        await event_bus.emit(*event)
+    return competition
+
+
+@router.post("/{competition_id}/stop", response_model=CompetitionOut)
+async def stop_competition(
+    competition_id: str,
+    current_user: User = Depends(require_permission("manage_schedule")),
+    db: AsyncSession = Depends(get_db),
+) -> Competition:
+    """Close gameplay now: status → ended. Idempotent if already ended. Reversible
+    — a later start reopens it. Emits competition.ended."""
+    competition = await _competition_or_404(db, competition_id)
+    event = stop_transition(competition)
+    await db.commit()
+    await db.refresh(competition)
+    if event is not None:
+        await event_bus.emit(*event)
     return competition
 
 

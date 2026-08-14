@@ -436,6 +436,11 @@ export const competitionsApi = {
     apiFetch<Competition>(`/api/competitions/${id}/archive`, { method: "POST" }),
   unarchive: (id: string) =>
     apiFetch<Competition>(`/api/competitions/${id}/unarchive`, { method: "POST" }),
+  // Manual gameplay lifecycle (#221): open (running) / close (ended) play now.
+  start: (id: string) =>
+    apiFetch<Competition>(`/api/competitions/${id}/start`, { method: "POST" }),
+  stop: (id: string) =>
+    apiFetch<Competition>(`/api/competitions/${id}/stop`, { method: "POST" }),
   remove: (id: string) =>
     apiFetch<void>(`/api/competitions/${id}`, { method: "DELETE" }),
   // Self-serve join for a public competition (from the lobby list).

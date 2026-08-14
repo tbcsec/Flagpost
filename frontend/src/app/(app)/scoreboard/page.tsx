@@ -149,6 +149,22 @@ export default function ScoreboardPage() {
     return <NoCompetition />;
   }
 
+  // Status gate (#221): the board is closed to competitors only until the
+  // competition starts — the FINAL board stays visible after it ends (with a
+  // banner below). Staff (challenge_edit) bypass, matching the backend.
+  if (competition && competition.status === "not_started" && !access.has("challenge_edit")) {
+    return (
+      <>
+        <SectionHeader title="Scoreboard" subtitle={competition.name} />
+        <EmptyState
+          icon={<TrophyEmptyIcon />}
+          title="This competition hasn't started yet"
+          description="The scoreboard opens once the organisers start the competition."
+        />
+      </>
+    );
+  }
+
   const mySubjectId = isTeam ? myTeam.data?.id : userId;
   const top = shown.slice(0, 10);
   const live = board.socketStatus === "open";
@@ -191,6 +207,13 @@ export default function ScoreboardPage() {
           ) : undefined
         }
       />
+
+      {competition?.status === "ended" && (
+        <div className="rounded-md border border-border bg-muted/40 px-4 py-2.5 text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">Final standings.</span>{" "}
+          The competition has ended — these results are final.
+        </div>
+      )}
 
       {frozen && (
         <div className="rounded-md border border-border bg-muted/40 px-4 py-2.5 text-sm text-muted-foreground">

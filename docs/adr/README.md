@@ -61,3 +61,4 @@ Status is one of:
 | [0025](0025-multi-worker-broadcast-relay.md) | Multi-worker via a Redis broadcast relay behind the connection manager | Accepted |
 | [0026](0026-cross-worker-presence.md) | Cross-worker presence via heartbeat-TTL liveness in Redis | Accepted |
 | [0027](0027-certificate-rendering-server-side.md) | Certificate rendering — server-side Pillow → PNG, not a headless browser | Proposed |
+| [0028](0028-competition-status-gate.md) | Competition status is an explicit gameplay gate; the schedule drives it | Accepted |

@@ -33,18 +33,19 @@ _AWARDED = (Submission.is_correct.is_(True), Submission.is_duplicate.is_(False))
 
 
 def _status(competition: Competition, now) -> str:
+    """The admin-overview status label. Driven by the explicit gameplay status
+    (#221), with `archived` overlaid and `not_started` split into `scheduled` (a
+    future start_at is set) vs `draft` (none) for the operator's benefit."""
     if competition.archived_at is not None:
         return "archived"
-    # SQLite hands datetimes back naive; normalize before comparing (ADR-0006).
-    end_at = ensure_aware_utc(competition.end_at) if competition.end_at else None
-    start_at = ensure_aware_utc(competition.start_at) if competition.start_at else None
-    if end_at is not None and end_at < now:
+    if competition.status == "ended":
         return "ended"
-    if start_at is not None and start_at > now:
-        return "scheduled"
-    if start_at is not None:
+    if competition.status == "running":
         return "running"
-    return "draft"
+    # not_started: distinguish a scheduled start from an unscheduled draft.
+    # SQLite hands datetimes back naive; normalize before comparing (ADR-0006).
+    start_at = ensure_aware_utc(competition.start_at) if competition.start_at else None
+    return "scheduled" if start_at is not None and start_at > now else "draft"
 
 
 async def _counts_by_competition(db: AsyncSession, stmt) -> dict[str, int]:

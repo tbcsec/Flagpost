@@ -130,6 +130,10 @@ async def emit_lifecycle_events(db_factory, *, now: datetime | None = None) -> N
                 and now >= ensure_aware_utc(c.start_at)
             ):
                 c.started_event_fired = True
+                # Auto-open the gate (#221), but never override a manual stop that
+                # already moved it past not_started.
+                if c.status == "not_started":
+                    c.status = "running"
                 to_emit.append(
                     ("competition.started", {"competition_id": c.id, "name": c.name})
                 )
@@ -139,6 +143,7 @@ async def emit_lifecycle_events(db_factory, *, now: datetime | None = None) -> N
                 and now >= ensure_aware_utc(c.end_at)
             ):
                 c.ended_event_fired = True
+                c.status = "ended"  # scheduled end closes the gate (#221)
                 to_emit.append(
                     ("competition.ended", {"competition_id": c.id, "name": c.name})
                 )

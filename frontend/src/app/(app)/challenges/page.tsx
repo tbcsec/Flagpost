@@ -101,6 +101,29 @@ export default function ChallengesPage() {
     return <NoCompetition />;
   }
 
+  // Status gate (#221): before the competition is running (or after it ends),
+  // competitors see a closed message instead of the challenge grid. Staff keep
+  // full access to build before and review after — the bypass matches the
+  // backend gate exactly (challenge_edit), so the UI never renders a page the
+  // server will 403.
+  if (competition && competition.status !== "running" && !access.has("challenge_edit")) {
+    const ended = competition.status === "ended";
+    return (
+      <>
+        <SectionHeader title="Challenges" subtitle={competition.name} />
+        <EmptyState
+          icon={<FlagEmptyIcon />}
+          title={ended ? "This competition has ended" : "This competition hasn't started yet"}
+          description={
+            ended
+              ? "Challenges are closed. Thanks for playing!"
+              : "Challenges will appear here once the organisers start the competition."
+          }
+        />
+      </>
+    );
+  }
+
   const categoryName = (id: string | null) =>
     categories.data?.find((c) => c.id === id)?.name ?? "uncategorized";
 

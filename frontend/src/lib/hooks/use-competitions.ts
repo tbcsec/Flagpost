@@ -115,6 +115,25 @@ export function useArchiveCompetition() {
   });
 }
 
+/** Manually open (start) or close (stop) gameplay (#221). Invalidates the queries
+ *  the status gate controls — the competition, challenge list, and scoreboard — so
+ *  the acting judge's own view flips immediately; other sessions (competitors)
+ *  flip live off the competition.started/ended activity-room ping (see
+ *  lib/live.ts), or on their next refetch. */
+export function useSetCompetitionStatus(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (action: "start" | "stop") =>
+      action === "start" ? competitionsApi.start(id) : competitionsApi.stop(id),
+    onSuccess: (updated: Competition) => {
+      queryClient.setQueryData(competitionKeys.detail(id), updated);
+      queryClient.invalidateQueries({ queryKey: competitionKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["challenges", id] });
+      queryClient.invalidateQueries({ queryKey: ["scoreboard", id] });
+    },
+  });
+}
+
 export function useDeleteCompetition() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -7,6 +7,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 ParticipationMode = Literal["team", "individual"]
 Visibility = Literal["public", "private"]
+# Gameplay lifecycle gate (#221). Read-only on CompetitionOut — it only moves via
+# the dedicated start/stop routes and the scheduler, never a generic PATCH.
+CompetitionStatus = Literal["not_started", "running", "ended"]
 
 
 class CompetitionCreate(BaseModel):
@@ -86,6 +89,9 @@ class CompetitionOut(BaseModel):
     registration_closes_at: datetime | None
     participation_mode: ParticipationMode
     visibility: Visibility
+    # Gameplay lifecycle (#221): not_started → running → ended. The gate on
+    # competitor access; moved by the start/stop routes + the scheduler.
+    status: CompetitionStatus = "not_started"
     # Only members/organisers ever receive a CompetitionOut (visibility is
     # enforced on read), and it mirrors the team invite-code exposure, so the
     # code travels with the record for organisers to share.
@@ -105,6 +111,9 @@ class CompetitionOut(BaseModel):
     brackets: list[str] = Field(default_factory=list)
     max_team_size: int | None = None
     paused: bool = False
+    # The scoreboard-freeze instant (null = live). Surfaced so the settings
+    # "Controls" panel can show Freeze/Unfreeze without loading the board.
+    scoreboard_frozen_at: datetime | None = None
     rules_override: dict[str, Any] | None = None
     rules_display_only: bool = False
 

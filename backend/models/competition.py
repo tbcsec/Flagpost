@@ -144,8 +144,21 @@ class Competition(Base, TimestampMixin):
     rules_display_only: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"
     )
+    # Explicit gameplay lifecycle (#221): "not_started" | "running" | "ended".
+    # THE gate for competitor access — challenge viewing/submission and the
+    # scoreboard are open only while "running" (staff with challenge_edit bypass,
+    # to build before and review after). New competitions default "not_started".
+    # Both the scheduler (at start_at/end_at) and a judge's manual Start/Stop drive
+    # it; a manual action is authoritative and marks the boundary handled via the
+    # *_event_fired flags below, so the scheduler won't undo it. Distinct from
+    # `paused` (a temporary halt *within* a running competition) and the scoreboard
+    # freeze — those are orthogonal axes.
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, default="not_started", server_default="not_started"
+    )
     # Internal dedup for the scheduler's competition.started/ended events — fired
-    # once each when the schedule boundary is crossed.
+    # once each when the schedule boundary is crossed (or when a judge starts/stops
+    # manually), so the scheduler never re-fires or overrides a manual decision.
     started_event_fired: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"
     )

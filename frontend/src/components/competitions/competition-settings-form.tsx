@@ -8,10 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { Select } from "@/components/ui/select";
-import { useUpdateCompetition } from "@/lib/hooks/use-competitions";
+import {
+  useSetCompetitionStatus,
+  useUpdateCompetition,
+} from "@/lib/hooks/use-competitions";
+import { useFreezeScoreboard } from "@/lib/hooks/use-scoreboard";
+import { useAccess } from "@/lib/hooks/use-permissions";
 import { richTextToPlain } from "@/lib/rich-text";
 import type {
   Competition,
+  CompetitionStatus,
   ParticipationMode,
   RichTextDoc,
   Visibility,
@@ -24,6 +30,18 @@ const toInput = (iso: string | null) => (iso ? iso.slice(0, 16) : "");
 const fromInput = (v: string) => (v ? new Date(`${v}Z`).toISOString() : null);
 
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+const STATUS_LABEL: Record<CompetitionStatus, string> = {
+  not_started: "Not started",
+  running: "Running",
+  ended: "Ended",
+};
+
+// State pills for the Controls panel (design tokens, not raw colours).
+const PILL = "shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ";
+const PILL_RUNNING = "bg-success/15 text-success";
+const PILL_NEUTRAL = "bg-muted text-muted-foreground";
+const PILL_WARN = "bg-warning/15 text-warning";
 
 export type SettingsSection = "general" | "schedule" | "challenges" | "rules";
 
@@ -39,7 +57,94 @@ export function CompetitionSettingsForm({
   section: SettingsSection;
 }) {
   const update = useUpdateCompetition(competition.id);
+  const setStatus = useSetCompetitionStatus(competition.id);
+  const freeze = useFreezeScoreboard(competition.id);
+  const access = useAccess();
   const confirm = useConfirm();
+  // Each control's routes are gated on its own permission, so only offer the
+  // button to a holder (the Settings tab opens on the broader edit/challenge
+  // perms): status → manage_schedule, pause → edit_competition, freeze →
+  // scoreboard_freeze.
+  const canControlStatus = access.has("manage_schedule");
+  const canPause = access.has("edit_competition");
+  const canFreeze = access.has("scoreboard_freeze");
+  const frozen = competition.scoreboard_frozen_at != null;
+
+  async function onStart() {
+    if (
+      !(await confirm({
+        title: competition.status === "ended" ? "Re-open the competition?" : "Start the competition?",
+        description:
+          "Competitors will immediately be able to view challenges, submit flags, and see the scoreboard.",
+        confirmLabel: competition.status === "ended" ? "Re-open" : "Start",
+        destructive: false,
+      }))
+    )
+      return;
+    setStatus.mutate("start", {
+      onSuccess: () => toast("Competition started", { variant: "success" }),
+      onError: (e) =>
+        toast("Couldn't start", { description: (e as Error).message, variant: "destructive" }),
+    });
+  }
+
+  async function onStop() {
+    if (
+      !(await confirm({
+        title: "Stop the competition?",
+        description:
+          "Challenge viewing and submissions close for competitors right away; the scoreboard stays visible as final standings. You can start it again later. Want a temporary stop instead? Pause the competition rather than stopping it.",
+        confirmLabel: "Stop",
+        destructive: true,
+      }))
+    )
+      return;
+    setStatus.mutate("stop", {
+      onSuccess: () => toast("Competition stopped", { variant: "success" }),
+      onError: (e) =>
+        toast("Couldn't stop", { description: (e as Error).message, variant: "destructive" }),
+    });
+  }
+
+  function onTogglePause() {
+    // Immediate action (not part of the form Save) — a run-day toggle, and
+    // instantly reversible, so no confirmation.
+    update.mutate(
+      { paused: !competition.paused },
+      {
+        onSuccess: () =>
+          toast(competition.paused ? "Competition resumed" : "Competition paused", {
+            variant: "success",
+          }),
+        onError: (e) =>
+          toast("Couldn't update", { description: (e as Error).message, variant: "destructive" }),
+      },
+    );
+  }
+
+  async function onToggleFreeze() {
+    if (
+      !frozen &&
+      !(await confirm({
+        title: "Freeze the scoreboard?",
+        description:
+          "Competitors keep solving and their points still count — the public board just stops showing movement until you unfreeze it. Staff can still view live standings.",
+        confirmLabel: "Freeze",
+        destructive: false,
+      }))
+    )
+      return;
+    freeze.mutate(!frozen, {
+      onSuccess: () =>
+        toast(frozen ? "Scoreboard unfrozen" : "Scoreboard frozen", { variant: "success" }),
+      onError: (e) =>
+        toast("Couldn't update the board", {
+          description: (e as Error).message,
+          variant: "destructive",
+        }),
+    });
+  }
+
   const [form, setForm] = useState({
     name: competition.name,
     description: competition.description,
@@ -58,7 +163,6 @@ export function CompetitionSettingsForm({
     ctftime_enabled: competition.ctftime_enabled,
     brackets: competition.brackets ?? [],
     max_team_size: competition.max_team_size ? String(competition.max_team_size) : "",
-    paused: competition.paused,
     rules_override: (competition.rules_override ?? {}) as RichTextDoc,
     rules_display_only: competition.rules_display_only,
   });
@@ -112,7 +216,6 @@ export function CompetitionSettingsForm({
         ctftime_enabled: form.ctftime_enabled,
         brackets: form.brackets,
         max_team_size: form.max_team_size ? Number(form.max_team_size) : null,
-        paused: form.paused,
         rules_override: rulesDoc,
         rules_display_only: form.rules_display_only,
       },
@@ -167,24 +270,6 @@ export function CompetitionSettingsForm({
               </Select>
             </div>
           </div>
-
-          <label className="flex items-start gap-2.5 rounded-md border border-border bg-muted/30 p-3 text-sm">
-            <input
-              type="checkbox"
-              className="mt-0.5 h-4 w-4 rounded border-border"
-              style={{ accentColor: "hsl(var(--warning))" }}
-              checked={form.paused}
-              onChange={(e) => set("paused", e.target.checked)}
-            />
-            <span>
-              <span className="font-medium">Pause competition</span>
-              <span className="ml-1 text-xs text-muted-foreground">
-                — halts gameplay: competitors can&apos;t submit flags (staff still
-                can, to test). Different from freezing the scoreboard, which only
-                stops the board from updating.
-              </span>
-            </span>
-          </label>
 
           <div className="space-y-3 border-t border-border pt-4">
             <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -269,42 +354,156 @@ export function CompetitionSettingsForm({
       )}
 
       {section === "schedule" && (
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-2">
-            <Label htmlFor="start_at">Starts</Label>
-            <Input
-              id="start_at"
-              type="datetime-local"
-              value={form.start_at}
-              onChange={(e) => set("start_at", e.target.value)}
-            />
+        <div className="space-y-5">
+          <p className="text-xs text-muted-foreground">
+            Run-day controls plus the schedule. The three controls apply
+            immediately; the schedule at the bottom saves with the form.
+          </p>
+
+          {/* Status — start / stop (#221) */}
+          <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <Label>Competition status</Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Competitors can play only while{" "}
+                  <span className="font-medium">running</span> — otherwise
+                  challenges show a closed message (the final scoreboard stays
+                  visible after it ends). The schedule below moves this
+                  automatically; Start / Stop override it now.
+                </p>
+              </div>
+              <span
+                className={
+                  PILL + (competition.status === "running" ? PILL_RUNNING : PILL_NEUTRAL)
+                }
+              >
+                {STATUS_LABEL[competition.status]}
+              </span>
+            </div>
+            {canControlStatus && (
+              <div className="flex flex-wrap gap-2">
+                {competition.status !== "running" ? (
+                  <Button type="button" size="sm" onClick={onStart} disabled={setStatus.isPending}>
+                    {competition.status === "ended" ? "Re-open competition" : "Start competition"}
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={onStop}
+                    disabled={setStatus.isPending}
+                  >
+                    Stop competition
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="end_at">Ends</Label>
-            <Input
-              id="end_at"
-              type="datetime-local"
-              value={form.end_at}
-              onChange={(e) => set("end_at", e.target.value)}
-            />
+
+          {/* Pause — halt submissions (moved here from General) */}
+          <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <Label>Gameplay pause</Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Temporarily halt gameplay — competitors can&apos;t submit flags
+                  (staff still can, to test). Instantly reversible, and separate
+                  from stopping (which ends the competition) or freezing the board.
+                </p>
+              </div>
+              {competition.paused && <span className={PILL + PILL_WARN}>Paused</span>}
+            </div>
+            {canPause && (
+              <Button
+                type="button"
+                size="sm"
+                variant={competition.paused ? "default" : "secondary"}
+                onClick={onTogglePause}
+                disabled={update.isPending}
+              >
+                {competition.paused ? "Resume competition" : "Pause competition"}
+              </Button>
+            )}
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="registration_opens_at">Registration opens</Label>
-            <Input
-              id="registration_opens_at"
-              type="datetime-local"
-              value={form.registration_opens_at}
-              onChange={(e) => set("registration_opens_at", e.target.value)}
-            />
+
+          {/* Freeze — scoreboard */}
+          <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <Label>Scoreboard freeze</Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Freeze the public board at its current standings — competitors
+                  keep solving and their points still count, but the board stops
+                  showing movement until you unfreeze it. Staff still see live
+                  standings.
+                </p>
+              </div>
+              {frozen && <span className={PILL + PILL_NEUTRAL}>Frozen</span>}
+            </div>
+            {canFreeze && (
+              <Button
+                type="button"
+                size="sm"
+                variant={frozen ? "default" : "secondary"}
+                onClick={onToggleFreeze}
+                disabled={freeze.isPending}
+              >
+                {freeze.isPending
+                  ? "Saving…"
+                  : frozen
+                    ? "Unfreeze scoreboard"
+                    : "Freeze scoreboard"}
+              </Button>
+            )}
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="registration_closes_at">Registration closes</Label>
-            <Input
-              id="registration_closes_at"
-              type="datetime-local"
-              value={form.registration_closes_at}
-              onChange={(e) => set("registration_closes_at", e.target.value)}
-            />
+
+          {/* Schedule (saved with the form) */}
+          <div className="space-y-2 border-t border-border pt-4">
+            <Label>Schedule</Label>
+            <p className="text-xs text-muted-foreground">
+              When play auto-starts / ends and when registration is open. Saved
+              with the form; a manual Start / Stop above overrides these.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="start_at">Starts</Label>
+                <Input
+                  id="start_at"
+                  type="datetime-local"
+                  value={form.start_at}
+                  onChange={(e) => set("start_at", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="end_at">Ends</Label>
+                <Input
+                  id="end_at"
+                  type="datetime-local"
+                  value={form.end_at}
+                  onChange={(e) => set("end_at", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="registration_opens_at">Registration opens</Label>
+                <Input
+                  id="registration_opens_at"
+                  type="datetime-local"
+                  value={form.registration_opens_at}
+                  onChange={(e) => set("registration_opens_at", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="registration_closes_at">Registration closes</Label>
+                <Input
+                  id="registration_closes_at"
+                  type="datetime-local"
+                  value={form.registration_closes_at}
+                  onChange={(e) => set("registration_closes_at", e.target.value)}
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}

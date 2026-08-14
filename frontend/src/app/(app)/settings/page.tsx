@@ -22,7 +22,7 @@ type Tab = SettingsSection | "modules" | "assistant" | "certificates";
 
 const TABS: { value: Tab; label: string }[] = [
   { value: "general", label: "General" },
-  { value: "schedule", label: "Schedule" },
+  { value: "schedule", label: "Controls" },
   { value: "challenges", label: "Challenges" },
   { value: "rules", label: "Rules" },
   { value: "assistant", label: "Assistant" },

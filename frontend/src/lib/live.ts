@@ -107,6 +107,11 @@ const ACTIVITY_INVALIDATIONS: Record<string, (cid: string) => QueryKey[]> = {
   "competition.member_joined": rosters,
   // Pause toggles, schedule edits, vocab changes — the banner goes live.
   "competition.updated": () => [["competitions"]],
+  // Start/Stop (#221) re-gate access: refetch the competition (its status drives
+  // the gate) plus the challenge list and scoreboard so a competitor's closed
+  // message flips to the live surfaces (and back) the moment a judge acts.
+  "competition.started": (cid) => [["competitions"], ["challenges", cid], ["scoreboard", cid]],
+  "competition.ended": (cid) => [["competitions"], ["challenges", cid], ["scoreboard", cid]],
   "team.created": rosters,
   "team.member_joined": rosters,
   "team.member_left": rosters,

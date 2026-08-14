@@ -249,9 +249,9 @@ async def test_competitor_conversation_requires_enabled_and_active(client):
     assert r.status_code == 201
     assert r.json()["assistant_type"] == "competitor"
 
-    # End the competition → active-only gate refuses (409).
-    past = (utcnow() - timedelta(hours=1)).isoformat()
-    await client.patch(f"/api/competitions/{comp}", json={"end_at": past}, headers=_auth(admin))
+    # Stop the competition (status → ended) → active-only gate refuses (409). The
+    # gate is the #221 status now, not the raw schedule, so /stop is what ends it.
+    await client.post(f"/api/competitions/{comp}/stop", headers=_auth(admin))
     r = await client.post(f"/api/competitions/{comp}/ai/conversations", json=body, headers=_auth(p_token))
     assert r.status_code == 409
 

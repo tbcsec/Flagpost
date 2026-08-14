@@ -22,6 +22,7 @@ from db import get_db, utcnow
 from models.competition import Competition
 from models.user import User
 from schemas.scoreboard import FreezeRequest, ScoreboardOut
+from utils.competition_status import require_started
 from utils.event_bus import event_bus
 from utils.scoreboard import cached_scoreboard, compute_scoreboard
 
@@ -48,6 +49,10 @@ async def get_scoreboard(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     competition = await _get_competition(db, competition_id)
+    # Competition status gate (#221): the board is closed to competitors only until
+    # the competition starts — the FINAL board stays readable after it ends (staff
+    # bypass either way). The page renders a "not started" message off the status.
+    await require_started(db, competition, current_user.id)
     # Only a freeze-manager may bypass the freeze to see live standings.
     allow_live = live and await user_has_permission(
         db, current_user.id, "scoreboard_freeze", competition_id

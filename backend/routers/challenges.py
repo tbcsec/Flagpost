@@ -39,6 +39,7 @@ from schemas.challenge import (
 from storage import get_storage
 from storage.base import ObjectStorage
 from utils.challenge_yaml import export_challenges, import_challenges
+from utils.competition_status import is_playable, require_playable
 from utils.event_bus import event_bus
 from utils.flags import hash_static_flag, make_salt
 from utils.scoreboard import visible_solve_cutoff
@@ -271,6 +272,12 @@ async def list_challenges(
     can_edit = await user_has_permission(
         db, current_user.id, "challenge_edit", competition_id
     )
+    # Competition status gate (#221): competitors get no challenges until the
+    # competition is running (the page shows a "not started / ended" message off
+    # the competition's status); staff keep full access to build/review.
+    competition = await db.get(Competition, competition_id)
+    if not can_edit and competition is not None and not is_playable(competition):
+        return []
     query = select(Challenge).where(Challenge.competition_id == competition_id)
     if not can_edit:
         # Competitors see only published challenges whose scheduled release (if
@@ -287,8 +294,8 @@ async def list_challenges(
 
     # Annotate each with solve state (Phase 6): total solves, plus whether the
     # requesting subject has solved it. A viewer with no subject (e.g. a manager
-    # not on a team) simply sees solved=False everywhere.
-    competition = await db.get(Competition, competition_id)
+    # not on a team) simply sees solved=False everywhere. (`competition` was
+    # already loaded for the status gate above.)
     subject = (
         await resolve_subject(db, competition, current_user)
         if competition is not None
@@ -418,10 +425,15 @@ async def get_challenge(
     current_user: User = Depends(require_permission("challenge_view")),
     db: AsyncSession = Depends(get_db),
 ) -> Challenge:
+    competition = await db.get(Competition, competition_id)
+    # Competition status gate (#221): a competitor can't open a challenge unless
+    # the competition is running (staff bypass). Checked before the load so it's a
+    # uniform 403 that never reveals whether a given id exists.
+    if competition is not None:
+        await require_playable(db, competition, current_user.id)
     challenge = await load_visible_challenge(
         db, competition_id, challenge_id, current_user
     )
-    competition = await db.get(Competition, competition_id)
     # Honour the scoreboard freeze on this read too: a frozen-out competitor must
     # not learn the live solve count (or decayed value) via the detail endpoint
     # (#11) — every other solve-count read already clamps to visible_solve_cutoff.

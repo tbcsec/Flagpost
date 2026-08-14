@@ -64,7 +64,11 @@ export function useFreezeScoreboard(competitionId: string) {
       freeze
         ? scoreboardApi.freeze(competitionId)
         : scoreboardApi.unfreeze(competitionId),
-    onSuccess: (board) =>
-      queryClient.setQueryData(scoreboardKeys.detail(competitionId), board),
+    onSuccess: (board) => {
+      queryClient.setQueryData(scoreboardKeys.detail(competitionId), board);
+      // The competition's scoreboard_frozen_at changed — refresh it so the
+      // settings Controls toggle (Freeze/Unfreeze) reflects the new state.
+      queryClient.invalidateQueries({ queryKey: ["competitions"] });
+    },
   });
 }

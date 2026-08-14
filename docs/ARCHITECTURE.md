@@ -1353,6 +1353,21 @@ submission is the one endpoint they have direct incentive to script.
   their points still count**; the UI states this (confirm on freeze + a note on
   the frozen board). It's also an automation action, so a rule can freeze on
   `competition.ended` (a lifecycle trigger the scheduler now emits).
+- **Competition status gate** (`Competition.status`, #221, ADR-0028): the
+  gameplay lifecycle `not_started → running → ended` (reversible), and **the gate
+  on competitor access** — **play** (challenge viewing/submission) is open only
+  while `running`; the **results** surfaces (scoreboard + solve ticker) open at
+  start and **stay readable after the end** (the final board is read-only),
+  closing only while `not_started`. Closed surfaces show a "hasn't started / has
+  ended" message. Staff (`challenge_edit`) bypass,
+  to build before and review after (the same bypass `paused` uses). New
+  competitions default `not_started`. The scheduler auto-transitions at `start_at`
+  / `end_at`; a judge's manual **Start/Stop** (`POST /competitions/{id}/start|stop`,
+  permission `manage_schedule`) overrides and marks the boundary handled via the
+  `started_event_fired` / `ended_event_fired` dedup flags, so the scheduler won't
+  undo it. Manual transitions emit `competition.started` / `competition.ended`
+  like scheduled ones (audit + automation). Distinct from `paused` (a temporary
+  halt within a run) and the scoreboard freeze — orthogonal axes.
 
 ### 13.3 File Storage & Access Control
 

@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import require_permission, user_has_permission
 from db import get_db, utcnow
+from utils.competition_status import has_started
 from models.challenge import Challenge
 from models.competition import Competition
 from models.dashboard_layout import DashboardLayout
@@ -142,9 +143,15 @@ async def recent_solves(
     # competitors ahead of a scheduled wave. Every other competitor-facing read
     # of a challenge goes through `load_visible_challenge`, which applies the
     # same two conditions.
-    if not await user_has_permission(
+    can_edit = await user_has_permission(
         db, current_user.id, "challenge_edit", competition_id
-    ):
+    )
+    # Competition status gate (#221): the ticker is solve data, so it tracks the
+    # scoreboard — closed to competitors only before the competition starts (once
+    # it ends, the same solves are public on the final board). Staff always see it.
+    if not can_edit and not has_started(competition):
+        return []
+    if not can_edit:
         stmt = stmt.where(
             Challenge.state == "published",
             or_(Challenge.release_at.is_(None), Challenge.release_at <= utcnow()),

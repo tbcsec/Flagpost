@@ -24,6 +24,8 @@ export interface TokenResponse {
 
 export type ParticipationMode = "team" | "individual";
 export type Visibility = "public" | "private";
+/** Gameplay lifecycle (#221): the gate on competitor access. */
+export type CompetitionStatus = "not_started" | "running" | "ended";
 
 export interface Competition {
   id: string;
@@ -35,6 +37,10 @@ export interface Competition {
   registration_closes_at: string | null;
   participation_mode: ParticipationMode;
   visibility: Visibility;
+  /** Gameplay lifecycle (#221): the gate on competitor access to challenges +
+   *  the scoreboard. not_started → running → ended (reversible). Moved by the
+   *  start/stop actions and the schedule; never a plain settings save. */
+  status: CompetitionStatus;
   /** Organiser-shareable code for joining a private competition. */
   invite_code: string;
   created_at: string;
@@ -63,6 +69,8 @@ export interface Competition {
   max_team_size: number | null;
   /** Paused = gameplay halted; competitors can't submit flags. */
   paused: boolean;
+  /** Scoreboard-freeze instant (null = live). Drives the Controls-panel toggle. */
+  scoreboard_frozen_at: string | null;
   /** Per-competition rules/CoC override (#57); null = site-wide rules apply. */
   rules_override: RichTextDoc | null;
   /** Informational-only override: shown at join, never gating. */

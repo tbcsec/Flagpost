@@ -95,7 +95,10 @@ Subsystem by subsystem, with the non-obvious bits called out:
   Redis required) and adds a cross-worker broadcast relay + TTL presence store so
   rooms span workers, plus a scheduler sidecar (ADR-0025/0026, #189).
 - **Competitions** — the tenancy root. Team or individual mode, visibility,
-  invite codes, schedule, **pause**, archive (with an opt-out retention policy
+  invite codes, schedule, a **status gameplay gate** (`not_started`/`running`/
+  `ended`, default not-started — competitor challenge/scoreboard access is open
+  only while running; manual Start/Stop under `manage_schedule` + schedule
+  auto-drive it, ADR-0028), **pause**, archive (with an opt-out retention policy
   that auto-purges), clone, hard delete, rules/CoC gate, brackets, and a
   per-competition managed vocab for tags/difficulty.
 - **Challenges & scoring** — static / regex / multiple-choice flags; static or
@@ -329,6 +332,10 @@ Established in Tier 0 (see `docs/adr/0006-testing-stack.md`):
   (aiosqlite) so no infra is needed. `cd backend && .venv/bin/pytest`.
   The suite builds the schema from `Base.metadata` and seeds roles from
   `auth/seed.py` (the same specs the migration uses).
+  **Test-created competitions auto-start** — an autouse `conftest` fixture flips
+  each to `running` (via a `competition.created` listener) so gameplay tests
+  aren't blocked by the #221 status gate. A test that needs the real
+  `not_started` default marks itself `@pytest.mark.competition_lifecycle`.
 - **Frontend:** Vitest + Testing Library + jsdom.
   `cd frontend && npm run test`.
 

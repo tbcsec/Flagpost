@@ -63,12 +63,53 @@ async def admin_token(client) -> str:
     return resp.json()["access_token"]
 
 
+
+
 import pytest  # noqa: E402
 
 from ratelimit import get_rate_limiter  # noqa: E402
 from ratelimit.memory import InMemoryRateLimiter  # noqa: E402
 from storage import get_storage  # noqa: E402
 from storage.memory import InMemoryStorage  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _competitions_default_running(request):
+    """Gameplay is exercised against a *running* competition, but production
+    defaults a new competition to ``not_started`` (#221 — the gameplay gate that
+    closes challenge viewing/submission and the scoreboard to competitors). So for
+    the suite, auto-start a freshly-created competition, sparing the many
+    competitor-facing tests from each starting theirs. Tests that drive the
+    lifecycle itself opt out with ``@pytest.mark.competition_lifecycle`` and get
+    the real ``not_started`` default (see tests/test_competition_status.py).
+
+    Implemented as a foreground ``competition.created`` listener (a direct row
+    UPDATE, robust unlike mutating the cached column default) that only flips the
+    status — it deliberately leaves ``started_event_fired`` alone so scheduler /
+    lifecycle-event tests still fire ``competition.started`` normally. Registered
+    only for the current test and removed after, so opted-out tests are untouched."""
+    if request.node.get_closest_marker("competition_lifecycle"):
+        yield
+        return
+    from db import SessionLocal
+    from models.competition import Competition
+    from utils.event_bus import event_bus
+
+    async def _auto_start(_event_name, payload):
+        cid = payload.get("competition_id")
+        if not cid:
+            return
+        async with SessionLocal() as session:
+            comp = await session.get(Competition, cid)
+            if comp is not None and comp.status == "not_started":
+                comp.status = "running"
+                await session.commit()
+
+    event_bus.subscribe("competition.created", _auto_start, owner="_test_autostart")
+    try:
+        yield
+    finally:
+        event_bus.unsubscribe_owner("_test_autostart")
 
 
 @pytest.fixture

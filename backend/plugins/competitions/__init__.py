@@ -42,6 +42,10 @@ ACTIVITY_EVENTS: tuple[str, ...] = (
     "achievement.awarded",
     "competition.member_joined",
     "competition.updated",
+    # Manual/scheduled start & stop (#221) re-gate challenge + scoreboard access,
+    # so competitors' pages must refetch live when a judge opens/closes play.
+    "competition.started",
+    "competition.ended",
     "team.created",
     "team.member_joined",
     "team.member_left",

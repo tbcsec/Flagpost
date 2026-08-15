@@ -30,6 +30,12 @@ async def test_demo_seed_creates_accounts_and_is_idempotent(client):
             )
         ).all()
         assert len(comps) == 1  # not duplicated by the second run
+        # The demo competition is live out of the box, so submissions + the
+        # activity simulator work despite the #221 not_started default.
+        comp = await db.scalar(
+            select(Competition).where(Competition.name == DEMO_COMPETITION_NAME)
+        )
+        assert comp.status == "running"
 
 
 async def test_demo_seed_marks_the_install_provisioned(client):

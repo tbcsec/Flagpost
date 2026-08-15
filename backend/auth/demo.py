@@ -219,6 +219,12 @@ async def seed_demo_data(db: AsyncSession) -> None:
         challenge_tags=list(DEMO_CHALLENGE_TAGS),
         difficulty_tiers=list(DEMO_DIFFICULTY_TIERS),
         invite_code=generate_invite_code(),
+        # The demo is a live competition: start it running so competitors (and the
+        # activity simulator) can submit immediately. The #221 status gate defaults
+        # new competitions to not_started, which would otherwise block the demo.
+        # No schedule, so mark the start boundary handled to keep the scheduler off.
+        status="running",
+        started_event_fired=True,
     )
     db.add(comp)
     await db.flush()

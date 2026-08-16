@@ -51,6 +51,85 @@
       "manage": "Administrar competiciones"
     }
   },
+  "scoreboard": {
+    "title": "Scoreboard",
+    "teamMode": "team mode",
+    "individualMode": "individual mode",
+    "frozen": "Frozen",
+    "live": "live",
+    "division": "Division",
+    "divisionAll": "All",
+    "divisionHint": "— set each competitor's division in the table below",
+    "you": "you",
+    "freeze": {
+      "confirmTitle": "Freeze the scoreboard?",
+      "confirmDescription": "Competitors keep solving and their points still count — the public board just stops showing movement until you unfreeze it. Staff can still view live standings.",
+      "confirmLabel": "Freeze",
+      "saving": "Saving…",
+      "unfreeze": "Unfreeze board",
+      "freeze": "Freeze board",
+      "unfrozenToast": "Scoreboard unfrozen",
+      "frozenToast": "Scoreboard frozen",
+      "errorToast": "Couldn't update the board"
+    },
+    "gate": {
+      "notStartedTitle": "This competition hasn't started yet",
+      "notStartedDescription": "The scoreboard opens once the organisers start the competition."
+    },
+    "endedBanner": {
+      "lead": "Final standings.",
+      "rest": "The competition has ended — these results are final."
+    },
+    "frozenBanner": {
+      "lead": "The scoreboard is frozen.",
+      "rest": "Competitors keep solving and their points still count — new solves are hidden here until the organisers unfreeze the board."
+    },
+    "empty": {
+      "title": "No scores yet",
+      "descriptionTeam": "The board fills in the moment a team lands a solve. First flag takes the top spot.",
+      "descriptionIndividual": "The board fills in the moment someone lands a solve. First flag takes the top spot."
+    },
+    "table": {
+      "rank": "Rank",
+      "team": "Team",
+      "participant": "Participant",
+      "points": "Points",
+      "lastSolve": "Last solve"
+    },
+    "chart": {
+      "rankName": "Rank {rank}: {name}",
+      "you": "you",
+      "yourTeam": "your team",
+      "pointsAria": "{points} points",
+      "lastSolveAria": "last solve {time}",
+      "noSolvesAria": "no solves yet",
+      "pointsLabel": "points",
+      "lastSolve": "Last solve {time}",
+      "noSolves": "No solves yet",
+      "division": "Division: {bracket}",
+      "divisionAria": "division {bracket}"
+    },
+    "public": {
+      "directoryTitle": "Public scoreboards",
+      "directorySubtitle": "Live standings for competitions open to spectators — no account needed.",
+      "directoryEmpty": "No public scoreboards are available right now.",
+      "teamCompetition": "Team competition",
+      "individualCompetition": "Individual competition",
+      "ends": "· ends {date}",
+      "venueMode": "Venue mode",
+      "notPublic": "This scoreboard isn't public, or the competition doesn't exist.",
+      "backToAll": "← All public scoreboards",
+      "teamScoreboard": "Team scoreboard",
+      "individualScoreboard": "Individual scoreboard",
+      "frozenSuffix": "· frozen",
+      "emptyBoard": "No scores yet — the board fills in on the first solve.",
+      "frozen": "Frozen",
+      "rank": "Rank",
+      "team": "Team",
+      "competitor": "Competitor",
+      "points": "Points"
+    }
+  },
   "auth": {
     "login": {
       "title": "Iniciar sesión",
@@ -138,6 +217,107 @@
       "success": "Tu correo electrónico ha sido verificado. Ahora puedes unirte a las competiciones.",
       "fallbackError": "Este enlace de verificación no es válido o ha caducado.",
       "continue": "Continuar con el inicio de sesión"
+    }
+  },
+  "challenges": {
+    "title": "Challenges",
+    "uncategorized": "uncategorized",
+    "solvedOfTotal": "{solved} of {total} solved",
+    "manage": "Manage challenges",
+    "doneManaging": "Done managing",
+    "points": "{value} pts",
+    "dynamic": "dynamic",
+    "dynamicSuffix": "(dynamic)",
+    "solvesCount": "{count, plural, one {# solve} other {# solves}}",
+    "chipAll": "All",
+    "layout": {
+      "group": "Challenge layout",
+      "cards": "Cards",
+      "list": "List"
+    },
+    "availability": {
+      "all": "all",
+      "available": "available",
+      "locked": "locked"
+    },
+    "status": {
+      "draft": "Draft",
+      "locked": "Locked",
+      "lockedBadge": "🔒 Locked",
+      "solved": "Solved",
+      "open": "Open"
+    },
+    "gate": {
+      "endedTitle": "This competition has ended",
+      "notStartedTitle": "This competition hasn't started yet",
+      "endedDescription": "Challenges are closed. Thanks for playing!",
+      "notStartedDescription": "Challenges will appear here once the organisers start the competition."
+    },
+    "paused": {
+      "banner": "⏸ The competition is paused.",
+      "manage": "Submissions are closed for competitors — you can still submit to test.",
+      "competitor": "Flag submissions are closed until the organisers resume it.",
+      "dialog": "⏸ The competition is paused — submissions are closed."
+    },
+    "empty": {
+      "title": "No challenges yet",
+      "manageDescription": "Add your first challenge to open the competition — save it as a draft and publish when it's ready.",
+      "competitorDescription": "The organisers haven't published any challenges yet. Check back once the competition opens.",
+      "create": "Create a challenge",
+      "categoryEmpty": "No challenges in this category yet.",
+      "filterEmpty": "No challenges match this filter."
+    },
+    "detail": {
+      "noDescription": "No description.",
+      "othersViewing": "{count, plural, one {# other viewing} other {# others viewing}}",
+      "lockedTitle": "Locked",
+      "lockedBy": "Solve {names} to unlock this challenge.",
+      "lockedByGeneric": "Solve this challenge's prerequisites to unlock it.",
+      "firstBlood": "First blood!",
+      "solved": "Solved!",
+      "pointsAwarded": "+{points} pts",
+      "reducedFrom": "(reduced from {value})",
+      "alreadySolved": "You've solved this challenge.",
+      "outOfGuesses": "You've used all your guesses for this question.",
+      "chooseAnswer": "Choose an answer",
+      "guessesRemaining": "{count, plural, one {# guess remaining.} other {# guesses remaining.}}",
+      "penaltyNote": "Each wrong guess lowers this question's value by {pct}%.",
+      "flag": "Flag",
+      "incorrectAnswer": "Incorrect answer.",
+      "incorrectFlag": "Incorrect flag.",
+      "submitting": "Submitting…",
+      "submitAnswer": "Submit answer",
+      "submitFlag": "Submit flag"
+    },
+    "solveToast": {
+      "description": "{title} · +{points} pts",
+      "descriptionReduced": "{title} · +{points} pts (reduced from {full})"
+    },
+    "notes": {
+      "team": "Team notes",
+      "mine": "My notes",
+      "sharedDescription": "A shared scratchpad for {name} — visible only to your team, live as you type.",
+      "privateDescription": "A private scratchpad for this challenge — only you can see it, and it stays in sync across your devices."
+    },
+    "solves": {
+      "title": "Solves",
+      "empty": "No solves yet — be the first to solve it.",
+      "firstBlood": "First blood"
+    },
+    "hints": {
+      "title": "Hints",
+      "cost": "Costs {cost} pts",
+      "free": "Free hint",
+      "reveal": "Reveal",
+      "revealing": "Revealing…",
+      "revealedToast": "Hint revealed",
+      "revealedCost": "−{cost} pts"
+    },
+    "rating": {
+      "prompt": "How was this challenge?",
+      "star": "Rate {n} out of 5",
+      "thanks": "Thanks for the feedback!",
+      "error": "Couldn't submit rating"
     }
   }
 }

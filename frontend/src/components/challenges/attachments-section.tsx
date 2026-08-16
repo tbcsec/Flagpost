@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useRef } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ export function AttachmentsSection({
   competitionId: string;
   challengeId: string;
 }) {
+  const t = useTranslations("challenges.admin.attachments");
   const attachments = useAttachments(competitionId, challengeId);
   const upload = useUploadAttachment(competitionId, challengeId);
   const remove = useDeleteAttachment(competitionId, challengeId);
@@ -47,7 +49,7 @@ export function AttachmentsSection({
 
   return (
     <div className="space-y-3 rounded-md border border-border p-4">
-      <Label>Attachments</Label>
+      <Label>{t("title")}</Label>
 
       {attachments.data && attachments.data.length > 0 ? (
         <ul className="space-y-2">
@@ -70,7 +72,7 @@ export function AttachmentsSection({
                   disabled={download.isPending}
                   onClick={() => download.mutate(attachment.id)}
                 >
-                  Download
+                  {t("download")}
                 </Button>
                 <Button
                   type="button"
@@ -81,23 +83,23 @@ export function AttachmentsSection({
                   onClick={async () => {
                     if (
                       await confirm({
-                        title: "Remove attachment?",
-                        description: `"${attachment.filename}" will be deleted from this challenge.`,
-                        confirmLabel: "Remove",
+                        title: t("removeConfirmTitle"),
+                        description: t("removeConfirmDescription", { filename: attachment.filename }),
+                        confirmLabel: t("removeConfirmLabel"),
                       })
                     ) {
                       remove.mutate(attachment.id);
                     }
                   }}
                 >
-                  Remove
+                  {t("remove")}
                 </Button>
               </span>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="text-sm text-muted-foreground">No files attached.</p>
+        <p className="text-sm text-muted-foreground">{t("empty")}</p>
       )}
 
       <div className="flex items-center gap-3">
@@ -109,7 +111,7 @@ export function AttachmentsSection({
           className="text-sm file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:text-secondary-foreground hover:file:bg-secondary/80"
         />
         {upload.isPending && (
-          <span className="text-sm text-muted-foreground">Uploading…</span>
+          <span className="text-sm text-muted-foreground">{t("uploading")}</span>
         )}
       </div>
       {(upload.isError || download.isError || remove.isError) && (

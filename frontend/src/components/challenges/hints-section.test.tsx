@@ -1,5 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+
+import { renderWithIntl } from "@/test/intl";
 
 const createMutate = vi.fn();
 const updateMutate = vi.fn();
@@ -25,7 +27,7 @@ import { HintsSection } from "@/components/challenges/hints-section";
 
 describe("HintsSection — hidden/scheduled hints (#213)", () => {
   it("badges a hidden hint and publishes it on click", () => {
-    render(<HintsSection competitionId="c1" challengeId="ch1" />);
+    renderWithIntl(<HintsSection competitionId="c1" challengeId="ch1" />);
     // The hidden hint shows a "Hidden" badge and a Publish button; the visible
     // one has neither (exactly one Publish button on the page).
     expect(screen.getByText("Hidden")).toBeTruthy();
@@ -38,7 +40,7 @@ describe("HintsSection — hidden/scheduled hints (#213)", () => {
   });
 
   it("reveals the schedule field only when 'hidden until released' is checked", () => {
-    render(<HintsSection competitionId="c1" challengeId="ch1" />);
+    renderWithIntl(<HintsSection competitionId="c1" challengeId="ch1" />);
     expect(screen.queryByLabelText("Hint release time")).toBeNull();
     fireEvent.click(screen.getByLabelText("Hidden until released"));
     expect(screen.getByLabelText("Hint release time")).toBeTruthy();

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ export function ChallengeGuessesSection({
   competitionId: string;
   challengeId: string;
 }) {
+  const t = useTranslations("challenges.admin.guesses");
   const { data: competition } = useActiveCompetition();
   const teamMode = competition?.participation_mode === "team";
   const reset = useResetGuesses(competitionId, challengeId);
@@ -38,38 +40,36 @@ export function ChallengeGuessesSection({
     if (!target) return;
     reset.mutate(teamMode ? { team_id: target } : { user_id: target }, {
       onSuccess: () => {
-        toast("Guesses reset", { variant: "success" });
+        toast(t("resetToast"), { variant: "success" });
         setTarget("");
       },
-      onError: (e) => toast("Couldn't reset", { description: (e as Error).message, variant: "destructive" }),
+      onError: (e) => toast(t("resetError"), { description: (e as Error).message, variant: "destructive" }),
     });
   }
 
   async function resetEveryone() {
     if (
       !(await confirm({
-        title: "Reset guesses for everyone?",
-        description:
-          "Every competitor gets a fresh set of guesses on this challenge. Their submission history is kept.",
-        confirmLabel: "Reset for everyone",
+        title: t("resetEveryoneConfirmTitle"),
+        description: t("resetEveryoneConfirmDescription"),
+        confirmLabel: t("resetEveryoneConfirmLabel"),
         destructive: false,
       }))
     ) {
       return;
     }
     reset.mutate({}, {
-      onSuccess: () => toast("Guesses reset for everyone", { variant: "success" }),
-      onError: (e) => toast("Couldn't reset", { description: (e as Error).message, variant: "destructive" }),
+      onSuccess: () => toast(t("resetEveryoneToast"), { variant: "success" }),
+      onError: (e) => toast(t("resetError"), { description: (e as Error).message, variant: "destructive" }),
     });
   }
 
   return (
     <section className="space-y-3 rounded-lg border border-border p-4">
       <div>
-        <h4 className="text-sm font-semibold">Guesses</h4>
+        <h4 className="text-sm font-semibold">{t("title")}</h4>
         <p className="text-xs text-muted-foreground">
-          Multiple-choice guesses are capped competition-wide. Reset them to grant a
-          fresh set — history is kept.
+          {t("description")}
         </p>
       </div>
       <div className="flex flex-wrap items-end gap-2">
@@ -78,7 +78,7 @@ export function ChallengeGuessesSection({
             options={options}
             value={target}
             onChange={setTarget}
-            placeholder={teamMode ? "Select a team…" : "Select a competitor…"}
+            placeholder={teamMode ? t("selectTeam") : t("selectCompetitor")}
           />
         </div>
         <Button
@@ -87,7 +87,7 @@ export function ChallengeGuessesSection({
           onClick={resetTarget}
           disabled={!target || reset.isPending}
         >
-          Reset for selected
+          {t("resetSelected")}
         </Button>
       </div>
       <Button
@@ -97,7 +97,7 @@ export function ChallengeGuessesSection({
         onClick={resetEveryone}
         disabled={reset.isPending}
       >
-        Reset for everyone
+        {t("resetEveryone")}
       </Button>
     </section>
   );

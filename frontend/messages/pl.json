@@ -1,95 +1,95 @@
 {
   "common": {
-    "poweredBy": "Powered by",
-    "language": "Language"
+    "poweredBy": "Wspierane przez",
+    "language": "Język"
   },
   "auth": {
     "login": {
-      "title": "Sign in",
-      "description": "Access your competitions.",
-      "identifier": "Username or email",
-      "password": "Password",
-      "forgotPassword": "Forgot password?",
-      "submit": "Sign in",
-      "submitting": "Signing in…",
-      "or": "or",
-      "ssoSignIn": "Sign in with {name}",
-      "noAccount": "No account?",
-      "register": "Register",
+      "title": "Zaloguj się",
+      "description": "Uzyskaj dostęp do swoich konkursów.",
+      "identifier": "Nazwa użytkownika lub e-mail",
+      "password": "Hasło",
+      "forgotPassword": "Zapomniałeś hasła?",
+      "submit": "Zaloguj się",
+      "submitting": "Logowanie w…",
+      "or": "lub",
+      "ssoSignIn": "Zaloguj się za pomocą {name}",
+      "noAccount": "Brak konta?",
+      "register": "Rejestracja",
       "ssoErrors": {
-        "invalid_state": "That sign-in link has expired or was already used. Please try again.",
-        "expired": "That sign-in attempt timed out. Please try again.",
-        "invalid_token": "We couldn't verify the response from your identity provider.",
-        "provider_unavailable": "That identity provider isn't reachable right now. Try again, or sign in with a password.",
-        "provider_denied": "Your identity provider declined the sign-in request.",
-        "invalid_response": "Your identity provider sent an incomplete response.",
-        "account_disabled": "That account has been disabled. Contact an administrator.",
-        "domain_not_allowed": "Your account isn't permitted to sign in to this instance. Contact an administrator.",
-        "registration_closed": "This instance isn't accepting new accounts. Contact an administrator.",
-        "default": "Single sign-on failed. Please try again, or sign in with a password."
+        "invalid_state": "Ten link logowania wygasł lub był już używany. Spróbuj ponownie.",
+        "expired": "Upłynął limit czasu logowania. Spróbuj ponownie.",
+        "invalid_token": "Nie mogliśmy zweryfikować odpowiedzi od Twojego dostawcy tożsamości.",
+        "provider_unavailable": "Ten dostawca tożsamości nie jest teraz dostępny. Spróbuj ponownie lub zaloguj się przy użyciu hasła.",
+        "provider_denied": "Twój dostawca tożsamości odrzucił żądanie logowania.",
+        "invalid_response": "Twój dostawca tożsamości wysłał niekompletną odpowiedź.",
+        "account_disabled": "To konto zostało wyłączone. Skontaktuj się z administratorem.",
+        "domain_not_allowed": "Twoje konto nie może się zalogować w tej instancji. Skontaktuj się z administratorem.",
+        "registration_closed": "Ta instancja nie akceptuje nowych kont. Skontaktuj się z administratorem.",
+        "default": "Pojedyncze logowanie nie powiodło się. Spróbuj ponownie lub zaloguj się hasłem."
       },
       "demo": {
         "badge": "Demo",
-        "title": "Try it instantly",
-        "description": "Click an account to fill the form above — the password is <pw>{password}</pw>. Data is public and resets every hour, on the hour.",
+        "title": "Wypróbuj natychmiast",
+        "description": "Kliknij konto, aby wypełnić powyższy formularz — hasło to <pw>{password}</pw>. Dane są publicznie dostępne i są resetowane co godzinę, o pełnej godzinie.",
         "accounts": {
           "admin": {
             "label": "Administrator",
-            "description": "full platform control"
+            "description": "pełna kontrola platformy"
           },
           "judge": {
-            "label": "Judge",
-            "description": "run a competition"
+            "label": "Sędzia",
+            "description": "uruchom konkurs"
           },
           "participant": {
-            "label": "Participant",
-            "description": "solve challenges"
+            "label": "Uczestnik",
+            "description": "rozwiązywanie wyzwań"
           }
         }
       }
     },
     "register": {
-      "title": "Create account",
-      "description": "Register to take part in competitions.",
-      "closed": "Registration is closed. Ask an administrator to create an account for you.",
-      "username": "Username",
-      "usernameHint": "How you'll sign in and appear to others. Must be unique.",
-      "email": "Email",
-      "emailOptional": "Email (optional)",
-      "emailHintRequired": "Required to register. You can also sign in with it.",
-      "emailHintOptional": "Optional — you can also sign in with it.",
-      "password": "Password",
-      "submit": "Create account",
-      "submitting": "Creating…",
-      "haveAccount": "Already have an account?",
-      "signIn": "Sign in"
+      "title": "Utwórz konto",
+      "description": "Zarejestruj się, aby wziąć udział w konkursach.",
+      "closed": "Rejestracja jest zamknięta. Poproś administratora o utworzenie konta dla Ciebie.",
+      "username": "Nazwa użytkownika",
+      "usernameHint": "Jak zalogujesz się i wyświetlisz innym. Musi być unikatowy.",
+      "email": "E-mail",
+      "emailOptional": "E-mail (opcjonalnie)",
+      "emailHintRequired": "Wymagane do rejestracji. Możesz również zalogować się za pomocą niej.",
+      "emailHintOptional": "Opcjonalnie — możesz również się z nim zalogować.",
+      "password": "Hasło",
+      "submit": "Utwórz konto",
+      "submitting": "Tworzenie…",
+      "haveAccount": "Masz już konto?",
+      "signIn": "Zaloguj się"
     },
     "forgotPassword": {
-      "title": "Reset your password",
-      "description": "Enter your account email and we'll send a reset link.",
-      "success": "If an account exists for <b>{email}</b>, a reset link is on its way. Check your inbox (and spam).",
-      "email": "Email",
-      "submit": "Send reset link",
-      "submitting": "Sending…",
-      "backToSignIn": "Back to sign in"
+      "title": "Zresetuj hasło",
+      "description": "Wprowadź adres e-mail swojego konta, a wyślemy link resetujący.",
+      "success": "Jeśli konto istnieje dla <b>{email}</b>, jest w drodze. Sprawdź swoją skrzynkę odbiorczą (i spam).",
+      "email": "E-mail",
+      "submit": "Wyślij link resetowania",
+      "submitting": "Wysyłanie…",
+      "backToSignIn": "Powrót do logowania"
     },
     "resetPassword": {
-      "title": "Choose a new password",
-      "description": "Enter a new password for your account.",
-      "missingToken": "This link is missing its reset token. Request a new one from <link>forgot password</link>.",
-      "newPassword": "New password",
-      "submit": "Set new password",
-      "submitting": "Saving…",
-      "successToast": "Password reset — please sign in"
+      "title": "Wybierz nowe hasło",
+      "description": "Wprowadź nowe hasło dla swojego konta.",
+      "missingToken": "W tym linku brakuje jego tokenu resetującego. Poproś o nowe hasło od <link>zapomniałem hasła</link>.",
+      "newPassword": "Nowe hasło",
+      "submit": "Ustaw nowe hasło",
+      "submitting": "Zapisywanie…",
+      "successToast": "Resetowanie hasła — zaloguj się"
     },
     "verifyEmail": {
-      "title": "Verify your email",
-      "description": "Confirming the address on your account.",
-      "missingToken": "This link is missing its verification token.",
-      "verifying": "Verifying…",
-      "success": "Your email is verified. You can now join competitions.",
-      "fallbackError": "This verification link is invalid or has expired.",
-      "continue": "Continue to sign in"
+      "title": "Potwierdź swój adres e-mail",
+      "description": "Potwierdzenie adresu na Twoim koncie.",
+      "missingToken": "W tym linku brakuje tokenu weryfikacyjnego.",
+      "verifying": "Weryfikowanie…",
+      "success": "Twój e-mail jest zweryfikowany. Możesz teraz dołączyć do ligi.",
+      "fallbackError": "Ten link weryfikacyjny jest nieprawidłowy lub wygasł.",
+      "continue": "Kontynuuj logowanie"
     }
   }
 }

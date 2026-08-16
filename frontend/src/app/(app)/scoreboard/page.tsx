@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { useTranslations } from "next-intl";
+
 import { SectionHeader } from "@/components/app/section-header";
 import { NoCompetition } from "@/components/app/no-competition";
 import { ScoreboardCertificateCard } from "@/components/certificates/scoreboard-certificate-card";
@@ -44,6 +46,7 @@ import { cn } from "@/lib/utils";
 
 export default function ScoreboardPage() {
   const { competitionId, data: competition } = useActiveCompetition();
+  const t = useTranslations("scoreboard");
   const board = useScoreboard(competitionId ?? "");
   const isTeam = competition?.participation_mode !== "individual";
   const myTeam = useMyTeam(isTeam ? (competitionId ?? "") : "");
@@ -64,10 +67,9 @@ export default function ScoreboardPage() {
     if (
       !frozen &&
       !(await confirm({
-        title: "Freeze the scoreboard?",
-        description:
-          "Competitors keep solving and their points still count — the public board just stops showing movement until you unfreeze it. Staff can still view live standings.",
-        confirmLabel: "Freeze",
+        title: t("freeze.confirmTitle"),
+        description: t("freeze.confirmDescription"),
+        confirmLabel: t("freeze.confirmLabel"),
         destructive: false,
       }))
     ) {
@@ -75,11 +77,11 @@ export default function ScoreboardPage() {
     }
     freeze.mutate(!frozen, {
       onSuccess: () =>
-        toast(frozen ? "Scoreboard unfrozen" : "Scoreboard frozen", {
+        toast(frozen ? t("freeze.unfrozenToast") : t("freeze.frozenToast"), {
           variant: "success",
         }),
       onError: (e) =>
-        toast("Couldn't update the board", {
+        toast(t("freeze.errorToast"), {
           description: (e as Error).message,
           variant: "destructive",
         }),
@@ -155,11 +157,11 @@ export default function ScoreboardPage() {
   if (competition && competition.status === "not_started" && !access.has("challenge_edit")) {
     return (
       <>
-        <SectionHeader title="Scoreboard" subtitle={competition.name} />
+        <SectionHeader title={t("title")} subtitle={competition.name} />
         <EmptyState
           icon={<TrophyEmptyIcon />}
-          title="This competition hasn't started yet"
-          description="The scoreboard opens once the organisers start the competition."
+          title={t("gate.notStartedTitle")}
+          description={t("gate.notStartedDescription")}
         />
       </>
     );
@@ -172,19 +174,19 @@ export default function ScoreboardPage() {
   return (
     <>
       <SectionHeader
-        title="Scoreboard"
+        title={t("title")}
         subtitle={
           <>
-            {competition?.name ?? ""} · {isTeam ? "team" : "individual"} mode
+            {competition?.name ?? ""} · {t(isTeam ? "teamMode" : "individualMode")}
             {frozen ? (
               <Badge variant="secondary" className="ml-2 align-middle">
-                Frozen
+                {t("frozen")}
               </Badge>
             ) : (
               live && (
                 <span className="ml-2 inline-flex items-center gap-1.5 text-primary">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
-                  live
+                  {t("live")}
                 </span>
               )
             )}
@@ -199,10 +201,10 @@ export default function ScoreboardPage() {
               disabled={freeze.isPending}
             >
               {freeze.isPending
-                ? "Saving…"
+                ? t("freeze.saving")
                 : frozen
-                  ? "Unfreeze board"
-                  : "Freeze board"}
+                  ? t("freeze.unfreeze")
+                  : t("freeze.freeze")}
             </Button>
           ) : undefined
         }
@@ -210,22 +212,21 @@ export default function ScoreboardPage() {
 
       {competition?.status === "ended" && (
         <div className="rounded-md border border-border bg-muted/40 px-4 py-2.5 text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">Final standings.</span>{" "}
-          The competition has ended — these results are final.
+          <span className="font-medium text-foreground">{t("endedBanner.lead")}</span>{" "}
+          {t("endedBanner.rest")}
         </div>
       )}
 
       {frozen && (
         <div className="rounded-md border border-border bg-muted/40 px-4 py-2.5 text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">The scoreboard is frozen.</span>{" "}
-          Competitors keep solving and their points still count — new solves are
-          hidden here until the organisers unfreeze the board.
+          <span className="font-medium text-foreground">{t("frozenBanner.lead")}</span>{" "}
+          {t("frozenBanner.rest")}
         </div>
       )}
 
       {brackets.length > 0 && (
         <div className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">Division</span>
+          <span className="text-muted-foreground">{t("division")}</span>
           <Select
             value={bracketFilter}
             onChange={(e) => {
@@ -234,7 +235,7 @@ export default function ScoreboardPage() {
             }}
             className="h-8 w-auto"
           >
-            <option value="all">All</option>
+            <option value="all">{t("divisionAll")}</option>
             {brackets.map((b) => (
               <option key={b} value={b}>
                 {b}
@@ -243,7 +244,7 @@ export default function ScoreboardPage() {
           </Select>
           {canAssignBrackets && (
             <span className="text-xs text-muted-foreground">
-              — set each competitor&apos;s division in the table below
+              {t("divisionHint")}
             </span>
           )}
         </div>
@@ -264,10 +265,8 @@ export default function ScoreboardPage() {
       {board.data && entries.length === 0 && (
         <EmptyState
           icon={<TrophyEmptyIcon />}
-          title="No scores yet"
-          description={`The board fills in the moment ${
-            isTeam ? "a team" : "someone"
-          } lands a solve. First flag takes the top spot.`}
+          title={t("empty.title")}
+          description={t(isTeam ? "empty.descriptionTeam" : "empty.descriptionIndividual")}
         />
       )}
 
@@ -286,19 +285,19 @@ export default function ScoreboardPage() {
               <TableHeader>
                 <TableRow>
                   <SortableTableHead active={dir("rank")} onSort={() => table.toggleSort("rank")}>
-                    Rank
+                    {t("table.rank")}
                   </SortableTableHead>
                   <SortableTableHead active={dir("name")} onSort={() => table.toggleSort("name")}>
-                    {isTeam ? "Team" : "Participant"}
+                    {isTeam ? t("table.team") : t("table.participant")}
                   </SortableTableHead>
                   {brackets.length > 0 && bracketFilter === "all" && (
-                    <TableHead>Division</TableHead>
+                    <TableHead>{t("division")}</TableHead>
                   )}
                   <SortableTableHead active={dir("points")} onSort={() => table.toggleSort("points")}>
-                    Points
+                    {t("table.points")}
                   </SortableTableHead>
                   <SortableTableHead active={dir("last_solve")} onSort={() => table.toggleSort("last_solve")}>
-                    Last solve
+                    {t("table.lastSolve")}
                   </SortableTableHead>
                 </TableRow>
               </TableHeader>
@@ -318,7 +317,7 @@ export default function ScoreboardPage() {
                     <TableCell className="font-medium">
                       {e.name}
                       {e.subject_id === mySubjectId && (
-                        <span className="ml-2 text-[11px] text-primary">you</span>
+                        <span className="ml-2 text-[11px] text-primary">{t("you")}</span>
                       )}
                     </TableCell>
                     {brackets.length > 0 && bracketFilter === "all" && (

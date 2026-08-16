@@ -1,7 +1,8 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { TopChart } from "@/components/scoreboard/top-chart";
+import { renderWithIntl } from "@/test/intl";
 import type { ScoreboardEntry } from "@/lib/types";
 
 function entry(over: Partial<ScoreboardEntry>): ScoreboardEntry {
@@ -31,7 +32,7 @@ const BOARD: ScoreboardEntry[] = [
 
 describe("TopChart", () => {
   it("gives every column a screen-reader label carrying the tooltip's facts", () => {
-    render(<TopChart entries={BOARD} mySubjectId={null} isTeam={false} />);
+    renderWithIntl(<TopChart entries={BOARD} mySubjectId={null} isTeam={false} />);
     expect(
       screen.getByRole("button", {
         name: /Rank 1: Alpha, 500 points, last solve .*, division Students/,
@@ -43,7 +44,7 @@ describe("TopChart", () => {
   });
 
   it("marks the viewer's own subject, worded for the mode", () => {
-    const { rerender } = render(
+    const { rerender } = renderWithIntl(
       <TopChart entries={BOARD} mySubjectId="b" isTeam={false} />,
     );
     expect(
@@ -57,7 +58,7 @@ describe("TopChart", () => {
   });
 
   it("reveals the tooltip on focus and hides it on blur", () => {
-    render(<TopChart entries={BOARD} mySubjectId={null} isTeam={false} />);
+    renderWithIntl(<TopChart entries={BOARD} mySubjectId={null} isTeam={false} />);
     const bar = screen.getByRole("button", { name: /Rank 1: Alpha/ });
     const tooltip = () => bar.querySelector('div[aria-hidden="true"]');
 
@@ -69,7 +70,7 @@ describe("TopChart", () => {
   });
 
   it("reveals on hover, one column at a time", () => {
-    render(<TopChart entries={BOARD} mySubjectId={null} isTeam={false} />);
+    renderWithIntl(<TopChart entries={BOARD} mySubjectId={null} isTeam={false} />);
     const alpha = screen.getByRole("button", { name: /Rank 1: Alpha/ });
     const bravo = screen.getByRole("button", { name: /Rank 2: Bravo/ });
     const open = (b: HTMLElement) =>
@@ -85,14 +86,14 @@ describe("TopChart", () => {
   });
 
   it("carries the detail content (name, points, last solve, division)", () => {
-    render(<TopChart entries={BOARD} mySubjectId={null} isTeam={false} />);
+    renderWithIntl(<TopChart entries={BOARD} mySubjectId={null} isTeam={false} />);
     expect(screen.getByText("Division: Students")).toBeInTheDocument();
     expect(screen.getByText(/Last solve/)).toBeInTheDocument();
     expect(screen.getAllByText("No solves yet")).toHaveLength(2);
   });
 
   it("shows at-a-glance labels without hover: points above, rank · name below", () => {
-    render(<TopChart entries={BOARD} mySubjectId={null} isTeam={false} />);
+    renderWithIntl(<TopChart entries={BOARD} mySubjectId={null} isTeam={false} />);
     // Points figure appears in the plot label and the tooltip for each column.
     expect(screen.getAllByText("500").length).toBeGreaterThanOrEqual(2);
     // Under-bar label carries rank + name (aria-hidden, so query by text).
@@ -100,7 +101,7 @@ describe("TopChart", () => {
   });
 
   it("scales bars to points, zero staying a zero-height bar not a crash", () => {
-    const { container } = render(
+    const { container } = renderWithIntl(
       <TopChart entries={BOARD} mySubjectId={null} isTeam={false} />,
     );
     const heights = [...container.querySelectorAll("div[style]")]

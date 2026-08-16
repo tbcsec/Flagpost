@@ -548,5 +548,179 @@
         "resetEveryoneConfirmLabel": "Reset for everyone"
       }
     }
+  },
+  "support": {
+    "title": "Support",
+    "openCount": "{count} open",
+    "yourTickets": "your tickets",
+    "stats": {
+      "all": "All tickets",
+      "open": "Open",
+      "resolved": "Resolved"
+    },
+    "status": {
+      "all": "all",
+      "open": "open",
+      "resolved": "resolved"
+    },
+    "searchPlaceholder": "Search tickets…",
+    "you": "You",
+    "messageCount": "{count, plural, one {# message} other {# messages}}",
+    "noMatchSearch": "No {filter}tickets match your search.",
+    "noMatchFilter": "No {filter}tickets match this filter.",
+    "empty": {
+      "staffTitle": "No tickets yet",
+      "competitorTitle": "Need a hand?",
+      "staffDescription": "When competitors open support tickets they'll appear here — you'll get a cue the moment one lands.",
+      "competitorDescription": "Stuck on a challenge or hit a snag? Open a ticket and staff will pick it up live."
+    },
+    "new": {
+      "trigger": "New ticket",
+      "title": "New ticket",
+      "description": "Ask a question — staff will see it and reply.",
+      "subject": "Subject",
+      "challenge": "Related challenge (optional)",
+      "challengeNone": "None",
+      "message": "Message",
+      "screenshots": "Screenshots (optional)",
+      "opening": "Opening…",
+      "submit": "Open ticket",
+      "openedToast": "Ticket opened",
+      "openedPartialToast": "Ticket opened, but {files} couldn't be attached"
+    },
+    "thread": {
+      "fallbackTitle": "Ticket",
+      "assignedTo": "· assigned to {name}",
+      "loading": "Loading…",
+      "judgeLooking": "A judge is looking at this ticket",
+      "othersHere": "{count, plural, one {# other here} other {# others here}}",
+      "internalNote": "internal note",
+      "replyAria": "Reply",
+      "replyPlaceholder": "Write a reply…",
+      "internalCheckbox": "Internal note",
+      "assignToMe": "Assign to me",
+      "assignedToast": "Assigned to you",
+      "resolve": "Resolve",
+      "resolvedToast": "Ticket resolved",
+      "sending": "Sending…",
+      "send": "Send",
+      "replyPartialToast": "Reply sent, but {files} couldn't be attached",
+      "staffNotes": "Staff notes",
+      "staffNotesDesc": "A shared working pad for staff on this ticket — never shown to the competitor, live as you type."
+    },
+    "attachments": {
+      "previewUnavailable": "Preview unavailable",
+      "viewFull": "View {filename} full size",
+      "loadFailed": "This image could not be loaded.",
+      "removeConfirmTitle": "Remove attachment?",
+      "removeConfirmDescription": "\"{filename}\" will be deleted from this ticket.",
+      "removeConfirmLabel": "Remove",
+      "remove": "Remove"
+    },
+    "picker": {
+      "attachAria": "Attach screenshots",
+      "notImage": "{name} isn't a PNG, JPEG or WebP image",
+      "tooLarge": "{name} is larger than {max}",
+      "tooMany": "only {max} images can be attached to a ticket",
+      "skipped": "Skipped: {reasons}.",
+      "hint": "PNG, JPEG or WebP · up to {max} each · {remaining} left",
+      "limitReached": "Attachment limit reached for this ticket",
+      "remove": "Remove"
+    }
+  },
+  "feedback": {
+    "title": "Feedback",
+    "subtitle": "surveys",
+    "newSurvey": "New survey",
+    "untitledSurvey": "Untitled survey",
+    "createdToast": "Survey created",
+    "createError": "Couldn't create",
+    "moduleDisabled": "The feedback module is disabled for this competition.",
+    "empty": {
+      "staffTitle": "No surveys yet",
+      "competitorTitle": "No surveys open right now",
+      "staffDescription": "Build a survey to gather feedback — rating scales, multiple choice, and free text, with CSV export when responses come in.",
+      "competitorDescription": "When the organisers open a survey, you'll be able to answer it here.",
+      "create": "Create a survey"
+    },
+    "card": {
+      "open": "open",
+      "closed": "closed",
+      "responded": "responded",
+      "questionCount": "{count, plural, one {# question} other {# questions}}",
+      "responseCount": "{count, plural, one {# response} other {# responses}}",
+      "respond": "Respond",
+      "edit": "Edit",
+      "results": "Results",
+      "delete": "Delete",
+      "deleteConfirmTitle": "Delete \"{title}\"?",
+      "deleteConfirmDescription": "The survey and all of its responses are permanently removed.",
+      "deleteConfirmLabel": "Delete survey"
+    },
+    "types": {
+      "rating_1_10": "Rating (1–10)",
+      "rating_1_5": "Rating (1–5)",
+      "short_text": "Short text",
+      "long_text": "Long text",
+      "multiple_choice": "Multiple choice"
+    },
+    "editor": {
+      "title": "Edit survey",
+      "surveyTitle": "Title",
+      "description": "Description (optional)",
+      "openForResponses": "Open for responses",
+      "openHint": "(competitors only see open surveys)",
+      "saveDetails": "Save details",
+      "savedToast": "Survey saved",
+      "saveError": "Couldn't save",
+      "questions": "Questions",
+      "noQuestions": "No questions yet.",
+      "required": "required",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "edit": "Edit",
+      "delete": "Delete",
+      "deleteQuestionTitle": "Delete this question?",
+      "deleteQuestionDescription": "The question and any answers to it are removed.",
+      "deleteQuestionLabel": "Delete",
+      "saveQuestionError": "Couldn't save question",
+      "addQuestionError": "Couldn't add question",
+      "addQuestion": "+ Add question",
+      "questionLabel": "Question",
+      "questionPlaceholder": "e.g. How was the difficulty?",
+      "requiredCheckbox": "Required",
+      "optionsLabel": "Options (one per line, at least two)",
+      "saveQuestion": "Save question",
+      "cancel": "Cancel"
+    },
+    "response": {
+      "thanksToast": "Thanks for your feedback!",
+      "submitError": "Couldn't submit",
+      "noQuestions": "This survey has no questions yet.",
+      "cancel": "Cancel",
+      "submitting": "Submitting…",
+      "submit": "Submit"
+    },
+    "results": {
+      "title": "Results",
+      "titleFor": "Results — {title}",
+      "loading": "Loading results…",
+      "noResponses": "No responses yet.",
+      "responseCount": "{count, plural, one {# response} other {# responses}}",
+      "close": "Close",
+      "exporting": "Exporting…",
+      "exportCsv": "Export CSV",
+      "exportError": "Export failed",
+      "answered": "{count} answered",
+      "avgSuffix": "· avg {value}",
+      "noText": "No text answers."
+    },
+    "ratings": {
+      "title": "Challenge ratings",
+      "description": "Average competitor rating (1–5) per challenge — highest first.",
+      "colChallenge": "Challenge",
+      "colAverage": "Average",
+      "colRatings": "Ratings"
+    }
   }
 }

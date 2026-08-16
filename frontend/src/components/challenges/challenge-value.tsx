@@ -1,3 +1,5 @@
+import { useTranslations } from "next-intl";
+
 import type { Challenge } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +17,7 @@ export function ChallengeValue({
   challenge: Challenge;
   className?: string;
 }) {
+  const t = useTranslations("challenges");
   const reduced = challenge.subject_value;
   const worth = reduced ?? challenge.value;
   return (
@@ -24,10 +27,10 @@ export function ChallengeValue({
           {challenge.value}
         </span>
       )}
-      {worth} pts
+      {t("points", { value: worth })}
       {challenge.scoring_type === "dynamic" && (
         <span className="ml-1 text-[10px] font-normal text-muted-foreground">
-          dynamic
+          {t("dynamic")}
         </span>
       )}
     </span>

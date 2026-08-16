@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
@@ -19,6 +20,7 @@ export function ChallengeRatingPrompt({
   competitionId: string;
   challenge: Challenge;
 }) {
+  const t = useTranslations("challenges.rating");
   const { data: competition } = useActiveCompetition();
   const enabledModules = useEnabledModules(competitionId);
   const submit = useSubmitRating(competitionId, challenge.id);
@@ -36,19 +38,19 @@ export function ChallengeRatingPrompt({
     submit.mutate(n, {
       onSuccess: () => setJustRated(n),
       onError: (e) =>
-        toast("Couldn't submit rating", { description: (e as Error).message, variant: "destructive" }),
+        toast(t("error"), { description: (e as Error).message, variant: "destructive" }),
     });
   }
 
   return (
     <div className="flex flex-col items-center gap-1">
-      <span className="text-xs text-muted-foreground">How was this challenge?</span>
+      <span className="text-xs text-muted-foreground">{t("prompt")}</span>
       <div className="flex gap-0.5" onMouseLeave={() => setHover(0)}>
         {[1, 2, 3, 4, 5].map((n) => (
           <button
             key={n}
             type="button"
-            aria-label={`Rate ${n} out of 5`}
+            aria-label={t("star", { n })}
             onMouseEnter={() => setHover(n)}
             onClick={() => rate(n)}
             disabled={submit.isPending}
@@ -61,7 +63,7 @@ export function ChallengeRatingPrompt({
           </button>
         ))}
       </div>
-      {justRated != null && <span className="text-xs text-success">Thanks for the feedback!</span>}
+      {justRated != null && <span className="text-xs text-success">{t("thanks")}</span>}
     </div>
   );
 }

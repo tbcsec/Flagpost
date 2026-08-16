@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { Button } from "@/components/ui/button";
 import { useHints, useRevealHint } from "@/lib/hooks/use-hints";
 import { toast } from "@/stores/toast";
@@ -14,6 +16,7 @@ export function ChallengeHints({
   competitionId: string;
   challengeId: string;
 }) {
+  const t = useTranslations("challenges.hints");
   const hints = useHints(competitionId, challengeId);
   const reveal = useRevealHint(competitionId, challengeId);
 
@@ -21,7 +24,7 @@ export function ChallengeHints({
 
   return (
     <div className="grid gap-2 border-t border-border pt-4">
-      <span className="text-[13px] font-semibold">Hints</span>
+      <span className="text-[13px] font-semibold">{t("title")}</span>
       <ul className="grid gap-2">
         {hints.data.map((hint) => (
           <li
@@ -33,7 +36,7 @@ export function ChallengeHints({
             ) : (
               <div className="flex items-center justify-between gap-3">
                 <span className="text-muted-foreground">
-                  {hint.cost > 0 ? `Costs ${hint.cost} pts` : "Free hint"}
+                  {hint.cost > 0 ? t("cost", { cost: hint.cost }) : t("free")}
                 </span>
                 <Button
                   size="sm"
@@ -42,13 +45,13 @@ export function ChallengeHints({
                   onClick={() =>
                     reveal.mutate(hint.id, {
                       onSuccess: (h) =>
-                        toast("Hint revealed", {
-                          description: h.cost > 0 ? `−${h.cost} pts` : undefined,
+                        toast(t("revealedToast"), {
+                          description: h.cost > 0 ? t("revealedCost", { cost: h.cost }) : undefined,
                         }),
                     })
                   }
                 >
-                  {reveal.isPending ? "Revealing…" : "Reveal"}
+                  {reveal.isPending ? t("revealing") : t("reveal")}
                 </Button>
               </div>
             )}

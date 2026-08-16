@@ -1,10 +1,11 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   ChallengeList,
   groupChallengesByCategory,
 } from "@/components/challenges/challenge-list";
+import { renderWithIntl } from "@/test/intl";
 import type { Challenge } from "@/lib/types";
 import { useChallengeViewStore } from "@/stores/challenge-view";
 
@@ -88,7 +89,7 @@ describe("ChallengeList", () => {
   ];
 
   it("renders category sections collapsed by default (rows hidden)", () => {
-    render(<ChallengeList challenges={challenges} categories={CATEGORIES} onOpen={vi.fn()} />);
+    renderWithIntl(<ChallengeList challenges={challenges} categories={CATEGORIES} onOpen={vi.fn()} />);
     // The category header and its count show...
     expect(screen.getByRole("button", { name: /web/i })).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByText("1/2")).toBeInTheDocument();
@@ -97,7 +98,7 @@ describe("ChallengeList", () => {
   });
 
   it("expands a category on click and shows rows with points, difficulty, and solve count", () => {
-    render(<ChallengeList challenges={challenges} categories={CATEGORIES} onOpen={vi.fn()} />);
+    renderWithIntl(<ChallengeList challenges={challenges} categories={CATEGORIES} onOpen={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /web/i }));
 
     expect(screen.getByText("SQL injection 101")).toBeInTheDocument();
@@ -108,7 +109,7 @@ describe("ChallengeList", () => {
 
   it("marks a locked row with a padlock and a solved row with an sr-only label", () => {
     useChallengeViewStore.setState({ viewMode: "list", expanded: ["web"] });
-    render(<ChallengeList challenges={challenges} categories={CATEGORIES} onOpen={vi.fn()} />);
+    renderWithIntl(<ChallengeList challenges={challenges} categories={CATEGORIES} onOpen={vi.fn()} />);
     expect(screen.getByRole("img", { name: "Locked" })).toBeInTheDocument();
     expect(screen.getByText("Solved")).toBeInTheDocument();
   });
@@ -116,19 +117,19 @@ describe("ChallengeList", () => {
   it("opens the challenge when its row is clicked", () => {
     const onOpen = vi.fn();
     useChallengeViewStore.setState({ viewMode: "list", expanded: ["web"] });
-    render(<ChallengeList challenges={challenges} categories={CATEGORIES} onOpen={onOpen} />);
+    renderWithIntl(<ChallengeList challenges={challenges} categories={CATEGORIES} onOpen={onOpen} />);
     fireEvent.click(screen.getByText("SQL injection 101"));
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: "1" }));
   });
 
   it("shows an empty-filter message when nothing matches", () => {
-    render(<ChallengeList challenges={[]} categories={CATEGORIES} onOpen={vi.fn()} />);
+    renderWithIntl(<ChallengeList challenges={[]} categories={CATEGORIES} onOpen={vi.fn()} />);
     expect(screen.getByText(/no challenges match this filter/i)).toBeInTheDocument();
   });
 
   it("shows the reduced subject value with the base struck through (#148)", () => {
     useChallengeViewStore.setState({ viewMode: "list", expanded: ["web"] });
-    render(
+    renderWithIntl(
       <ChallengeList
         challenges={[
           mk({ id: "3", title: "Quiz", category_id: "web", value: 200, subject_value: 150 }),

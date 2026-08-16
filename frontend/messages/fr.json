@@ -4,51 +4,51 @@
     "language": "Langue"
   },
   "app": {
-    "skipToContent": "Skip to content",
-    "toggleSidebar": "Toggle sidebar",
+    "skipToContent": "Passer au contenu",
+    "toggleSidebar": "Activer/désactiver la barre latérale",
     "expandSidebar": "Expand sidebar",
-    "collapseSidebar": "Collapse sidebar",
-    "openMenu": "Open menu",
-    "signOut": "Sign out",
-    "profileSettings": "Profile & notification settings",
-    "adminNoAccess": "You don't have access to the admin area.",
-    "adminGlobalScope": "Admin is global — not scoped to a competition",
-    "mainNav": "Main",
+    "collapseSidebar": "Réduire la barre latérale",
+    "openMenu": "Ouvrir le menu",
+    "signOut": "Se déconnecter",
+    "profileSettings": "Paramètres de profil et de notification",
+    "adminNoAccess": "Vous n'avez pas accès à la zone d'administration.",
+    "adminGlobalScope": "L'administrateur est global — non limité à une compétition",
+    "mainNav": "Principal",
     "nav": {
-      "dashboard": "Dashboard",
-      "challenges": "Challenges",
-      "scoreboard": "Scoreboard",
+      "dashboard": "Tableau de bord",
+      "challenges": "Défi",
+      "scoreboard": "Tableau de bord",
       "participants": "Participants",
-      "support": "Support",
-      "feedback": "Feedback",
-      "analytics": "Analytics",
-      "automations": "Automations",
-      "aiTranscripts": "AI transcripts",
-      "settings": "Settings",
+      "support": "Soutien",
+      "feedback": "Vos commentaires",
+      "analytics": "Analyses",
+      "automations": "Automatisations",
+      "aiTranscripts": "Transcriptions AI",
+      "settings": "Réglages",
       "lobby": "Lobby",
-      "admin": "Admin"
+      "admin": "Administrateur"
     },
     "adminNav": {
-      "dashboard": "Dashboard",
-      "competitions": "Competitions",
-      "users": "Users",
-      "roles": "Roles",
-      "events": "Event log",
-      "automations": "Automations",
-      "siteSettings": "Site settings"
+      "dashboard": "Tableau de bord",
+      "competitions": "Concours",
+      "users": "Utilisateurs",
+      "roles": "Rôles",
+      "events": "Journal des événements",
+      "automations": "Automatisations",
+      "siteSettings": "Paramètres du site"
     },
     "notifications": {
       "title": "Notifications",
-      "unread": "Notifications ({count} unread)",
-      "markAllRead": "Mark all read",
-      "empty": "No notifications yet."
+      "unread": "Notifications ({count} non lues)",
+      "markAllRead": "Marquer tous les lus",
+      "empty": "Pas encore de notifications."
     },
-    "demoBanner": "Demo instance — data is public and <b>resets every hour, on the hour</b>.",
+    "demoBanner": "Instance de démo — les données sont publiques et <b>réinitialise toutes les heures, sur l'heure</b>.",
     "noCompetition": {
-      "title": "No competition loaded",
-      "descriptionCanCreate": "There aren't any competitions yet. Create one to open its challenges, teams, scoreboard, and more.",
-      "description": "There aren't any competitions available to you yet. Check back soon.",
-      "manage": "Manage competitions"
+      "title": "Pas de compétition chargée",
+      "descriptionCanCreate": "Il n'y a pas encore de compétition. Créez-en une pour ouvrir ses défis, ses équipes, son tableau de bord, et plus encore.",
+      "description": "Il n'y a pas encore de compétitions disponibles pour vous. Revenez bientôt.",
+      "manage": "Gérer les compétitions"
     }
   },
   "auth": {

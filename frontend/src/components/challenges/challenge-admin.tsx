@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useId, useState } from "react";
 
 import { AttachmentsSection } from "@/components/challenges/attachments-section";
@@ -65,6 +66,7 @@ function toLocalInput(iso: string): string {
 // any 403 surfaces inline. The flag is write-only — the form shows *that* one
 // is set, never its value (§13.2).
 export function ChallengeAdmin({ competitionId }: { competitionId: string }) {
+  const t = useTranslations("challenges.admin");
   const challenges = useChallenges(competitionId);
   const categories = useCategories(competitionId);
   const [editing, setEditing] = useState<Challenge | "new" | null>(null);
@@ -81,15 +83,16 @@ export function ChallengeAdmin({ competitionId }: { competitionId: string }) {
     importChallenges.mutate(file, {
       onSuccess: (r) =>
         toast(
-          `Imported ${r.created} challenge${r.created === 1 ? "" : "s"}` +
-            (r.skipped ? `, ${r.skipped} skipped` : ""),
+          r.skipped
+            ? t("importedSkipped", { created: r.created, skipped: r.skipped })
+            : t("imported", { created: r.created }),
           {
             variant: "success",
             description: r.errors.length ? r.errors.slice(0, 3).join("; ") : undefined,
           },
         ),
       onError: (err) =>
-        toast("Import failed", {
+        toast(t("importFailed"), {
           description: (err as Error).message,
           variant: "destructive",
         }),
@@ -101,9 +104,9 @@ export function ChallengeAdmin({ competitionId }: { competitionId: string }) {
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <div>
-            <CardTitle>Challenges</CardTitle>
+            <CardTitle>{t("listTitle")}</CardTitle>
             <CardDescription>
-              {challenges.data?.length ?? 0} challenge(s)
+              {t("count", { count: challenges.data?.length ?? 0 })}
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -113,7 +116,7 @@ export function ChallengeAdmin({ competitionId }: { competitionId: string }) {
               onClick={() =>
                 exportChallenges.mutate(undefined, {
                   onError: (err) =>
-                    toast("Export failed", {
+                    toast(t("exportFailed"), {
                       description: (err as Error).message,
                       variant: "destructive",
                     }),
@@ -121,7 +124,7 @@ export function ChallengeAdmin({ competitionId }: { competitionId: string }) {
               }
               disabled={exportChallenges.isPending || !challenges.data?.length}
             >
-              Export
+              {t("export")}
             </Button>
             <label>
               <span
@@ -130,7 +133,7 @@ export function ChallengeAdmin({ competitionId }: { competitionId: string }) {
                   importChallenges.isPending && "pointer-events-none opacity-60",
                 )}
               >
-                {importChallenges.isPending ? "Importing…" : "Import"}
+                {importChallenges.isPending ? t("importing") : t("import")}
               </span>
               <input
                 type="file"
@@ -140,7 +143,7 @@ export function ChallengeAdmin({ competitionId }: { competitionId: string }) {
                 disabled={importChallenges.isPending}
               />
             </label>
-            <Button onClick={() => setEditing("new")}>New challenge</Button>
+            <Button onClick={() => setEditing("new")}>{t("newChallenge")}</Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -153,11 +156,11 @@ export function ChallengeAdmin({ competitionId }: { competitionId: string }) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Points</TableHead>
-                  <TableHead>State</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t("colTitle")}</TableHead>
+                  <TableHead>{t("colCategory")}</TableHead>
+                  <TableHead>{t("colPoints")}</TableHead>
+                  <TableHead>{t("colState")}</TableHead>
+                  <TableHead className="text-right">{t("colActions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -200,6 +203,7 @@ function ChallengeRow({
   categoryName: string;
   onEdit: () => void;
 }) {
+  const t = useTranslations("challenges.admin");
   const stateMutation = useChallengeStateMutation(competitionId);
   const confirm = useConfirm();
   const isPublished = challenge.state === "published";
@@ -208,9 +212,9 @@ function ChallengeRow({
     if (
       isPublished &&
       !(await confirm({
-        title: "Unpublish challenge?",
-        description: `"${challenge.title}" will be hidden from competitors until you publish it again.`,
-        confirmLabel: "Unpublish",
+        title: t("unpublishConfirmTitle"),
+        description: t("unpublishConfirmDescription", { title: challenge.title }),
+        confirmLabel: t("unpublishConfirmLabel"),
         destructive: false,
       }))
     ) {
@@ -225,9 +229,9 @@ function ChallengeRow({
   async function onDelete() {
     if (
       await confirm({
-        title: "Delete challenge?",
-        description: `"${challenge.title}" and its attachments, hints, and solve history will be permanently removed. This can't be undone.`,
-        confirmLabel: "Delete",
+        title: t("deleteConfirmTitle"),
+        description: t("deleteConfirmDescription", { title: challenge.title }),
+        confirmLabel: t("deleteConfirmLabel"),
       })
     ) {
       stateMutation.mutate({ challengeId: challenge.id, action: "delete" });
@@ -240,30 +244,30 @@ function ChallengeRow({
       <TableCell className="text-muted-foreground">{categoryName}</TableCell>
       <TableCell>
         {challenge.scoring_type === "dynamic" ? (
-          <span title={`Dynamic: ${challenge.points}→${challenge.min_points} over ~${challenge.decay} solves`}>
+          <span title={t("dynamicTooltip", { points: challenge.points, min: challenge.min_points ?? 0, decay: challenge.decay ?? 0 })}>
             {challenge.value}{" "}
-            <span className="text-xs text-muted-foreground">dyn</span>
+            <span className="text-xs text-muted-foreground">{t("dyn")}</span>
           </span>
         ) : (
           challenge.points
         )}
       </TableCell>
       <TableCell className="capitalize">
-        {challenge.state}
+        {t(challenge.state === "published" ? "statePublished" : "stateDraft")}
         {challenge.state === "published" &&
           challenge.release_at &&
           new Date(challenge.release_at) > new Date() && (
             <span
               className="ml-1.5 text-xs normal-case text-muted-foreground"
-              title={`Releases ${new Date(challenge.release_at).toLocaleString()}`}
+              title={t("releasesTooltip", { date: new Date(challenge.release_at).toLocaleString() })}
             >
-              · scheduled
+              {t("scheduled")}
             </span>
           )}
       </TableCell>
       <TableCell className="space-x-2 text-right">
         <Button variant="ghost" size="sm" onClick={onEdit}>
-          Edit
+          {t("edit")}
         </Button>
         <Button
           variant="ghost"
@@ -271,7 +275,7 @@ function ChallengeRow({
           disabled={stateMutation.isPending || (!isPublished && !challenge.has_flag)}
           onClick={onTogglePublish}
         >
-          {isPublished ? "Unpublish" : "Publish"}
+          {isPublished ? t("unpublish") : t("publish")}
         </Button>
         <Button
           variant="ghost"
@@ -280,7 +284,7 @@ function ChallengeRow({
           disabled={stateMutation.isPending}
           onClick={onDelete}
         >
-          Delete
+          {t("delete")}
         </Button>
       </TableCell>
     </TableRow>
@@ -300,6 +304,7 @@ function ChallengeForm({
   allChallenges: Challenge[];
   onDone: () => void;
 }) {
+  const t = useTranslations("challenges.admin");
   const isEdit = challenge !== null;
   const { data: activeCompetition } = useActiveCompetition();
   const tagVocab = activeCompetition?.challenge_tags ?? [];
@@ -396,19 +401,17 @@ function ChallengeForm({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{isEdit ? "Edit challenge" : "New challenge"}</CardTitle>
+        <CardTitle>{isEdit ? t("editTitle") : t("newChallenge")}</CardTitle>
         {isEdit && (
           <CardDescription>
-            {challenge.has_flag
-              ? "A flag is set. Leave the flag field blank to keep it."
-              : "No flag set yet — add one before publishing."}
+            {challenge.has_flag ? t("flagSetHint") : t("noFlagHint")}
           </CardDescription>
         )}
       </CardHeader>
       <CardContent className="space-y-4">
         <form id={formId} onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="title">Title</Label>
+            <Label htmlFor="title">{t("fieldTitle")}</Label>
             <Input
               id="title"
               value={title}
@@ -417,18 +420,18 @@ function ChallengeForm({
             />
           </div>
           <div className="space-y-2">
-            <Label>Description</Label>
+            <Label>{t("fieldDescription")}</Label>
             <RichTextEditor value={description} onChange={setDescription} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="category">Category</Label>
+              <Label htmlFor="category">{t("fieldCategory")}</Label>
               <Select
                 id="category"
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value)}
               >
-                <option value="">Uncategorized</option>
+                <option value="">{t("uncategorized")}</option>
                 {categories.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
@@ -438,7 +441,7 @@ function ChallengeForm({
             </div>
             <div className="space-y-2">
               <Label htmlFor="points">
-                {scoringType === "dynamic" ? "Initial points" : "Points"}
+                {scoringType === "dynamic" ? t("initialPoints") : t("points")}
               </Label>
               <Input
                 id="points"
@@ -451,20 +454,20 @@ function ChallengeForm({
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="scoring-type">Scoring</Label>
+            <Label htmlFor="scoring-type">{t("scoring")}</Label>
             <Select
               id="scoring-type"
               value={scoringType}
               onChange={(e) => setScoringType(e.target.value as ScoringType)}
               className="max-w-xs"
             >
-              <option value="static">Static (fixed points)</option>
-              <option value="dynamic">Dynamic (decays as more solve)</option>
+              <option value="static">{t("scoringStatic")}</option>
+              <option value="dynamic">{t("scoringDynamic")}</option>
             </Select>
             {scoringType === "dynamic" && (
               <div className="grid grid-cols-2 gap-3 pt-1">
                 <div className="space-y-2">
-                  <Label htmlFor="min-points">Minimum points</Label>
+                  <Label htmlFor="min-points">{t("minPoints")}</Label>
                   <Input
                     id="min-points"
                     type="number"
@@ -475,7 +478,7 @@ function ChallengeForm({
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="decay">Decay (solves)</Label>
+                  <Label htmlFor="decay">{t("decay")}</Label>
                   <Input
                     id="decay"
                     type="number"
@@ -486,9 +489,7 @@ function ChallengeForm({
                   />
                 </div>
                 <p className="col-span-2 text-xs text-muted-foreground">
-                  Worth {points || 0} until solves accumulate, decaying toward{" "}
-                  {minPoints || 0} over ~{decay || 0} solves. Every solver always
-                  holds the current value.
+                  {t("dynamicHint", { points: points || 0, min: minPoints || 0, decay: decay || 0 })}
                 </p>
               </div>
             )}
@@ -497,7 +498,7 @@ function ChallengeForm({
             <div className="grid gap-4 sm:grid-cols-2">
               {tiers.length > 0 && (
                 <div className="space-y-2">
-                  <Label htmlFor="difficulty">Difficulty</Label>
+                  <Label htmlFor="difficulty">{t("difficulty")}</Label>
                   <Select
                     id="difficulty"
                     value={difficulty}
@@ -514,7 +515,7 @@ function ChallengeForm({
               )}
               {tagVocab.length > 0 && (
                 <div className="space-y-2">
-                  <Label>Tags</Label>
+                  <Label>{t("tags")}</Label>
                   <div className="flex flex-wrap gap-1.5">
                     {tagVocab.map((t) => {
                       const on = tags.includes(t);
@@ -544,7 +545,7 @@ function ChallengeForm({
             </div>
           )}
           <div className="space-y-2">
-            <Label htmlFor="release-at">Release at</Label>
+            <Label htmlFor="release-at">{t("releaseAt")}</Label>
             <div className="flex items-center gap-2">
               <Input
                 id="release-at"
@@ -555,23 +556,17 @@ function ChallengeForm({
               />
               {releaseAt && (
                 <Button type="button" variant="ghost" size="sm" onClick={() => setReleaseAt("")}>
-                  Clear
+                  {t("clear")}
                 </Button>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Optional. A published challenge stays hidden from competitors until
-              this time — leave blank to release as soon as it&apos;s published.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("releaseHint")}</p>
           </div>
           <div className="space-y-2">
-            <Label>Prerequisites</Label>
-            <p className="text-xs text-muted-foreground">
-              Competitors must solve these before this challenge unlocks (an
-              unlock chain). Optional.
-            </p>
+            <Label>{t("prerequisites")}</Label>
+            <p className="text-xs text-muted-foreground">{t("prerequisitesHint")}</p>
             {allChallenges.filter((c) => c.id !== challenge?.id).length === 0 ? (
-              <p className="text-xs text-muted-foreground">No other challenges yet.</p>
+              <p className="text-xs text-muted-foreground">{t("noOtherChallenges")}</p>
             ) : (
               <div className="grid max-h-40 gap-1 overflow-y-auto rounded-md border border-border p-2">
                 {allChallenges
@@ -598,27 +593,24 @@ function ChallengeForm({
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="flag-type">Flag type</Label>
+            <Label htmlFor="flag-type">{t("flagType")}</Label>
             <Select
               id="flag-type"
               value={flagType}
               onChange={(e) => setFlagType(e.target.value as FlagType)}
               className="max-w-xs"
             >
-              <option value="static">Static</option>
-              <option value="regex">Regex</option>
-              <option value="multiple_choice">Multiple choice</option>
+              <option value="static">{t("flagStatic")}</option>
+              <option value="regex">{t("flagRegex")}</option>
+              <option value="multiple_choice">{t("flagMultipleChoice")}</option>
             </Select>
           </div>
 
           {flagType === "multiple_choice" ? (
             <div className="space-y-2">
-              <Label>Options</Label>
+              <Label>{t("options")}</Label>
               <p className="text-xs text-muted-foreground">
-                Add the options a competitor picks from, and mark the correct one.
-                {isEdit && challenge.has_flag
-                  ? " Leave unselected to keep the current answer."
-                  : ""}
+                {isEdit && challenge.has_flag ? t("optionsHintKeep") : t("optionsHint")}
               </p>
               <div className="space-y-2">
                 {choices.map((opt, i) => (
@@ -629,12 +621,12 @@ function ChallengeForm({
                       checked={correctIndex === i}
                       onChange={() => setCorrectIndex(i)}
                       style={{ accentColor: "hsl(var(--primary))" }}
-                      aria-label={`Mark option ${i + 1} correct`}
+                      aria-label={t("markCorrect", { n: i + 1 })}
                     />
                     <Input
                       value={opt}
                       onChange={(e) => updateChoice(i, e.target.value)}
-                      placeholder={`Option ${i + 1}`}
+                      placeholder={t("optionPlaceholder", { n: i + 1 })}
                     />
                     {choices.length > 2 && (
                       <Button
@@ -642,7 +634,7 @@ function ChallengeForm({
                         variant="ghost"
                         size="sm"
                         onClick={() => removeChoice(i)}
-                        aria-label={`Remove option ${i + 1}`}
+                        aria-label={t("removeOption", { n: i + 1 })}
                       >
                         ✕
                       </Button>
@@ -657,7 +649,7 @@ function ChallengeForm({
                   size="sm"
                   onClick={() => setChoices([...choices, ""])}
                 >
-                  + Add option
+                  {t("addOption")}
                 </Button>
               )}
             </div>
@@ -665,12 +657,12 @@ function ChallengeForm({
             <>
               <div className="space-y-2">
                 <Label htmlFor="flag">
-                  {flagType === "regex" ? "Flag pattern" : "Flag"}
+                  {flagType === "regex" ? t("flagPattern") : t("flag")}
                 </Label>
                 <Input
                   id="flag"
                   value={flag}
-                  placeholder={isEdit && challenge.has_flag ? "(unchanged)" : ""}
+                  placeholder={isEdit && challenge.has_flag ? t("flagUnchanged") : ""}
                   onChange={(e) => setFlag(e.target.value)}
                   required={!isEdit}
                   className="max-w-md"
@@ -682,7 +674,7 @@ function ChallengeForm({
                   checked={caseInsensitive}
                   onChange={(e) => setCaseInsensitive(e.target.checked)}
                 />
-                Case-insensitive flag
+                {t("caseInsensitive")}
               </label>
             </>
           )}
@@ -720,13 +712,13 @@ function ChallengeForm({
         <div className="flex gap-2">
           <Button type="submit" form={formId} disabled={mutation.isPending}>
             {mutation.isPending
-              ? "Saving…"
+              ? t("saving")
               : isEdit
-                ? "Save changes"
-                : "Create challenge"}
+                ? t("saveChanges")
+                : t("createChallenge")}
           </Button>
           <Button type="button" variant="ghost" onClick={onDone}>
-            Cancel
+            {t("cancel")}
           </Button>
         </div>
       </CardContent>
@@ -735,6 +727,7 @@ function ChallengeForm({
 }
 
 export function CategoryManager({ competitionId }: { competitionId: string }) {
+  const t = useTranslations("challenges.admin");
   const categories = useCategories(competitionId);
   const createCategory = useCreateCategory(competitionId);
   const deleteCategory = useDeleteCategory(competitionId);
@@ -744,9 +737,9 @@ export function CategoryManager({ competitionId }: { competitionId: string }) {
   async function onDeleteCategory(id: string, catName: string) {
     if (
       await confirm({
-        title: "Delete category?",
-        description: `"${catName}" will be removed. Its challenges aren't deleted — they become uncategorised.`,
-        confirmLabel: "Delete",
+        title: t("deleteCategoryConfirmTitle"),
+        description: t("deleteCategoryConfirmDescription", { name: catName }),
+        confirmLabel: t("deleteCategoryConfirmLabel"),
       })
     ) {
       deleteCategory.mutate(id);
@@ -756,8 +749,8 @@ export function CategoryManager({ competitionId }: { competitionId: string }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Categories</CardTitle>
-        <CardDescription>Group challenges by topic.</CardDescription>
+        <CardTitle>{t("categories")}</CardTitle>
+        <CardDescription>{t("categoriesDescription")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex flex-wrap gap-2">
@@ -769,7 +762,7 @@ export function CategoryManager({ competitionId }: { competitionId: string }) {
               {category.name}
               <button
                 type="button"
-                aria-label={`Delete ${category.name}`}
+                aria-label={t("deleteCategoryAria", { name: category.name })}
                 className="text-muted-foreground hover:text-destructive"
                 onClick={() => onDeleteCategory(category.id, category.name)}
               >
@@ -779,7 +772,7 @@ export function CategoryManager({ competitionId }: { competitionId: string }) {
           ))}
           {categories.data?.length === 0 && (
             <span className="text-sm text-muted-foreground">
-              No categories yet.
+              {t("noCategoriesYet")}
             </span>
           )}
         </div>
@@ -795,12 +788,12 @@ export function CategoryManager({ competitionId }: { competitionId: string }) {
         >
           <Input
             value={name}
-            placeholder="New category"
+            placeholder={t("newCategory")}
             onChange={(e) => setName(e.target.value)}
             required
           />
           <Button type="submit" disabled={createCategory.isPending}>
-            Add
+            {t("add")}
           </Button>
         </form>
         {createCategory.isError && (

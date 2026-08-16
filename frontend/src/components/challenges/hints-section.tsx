@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +33,7 @@ export function HintsSection({
   competitionId: string;
   challengeId: string;
 }) {
+  const t = useTranslations("challenges.admin.hints");
   const hints = useHints(competitionId, challengeId);
   const create = useCreateHint(competitionId, challengeId);
   const update = useUpdateHint(competitionId, challengeId);
@@ -45,9 +47,9 @@ export function HintsSection({
   async function onRemove(id: string) {
     if (
       await confirm({
-        title: "Delete hint?",
-        description: "This hint will be removed from the challenge.",
-        confirmLabel: "Delete",
+        title: t("deleteConfirmTitle"),
+        description: t("deleteConfirmDescription"),
+        confirmLabel: t("deleteConfirmLabel"),
       })
     ) {
       remove.mutate(id);
@@ -76,7 +78,7 @@ export function HintsSection({
 
   return (
     <div className="grid gap-3">
-      <Label>Hints</Label>
+      <Label>{t("title")}</Label>
       {hints.data && hints.data.length > 0 && (
         <ul className="grid gap-2">
           {hints.data.map((hint) => (
@@ -88,15 +90,17 @@ export function HintsSection({
               {hint.hidden && (
                 <Badge variant="warning" className="whitespace-nowrap">
                   {hint.release_at
-                    ? `Releases ${parseServerDate(hint.release_at).toLocaleString([], {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      })}`
-                    : "Hidden"}
+                    ? t("releases", {
+                        date: parseServerDate(hint.release_at).toLocaleString([], {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        }),
+                      })
+                    : t("hidden")}
                 </Badge>
               )}
               <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">
-                {hint.cost} pts
+                {t("cost", { cost: hint.cost })}
               </span>
               {hint.hidden && (
                 <Button
@@ -108,7 +112,7 @@ export function HintsSection({
                     update.mutate({ hintId: hint.id, patch: { hidden: false } })
                   }
                 >
-                  Publish
+                  {t("publish")}
                 </Button>
               )}
               <Button
@@ -119,7 +123,7 @@ export function HintsSection({
                 disabled={remove.isPending}
                 onClick={() => onRemove(hint.id)}
               >
-                Remove
+                {t("remove")}
               </Button>
             </li>
           ))}
@@ -130,7 +134,7 @@ export function HintsSection({
           <div className="grid flex-1 gap-1">
             <Input
               value={body}
-              placeholder="Hint text"
+              placeholder={t("bodyPlaceholder")}
               onChange={(e) => setBody(e.target.value)}
               required
             />
@@ -140,12 +144,12 @@ export function HintsSection({
               type="number"
               min={0}
               value={cost}
-              aria-label="Hint cost"
+              aria-label={t("costAria")}
               onChange={(e) => setCost(e.target.value)}
             />
           </div>
           <Button type="submit" disabled={create.isPending}>
-            Add hint
+            {t("add")}
           </Button>
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
@@ -156,17 +160,17 @@ export function HintsSection({
               onChange={(e) => setHidden(e.target.checked)}
               className="h-4 w-4 rounded border-input"
             />
-            Hidden until released
+            {t("hiddenUntilReleased")}
           </label>
           {hidden && (
             <label className="flex items-center gap-2">
-              Release at (optional)
+              {t("releaseLabel")}
               <Input
                 type="datetime-local"
                 value={releaseAt}
                 onChange={(e) => setReleaseAt(e.target.value)}
                 className="h-8 w-auto"
-                aria-label="Hint release time"
+                aria-label={t("releaseTimeAria")}
               />
             </label>
           )}

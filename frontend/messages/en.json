@@ -130,6 +130,110 @@
       "points": "Points"
     }
   },
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitleManager": "operational overview",
+    "subtitleParticipant": "your dashboard",
+    "stats": {
+      "solves": "Solves",
+      "submissions": "Submissions",
+      "activeTeams": "Active teams",
+      "activeParticipants": "Active participants",
+      "publishedChallenges": "Published challenges"
+    },
+    "standing": {
+      "rank": "Your rank",
+      "points": "Your points",
+      "solved": "Solved"
+    },
+    "activity": {
+      "title": "Recent activity",
+      "description": "Latest solves across the competition",
+      "line": "<b>{name}</b> solved <c>{challenge}</c> <p>+{points}</p>",
+      "empty": "No solves yet."
+    },
+    "announcements": {
+      "title": "Announcements",
+      "description": "Archive, newest first",
+      "empty": "No announcements yet."
+    },
+    "health": {
+      "title": "Challenge health",
+      "description": "Solves vs. attempts",
+      "stat": "{solves} solved · {attempts} tries",
+      "empty": "No challenges yet."
+    },
+    "support": {
+      "title": "Support queue",
+      "open": "{count} open",
+      "emptyPrefix": "No open tickets.",
+      "emptyLink": "Support"
+    },
+    "mySolves": {
+      "title": "Your solves",
+      "solved": "{count} solved",
+      "empty": "No solves yet — head to Challenges to get started."
+    },
+    "widgetLabels": {
+      "stats": "At a glance",
+      "standing": "Your standing",
+      "activity": "Recent solves",
+      "announcements": "Announcements",
+      "challengeHealth": "Challenge health",
+      "supportQueue": "Support queue",
+      "mySolves": "Your solves"
+    },
+    "grid": {
+      "customize": "Customize",
+      "editHint": "Drag to move · drag a corner to resize · or use each widget's buttons",
+      "saving": "Saving…",
+      "saveLayout": "Save layout",
+      "cancel": "Cancel",
+      "resetDefault": "Reset to default",
+      "savedToast": "Dashboard layout saved",
+      "saveErrorToast": "Couldn't save layout",
+      "resetToast": "Dashboard reset to default",
+      "resetErrorToast": "Couldn't reset layout",
+      "dragToMove": "Drag to move {label}",
+      "hiddenSuffix": "· hidden",
+      "groupMove": "Move",
+      "groupResize": "Resize",
+      "moveLeft": "Move {label} left",
+      "moveRight": "Move {label} right",
+      "moveUp": "Move {label} up",
+      "moveDown": "Move {label} down",
+      "narrower": "Narrower {label}",
+      "wider": "Wider {label}",
+      "shorter": "Shorter {label}",
+      "taller": "Taller {label}",
+      "show": "Show {label}",
+      "hide": "Hide {label}"
+    },
+    "firstRun": {
+      "title": "Getting started",
+      "createChallenges": "Create challenges",
+      "createChallengesDesc": "Add and publish your first challenges so competitors have something to solve.",
+      "inviteTeams": "Invite teams",
+      "inviteTeamsDesc": "Share the join link or invite code so players can register and form teams.",
+      "brandEvent": "Brand your event",
+      "brandEventDesc": "Set the platform name, palette, and accent under Admin → Site settings → Appearance."
+    }
+  },
+  "lobby": {
+    "title": "Lobby",
+    "subtitle": "You're not currently part of any competition.",
+    "joined": "Joined {name}",
+    "cantJoin": "Couldn't join",
+    "verifyEmailHint": "{message} — see your Profile page.",
+    "inviteTitle": "Join with an invite code",
+    "inviteDescription": "For invite-only competitions",
+    "invitePlaceholder": "Invite code",
+    "joining": "Joining…",
+    "join": "Join",
+    "publicTitle": "Public competitions",
+    "publicDescription": "Open to join right now",
+    "empty": "No public competitions right now."
+  },
   "auth": {
     "login": {
       "title": "Sign in",

@@ -9,6 +9,7 @@
 // is React-19-safe; we use the classic `legacy` API surface). Non-editable
 // audiences (participants) get the plain static render, no layout fetch.
 
+import { useTranslations } from "next-intl";
 import * as React from "react";
 import { Responsive, WidthProvider } from "react-grid-layout/legacy";
 import type { Layout, ResponsiveLayouts } from "react-grid-layout/legacy";
@@ -80,6 +81,7 @@ export function DashboardGrid({
   defaultLayout,
   editable,
 }: DashboardGridProps) {
+  const t = useTranslations("dashboard.grid");
   const layoutQuery = useDashboardLayout(competitionId, dashboardKey, editable);
   const saveLayout = useSaveDashboardLayout(competitionId, dashboardKey);
   const resetLayout = useResetDashboardLayout(competitionId, dashboardKey);
@@ -132,9 +134,9 @@ export function DashboardGrid({
     saveLayout.mutate(toSaved(draft), {
       onSuccess: () => {
         setEditing(false);
-        toast("Dashboard layout saved", { variant: "success" });
+        toast(t("savedToast"), { variant: "success" });
       },
-      onError: () => toast("Couldn't save layout", { variant: "destructive" }),
+      onError: () => toast(t("saveErrorToast"), { variant: "destructive" }),
     });
   };
 
@@ -142,9 +144,9 @@ export function DashboardGrid({
     resetLayout.mutate(undefined, {
       onSuccess: () => {
         setEditing(false);
-        toast("Dashboard reset to default");
+        toast(t("resetToast"));
       },
-      onError: () => toast("Couldn't reset layout", { variant: "destructive" }),
+      onError: () => toast(t("resetErrorToast"), { variant: "destructive" }),
     });
   };
 
@@ -176,18 +178,18 @@ export function DashboardGrid({
       <div className="flex flex-wrap items-center gap-2">
         {!editing ? (
           <Button variant="outline" size="sm" onClick={startEditing}>
-            Customize
+            {t("customize")}
           </Button>
         ) : (
           <>
             <span className="mr-1 text-sm text-muted-foreground">
-              Drag to move · drag a corner to resize · or use each widget&apos;s buttons
+              {t("editHint")}
             </span>
             <Button size="sm" onClick={save} disabled={saveLayout.isPending}>
-              {saveLayout.isPending ? "Saving…" : "Save layout"}
+              {saveLayout.isPending ? t("saving") : t("saveLayout")}
             </Button>
             <Button variant="outline" size="sm" onClick={() => setEditing(false)}>
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               variant="ghost"
@@ -196,7 +198,7 @@ export function DashboardGrid({
               disabled={resetLayout.isPending}
               className="text-muted-foreground"
             >
-              Reset to default
+              {t("resetDefault")}
             </Button>
           </>
         )}
@@ -303,9 +305,11 @@ function EditableWidget({
   onNudge,
   onResize,
 }: EditableWidgetProps) {
+  const t = useTranslations("dashboard");
   const def = WIDGETS[entry.widgetId];
   if (!def) return null;
   const Widget = def.Component;
+  const label = t(`widgetLabels.${def.labelKey}`);
 
   return (
     <div
@@ -318,30 +322,30 @@ function EditableWidget({
       <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-1 border-b border-border/60 bg-background/80 px-2 py-1 backdrop-blur">
         <span
           className="rgl-drag-handle flex cursor-grab items-center gap-1.5 text-xs font-medium text-muted-foreground active:cursor-grabbing"
-          aria-label={`Drag to move ${def.label}`}
+          aria-label={t("grid.dragToMove", { label })}
         >
           {gripIcon}
-          {def.label}
-          {entry.hidden && <span className="italic">· hidden</span>}
+          {label}
+          {entry.hidden && <span className="italic">{t("grid.hiddenSuffix")}</span>}
         </span>
         <span className="flex items-center gap-0.5">
-          <ChromeGroup label="Move">
-            <ChromeButton label={`Move ${def.label} left`} onClick={() => onNudge(-1, 0)}>←</ChromeButton>
-            <ChromeButton label={`Move ${def.label} right`} onClick={() => onNudge(1, 0)}>→</ChromeButton>
-            <ChromeButton label={`Move ${def.label} up`} onClick={() => onNudge(0, -1)}>↑</ChromeButton>
-            <ChromeButton label={`Move ${def.label} down`} onClick={() => onNudge(0, 1)}>↓</ChromeButton>
+          <ChromeGroup label={t("grid.groupMove")}>
+            <ChromeButton label={t("grid.moveLeft", { label })} onClick={() => onNudge(-1, 0)}>←</ChromeButton>
+            <ChromeButton label={t("grid.moveRight", { label })} onClick={() => onNudge(1, 0)}>→</ChromeButton>
+            <ChromeButton label={t("grid.moveUp", { label })} onClick={() => onNudge(0, -1)}>↑</ChromeButton>
+            <ChromeButton label={t("grid.moveDown", { label })} onClick={() => onNudge(0, 1)}>↓</ChromeButton>
           </ChromeGroup>
-          <ChromeGroup label="Resize">
-            <ChromeButton label={`Narrower ${def.label}`} onClick={() => onResize(-1, 0)}>−W</ChromeButton>
-            <ChromeButton label={`Wider ${def.label}`} onClick={() => onResize(1, 0)}>+W</ChromeButton>
-            <ChromeButton label={`Shorter ${def.label}`} onClick={() => onResize(0, -1)}>−H</ChromeButton>
-            <ChromeButton label={`Taller ${def.label}`} onClick={() => onResize(0, 1)}>+H</ChromeButton>
+          <ChromeGroup label={t("grid.groupResize")}>
+            <ChromeButton label={t("grid.narrower", { label })} onClick={() => onResize(-1, 0)}>−W</ChromeButton>
+            <ChromeButton label={t("grid.wider", { label })} onClick={() => onResize(1, 0)}>+W</ChromeButton>
+            <ChromeButton label={t("grid.shorter", { label })} onClick={() => onResize(0, -1)}>−H</ChromeButton>
+            <ChromeButton label={t("grid.taller", { label })} onClick={() => onResize(0, 1)}>+H</ChromeButton>
           </ChromeGroup>
           <button
             type="button"
             onClick={onToggleHidden}
             className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-            aria-label={entry.hidden ? `Show ${def.label}` : `Hide ${def.label}`}
+            aria-label={entry.hidden ? t("grid.show", { label }) : t("grid.hide", { label })}
           >
             {entry.hidden ? eyeOffIcon : eyeIcon}
           </button>

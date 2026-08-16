@@ -7,30 +7,21 @@
 // disappears the moment the first challenge is published.
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useDashboardStats } from "@/lib/hooks/use-dashboard";
 
+// Titles/descriptions resolve through `t(step.key)` / `t(`${step.key}Desc`)` at
+// render — the module-level array can't call the hook (§10 onboarding, i18n).
 const STEPS = [
-  {
-    href: "/challenges",
-    title: "Create challenges",
-    description: "Add and publish your first challenges so competitors have something to solve.",
-  },
-  {
-    href: "/participants",
-    title: "Invite teams",
-    description: "Share the join link or invite code so players can register and form teams.",
-  },
-  {
-    href: "/admin/settings",
-    title: "Brand your event",
-    description:
-      "Set the platform name, palette, and accent under Admin → Site settings → Appearance.",
-  },
-];
+  { href: "/challenges", key: "createChallenges" },
+  { href: "/participants", key: "inviteTeams" },
+  { href: "/admin/settings", key: "brandEvent" },
+] as const;
 
 export function FirstRunGuide({ competitionId }: { competitionId: string }) {
+  const t = useTranslations("dashboard.firstRun");
   const stats = useDashboardStats(competitionId);
   // Only while the competition is genuinely empty; gone once anything is live.
   if (!stats.data || stats.data.published_challenges > 0) return null;
@@ -38,7 +29,7 @@ export function FirstRunGuide({ competitionId }: { competitionId: string }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Getting started</CardTitle>
+        <CardTitle>{t("title")}</CardTitle>
       </CardHeader>
       <CardContent>
         <ol className="grid gap-2.5">
@@ -52,8 +43,8 @@ export function FirstRunGuide({ competitionId }: { competitionId: string }) {
                   {i + 1}
                 </span>
                 <span className="grid gap-0.5">
-                  <span className="text-sm font-medium">{step.title}</span>
-                  <span className="text-xs text-muted-foreground">{step.description}</span>
+                  <span className="text-sm font-medium">{t(step.key)}</span>
+                  <span className="text-xs text-muted-foreground">{t(`${step.key}Desc`)}</span>
                 </span>
               </Link>
             </li>

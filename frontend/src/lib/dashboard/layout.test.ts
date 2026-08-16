@@ -15,8 +15,8 @@ import type { DashboardLayoutEntry } from "@/lib/types";
 // A minimal fixture registry so these stay pure (no component imports needed).
 const Noop = (() => null) as unknown as WidgetDef["Component"];
 const REG: Record<string, WidgetDef> = {
-  a: { id: "a", label: "A", minSize: { w: 4, h: 1 }, defaultSize: { w: 12, h: 2 }, Component: Noop },
-  b: { id: "b", label: "B", minSize: { w: 4, h: 3 }, defaultSize: { w: 6, h: 5 }, Component: Noop },
+  a: { id: "a", labelKey: "stats", minSize: { w: 4, h: 1 }, defaultSize: { w: 12, h: 2 }, Component: Noop },
+  b: { id: "b", labelKey: "standing", minSize: { w: 4, h: 3 }, defaultSize: { w: 6, h: 5 }, Component: Noop },
 };
 
 const DEFAULT: LayoutEntry[] = [

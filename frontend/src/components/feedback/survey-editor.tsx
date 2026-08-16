@@ -5,6 +5,7 @@
 // immediate (per-question endpoints), so the dialog reflects the live survey
 // passed in rather than diffing a draft.
 
+import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -32,13 +33,15 @@ import { toast } from "@/stores/toast";
 const TEXTAREA_CLASS =
   "flex min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
-const TYPE_LABELS: Record<QuestionType, string> = {
-  rating_1_10: "Rating (1–10)",
-  rating_1_5: "Rating (1–5)",
-  short_text: "Short text",
-  long_text: "Long text",
-  multiple_choice: "Multiple choice",
-};
+// The displayed labels live in feedback.types.* (resolved with t() at render);
+// this is just their order in the type picker.
+const QUESTION_TYPES: QuestionType[] = [
+  "rating_1_10",
+  "rating_1_5",
+  "short_text",
+  "long_text",
+  "multiple_choice",
+];
 
 export function SurveyEditorDialog({
   competitionId,
@@ -54,6 +57,7 @@ export function SurveyEditorDialog({
   // Seeded on mount: the loader renders this dialog only while open and keys
   // it by survey id, so opening (or switching survey) remounts with fresh
   // fields. Refetches of the same survey deliberately don't clobber edits.
+  const t = useTranslations("feedback");
   const [title, setTitle] = React.useState(survey.title);
   const [description, setDescription] = React.useState(survey.description ?? "");
   const [isOpen, setIsOpen] = React.useState(survey.is_open);
@@ -71,8 +75,8 @@ export function SurveyEditorDialog({
     updateSurvey.mutate(
       { surveyId: survey.id, input: { title, description: description || null, is_open: isOpen } },
       {
-        onSuccess: () => toast("Survey saved", { variant: "success" }),
-        onError: (e) => toast("Couldn't save", { description: (e as Error).message, variant: "destructive" }),
+        onSuccess: () => toast(t("editor.savedToast"), { variant: "success" }),
+        onError: (e) => toast(t("editor.saveError"), { description: (e as Error).message, variant: "destructive" }),
       },
     );
   }
@@ -89,16 +93,16 @@ export function SurveyEditorDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[88vh] max-w-[52rem] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit survey</DialogTitle>
+          <DialogTitle>{t("editor.title")}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="survey-title">Title</Label>
+            <Label htmlFor="survey-title">{t("editor.surveyTitle")}</Label>
             <Input id="survey-title" value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="survey-desc">Description (optional)</Label>
+            <Label htmlFor="survey-desc">{t("editor.description")}</Label>
             <textarea
               id="survey-desc"
               className={TEXTAREA_CLASS}
@@ -108,20 +112,20 @@ export function SurveyEditorDialog({
           </div>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={isOpen} onChange={(e) => setIsOpen(e.target.checked)} />
-            Open for responses
+            {t("editor.openForResponses")}
             <span className="text-xs text-muted-foreground">
-              (competitors only see open surveys)
+              {t("editor.openHint")}
             </span>
           </label>
           <Button size="sm" onClick={saveDetails} disabled={updateSurvey.isPending || !title.trim()}>
-            Save details
+            {t("editor.saveDetails")}
           </Button>
         </div>
 
         <div className="mt-2 space-y-3 border-t border-border pt-4">
-          <h3 className="text-sm font-semibold">Questions</h3>
+          <h3 className="text-sm font-semibold">{t("editor.questions")}</h3>
           {survey.questions.length === 0 && !adding && (
-            <p className="text-[13px] text-muted-foreground">No questions yet.</p>
+            <p className="text-[13px] text-muted-foreground">{t("editor.noQuestions")}</p>
           )}
           {survey.questions.map((q, i) =>
             editingId === q.id ? (
@@ -134,7 +138,7 @@ export function SurveyEditorDialog({
                     { questionId: q.id, input },
                     {
                       onSuccess: () => setEditingId(null),
-                      onError: (e) => toast("Couldn't save question", { description: (e as Error).message, variant: "destructive" }),
+                      onError: (e) => toast(t("editor.saveQuestionError"), { description: (e as Error).message, variant: "destructive" }),
                     },
                   )
                 }
@@ -144,16 +148,16 @@ export function SurveyEditorDialog({
                 <div className="min-w-0 flex-1">
                   <div className="text-sm">{i + 1}. {q.prompt}</div>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    <Badge variant="muted">{TYPE_LABELS[q.type]}</Badge>
-                    {q.required && <span>required</span>}
+                    <Badge variant="muted">{t(`types.${q.type}`)}</Badge>
+                    {q.required && <span>{t("editor.required")}</span>}
                     {q.type === "multiple_choice" && <span>{q.options.join(" · ")}</span>}
                   </div>
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-1">
-                  <IconBtn label="Move up" disabled={i === 0} onClick={() => move(i, -1)}>↑</IconBtn>
-                  <IconBtn label="Move down" disabled={i === survey.questions.length - 1} onClick={() => move(i, 1)}>↓</IconBtn>
+                  <IconBtn label={t("editor.moveUp")} disabled={i === 0} onClick={() => move(i, -1)}>↑</IconBtn>
+                  <IconBtn label={t("editor.moveDown")} disabled={i === survey.questions.length - 1} onClick={() => move(i, 1)}>↓</IconBtn>
                   <Button size="sm" variant="outline" onClick={() => { setEditingId(q.id); setAdding(false); }}>
-                    Edit
+                    {t("editor.edit")}
                   </Button>
                   <Button
                     size="sm"
@@ -161,16 +165,16 @@ export function SurveyEditorDialog({
                     onClick={async () => {
                       if (
                         await confirm({
-                          title: "Delete this question?",
-                          description: "The question and any answers to it are removed.",
-                          confirmLabel: "Delete",
+                          title: t("editor.deleteQuestionTitle"),
+                          description: t("editor.deleteQuestionDescription"),
+                          confirmLabel: t("editor.deleteQuestionLabel"),
                         })
                       ) {
                         deleteQuestion.mutate(q.id);
                       }
                     }}
                   >
-                    Delete
+                    {t("editor.delete")}
                   </Button>
                 </div>
               </div>
@@ -183,7 +187,7 @@ export function SurveyEditorDialog({
               onSave={(input) =>
                 addQuestion.mutate(input, {
                   onSuccess: () => setAdding(false),
-                  onError: (e) => toast("Couldn't add question", { description: (e as Error).message, variant: "destructive" }),
+                  onError: (e) => toast(t("editor.addQuestionError"), { description: (e as Error).message, variant: "destructive" }),
                 })
               }
             />
@@ -193,7 +197,7 @@ export function SurveyEditorDialog({
               onClick={() => { setAdding(true); setEditingId(null); }}
               className="text-xs font-medium text-primary hover:underline"
             >
-              + Add question
+              {t("editor.addQuestion")}
             </button>
           )}
         </div>
@@ -211,6 +215,7 @@ function QuestionForm({
   onSave: (input: QuestionInput) => void;
   onCancel: () => void;
 }) {
+  const t = useTranslations("feedback");
   const [prompt, setPrompt] = React.useState(initial?.prompt ?? "");
   const [type, setType] = React.useState<QuestionType>(initial?.type ?? "rating_1_5");
   const [required, setRequired] = React.useState(initial?.required ?? true);
@@ -222,24 +227,24 @@ function QuestionForm({
   return (
     <div className="space-y-2 rounded-md border border-primary/40 bg-background/40 p-3">
       <div className="space-y-1.5">
-        <Label className="text-xs">Question</Label>
-        <Input value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="e.g. How was the difficulty?" />
+        <Label className="text-xs">{t("editor.questionLabel")}</Label>
+        <Input value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t("editor.questionPlaceholder")} />
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <Select value={type} onChange={(e) => setType(e.target.value as QuestionType)} className="h-9 w-48">
-          {(Object.keys(TYPE_LABELS) as QuestionType[]).map((t) => (
-            <option key={t} value={t}>{TYPE_LABELS[t]}</option>
+          {QUESTION_TYPES.map((qt) => (
+            <option key={qt} value={qt}>{t(`types.${qt}`)}</option>
           ))}
         </Select>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} />
-          Required
+          {t("editor.requiredCheckbox")}
         </label>
       </div>
       {type === "multiple_choice" && (
         <div className="space-y-1.5">
           <Label htmlFor="survey-q-options" className="text-xs">
-            Options (one per line, at least two)
+            {t("editor.optionsLabel")}
           </Label>
           <textarea
             id="survey-q-options"
@@ -256,9 +261,9 @@ function QuestionForm({
           disabled={!valid}
           onClick={() => onSave({ prompt: prompt.trim(), type, options, required })}
         >
-          Save question
+          {t("editor.saveQuestion")}
         </Button>
-        <Button size="sm" variant="outline" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" variant="outline" onClick={onCancel}>{t("editor.cancel")}</Button>
       </div>
     </div>
   );

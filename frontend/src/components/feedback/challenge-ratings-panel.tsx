@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -14,25 +16,24 @@ import { useChallengeRatings } from "@/lib/hooks/use-feedback";
 // Staff view of post-solve challenge ratings (Phase 9) — which challenges landed
 // well. Hidden until at least one rating exists. Read via feedback_view_responses.
 export function ChallengeRatingsPanel({ competitionId }: { competitionId: string }) {
+  const t = useTranslations("feedback.ratings");
   const { data } = useChallengeRatings(competitionId);
   if (!data || data.length === 0) return null;
 
   return (
     <section className="grid gap-2">
       <div>
-        <h2 className="text-lg font-semibold">Challenge ratings</h2>
-        <p className="text-sm text-muted-foreground">
-          Average competitor rating (1–5) per challenge — highest first.
-        </p>
+        <h2 className="text-lg font-semibold">{t("title")}</h2>
+        <p className="text-sm text-muted-foreground">{t("description")}</p>
       </div>
       <Card>
         <CardContent className="pt-4">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Challenge</TableHead>
-                <TableHead className="text-right">Average</TableHead>
-                <TableHead className="text-right">Ratings</TableHead>
+                <TableHead>{t("colChallenge")}</TableHead>
+                <TableHead className="text-right">{t("colAverage")}</TableHead>
+                <TableHead className="text-right">{t("colRatings")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

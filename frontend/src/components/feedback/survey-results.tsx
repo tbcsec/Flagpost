@@ -6,6 +6,8 @@
 
 import * as React from "react";
 
+import { useTranslations } from "next-intl";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,6 +31,7 @@ export function SurveyResultsDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useTranslations("feedback.results");
   const { data, isLoading } = useSurveyResults(competitionId, open ? surveyId : null);
   const exportCsvMutation = useExportSurveyCsv(competitionId);
   const exporting = exportCsvMutation.isPending;
@@ -36,7 +39,7 @@ export function SurveyResultsDialog({
   function exportCsv() {
     exportCsvMutation.mutate(surveyId, {
       onError: (e) =>
-        toast("Export failed", { description: (e as Error).message, variant: "destructive" }),
+        toast(t("exportError"), { description: (e as Error).message, variant: "destructive" }),
     });
   }
 
@@ -45,18 +48,18 @@ export function SurveyResultsDialog({
       <DialogContent className="max-h-[88vh] max-w-[52rem] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            Results{data ? ` — ${data.title}` : ""}
+            {data ? t("titleFor", { title: data.title }) : t("title")}
           </DialogTitle>
         </DialogHeader>
 
         {isLoading || !data ? (
-          <p className="text-sm text-muted-foreground">Loading results…</p>
+          <p className="text-sm text-muted-foreground">{t("loading")}</p>
         ) : data.response_count === 0 ? (
-          <p className="text-sm text-muted-foreground">No responses yet.</p>
+          <p className="text-sm text-muted-foreground">{t("noResponses")}</p>
         ) : (
           <>
             <p className="text-sm text-muted-foreground">
-              {data.response_count} response{data.response_count === 1 ? "" : "s"}
+              {t("responseCount", { count: data.response_count })}
             </p>
             <div className="space-y-5">
               {data.questions.map((q) => (
@@ -68,13 +71,13 @@ export function SurveyResultsDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
+            {t("close")}
           </Button>
           <Button
             disabled={exporting || !data || data.response_count === 0}
             onClick={exportCsv}
           >
-            {exporting ? "Exporting…" : "Export CSV"}
+            {exporting ? t("exporting") : t("exportCsv")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -83,24 +86,25 @@ export function SurveyResultsDialog({
 }
 
 function QuestionResultView({ q }: { q: QuestionResults }) {
+  const t = useTranslations("feedback.results");
   return (
     <div className="space-y-2 border-b border-border pb-4 last:border-0">
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-sm font-medium">{q.prompt}</span>
         <span className="whitespace-nowrap text-xs text-muted-foreground">
-          {q.answered} answered
-          {q.average !== null && ` · avg ${q.average}`}
+          {t("answered", { count: q.answered })}
+          {q.average !== null && ` ${t("avgSuffix", { value: q.average })}`}
         </span>
       </div>
       {q.counts && <Histogram counts={q.counts} />}
       {q.texts && (
         <ul className="space-y-1">
           {q.texts.length === 0 ? (
-            <li className="text-[13px] text-muted-foreground">No text answers.</li>
+            <li className="text-[13px] text-muted-foreground">{t("noText")}</li>
           ) : (
-            q.texts.map((t, i) => (
+            q.texts.map((text, i) => (
               <li key={i} className="rounded-md bg-muted/50 px-2.5 py-1.5 text-[13px]">
-                {t}
+                {text}
               </li>
             ))
           )}

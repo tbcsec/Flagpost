@@ -5,6 +5,8 @@
 
 import * as React from "react";
 
+import { useTranslations } from "next-intl";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -38,6 +40,7 @@ export function SurveyResponseDialog({
 }) {
   // Starts empty on mount: the loader renders this dialog only while open and
   // keys it by survey id, so every open is a fresh, blank response form.
+  const t = useTranslations("feedback.response");
   const [values, setValues] = React.useState<Record<string, string>>({});
   const submit = useSubmitResponse(competitionId, survey.id);
 
@@ -55,11 +58,11 @@ export function SurveyResponseDialog({
       .map(([question_id, value]) => ({ question_id, value }));
     submit.mutate(answers, {
       onSuccess: () => {
-        toast("Thanks for your feedback!", { variant: "success" });
+        toast(t("thanksToast"), { variant: "success" });
         onOpenChange(false);
       },
       onError: (e) =>
-        toast("Couldn't submit", { description: (e as Error).message, variant: "destructive" }),
+        toast(t("submitError"), { description: (e as Error).message, variant: "destructive" }),
     });
   }
 
@@ -90,19 +93,19 @@ export function SurveyResponseDialog({
             </div>
           ))}
           {survey.questions.length === 0 && (
-            <p className="text-sm text-muted-foreground">This survey has no questions yet.</p>
+            <p className="text-sm text-muted-foreground">{t("noQuestions")}</p>
           )}
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("cancel")}
           </Button>
           <Button
             disabled={missingRequired || submit.isPending || survey.questions.length === 0}
             onClick={onSubmit}
           >
-            {submit.isPending ? "Submitting…" : "Submit"}
+            {submit.isPending ? t("submitting") : t("submit")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { useTranslations } from "next-intl";
+
 import { SectionHeader } from "@/components/app/section-header";
 import { ChallengeRatingsPanel } from "@/components/feedback/challenge-ratings-panel";
 import { SurveyEditorDialog } from "@/components/feedback/survey-editor";
@@ -28,6 +30,7 @@ import { toast } from "@/stores/toast";
 // read results; competitors (feedback_submit) answer open ones. The engine's
 // survey.submitted trigger fires on submission (Phase 1).
 export default function FeedbackPage() {
+  const t = useTranslations("feedback");
   const { data: competition } = useActiveCompetition();
   const access = useAccess();
   const isStaff = access.has("feedback_manage");
@@ -49,13 +52,13 @@ export default function FeedbackPage() {
 
   function newSurvey() {
     create.mutate(
-      { title: "Untitled survey" },
+      { title: t("untitledSurvey") },
       {
         onSuccess: (survey) => {
-          toast("Survey created", { variant: "success" });
+          toast(t("createdToast"), { variant: "success" });
           setEditId(survey.id); // open the editor straight away
         },
-        onError: (e) => toast("Couldn't create", { description: (e as Error).message, variant: "destructive" }),
+        onError: (e) => toast(t("createError"), { description: (e as Error).message, variant: "destructive" }),
       },
     );
   }
@@ -63,12 +66,12 @@ export default function FeedbackPage() {
   return (
     <>
       <SectionHeader
-        title="Feedback"
-        subtitle={`${competition?.name ?? ""} · surveys`}
+        title={t("title")}
+        subtitle={`${competition?.name ?? ""} · ${t("subtitle")}`}
         actions={
           isStaff ? (
             <Button size="sm" onClick={newSurvey} disabled={!competitionId || create.isPending}>
-              New survey
+              {t("newSurvey")}
             </Button>
           ) : undefined
         }
@@ -80,20 +83,18 @@ export default function FeedbackPage() {
           <Skeleton className="h-20" />
         </div>
       ) : isError ? (
-        <Empty>The feedback module is disabled for this competition.</Empty>
+        <Empty>{t("moduleDisabled")}</Empty>
       ) : !surveys || surveys.length === 0 ? (
         <EmptyState
           icon={<SurveyEmptyIcon />}
-          title={isStaff ? "No surveys yet" : "No surveys open right now"}
+          title={isStaff ? t("empty.staffTitle") : t("empty.competitorTitle")}
           description={
-            isStaff
-              ? "Build a survey to gather feedback — rating scales, multiple choice, and free text, with CSV export when responses come in."
-              : "When the organisers open a survey, you'll be able to answer it here."
+            isStaff ? t("empty.staffDescription") : t("empty.competitorDescription")
           }
           action={
             isStaff ? (
               <Button onClick={newSurvey} disabled={!competitionId || create.isPending}>
-                Create a survey
+                {t("empty.create")}
               </Button>
             ) : undefined
           }
@@ -112,9 +113,9 @@ export default function FeedbackPage() {
               onDelete={async () => {
                 if (
                   await confirm({
-                    title: `Delete "${s.title}"?`,
-                    description: "The survey and all of its responses are permanently removed.",
-                    confirmLabel: "Delete survey",
+                    title: t("card.deleteConfirmTitle", { title: s.title }),
+                    description: t("card.deleteConfirmDescription"),
+                    confirmLabel: t("card.deleteConfirmLabel"),
                   })
                 ) {
                   del.mutate(s.id);
@@ -166,6 +167,7 @@ function SurveyCard({
   onResults: () => void;
   onDelete: () => void;
 }) {
+  const t = useTranslations("feedback.card");
   return (
     <Card>
       <CardContent className="flex flex-wrap items-center gap-3 p-4">
@@ -173,26 +175,26 @@ function SurveyCard({
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium">{survey.title}</span>
             <Badge variant={survey.is_open ? "success" : "muted"}>
-              {survey.is_open ? "open" : "closed"}
+              {survey.is_open ? t("open") : t("closed")}
             </Badge>
-            {survey.responded && <Badge variant="secondary">responded</Badge>}
+            {survey.responded && <Badge variant="secondary">{t("responded")}</Badge>}
           </div>
           <div className="mt-1 text-xs text-muted-foreground">
-            {survey.question_count} question{survey.question_count === 1 ? "" : "s"}
-            {isStaff && ` · ${survey.response_count} response${survey.response_count === 1 ? "" : "s"}`}
+            {t("questionCount", { count: survey.question_count })}
+            {isStaff && ` · ${t("responseCount", { count: survey.response_count })}`}
           </div>
         </div>
         <div className="flex flex-shrink-0 flex-wrap gap-2">
           {!isStaff && survey.is_open && !survey.responded && (
-            <Button size="sm" onClick={onRespond}>Respond</Button>
+            <Button size="sm" onClick={onRespond}>{t("respond")}</Button>
           )}
           {isStaff && (
             <>
-              <Button size="sm" variant="outline" onClick={onEdit}>Edit</Button>
+              <Button size="sm" variant="outline" onClick={onEdit}>{t("edit")}</Button>
               {canViewResults && (
-                <Button size="sm" variant="outline" onClick={onResults}>Results</Button>
+                <Button size="sm" variant="outline" onClick={onResults}>{t("results")}</Button>
               )}
-              <Button size="sm" variant="destructive" onClick={onDelete}>Delete</Button>
+              <Button size="sm" variant="destructive" onClick={onDelete}>{t("delete")}</Button>
             </>
           )}
         </div>

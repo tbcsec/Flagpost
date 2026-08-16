@@ -5,6 +5,7 @@
 // stranded: no password reset, and no way past the #74 verification gate
 // without an administrator editing the record by hand.
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ export function EmailCard() {
   const changeEmail = useChangeEmail();
   const confirm = useConfirm();
 
+  const t = useTranslations("profile.email");
   const [email, setEmail] = useState(user?.email ?? "");
   const [password, setPassword] = useState("");
 
@@ -48,7 +50,7 @@ export function EmailCard() {
           setEmail(updated.email ?? "");
           toast(
             updated.email && verificationRequired
-              ? `${successMessage} — check your inbox to verify it`
+              ? `${successMessage}${t("verifySuffix")}`
               : successMessage,
             { variant: "success" },
           );
@@ -59,38 +61,35 @@ export function EmailCard() {
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    submit(email.trim(), current ? "Email updated" : "Email added");
+    submit(email.trim(), current ? t("updatedToast") : t("addedToast"));
   }
 
   async function onClear() {
     if (
       !(await confirm({
-        title: "Remove your email address?",
-        description:
-          "You'll lose access to password reset, and an administrator will have to set an address for you to get it back.",
-        confirmLabel: "Remove",
+        title: t("removeConfirmTitle"),
+        description: t("removeConfirmDescription"),
+        confirmLabel: t("removeConfirmLabel"),
         destructive: true,
       }))
     ) {
       return;
     }
-    submit(null, "Email removed");
+    submit(null, t("removedToast"));
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Email</CardTitle>
+        <CardTitle>{t("title")}</CardTitle>
         <CardDescription>
-          {current
-            ? "Used for password resets and account notices."
-            : "No email set — add one to enable password reset."}
+          {current ? t("descriptionSet") : t("descriptionUnset")}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={onSubmit} className="grid max-w-md gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="pem">Email address</Label>
+            <Label htmlFor="pem">{t("address")}</Label>
             <Input
               id="pem"
               type="email"
@@ -103,14 +102,14 @@ export function EmailCard() {
             {current && changed && (
               <p className="text-xs text-muted-foreground">
                 {verificationRequired
-                  ? "Changing this will require verifying the new address before you can join a competition."
-                  : "We'll let your current address know it was changed."}
+                  ? t("changeHintVerify")
+                  : t("changeHintNotify")}
               </p>
             )}
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="pemcur">Current password</Label>
+            <Label htmlFor="pemcur">{t("current")}</Label>
             <Input
               id="pemcur"
               type="password"
@@ -119,10 +118,7 @@ export function EmailCard() {
               onChange={(e) => setPassword(e.target.value)}
               required
             />
-            <p className="text-xs text-muted-foreground">
-              Confirming your password keeps someone with access to an open
-              session from repointing where password resets are sent.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("currentHint")}</p>
           </div>
 
           {changeEmail.isError && (
@@ -133,7 +129,7 @@ export function EmailCard() {
 
           <div className="flex items-center gap-2">
             <Button type="submit" disabled={changeEmail.isPending || !changed}>
-              {changeEmail.isPending ? "Saving…" : current ? "Update email" : "Add email"}
+              {changeEmail.isPending ? t("saving") : current ? t("update") : t("add")}
             </Button>
             {canClear && (
               <Button
@@ -143,7 +139,7 @@ export function EmailCard() {
                 disabled={changeEmail.isPending || !password}
                 onClick={onClear}
               >
-                Remove
+                {t("remove")}
               </Button>
             )}
           </div>

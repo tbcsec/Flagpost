@@ -5,6 +5,7 @@
 // holder picker here because the API has no field for one, so no user (however
 // privileged) can issue a credential that acts as somebody else.
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +43,8 @@ import type { ApiToken, ApiTokenCreated } from "@/lib/types";
 import { toast } from "@/stores/toast";
 
 export function MyApiTokensCard() {
+  // `t` is a token in the row loop below, so the translator is `tr`.
+  const tr = useTranslations("profile.tokens");
   const tokens = useMyApiTokens();
   const revoke = useRevokeMyApiToken();
   const confirm = useConfirm();
@@ -53,17 +56,17 @@ export function MyApiTokensCard() {
   async function onRevoke(t: ApiToken) {
     if (
       !(await confirm({
-        title: "Revoke this token?",
-        description: `${t.description} will stop authenticating immediately. This can't be undone.`,
-        confirmLabel: "Revoke",
+        title: tr("revokeConfirmTitle"),
+        description: tr("revokeConfirmDescription", { description: t.description }),
+        confirmLabel: tr("revokeConfirmLabel"),
         destructive: true,
       }))
     ) {
       return;
     }
     revoke.mutate(t.id, {
-      onSuccess: () => toast("Token revoked"),
-      onError: (e) => toast("Couldn't revoke", { description: (e as Error).message, variant: "destructive" }),
+      onSuccess: () => toast(tr("revokedToast")),
+      onError: (e) => toast(tr("revokeError"), { description: (e as Error).message, variant: "destructive" }),
     });
   }
 
@@ -71,13 +74,10 @@ export function MyApiTokensCard() {
     <Card>
       <CardHeader className="flex-row items-start justify-between space-y-0">
         <div className="grid gap-1.5">
-          <CardTitle>API tokens</CardTitle>
-          <CardDescription>
-            Use a token instead of signing in to call the API from a script. Each
-            one acts as you, with your permissions, and is shown only once.
-          </CardDescription>
+          <CardTitle>{tr("title")}</CardTitle>
+          <CardDescription>{tr("description")}</CardDescription>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>Create token</Button>
+        <Button onClick={() => setCreateOpen(true)}>{tr("create")}</Button>
       </CardHeader>
       <CardContent>
         {tokens.isLoading ? (
@@ -87,22 +87,22 @@ export function MyApiTokensCard() {
           // failed fetch would tell someone they have no tokens when a live one
           // may still be authenticating.
           <p role="alert" className="text-sm text-destructive">
-            Couldn&apos;t load your tokens: {(tokens.error as Error).message}
+            {tr("loadError", { message: (tokens.error as Error).message })}
           </p>
         ) : rows.length === 0 ? (
           <EmptyState
-            title="No API tokens"
-            description="Create one to call the Flagpost API from a script or CI job."
+            title={tr("emptyTitle")}
+            description={tr("emptyDescription")}
           />
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Description</TableHead>
-                <TableHead>Expires</TableHead>
-                <TableHead>Last used</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>{tr("colDescription")}</TableHead>
+                <TableHead>{tr("colExpires")}</TableHead>
+                <TableHead>{tr("colLastUsed")}</TableHead>
+                <TableHead>{tr("colStatus")}</TableHead>
+                <TableHead className="text-right">{tr("colActions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -115,7 +115,7 @@ export function MyApiTokensCard() {
                       {new Date(t.expires_at).toLocaleString()}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {t.last_used_at ? relativeTime(t.last_used_at) : "Never"}
+                      {t.last_used_at ? relativeTime(t.last_used_at) : tr("never")}
                     </TableCell>
                     <TableCell>
                       <Badge variant={status.variant}>{status.label}</Badge>
@@ -129,7 +129,7 @@ export function MyApiTokensCard() {
                           disabled={revoke.isPending}
                           onClick={() => onRevoke(t)}
                         >
-                          Revoke
+                          {tr("revoke")}
                         </Button>
                       )}
                     </TableCell>
@@ -161,6 +161,7 @@ function CreateTokenDialog({
   onOpenChange: (open: boolean) => void;
   onCreated: (token: ApiTokenCreated) => void;
 }) {
+  const tr = useTranslations("profile.tokens");
   const create = useCreateApiToken();
   // Seeded on mount; the call site keys this dialog by open-state so each open
   // starts from a clean form.
@@ -177,7 +178,7 @@ function CreateTokenDialog({
           onCreated(token);
         },
         onError: (err) =>
-          toast("Couldn't create token", { description: (err as Error).message, variant: "destructive" }),
+          toast(tr("createError"), { description: (err as Error).message, variant: "destructive" }),
       },
     );
   }
@@ -186,30 +187,25 @@ function CreateTokenDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create API token</DialogTitle>
-          <DialogDescription>
-            The token acts as you, with your own permissions. Tokens can only be
-            created for your own account.
-          </DialogDescription>
+          <DialogTitle>{tr("createTitle")}</DialogTitle>
+          <DialogDescription>{tr("createDescription")}</DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={onSubmit}>
           <div className="grid gap-2">
-            <Label htmlFor="token-desc">Description</Label>
+            <Label htmlFor="token-desc">{tr("descLabel")}</Label>
             <Input
               id="token-desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g. CI grading bot"
+              placeholder={tr("descPlaceholder")}
               maxLength={200}
               required
               autoFocus
             />
-            <p className="text-xs text-muted-foreground">
-              So you can tell your tokens apart later.
-            </p>
+            <p className="text-xs text-muted-foreground">{tr("descHint")}</p>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="token-expiry">Expires in (days)</Label>
+            <Label htmlFor="token-expiry">{tr("expiresLabel")}</Label>
             <Input
               id="token-expiry"
               type="number"
@@ -225,7 +221,7 @@ function CreateTokenDialog({
           )}
           <DialogFooter>
             <Button type="submit" disabled={create.isPending || !description.trim()}>
-              {create.isPending ? "Creating…" : "Create token"}
+              {create.isPending ? tr("creating") : tr("createSubmit")}
             </Button>
           </DialogFooter>
         </form>
@@ -241,6 +237,7 @@ function RevealTokenDialog({
   token: ApiTokenCreated | null;
   onOpenChange: (open: boolean) => void;
 }) {
+  const tr = useTranslations("profile.tokens");
   const [copied, setCopied] = useState(false);
 
   async function onCopy() {
@@ -250,7 +247,7 @@ function RevealTokenDialog({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast("Couldn't copy — select and copy manually", { variant: "destructive" });
+      toast(tr("copyError"), { variant: "destructive" });
     }
   }
 
@@ -258,11 +255,11 @@ function RevealTokenDialog({
     <Dialog open={Boolean(token)} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Token created</DialogTitle>
+          <DialogTitle>{tr("revealTitle")}</DialogTitle>
           <DialogDescription>
-            Copy it now — it won&apos;t be shown again. Send it in an
-            <span className="font-mono text-xs"> Authorization: Bearer </span>
-            header.
+            {tr.rich("revealDescription", {
+              code: (chunks) => <span className="font-mono text-xs">{chunks}</span>,
+            })}
           </DialogDescription>
         </DialogHeader>
         <div className="flex items-center gap-2">
@@ -273,11 +270,11 @@ function RevealTokenDialog({
             onFocus={(e) => e.target.select()}
           />
           <Button type="button" variant="outline" onClick={onCopy}>
-            {copied ? "Copied" : "Copy"}
+            {copied ? tr("copied") : tr("copy")}
           </Button>
         </div>
         <DialogFooter>
-          <Button type="button" onClick={() => onOpenChange(false)}>Done</Button>
+          <Button type="button" onClick={() => onOpenChange(false)}>{tr("done")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { useTranslations } from "next-intl";
 import dynamic from "next/dynamic";
 
 import { NoCompetition } from "@/components/app/no-competition";
@@ -60,6 +61,7 @@ import { cn } from "@/lib/utils";
 
 export default function ChallengesPage() {
   const { competitionId, data: competition } = useActiveCompetition();
+  const t = useTranslations("challenges");
   const access = useAccess();
   const challenges = useChallenges(competitionId ?? "");
   const categories = useCategories(competitionId ?? "");
@@ -110,14 +112,12 @@ export default function ChallengesPage() {
     const ended = competition.status === "ended";
     return (
       <>
-        <SectionHeader title="Challenges" subtitle={competition.name} />
+        <SectionHeader title={t("title")} subtitle={competition.name} />
         <EmptyState
           icon={<FlagEmptyIcon />}
-          title={ended ? "This competition has ended" : "This competition hasn't started yet"}
+          title={ended ? t("gate.endedTitle") : t("gate.notStartedTitle")}
           description={
-            ended
-              ? "Challenges are closed. Thanks for playing!"
-              : "Challenges will appear here once the organisers start the competition."
+            ended ? t("gate.endedDescription") : t("gate.notStartedDescription")
           }
         />
       </>
@@ -125,14 +125,14 @@ export default function ChallengesPage() {
   }
 
   const categoryName = (id: string | null) =>
-    categories.data?.find((c) => c.id === id)?.name ?? "uncategorized";
+    categories.data?.find((c) => c.id === id)?.name ?? t("uncategorized");
 
   const solvedCount = allData.filter((c) => c.solved).length;
 
   // Each chip carries its solved/total progress so competitors can see at a
   // glance where they stand per category.
   const chips = [
-    { id: "all", label: "All", solved: solvedCount, total: allData.length },
+    { id: "all", label: t("chipAll"), solved: solvedCount, total: allData.length },
     ...(categories.data ?? []).map((c) => {
       const inCat = allData.filter((x) => x.category_id === c.id);
       return {
@@ -147,12 +147,12 @@ export default function ChallengesPage() {
   return (
     <>
       <SectionHeader
-        title="Challenges"
-        subtitle={`${competition?.name ?? ""} · ${solvedCount} of ${challenges.data?.length ?? 0} solved`}
+        title={t("title")}
+        subtitle={`${competition?.name ?? ""} · ${t("solvedOfTotal", { solved: solvedCount, total: challenges.data?.length ?? 0 })}`}
         actions={
           access.canManageActiveCompetition ? (
             <Button variant={managing ? "secondary" : "default"} onClick={() => setManaging((m) => !m)}>
-              {managing ? "Done managing" : "Manage challenges"}
+              {managing ? t("doneManaging") : t("manage")}
             </Button>
           ) : undefined
         }
@@ -160,10 +160,10 @@ export default function ChallengesPage() {
 
       {competition?.paused && (
         <div className="rounded-md border border-warning/40 bg-warning/10 px-4 py-2.5 text-sm">
-          <span className="font-medium">⏸ The competition is paused.</span>{" "}
+          <span className="font-medium">{t("paused.banner")}</span>{" "}
           {access.canManageActiveCompetition
-            ? "Submissions are closed for competitors — you can still submit to test."
-            : "Flag submissions are closed until the organisers resume it."}
+            ? t("paused.manage")
+            : t("paused.competitor")}
         </div>
       )}
 
@@ -213,7 +213,7 @@ export default function ChallengesPage() {
                       : "text-muted-foreground hover:bg-accent/60",
                   )}
                 >
-                  {a}
+                  {t(`availability.${a}`)}
                 </button>
               ))}
             </div>
@@ -222,7 +222,7 @@ export default function ChallengesPage() {
           {/* Card grid (default) vs. grouped list (#55). */}
           <div
             role="group"
-            aria-label="Challenge layout"
+            aria-label={t("layout.group")}
             className="inline-flex overflow-hidden rounded-full border border-border text-xs"
           >
             {(["card", "list"] as const).map((m) => (
@@ -238,7 +238,7 @@ export default function ChallengesPage() {
                     : "text-muted-foreground hover:bg-accent/60",
                 )}
               >
-                {m === "card" ? "Cards" : "List"}
+                {m === "card" ? t("layout.cards") : t("layout.list")}
               </button>
             ))}
           </div>
@@ -253,15 +253,15 @@ export default function ChallengesPage() {
       {challenges.data && allData.length === 0 && (
         <EmptyState
           icon={<FlagEmptyIcon />}
-          title="No challenges yet"
+          title={t("empty.title")}
           description={
             access.canManageActiveCompetition
-              ? "Add your first challenge to open the competition — save it as a draft and publish when it's ready."
-              : "The organisers haven't published any challenges yet. Check back once the competition opens."
+              ? t("empty.manageDescription")
+              : t("empty.competitorDescription")
           }
           action={
             access.canManageActiveCompetition && !managing ? (
-              <Button onClick={() => setManaging(true)}>Create a challenge</Button>
+              <Button onClick={() => setManaging(true)}>{t("empty.create")}</Button>
             ) : undefined
           }
         />
@@ -296,12 +296,12 @@ export default function ChallengesPage() {
                   {categoryName(ch.category_id)}
                 </span>
                 <div className="flex gap-1.5">
-                  {ch.state === "draft" && <Badge variant="outline">Draft</Badge>}
+                  {ch.state === "draft" && <Badge variant="outline">{t("status.draft")}</Badge>}
                   {ch.locked ? (
-                    <Badge variant="outline">🔒 Locked</Badge>
+                    <Badge variant="outline">{t("status.lockedBadge")}</Badge>
                   ) : (
                     <Badge variant={ch.solved ? "success" : "muted"}>
-                      {ch.solved ? "Solved" : "Open"}
+                      {ch.solved ? t("status.solved") : t("status.open")}
                     </Badge>
                   )}
                 </div>
@@ -326,13 +326,13 @@ export default function ChallengesPage() {
               )}
               <div className="flex items-baseline justify-between">
                 <ChallengeValue challenge={ch} className="text-sm" />
-                <span className="text-xs text-muted-foreground">{ch.solve_count} solves</span>
+                <span className="text-xs text-muted-foreground">{t("solvesCount", { count: ch.solve_count })}</span>
               </div>
             </button>
           ))}
           {grid.rows.length === 0 && (
             <p className="text-sm text-muted-foreground">
-              No challenges in this category yet.
+              {t("empty.categoryEmpty")}
             </p>
           )}
         </div>
@@ -379,6 +379,7 @@ function ChallengeDialogBody({
   paused: boolean;
   penaltyPct: number | null;
 }) {
+  const t = useTranslations("challenges");
   const [flag, setFlag] = useState("");
   const submit = useSubmitFlag(competitionId, challenge.id);
   // Titles of the prerequisites still blocking this challenge (unlock chain).
@@ -414,13 +415,19 @@ function ChallengeDialogBody({
         setFlag("");
         if (r.correct) {
           toast(
-            r.is_first_blood ? "First blood!" : "Solved!",
+            r.is_first_blood ? t("detail.firstBlood") : t("detail.solved"),
             {
-              description: `${challenge.title} · +${r.points_awarded} pts${
+              description:
                 r.full_value != null && r.full_value > r.points_awarded
-                  ? ` (reduced from ${r.full_value})`
-                  : ""
-              }`,
+                  ? t("solveToast.descriptionReduced", {
+                      title: challenge.title,
+                      points: r.points_awarded,
+                      full: r.full_value,
+                    })
+                  : t("solveToast.description", {
+                      title: challenge.title,
+                      points: r.points_awarded,
+                    }),
               variant: "success",
             },
           );
@@ -440,41 +447,42 @@ function ChallengeDialogBody({
               {challenge.value}{" "}
             </span>
           )}
-          {worth} pts
-          {challenge.scoring_type === "dynamic" && " (dynamic)"} · {challenge.solve_count} solves
+          {t("points", { value: worth })}
+          {challenge.scoring_type === "dynamic" && ` ${t("dynamicSuffix")}`} ·{" "}
+          {t("solvesCount", { count: challenge.solve_count })}
         </DialogDescription>
       </DialogHeader>
       {presence.others.length > 0 && (
         <PresenceIndicator
           members={presence.others}
-          label={`${presence.others.length} other${presence.others.length === 1 ? "" : "s"} viewing`}
+          label={t("detail.othersViewing", { count: presence.others.length })}
         />
       )}
       <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">
-        {richTextToPlain(challenge.description) || "No description."}
+        {richTextToPlain(challenge.description) || t("detail.noDescription")}
       </p>
 
       {challenge.locked ? (
         <div className="grid gap-2 rounded-lg border border-border bg-muted/40 p-6 text-center">
           <div className="text-2xl">🔒</div>
-          <div className="text-sm font-medium">Locked</div>
+          <div className="text-sm font-medium">{t("detail.lockedTitle")}</div>
           <p className="text-xs text-muted-foreground">
             {lockedBy.length > 0
-              ? `Solve ${lockedBy.join(", ")} to unlock this challenge.`
-              : "Solve this challenge's prerequisites to unlock it."}
+              ? t("detail.lockedBy", { names: lockedBy.join(", ") })
+              : t("detail.lockedByGeneric")}
           </p>
         </div>
       ) : justSolved ? (
         <div className="anim-toast flex flex-col items-center gap-2 rounded-lg border border-success/40 bg-success/10 p-6 text-center">
           <FlagpostMark size={40} theme="dark" />
           <div className="text-base font-semibold text-success">
-            {result.is_first_blood ? "First blood!" : "Solved!"}
+            {result.is_first_blood ? t("detail.firstBlood") : t("detail.solved")}
           </div>
           <div className="font-mono text-sm text-muted-foreground">
-            +{result.points_awarded} pts
+            {t("detail.pointsAwarded", { points: result.points_awarded })}
             {result.full_value != null && result.full_value > result.points_awarded && (
               <span className="ml-1 text-xs">
-                (reduced from {result.full_value})
+                {t("detail.reducedFrom", { value: result.full_value })}
               </span>
             )}
           </div>
@@ -482,22 +490,22 @@ function ChallengeDialogBody({
         </div>
       ) : alreadySolved ? (
         <div className="grid gap-3">
-          <p className="text-sm text-success">You&apos;ve solved this challenge.</p>
+          <p className="text-sm text-success">{t("detail.alreadySolved")}</p>
           <ChallengeRatingPrompt competitionId={competitionId} challenge={challenge} />
         </div>
       ) : outOfGuesses ? (
         <p role="alert" className="text-sm text-destructive">
-          You&apos;ve used all your guesses for this question.
+          {t("detail.outOfGuesses")}
         </p>
       ) : paused ? (
         <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm">
-          ⏸ The competition is paused — submissions are closed.
+          {t("paused.dialog")}
         </p>
       ) : (
         <form className="grid gap-3" onSubmit={onSubmit}>
           {isMultipleChoice ? (
             <div className="grid gap-2">
-              <Label>Choose an answer</Label>
+              <Label>{t("detail.chooseAnswer")}</Label>
               <div className="grid gap-1.5">
                 {(challenge.choices ?? []).map((option) => (
                   <label
@@ -518,16 +526,16 @@ function ChallengeDialogBody({
               {(typeof remaining === "number" || penaltyPct != null) && (
                 <span className="text-xs text-muted-foreground">
                   {typeof remaining === "number" &&
-                    `${remaining} guess${remaining === 1 ? "" : "es"} remaining.`}
+                    t("detail.guessesRemaining", { count: remaining })}
                   {typeof remaining === "number" && penaltyPct != null && " "}
                   {penaltyPct != null &&
-                    `Each wrong guess lowers this question's value by ${penaltyPct}%.`}
+                    t("detail.penaltyNote", { pct: penaltyPct })}
                 </span>
               )}
             </div>
           ) : (
             <div className="grid gap-2">
-              <Label htmlFor="flag-submit">Flag</Label>
+              <Label htmlFor="flag-submit">{t("detail.flag")}</Label>
               <Input
                 id="flag-submit"
                 value={flag}
@@ -541,7 +549,7 @@ function ChallengeDialogBody({
           )}
           {result && !result.correct && (
             <span role="alert" className="text-sm text-destructive">
-              {isMultipleChoice ? "Incorrect answer." : "Incorrect flag."}
+              {isMultipleChoice ? t("detail.incorrectAnswer") : t("detail.incorrectFlag")}
             </span>
           )}
           {submit.isError && (
@@ -550,10 +558,10 @@ function ChallengeDialogBody({
           <DialogFooter>
             <Button type="submit" disabled={submit.isPending || (isMultipleChoice && !flag)}>
               {submit.isPending
-                ? "Submitting…"
+                ? t("detail.submitting")
                 : isMultipleChoice
-                  ? "Submit answer"
-                  : "Submit flag"}
+                  ? t("detail.submitAnswer")
+                  : t("detail.submitFlag")}
             </Button>
           </DialogFooter>
         </form>
@@ -580,6 +588,7 @@ function ChallengeNotes({
   challenge: Challenge;
   team: { id: string; name: string } | null;
 }) {
+  const t = useTranslations("challenges.notes");
   const userId = useAuthStore((s) => s.user?.id);
   if (!team && !userId) return null;
 
@@ -587,11 +596,11 @@ function ChallengeNotes({
   return (
     <section className="grid gap-2">
       <div>
-        <h3 className="text-sm font-medium">{shared ? "Team notes" : "My notes"}</h3>
+        <h3 className="text-sm font-medium">{shared ? t("team") : t("mine")}</h3>
         <p className="text-xs text-muted-foreground">
           {shared
-            ? `A shared scratchpad for ${team.name} — visible only to your team, live as you type.`
-            : "A private scratchpad for this challenge — only you can see it, and it stays in sync across your devices."}
+            ? t("sharedDescription", { name: team.name })
+            : t("privateDescription")}
         </p>
       </div>
       <CollabNote
@@ -613,13 +622,14 @@ function ChallengeSolves({
   competitionId: string;
   challengeId: string;
 }) {
+  const t = useTranslations("challenges.solves");
   const { data: solvers } = useChallengeSolves(competitionId, challengeId);
   if (!solvers || solvers.length === 0) {
     return (
       <section className="grid gap-1">
-        <h3 className="text-sm font-medium">Solves</h3>
+        <h3 className="text-sm font-medium">{t("title")}</h3>
         <p className="text-xs text-muted-foreground">
-          No solves yet — be the first to solve it.
+          {t("empty")}
         </p>
       </section>
     );
@@ -627,7 +637,7 @@ function ChallengeSolves({
   return (
     <section className="grid gap-2">
       <h3 className="text-sm font-medium">
-        Solves <span className="text-muted-foreground">({solvers.length})</span>
+        {t("title")} <span className="text-muted-foreground">({solvers.length})</span>
       </h3>
       <ul className="grid max-h-48 gap-1 overflow-y-auto">
         {solvers.map((s) => (
@@ -637,7 +647,7 @@ function ChallengeSolves({
           >
             <span className="flex items-center gap-1.5">
               {s.is_first_blood && (
-                <span role="img" aria-label="First blood" title="First blood">
+                <span role="img" aria-label={t("firstBlood")} title={t("firstBlood")}>
                   <FirstBloodIcon />
                 </span>
               )}

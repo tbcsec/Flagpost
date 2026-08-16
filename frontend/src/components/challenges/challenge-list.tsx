@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -71,6 +72,7 @@ export function ChallengeList({
   categories: { id: string; name: string }[];
   onOpen: (challenge: Challenge) => void;
 }) {
+  const t = useTranslations("challenges");
   const groups = useMemo(
     () => groupChallengesByCategory(challenges, categories),
     [challenges, categories],
@@ -79,7 +81,7 @@ export function ChallengeList({
   if (groups.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No challenges match this filter.
+        {t("empty.filterEmpty")}
       </p>
     );
   }
@@ -107,6 +109,7 @@ function ChallengeCategorySection({
   // Expanded state is per-category and persisted (store-backed), collapsed by
   // default. Selecting a boolean keeps this row from re-rendering when an
   // unrelated category is toggled.
+  const t = useTranslations("challenges");
   const expanded = useChallengeViewStore((s) => s.expanded.includes(group.id));
   const toggleCategory = useChallengeViewStore((s) => s.toggleCategory);
 
@@ -119,7 +122,9 @@ function ChallengeCategorySection({
         className="flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-accent/50"
       >
         <Chevron open={expanded} />
-        <span className="font-medium capitalize">{group.name}</span>
+        <span className="font-medium capitalize">
+          {group.id === "" ? t("uncategorized") : group.name}
+        </span>
         <span className="ml-auto font-mono text-xs text-muted-foreground">
           {group.solved}/{group.total}
         </span>
@@ -142,6 +147,7 @@ function ChallengeListRow({
   challenge: Challenge;
   onOpen: (challenge: Challenge) => void;
 }) {
+  const t = useTranslations("challenges");
   const state = ch.locked ? "locked" : ch.solved ? "solved" : "open";
   return (
     <li className="border-t border-border first:border-t-0">
@@ -159,16 +165,14 @@ function ChallengeListRow({
             <span className="truncate text-sm font-medium">{ch.title}</span>
             {ch.state === "draft" && (
               <Badge variant="outline" className="text-[10px]">
-                Draft
+                {t("status.draft")}
               </Badge>
             )}
           </span>
           <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
             {ch.difficulty && <span className="capitalize">{ch.difficulty}</span>}
             {ch.difficulty && <span aria-hidden="true">·</span>}
-            <span>
-              {ch.solve_count} solve{ch.solve_count === 1 ? "" : "s"}
-            </span>
+            <span>{t("solvesCount", { count: ch.solve_count })}</span>
           </span>
         </span>
         <ChallengeValue challenge={ch} className="shrink-0 text-sm" />
@@ -182,9 +186,10 @@ function ChallengeListRow({
  *  change — issue comment); solved/open use a quiet colored dot with an sr-only
  *  label so the state isn't conveyed by colour alone. */
 function StatusMark({ state }: { state: "solved" | "open" | "locked" }) {
+  const t = useTranslations("challenges.status");
   if (state === "locked") {
     return (
-      <span className="shrink-0 text-sm leading-none" role="img" aria-label="Locked">
+      <span className="shrink-0 text-sm leading-none" role="img" aria-label={t("locked")}>
         🔒
       </span>
     );
@@ -198,7 +203,7 @@ function StatusMark({ state }: { state: "solved" | "open" | "locked" }) {
           state === "solved" ? "bg-success" : "bg-muted-foreground/50",
         )}
       />
-      <span className="sr-only">{state === "solved" ? "Solved" : "Open"}</span>
+      <span className="sr-only">{state === "solved" ? t("solved") : t("open")}</span>
     </span>
   );
 }

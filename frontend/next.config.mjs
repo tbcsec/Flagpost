@@ -1,6 +1,11 @@
 import { createRequire } from "module";
+import createNextIntlPlugin from "next-intl/plugin";
 
 const require = createRequire(import.meta.url);
+
+// i18n (ADR-0029): links the build to the per-request locale resolution in
+// src/i18n/request.ts (the plugin's default lookup path).
+const withNextIntl = createNextIntlPlugin();
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -20,4 +25,4 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

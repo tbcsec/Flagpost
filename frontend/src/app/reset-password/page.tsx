@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Suspense, useState } from "react";
 
+import { LocaleSwitcher } from "@/components/app/locale-switcher";
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
 import { Button } from "@/components/ui/button";
@@ -21,6 +23,7 @@ import { useResetPassword } from "@/lib/hooks/use-users";
 import { toast } from "@/stores/toast";
 
 function ResetForm() {
+  const t = useTranslations("auth.resetPassword");
   const { data: settings } = useSiteSettings();
   const brand = settings ?? FALLBACK_SETTINGS;
   const params = useSearchParams();
@@ -35,7 +38,7 @@ function ResetForm() {
       { token, new_password: password },
       {
         onSuccess: () => {
-          toast("Password reset — please sign in", { variant: "success" });
+          toast(t("successToast"), { variant: "success" });
           router.push("/login");
         },
       },
@@ -52,22 +55,24 @@ function ResetForm() {
       />
       <Card>
         <CardHeader>
-          <CardTitle>Choose a new password</CardTitle>
-          <CardDescription>Enter a new password for your account.</CardDescription>
+          <CardTitle>{t("title")}</CardTitle>
+          <CardDescription>{t("description")}</CardDescription>
         </CardHeader>
         <CardContent>
           {!token ? (
             <p role="alert" className="text-sm text-destructive">
-              This link is missing its reset token. Request a new one from{" "}
-              <Link href="/forgot-password" className="underline">
-                forgot password
-              </Link>
-              .
+              {t.rich("missingToken", {
+                link: (chunks) => (
+                  <Link href="/forgot-password" className="underline">
+                    {chunks}
+                  </Link>
+                ),
+              })}
             </p>
           ) : (
             <form onSubmit={onSubmit} className="grid gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="new-password">New password</Label>
+                <Label htmlFor="new-password">{t("newPassword")}</Label>
                 <Input
                   id="new-password"
                   type="password"
@@ -82,12 +87,13 @@ function ResetForm() {
                 <p role="alert" className="text-sm text-destructive">{(reset.error as Error).message}</p>
               )}
               <Button type="submit" disabled={reset.isPending}>
-                {reset.isPending ? "Saving…" : "Set new password"}
+                {reset.isPending ? t("submitting") : t("submit")}
               </Button>
             </form>
           )}
         </CardContent>
       </Card>
+      <LocaleSwitcher className="mx-auto" />
       <PoweredByFooter />
     </main>
   );

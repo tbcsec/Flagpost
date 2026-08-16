@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
+import { LocaleSwitcher } from "@/components/app/locale-switcher";
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
 import { Button } from "@/components/ui/button";
@@ -20,6 +22,7 @@ import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-setting
 import { useRegister } from "@/lib/hooks/use-users";
 
 export default function RegisterPage() {
+  const t = useTranslations("auth.register");
   const router = useRouter();
   const register = useRegister();
   const { data: settings } = useSiteSettings();
@@ -53,20 +56,16 @@ export default function RegisterPage() {
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>Create account</CardTitle>
-          <CardDescription>
-            Register to take part in competitions.
-          </CardDescription>
+          <CardTitle>{t("title")}</CardTitle>
+          <CardDescription>{t("description")}</CardDescription>
         </CardHeader>
         <CardContent>
           {!registrationOpen ? (
-            <p className="text-sm text-muted-foreground">
-              Registration is closed. Ask an administrator to create an account for you.
-            </p>
+            <p className="text-sm text-muted-foreground">{t("closed")}</p>
           ) : (
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="display_name">Username</Label>
+              <Label htmlFor="display_name">{t("username")}</Label>
               <Input
                 id="display_name"
                 autoComplete="username"
@@ -74,12 +73,12 @@ export default function RegisterPage() {
                 onChange={(e) => setDisplayName(e.target.value)}
                 required
               />
-              <p className="text-xs text-muted-foreground">
-                How you&apos;ll sign in and appear to others. Must be unique.
-              </p>
+              <p className="text-xs text-muted-foreground">{t("usernameHint")}</p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">{emailRequired ? "Email" : "Email (optional)"}</Label>
+              <Label htmlFor="email">
+                {emailRequired ? t("email") : t("emailOptional")}
+              </Label>
               <Input
                 id="email"
                 type="email"
@@ -89,13 +88,11 @@ export default function RegisterPage() {
                 required={emailRequired}
               />
               <p className="text-xs text-muted-foreground">
-                {emailRequired
-                  ? "Required to register. You can also sign in with it."
-                  : "Optional — you can also sign in with it."}
+                {emailRequired ? t("emailHintRequired") : t("emailHintOptional")}
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t("password")}</Label>
               <Input
                 id="password"
                 type="password"
@@ -116,18 +113,19 @@ export default function RegisterPage() {
               className="w-full"
               disabled={register.isPending}
             >
-              {register.isPending ? "Creating…" : "Create account"}
+              {register.isPending ? t("submitting") : t("submit")}
             </Button>
           </form>
           )}
           <p className="mt-4 text-sm text-muted-foreground">
-            Already have an account?{" "}
+            {t("haveAccount")}{" "}
             <Link href="/login" className="text-primary hover:underline">
-              Sign in
+              {t("signIn")}
             </Link>
           </p>
         </CardContent>
       </Card>
+      <LocaleSwitcher className="mx-auto" />
       <PoweredByFooter />
     </main>
   );

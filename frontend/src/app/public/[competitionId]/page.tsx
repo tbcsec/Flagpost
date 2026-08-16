@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, use } from "react";
 
+import { LocaleSwitcher } from "@/components/app/locale-switcher";
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
 import { StatTiles, Highlights } from "@/components/public/insights-cards";
@@ -198,7 +199,10 @@ function PublicScoreboardContent({
         </>
       )}
 
-      <PoweredByFooter className="mt-auto" />
+      <div className="mt-auto flex flex-col items-center">
+        <LocaleSwitcher />
+        <PoweredByFooter />
+      </div>
     </div>
   );
 }

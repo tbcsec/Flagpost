@@ -1,7 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import RegisterPage from "@/app/register/page";
+import { renderWithIntl } from "@/test/intl";
 
 // The register page reads email_required off the public site-settings hook to
 // decide whether the email field is mandatory (#56) — mock it plus the other
@@ -42,7 +43,7 @@ function settings(overrides: Partial<{ email_required: boolean }> = {}) {
 describe("RegisterPage", () => {
   it("renders email as optional when the allowlist is disabled", () => {
     mockUseSiteSettings.mockReturnValue({ data: settings({ email_required: false }) });
-    render(<RegisterPage />);
+    renderWithIntl(<RegisterPage />);
     const email = screen.getByLabelText("Email (optional)") as HTMLInputElement;
     expect(email.required).toBe(false);
     expect(screen.getByText(/Optional — you can also sign in/)).toBeInTheDocument();
@@ -50,7 +51,7 @@ describe("RegisterPage", () => {
 
   it("renders email as required when the allowlist is enabled", () => {
     mockUseSiteSettings.mockReturnValue({ data: settings({ email_required: true }) });
-    render(<RegisterPage />);
+    renderWithIntl(<RegisterPage />);
     const email = screen.getByLabelText("Email") as HTMLInputElement;
     expect(email.required).toBe(true);
     expect(screen.getByText(/Required to register/)).toBeInTheDocument();

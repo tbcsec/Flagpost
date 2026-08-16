@@ -61,6 +61,7 @@ into concrete technical commitments:
 | Database | PostgreSQL | |
 | Cache / pub-sub transport | Redis | |
 | Object storage | MinIO (S3-compatible) | challenge files, evidence, avatars |
+| Internationalization | next-intl (non-routed, cookie locale) + Crowdin | UI chrome only; ICU messages, `messages/en.json` source of truth — ADR-0029 |
 | Deployment | Docker Compose (default), Kubernetes (future) | |
 
 `VISION.md` suggests Next.js 14 / React 18 specifically; this table

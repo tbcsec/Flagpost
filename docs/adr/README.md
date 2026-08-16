@@ -62,3 +62,4 @@ Status is one of:
 | [0026](0026-cross-worker-presence.md) | Cross-worker presence via heartbeat-TTL liveness in Redis | Accepted |
 | [0027](0027-certificate-rendering-server-side.md) | Certificate rendering — server-side Pillow → PNG, not a headless browser | Proposed |
 | [0028](0028-competition-status-gate.md) | Competition status is an explicit gameplay gate; the schedule drives it | Accepted |
+| [0029](0029-frontend-i18n-next-intl-crowdin.md) | Frontend i18n — next-intl with a cookie locale, translations in Crowdin | Accepted |

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
@@ -27,6 +28,8 @@ type Filter = "all" | TicketStatus;
 
 export default function SupportPage() {
   const { competitionId, data: competition } = useActiveCompetition();
+  // `t` is a ticket in the loops below, so the translator is `tr`.
+  const tr = useTranslations("support");
   const access = useAccess();
   const isStaff = access.has("ticket_assign");
 
@@ -57,17 +60,17 @@ export default function SupportPage() {
   return (
     <>
       <SectionHeader
-        title="Support"
-        subtitle={`${competition?.name ?? ""} · ${isStaff ? `${openCount} open` : "your tickets"}`}
+        title={tr("title")}
+        subtitle={`${competition?.name ?? ""} · ${isStaff ? tr("openCount", { count: openCount }) : tr("yourTickets")}`}
         actions={!isStaff ? <NewTicketDialog competitionId={competitionId} /> : undefined}
       />
 
       {isStaff && (
         <div className="grid grid-cols-3 gap-4">
           {[
-            { label: "All tickets", value: all.length },
-            { label: "Open", value: openCount },
-            { label: "Resolved", value: resolvedCount },
+            { label: tr("stats.all"), value: all.length },
+            { label: tr("stats.open"), value: openCount },
+            { label: tr("stats.resolved"), value: resolvedCount },
           ].map((s) => (
             <Card key={s.label}>
               <CardContent className="p-6 text-center">
@@ -95,14 +98,14 @@ export default function SupportPage() {
                   : "border-transparent font-medium text-muted-foreground",
               )}
             >
-              {f}
+              {tr(`status.${f}`)}
             </button>
           ))}
         </div>
         <TableSearchInput
           value={table.query}
           onChange={table.setQuery}
-          placeholder="Search tickets…"
+          placeholder={tr("searchPlaceholder")}
           className="mb-1.5"
         />
       </div>
@@ -112,11 +115,9 @@ export default function SupportPage() {
       {!tickets.isLoading && all.length === 0 ? (
         <EmptyState
           icon={<TicketEmptyIcon />}
-          title={isStaff ? "No tickets yet" : "Need a hand?"}
+          title={isStaff ? tr("empty.staffTitle") : tr("empty.competitorTitle")}
           description={
-            isStaff
-              ? "When competitors open support tickets they'll appear here — you'll get a cue the moment one lands."
-              : "Stuck on a challenge or hit a snag? Open a ticket and staff will pick it up live."
+            isStaff ? tr("empty.staffDescription") : tr("empty.competitorDescription")
           }
           action={!isStaff ? <NewTicketDialog competitionId={competitionId} /> : undefined}
         />
@@ -133,19 +134,21 @@ export default function SupportPage() {
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium">{t.subject}</div>
                     <div className="truncate text-xs text-muted-foreground">
-                      {isStaff ? (t.team_name ?? t.opener_name) : "You"}
+                      {isStaff ? (t.team_name ?? t.opener_name) : tr("you")}
                       {t.challenge_title && ` · ${t.challenge_title}`}
-                      {` · ${t.message_count} message${t.message_count === 1 ? "" : "s"}`}
+                      {" · "}
+                      {tr("messageCount", { count: t.message_count })}
                     </div>
                   </div>
-                  <Badge variant={t.status === "open" ? "destructive" : "muted"}>{t.status}</Badge>
+                  <Badge variant={t.status === "open" ? "destructive" : "muted"}>{tr(`status.${t.status}`)}</Badge>
                 </button>
               </li>
             ))}
             {!tickets.isLoading && table.rows.length === 0 && (
               <li className="py-8 text-center text-sm text-muted-foreground">
-                No {filter === "all" ? "" : `${filter} `}tickets match
-                {table.query ? " your search" : " this filter"}.
+                {tr(table.query ? "noMatchSearch" : "noMatchFilter", {
+                  filter: filter === "all" ? "" : `${tr(`status.${filter}`)} `,
+                })}
               </li>
             )}
           </ul>

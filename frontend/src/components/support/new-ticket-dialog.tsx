@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ import { toast } from "@/stores/toast";
 // (ticket_respond) is server-enforced; the thread then goes live over the
 // ticket's WS room.
 export function NewTicketDialog({ competitionId }: { competitionId: string }) {
+  const t = useTranslations("support.new");
   const [open, setOpen] = useState(false);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -62,11 +64,11 @@ export function NewTicketDialog({ competitionId }: { competitionId: string }) {
           // The ticket itself did open — say so, but don't claim the
           // screenshots made it if they didn't.
           if (failures.length > 0) {
-            toast(`Ticket opened, but ${failures.join(", ")} couldn't be attached`, {
+            toast(t("openedPartialToast", { files: failures.join(", ") }), {
               variant: "destructive",
             });
           } else {
-            toast("Ticket opened", { variant: "success" });
+            toast(t("openedToast"), { variant: "success" });
           }
         },
       },
@@ -85,26 +87,26 @@ export function NewTicketDialog({ competitionId }: { competitionId: string }) {
       }}
     >
       <DialogTrigger asChild>
-        <Button>New ticket</Button>
+        <Button>{t("trigger")}</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New ticket</DialogTitle>
-          <DialogDescription>Ask a question — staff will see it and reply.</DialogDescription>
+          <DialogTitle>{t("title")}</DialogTitle>
+          <DialogDescription>{t("description")}</DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="ticket-subject">Subject</Label>
+            <Label htmlFor="ticket-subject">{t("subject")}</Label>
             <Input id="ticket-subject" value={subject} onChange={(e) => setSubject(e.target.value)} required />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="ticket-challenge">Related challenge (optional)</Label>
+            <Label htmlFor="ticket-challenge">{t("challenge")}</Label>
             <Select
               id="ticket-challenge"
               value={challengeId}
               onChange={(e) => setChallengeId(e.target.value)}
             >
-              <option value="">None</option>
+              <option value="">{t("challengeNone")}</option>
               {challenges.data?.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.title}
@@ -113,7 +115,7 @@ export function NewTicketDialog({ competitionId }: { competitionId: string }) {
             </Select>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="ticket-body">Message</Label>
+            <Label htmlFor="ticket-body">{t("message")}</Label>
             <textarea
               id="ticket-body"
               value={body}
@@ -124,7 +126,7 @@ export function NewTicketDialog({ competitionId }: { competitionId: string }) {
             />
           </div>
           <div className="grid gap-2">
-            <Label>Screenshots (optional)</Label>
+            <Label>{t("screenshots")}</Label>
             <ScreenshotPicker
               files={files}
               onChange={setFiles}
@@ -136,7 +138,7 @@ export function NewTicketDialog({ competitionId }: { competitionId: string }) {
           )}
           <DialogFooter>
             <Button type="submit" disabled={create.isPending || upload.isPending}>
-              {create.isPending || upload.isPending ? "Opening…" : "Open ticket"}
+              {create.isPending || upload.isPending ? t("opening") : t("submit")}
             </Button>
           </DialogFooter>
         </form>

@@ -9,6 +9,7 @@
 // The limits are enforced server-side; the client-side copies exist to fail
 // fast with a useful message instead of a round trip that 413s.
 
+import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ export function ScreenshotPicker({
   existingCount?: number;
   disabled?: boolean;
 }) {
+  const t = useTranslations("support.picker");
   const input = useRef<HTMLInputElement>(null);
   // Why a file the user picked didn't appear in the list — dropping one in
   // silence just looks broken.
@@ -51,11 +53,11 @@ export function ScreenshotPicker({
     const reasons: string[] = [];
     const accepted = chosen.filter((f) => {
       if (!ACCEPTED.has(f.type)) {
-        reasons.push(`${f.name} isn't a PNG, JPEG or WebP image`);
+        reasons.push(t("notImage", { name: f.name }));
         return false;
       }
       if (f.size === 0 || f.size > MAX_ATTACHMENT_BYTES) {
-        reasons.push(`${f.name} is larger than ${formatSize(MAX_ATTACHMENT_BYTES)}`);
+        reasons.push(t("tooLarge", { name: f.name, max: formatSize(MAX_ATTACHMENT_BYTES) }));
         return false;
       }
       return true;
@@ -63,11 +65,9 @@ export function ScreenshotPicker({
 
     const room = MAX_ATTACHMENTS_PER_TICKET - existingCount - files.length;
     if (accepted.length > room) {
-      reasons.push(
-        `only ${MAX_ATTACHMENTS_PER_TICKET} images can be attached to a ticket`,
-      );
+      reasons.push(t("tooMany", { max: MAX_ATTACHMENTS_PER_TICKET }));
     }
-    setNotice(reasons.length > 0 ? `Skipped: ${reasons.join("; ")}.` : null);
+    setNotice(reasons.length > 0 ? t("skipped", { reasons: reasons.join("; ") }) : null);
     onChange([...files, ...accepted.slice(0, Math.max(room, 0))]);
   }
 
@@ -81,13 +81,13 @@ export function ScreenshotPicker({
           multiple
           onChange={onFilesChosen}
           disabled={disabled || remaining <= 0}
-          aria-label="Attach screenshots"
+          aria-label={t("attachAria")}
           className="max-w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:text-secondary-foreground hover:file:bg-secondary/80 disabled:opacity-50"
         />
         <span className="text-xs text-muted-foreground">
           {remaining > 0
-            ? `PNG, JPEG or WebP · up to ${formatSize(MAX_ATTACHMENT_BYTES)} each · ${remaining} left`
-            : "Attachment limit reached for this ticket"}
+            ? t("hint", { max: formatSize(MAX_ATTACHMENT_BYTES), remaining })
+            : t("limitReached")}
         </span>
       </div>
 
@@ -112,7 +112,7 @@ export function ScreenshotPicker({
                   onChange(files.filter((_, j) => j !== i));
                 }}
               >
-                Remove
+                {t("remove")}
               </Button>
             </li>
           ))}

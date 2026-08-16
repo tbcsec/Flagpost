@@ -8,6 +8,7 @@
 // URL: the API requires a Bearer header, and the production CSP only allows
 // `img-src 'self' data: blob:`, so a presigned cross-origin URL wouldn't render.
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { formatSize } from "@/components/support/screenshot-picker";
@@ -31,12 +32,13 @@ function Thumbnail({
   attachment: TicketAttachment;
   onOpen: () => void;
 }) {
+  const t = useTranslations("support.attachments");
   const { url, failed } = useAttachmentImage(competitionId, ticketId, attachment.id);
 
   if (failed) {
     return (
       <span className="flex h-20 w-20 items-center justify-center rounded-md border border-border bg-muted/40 p-1 text-center text-[10px] text-muted-foreground">
-        Preview unavailable
+        {t("previewUnavailable")}
       </span>
     );
   }
@@ -46,7 +48,7 @@ function Thumbnail({
       type="button"
       onClick={onOpen}
       title={`${attachment.filename} · ${formatSize(attachment.size_bytes)}`}
-      aria-label={`View ${attachment.filename} full size`}
+      aria-label={t("viewFull", { filename: attachment.filename })}
       className="h-20 w-20 overflow-hidden rounded-md border border-border bg-muted/40 transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
       {url ? (
@@ -78,6 +80,7 @@ function Lightbox({
   attachment: TicketAttachment;
   onClose: () => void;
 }) {
+  const t = useTranslations("support.attachments");
   const { url, failed } = useAttachmentImage(competitionId, ticketId, attachment.id);
 
   return (
@@ -92,7 +95,7 @@ function Lightbox({
         <div className="flex max-h-[70vh] items-center justify-center overflow-auto rounded-md bg-muted/40">
           {failed ? (
             <p className="p-8 text-sm text-muted-foreground">
-              This image could not be loaded.
+              {t("loadFailed")}
             </p>
           ) : url ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -122,6 +125,7 @@ export function TicketAttachments({
   attachments: TicketAttachment[];
   canDelete: (attachment: TicketAttachment) => boolean;
 }) {
+  const t = useTranslations("support.attachments");
   const [viewing, setViewing] = useState<TicketAttachment | null>(null);
   const remove = useDeleteTicketAttachment(competitionId, ticketId);
   const confirm = useConfirm();
@@ -149,9 +153,9 @@ export function TicketAttachments({
                 onClick={async () => {
                   if (
                     await confirm({
-                      title: "Remove attachment?",
-                      description: `"${attachment.filename}" will be deleted from this ticket.`,
-                      confirmLabel: "Remove",
+                      title: t("removeConfirmTitle"),
+                      description: t("removeConfirmDescription", { filename: attachment.filename }),
+                      confirmLabel: t("removeConfirmLabel"),
                       destructive: true,
                     })
                   ) {
@@ -159,7 +163,7 @@ export function TicketAttachments({
                   }
                 }}
               >
-                Remove
+                {t("remove")}
               </Button>
             )}
           </li>

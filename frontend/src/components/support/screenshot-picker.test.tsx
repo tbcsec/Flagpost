@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
 
@@ -7,6 +7,7 @@ import {
   MAX_ATTACHMENTS_PER_TICKET,
   ScreenshotPicker,
 } from "@/components/support/screenshot-picker";
+import { renderWithIntl } from "@/test/intl";
 
 function file(name: string, type: string, size = 1024): File {
   const f = new File(["x"], name, { type });
@@ -35,7 +36,7 @@ function pick(files: File[]) {
 
 describe("ScreenshotPicker", () => {
   it("accepts the three allowed image types", () => {
-    render(<Harness />);
+    renderWithIntl(<Harness />);
     pick([
       file("a.png", "image/png"),
       file("b.jpg", "image/jpeg"),
@@ -47,7 +48,7 @@ describe("ScreenshotPicker", () => {
   });
 
   it("rejects a non-image and says why, rather than dropping it silently", () => {
-    render(<Harness />);
+    renderWithIntl(<Harness />);
     pick([file("notes.pdf", "application/pdf")]);
     expect(screen.queryByText("notes.pdf")).not.toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(
@@ -56,14 +57,14 @@ describe("ScreenshotPicker", () => {
   });
 
   it("rejects an oversized image", () => {
-    render(<Harness />);
+    renderWithIntl(<Harness />);
     pick([file("huge.png", "image/png", MAX_ATTACHMENT_BYTES + 1)]);
     expect(screen.queryByText("huge.png")).not.toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("is larger than");
   });
 
   it("caps the selection and explains the cap", () => {
-    render(<Harness />);
+    renderWithIntl(<Harness />);
     pick(
       Array.from({ length: MAX_ATTACHMENTS_PER_TICKET + 2 }, (_, i) =>
         file(`shot-${i}.png`, "image/png"),
@@ -78,7 +79,7 @@ describe("ScreenshotPicker", () => {
   it("counts attachments already on the ticket against the cap", () => {
     // Four already posted → only one more may be staged, and the input closes
     // once the ticket is full.
-    render(<Harness existingCount={MAX_ATTACHMENTS_PER_TICKET - 1} />);
+    renderWithIntl(<Harness existingCount={MAX_ATTACHMENTS_PER_TICKET - 1} />);
     expect(screen.getByText(/1 left/)).toBeInTheDocument();
 
     pick([file("a.png", "image/png"), file("b.png", "image/png")]);
@@ -88,7 +89,7 @@ describe("ScreenshotPicker", () => {
   });
 
   it("removes a staged file before posting", () => {
-    render(<Harness />);
+    renderWithIntl(<Harness />);
     pick([file("a.png", "image/png"), file("b.png", "image/png")]);
     fireEvent.click(screen.getAllByRole("button", { name: "Remove" })[0]);
     expect(screen.queryByText("a.png")).not.toBeInTheDocument();

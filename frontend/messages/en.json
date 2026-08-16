@@ -548,5 +548,84 @@
         "resetEveryoneConfirmLabel": "Reset for everyone"
       }
     }
+  },
+  "support": {
+    "title": "Support",
+    "openCount": "{count} open",
+    "yourTickets": "your tickets",
+    "stats": {
+      "all": "All tickets",
+      "open": "Open",
+      "resolved": "Resolved"
+    },
+    "status": {
+      "all": "all",
+      "open": "open",
+      "resolved": "resolved"
+    },
+    "searchPlaceholder": "Search tickets…",
+    "you": "You",
+    "messageCount": "{count, plural, one {# message} other {# messages}}",
+    "noMatchSearch": "No {filter}tickets match your search.",
+    "noMatchFilter": "No {filter}tickets match this filter.",
+    "empty": {
+      "staffTitle": "No tickets yet",
+      "competitorTitle": "Need a hand?",
+      "staffDescription": "When competitors open support tickets they'll appear here — you'll get a cue the moment one lands.",
+      "competitorDescription": "Stuck on a challenge or hit a snag? Open a ticket and staff will pick it up live."
+    },
+    "new": {
+      "trigger": "New ticket",
+      "title": "New ticket",
+      "description": "Ask a question — staff will see it and reply.",
+      "subject": "Subject",
+      "challenge": "Related challenge (optional)",
+      "challengeNone": "None",
+      "message": "Message",
+      "screenshots": "Screenshots (optional)",
+      "opening": "Opening…",
+      "submit": "Open ticket",
+      "openedToast": "Ticket opened",
+      "openedPartialToast": "Ticket opened, but {files} couldn't be attached"
+    },
+    "thread": {
+      "fallbackTitle": "Ticket",
+      "assignedTo": "· assigned to {name}",
+      "loading": "Loading…",
+      "judgeLooking": "A judge is looking at this ticket",
+      "othersHere": "{count, plural, one {# other here} other {# others here}}",
+      "internalNote": "internal note",
+      "replyAria": "Reply",
+      "replyPlaceholder": "Write a reply…",
+      "internalCheckbox": "Internal note",
+      "assignToMe": "Assign to me",
+      "assignedToast": "Assigned to you",
+      "resolve": "Resolve",
+      "resolvedToast": "Ticket resolved",
+      "sending": "Sending…",
+      "send": "Send",
+      "replyPartialToast": "Reply sent, but {files} couldn't be attached",
+      "staffNotes": "Staff notes",
+      "staffNotesDesc": "A shared working pad for staff on this ticket — never shown to the competitor, live as you type."
+    },
+    "attachments": {
+      "previewUnavailable": "Preview unavailable",
+      "viewFull": "View {filename} full size",
+      "loadFailed": "This image could not be loaded.",
+      "removeConfirmTitle": "Remove attachment?",
+      "removeConfirmDescription": "\"{filename}\" will be deleted from this ticket.",
+      "removeConfirmLabel": "Remove",
+      "remove": "Remove"
+    },
+    "picker": {
+      "attachAria": "Attach screenshots",
+      "notImage": "{name} isn't a PNG, JPEG or WebP image",
+      "tooLarge": "{name} is larger than {max}",
+      "tooMany": "only {max} images can be attached to a ticket",
+      "skipped": "Skipped: {reasons}.",
+      "hint": "PNG, JPEG or WebP · up to {max} each · {remaining} left",
+      "limitReached": "Attachment limit reached for this ticket",
+      "remove": "Remove"
+    }
   }
 }

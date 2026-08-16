@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { useTranslations } from "next-intl";
 import dynamic from "next/dynamic";
 
 import { PresenceIndicator } from "@/components/presence/presence-indicator";
@@ -56,6 +57,9 @@ export function TicketThread({
   const presence = usePresence("ticket", ticketId);
   const upload = useUploadTicketAttachment(competitionId);
   const userId = useAuthStore((s) => s.user?.id);
+  // `t` is the ticket data below, so the translator is `tr` (whole `support`
+  // namespace — it also needs the shared status labels).
+  const tr = useTranslations("support");
 
   const [body, setBody] = useState("");
   const [internal, setInternal] = useState(false);
@@ -99,7 +103,7 @@ export function TicketThread({
           setInternal(false);
           setFiles([]);
           if (failures.length > 0) {
-            toast(`Reply sent, but ${failures.join(", ")} couldn't be attached`, {
+            toast(tr("thread.replyPartialToast", { files: failures.join(", ") }), {
               variant: "destructive",
             });
           }
@@ -111,17 +115,17 @@ export function TicketThread({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>{t?.subject ?? "Ticket"}</DialogTitle>
+        <DialogTitle>{t?.subject ?? tr("thread.fallbackTitle")}</DialogTitle>
         <DialogDescription>
           {t ? (
             <>
-              <Badge variant={t.status === "open" ? "destructive" : "muted"}>{t.status}</Badge>
+              <Badge variant={t.status === "open" ? "destructive" : "muted"}>{tr(`status.${t.status}`)}</Badge>
               {t.challenge_title && <span className="ml-2">· {t.challenge_title}</span>}
               <span className="ml-2">· {t.team_name ?? t.opener_name}</span>
-              {t.assignee_name && <span className="ml-2">· assigned to {t.assignee_name}</span>}
+              {t.assignee_name && <span className="ml-2">{tr("thread.assignedTo", { name: t.assignee_name })}</span>}
             </>
           ) : (
-            "Loading…"
+            tr("thread.loading")
           )}
         </DialogDescription>
       </DialogHeader>
@@ -130,8 +134,8 @@ export function TicketThread({
         <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-muted/40 px-3 py-2">
           <span className="text-xs text-muted-foreground">
             {!isStaff && presence.staffPresent
-              ? "A judge is looking at this ticket"
-              : `${presence.others.length} other${presence.others.length === 1 ? "" : "s"} here`}
+              ? tr("thread.judgeLooking")
+              : tr("thread.othersHere", { count: presence.others.length })}
           </span>
           <PresenceIndicator members={presence.others} max={5} />
         </div>
@@ -152,7 +156,7 @@ export function TicketThread({
             <div className="flex items-baseline justify-between gap-2">
               <span className="text-[13px] font-medium">
                 {m.author_name}
-                {m.is_internal && <span className="ml-2 text-[11px] text-warning">internal note</span>}
+                {m.is_internal && <span className="ml-2 text-[11px] text-warning">{tr("thread.internalNote")}</span>}
               </span>
               <span className="whitespace-nowrap text-[11px] text-muted-foreground">
                 {relativeTime(m.created_at)}
@@ -177,8 +181,8 @@ export function TicketThread({
           onChange={(e) => setBody(e.target.value)}
           required
           rows={3}
-          aria-label="Reply"
-          placeholder="Write a reply…"
+          aria-label={tr("thread.replyAria")}
+          placeholder={tr("thread.replyPlaceholder")}
           className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         />
         <ScreenshotPicker
@@ -192,7 +196,7 @@ export function TicketThread({
             {isStaff && (
               <label className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
                 <input type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)} />
-                Internal note
+                {tr("thread.internalCheckbox")}
               </label>
             )}
           </div>
@@ -204,9 +208,9 @@ export function TicketThread({
                   variant="outline"
                   size="sm"
                   disabled={assign.isPending}
-                  onClick={() => assign.mutate(undefined, { onSuccess: () => toast("Assigned to you") })}
+                  onClick={() => assign.mutate(undefined, { onSuccess: () => toast(tr("thread.assignedToast")) })}
                 >
-                  Assign to me
+                  {tr("thread.assignToMe")}
                 </Button>
                 {t?.status === "open" && (
                   <Button
@@ -214,9 +218,9 @@ export function TicketThread({
                     variant="outline"
                     size="sm"
                     disabled={resolve.isPending}
-                    onClick={() => resolve.mutate(undefined, { onSuccess: () => toast("Ticket resolved", { variant: "success" }) })}
+                    onClick={() => resolve.mutate(undefined, { onSuccess: () => toast(tr("thread.resolvedToast"), { variant: "success" }) })}
                   >
-                    Resolve
+                    {tr("thread.resolve")}
                   </Button>
                 )}
               </>
@@ -226,7 +230,7 @@ export function TicketThread({
               size="sm"
               disabled={reply.isPending || upload.isPending}
             >
-              {reply.isPending || upload.isPending ? "Sending…" : "Send"}
+              {reply.isPending || upload.isPending ? tr("thread.sending") : tr("thread.send")}
             </Button>
           </div>
         </div>
@@ -238,9 +242,9 @@ export function TicketThread({
       {isStaff && (
         <section className="grid gap-2 border-t border-border pt-3">
           <div>
-            <h3 className="text-sm font-medium">Staff notes</h3>
+            <h3 className="text-sm font-medium">{tr("thread.staffNotes")}</h3>
             <p className="text-xs text-muted-foreground">
-              A shared working pad for staff on this ticket — never shown to the competitor, live as you type.
+              {tr("thread.staffNotesDesc")}
             </p>
           </div>
           <CollabNote docKey={`ticket:${ticketId}`} />

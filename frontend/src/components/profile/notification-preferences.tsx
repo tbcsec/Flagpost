@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -20,28 +21,19 @@ import { toast } from "@/stores/toast";
 
 type PrefKey = keyof NotificationPreferences;
 
-const IN_APP: { key: PrefKey; label: string; hint: string }[] = [
-  {
-    key: "inapp_tickets",
-    label: "Support tickets",
-    hint: "New tickets, replies, assignments, and resolutions.",
-  },
-  {
-    key: "inapp_automations",
-    label: "Automations & alerts",
-    hint: "Notifications sent to you by competition automation rules.",
-  },
-  {
-    key: "inapp_announcements",
-    label: "Announcements",
-    hint: "Organiser announcements. Urgent ones always come through, even with this off.",
-  },
-];
+// Labels/hints resolve through profile.notifications.inApp.<key>.* at render;
+// this is just the row order (the keys are a subset of PrefKey).
+const IN_APP_KEYS = [
+  "inapp_tickets",
+  "inapp_automations",
+  "inapp_announcements",
+] as const;
 
 // Notification preferences (§4.4). In-app toggles gate whether a bell
 // notification is created at all; browser + sound are client-honored delivery
 // hints for the notifications you do receive.
 export function NotificationPreferencesCard() {
+  const t = useTranslations("profile.notifications");
   const { data, isLoading } = useNotificationPreferences();
   const update = useUpdateNotificationPreferences();
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
@@ -68,8 +60,8 @@ export function NotificationPreferencesCard() {
   async function onToggleBrowser(value: boolean) {
     if (value && typeof Notification !== "undefined") {
       if (Notification.permission === "denied") {
-        toast("Browser notifications are blocked", {
-          description: "Allow notifications for this site in your browser settings, then try again.",
+        toast(t("browserBlockedTitle"), {
+          description: t("browserBlockedBody"),
           variant: "destructive",
         });
         return;
@@ -77,8 +69,8 @@ export function NotificationPreferencesCard() {
       if (Notification.permission !== "granted") {
         const result = await Notification.requestPermission();
         if (result !== "granted") {
-          toast("Permission not granted", {
-            description: "Browser notifications stay off until you allow them.",
+          toast(t("permissionDeniedTitle"), {
+            description: t("permissionDeniedBody"),
           });
           return;
         }
@@ -90,9 +82,9 @@ export function NotificationPreferencesCard() {
   function onSave() {
     if (!prefs) return;
     update.mutate(prefs, {
-      onSuccess: () => toast("Preferences saved", { variant: "success" }),
+      onSuccess: () => toast(t("savedToast"), { variant: "success" }),
       onError: (e) =>
-        toast("Couldn't save", {
+        toast(t("saveError"), {
           description: (e as Error).message,
           variant: "destructive",
         }),
@@ -102,10 +94,8 @@ export function NotificationPreferencesCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Notification preferences</CardTitle>
-        <CardDescription>
-          Control what reaches your notification bell, and how you&apos;re alerted.
-        </CardDescription>
+        <CardTitle>{t("title")}</CardTitle>
+        <CardDescription>{t("description")}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-6">
         {isLoading || !prefs ? (
@@ -118,16 +108,16 @@ export function NotificationPreferencesCard() {
           <>
             <section className="grid gap-3">
               <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                In-app notifications
+                {t("inAppHeading")}
               </h3>
               <div className="grid max-w-md gap-3">
-                {IN_APP.map((row) => (
+                {IN_APP_KEYS.map((key) => (
                   <PrefRow
-                    key={row.key}
-                    label={row.label}
-                    hint={row.hint}
-                    checked={prefs[row.key]}
-                    onChange={(v) => set(row.key, v)}
+                    key={key}
+                    label={t(`inApp.${key}.label`)}
+                    hint={t(`inApp.${key}.hint`)}
+                    checked={prefs[key]}
+                    onChange={(v) => set(key, v)}
                   />
                 ))}
               </div>
@@ -135,18 +125,18 @@ export function NotificationPreferencesCard() {
 
             <section className="grid gap-3">
               <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Delivery
+                {t("deliveryHeading")}
               </h3>
               <div className="grid max-w-md gap-3">
                 <PrefRow
-                  label="Browser notifications"
-                  hint="Show a desktop notification when something arrives while Flagpost is open."
+                  label={t("browser.label")}
+                  hint={t("browser.hint")}
                   checked={prefs.browser}
                   onChange={onToggleBrowser}
                 />
                 <PrefRow
-                  label="Sound for support tickets"
-                  hint="Play a short cue when a new ticket or reply comes in."
+                  label={t("sound.label")}
+                  hint={t("sound.hint")}
                   checked={prefs.sound}
                   onChange={(v) => set("sound", v)}
                 />
@@ -155,10 +145,10 @@ export function NotificationPreferencesCard() {
 
             <div className="flex items-center gap-3">
               <Button className="w-fit" onClick={onSave} disabled={!dirty || update.isPending}>
-                {update.isPending ? "Saving…" : "Save preferences"}
+                {update.isPending ? t("saving") : t("save")}
               </Button>
               {dirty && (
-                <span className="text-xs text-muted-foreground">Unsaved changes</span>
+                <span className="text-xs text-muted-foreground">{t("unsaved")}</span>
               )}
             </div>
           </>

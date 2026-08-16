@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 
 import { SectionHeader } from "@/components/app/section-header";
 import { MyCertificatesCard } from "@/components/profile/certificates-card";
@@ -29,16 +30,13 @@ import { toast } from "@/stores/toast";
 // yet, and it's the primary login identifier (ADR-0015).
 type Tab = "account" | "notifications" | "tokens" | "certificates";
 
-const TABS: { value: Tab; label: string }[] = [
-  { value: "account", label: "Account" },
-  { value: "notifications", label: "Notifications" },
-  { value: "tokens", label: "API tokens" },
-  { value: "certificates", label: "Certificates" },
-];
+// Labels resolve through `t("tabs.<value>")` at render (the module-level array
+// can't call the hook) — the value doubles as the message key.
+const TAB_VALUES: Tab[] = ["account", "notifications", "tokens", "certificates"];
 
 /** The tab named in `?tab=`, or the first one for a stale/absent value. */
 function resolveTab(requested: string | null): Tab {
-  return TABS.find((t) => t.value === requested)?.value ?? TABS[0].value;
+  return TAB_VALUES.find((t) => t === requested) ?? TAB_VALUES[0];
 }
 
 // Email verification (#74): shown only when the site requires it and this
@@ -46,14 +44,13 @@ function resolveTab(requested: string | null): Tab {
 // the Email card rather than offered a resend button with nothing to send to —
 // since #106 that's a self-service fix, not an admin request.
 function VerifyEmailBanner({ user }: { user: { email: string | null } }) {
+  const t = useTranslations("profile.verify");
   const resend = useResendVerification();
   return (
     <Card className="border-warning/50">
       <CardHeader>
-        <CardTitle>Verify your email</CardTitle>
-        <CardDescription>
-          This instance requires a verified email before you can join a competition.
-        </CardDescription>
+        <CardTitle>{t("title")}</CardTitle>
+        <CardDescription>{t("description")}</CardDescription>
       </CardHeader>
       <CardContent>
         {user.email ? (
@@ -64,9 +61,9 @@ function VerifyEmailBanner({ user }: { user: { email: string | null } }) {
               disabled={resend.isPending || resend.isSuccess}
               onClick={() =>
                 resend.mutate(undefined, {
-                  onSuccess: () => toast("Verification email sent", { variant: "success" }),
+                  onSuccess: () => toast(t("sentToast"), { variant: "success" }),
                   onError: (err) =>
-                    toast("Couldn't send it", {
+                    toast(t("sendError"), {
                       description: (err as Error).message,
                       variant: "destructive",
                     }),
@@ -74,17 +71,19 @@ function VerifyEmailBanner({ user }: { user: { email: string | null } }) {
               }
             >
               {resend.isPending
-                ? "Sending…"
+                ? t("sending")
                 : resend.isSuccess
-                  ? "Sent — check your inbox"
-                  : "Resend verification email"}
+                  ? t("sent")
+                  : t("resend")}
             </Button>
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">
-            Your account has no email address on file. Add one under{" "}
-            <span className="font-medium text-foreground">Email</span> below, and
-            we&apos;ll send you a verification link.
+            {t.rich("noEmail", {
+              b: (chunks) => (
+                <span className="font-medium text-foreground">{chunks}</span>
+              ),
+            })}
           </p>
         )}
       </CardContent>
@@ -95,6 +94,7 @@ function VerifyEmailBanner({ user }: { user: { email: string | null } }) {
 // Password change (POST /api/auth/change-password). Local draft state lives here
 // so it survives tab switches — the panel stays mounted.
 function PasswordCard() {
+  const t = useTranslations("profile.password");
   const user = useAuthStore((s) => s.user);
   const changePassword = useChangePassword();
   const [current, setCurrent] = useState("");
@@ -108,7 +108,7 @@ function PasswordCard() {
         onSuccess: () => {
           setCurrent("");
           setNext("");
-          toast("Password changed", { variant: "success" });
+          toast(t("changedToast"), { variant: "success" });
         },
       },
     );
@@ -117,19 +117,19 @@ function PasswordCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Account</CardTitle>
-        <CardDescription>Change your password</CardDescription>
+        <CardTitle>{t("title")}</CardTitle>
+        <CardDescription>{t("description")}</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={onSubmit} className="grid max-w-md gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="pdn">Display name</Label>
+            <Label htmlFor="pdn">{t("displayName")}</Label>
             {/* Renaming has no endpoint yet — read-only. Email is its own card
                 below, where it's editable (#106). */}
             <Input id="pdn" defaultValue={user?.display_name ?? ""} disabled />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="pcur">Current password</Label>
+            <Label htmlFor="pcur">{t("current")}</Label>
             <Input
               id="pcur"
               type="password"
@@ -140,7 +140,7 @@ function PasswordCard() {
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="ppw">New password</Label>
+            <Label htmlFor="ppw">{t("new")}</Label>
             <Input
               id="ppw"
               type="password"
@@ -156,10 +156,10 @@ function PasswordCard() {
           )}
           <div className="flex items-center gap-3">
             <Button type="submit" className="w-fit" disabled={changePassword.isPending}>
-              {changePassword.isPending ? "Saving…" : "Change password"}
+              {changePassword.isPending ? t("saving") : t("submit")}
             </Button>
             {changePassword.isSuccess && (
-              <span className="text-sm text-muted-foreground">Password changed.</span>
+              <span className="text-sm text-muted-foreground">{t("changed")}</span>
             )}
           </div>
         </form>
@@ -169,6 +169,7 @@ function PasswordCard() {
 }
 
 function ProfileInner() {
+  const t = useTranslations("profile");
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -189,9 +190,13 @@ function ProfileInner() {
 
   return (
     <>
-      <SectionHeader title="Profile" subtitle="Your account and notification preferences" />
+      <SectionHeader title={t("title")} subtitle={t("subtitle")} />
 
-      <Tabs tabs={TABS} value={tab} onValueChange={(v) => setTab(v as Tab)} />
+      <Tabs
+        tabs={TAB_VALUES.map((value) => ({ value, label: t(`tabs.${value}`) }))}
+        value={tab}
+        onValueChange={(v) => setTab(v as Tab)}
+      />
 
       <div className={tab === "account" ? "grid gap-6" : "hidden"}>
         {needsVerification && <VerifyEmailBanner user={user!} />}

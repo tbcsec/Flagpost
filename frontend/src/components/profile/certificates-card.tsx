@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -17,13 +19,14 @@ import {
 import type { MyCertificate } from "@/lib/types";
 
 function CertificateRow({ cert }: { cert: MyCertificate }) {
+  const t = useTranslations("profile.certificates");
   const download = useDownloadMyCertificate(cert.competition_id);
   return (
     <div className="flex items-center justify-between rounded-md border border-border p-3">
       <div>
         <p className="text-sm font-medium">{cert.competition_name}</p>
         <p className="text-xs text-muted-foreground">
-          Released {parseServerDate(cert.released_at).toLocaleDateString()}
+          {t("released", { date: parseServerDate(cert.released_at).toLocaleDateString() })}
         </p>
       </div>
       <Button
@@ -31,7 +34,7 @@ function CertificateRow({ cert }: { cert: MyCertificate }) {
         disabled={download.isPending}
         onClick={() => download.mutate(`certificate-${cert.competition_name}.png`)}
       >
-        {download.isPending ? "Preparing…" : "Download"}
+        {download.isPending ? t("preparing") : t("download")}
       </Button>
     </div>
   );
@@ -40,21 +43,19 @@ function CertificateRow({ cert }: { cert: MyCertificate }) {
 /** The durable, cross-competition home for a participant's certificates (#219) —
  *  survives closing the release modal and archiving the competition. */
 export function MyCertificatesCard() {
+  const t = useTranslations("profile.certificates");
   const { data, isLoading } = useMyCertificates();
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Certificates</CardTitle>
-        <CardDescription>Certificates you&apos;ve earned across competitions.</CardDescription>
+        <CardTitle>{t("title")}</CardTitle>
+        <CardDescription>{t("description")}</CardDescription>
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <Skeleton className="h-16 w-full" />
         ) : !data?.length ? (
-          <p className="text-sm text-muted-foreground">
-            No certificates yet. When an organiser releases certificates for a
-            competition you took part in, they&apos;ll appear here.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("empty")}</p>
         ) : (
           <div className="grid gap-2">
             {data.map((c) => (

@@ -1,7 +1,8 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import ProfilePage from "@/app/(app)/profile/page";
+import { renderWithIntl } from "@/test/intl";
 
 // The page groups its cards into URL-driven tabs (#113). Mock navigation + the
 // data hooks, and stub the child cards so this exercises the tab logic itself
@@ -55,7 +56,7 @@ describe("ProfilePage tabs", () => {
   });
 
   it("renders the four tabs", () => {
-    render(<ProfilePage />);
+    renderWithIntl(<ProfilePage />);
     expect(screen.getByRole("tab", { name: "Account" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Notifications" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "API tokens" })).toBeInTheDocument();
@@ -63,7 +64,7 @@ describe("ProfilePage tabs", () => {
   });
 
   it("defaults to the Account tab when no ?tab= is set", () => {
-    render(<ProfilePage />);
+    renderWithIntl(<ProfilePage />);
     expect(screen.getByRole("tab", { name: "Account" })).toHaveAttribute("aria-selected", "true");
     // Account panel (holds the email card) is shown; the tokens panel is hidden.
     expect(panelOf("email-card").className).not.toContain("hidden");
@@ -72,7 +73,7 @@ describe("ProfilePage tabs", () => {
 
   it("honours ?tab=tokens", () => {
     searchParams = new URLSearchParams("tab=tokens");
-    render(<ProfilePage />);
+    renderWithIntl(<ProfilePage />);
     expect(screen.getByRole("tab", { name: "API tokens" })).toHaveAttribute("aria-selected", "true");
     expect(panelOf("tokens-card").className).not.toContain("hidden");
     expect(panelOf("email-card").className).toContain("hidden");
@@ -80,12 +81,12 @@ describe("ProfilePage tabs", () => {
 
   it("falls back to Account for a stale/unknown ?tab=", () => {
     searchParams = new URLSearchParams("tab=nonsense");
-    render(<ProfilePage />);
+    renderWithIntl(<ProfilePage />);
     expect(screen.getByRole("tab", { name: "Account" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("pushes ?tab= when a tab is clicked", () => {
-    render(<ProfilePage />);
+    renderWithIntl(<ProfilePage />);
     fireEvent.click(screen.getByRole("tab", { name: "Notifications" }));
     expect(push).toHaveBeenCalledWith("/profile?tab=notifications", { scroll: false });
   });

@@ -53,9 +53,12 @@ const SSO_ERROR_CODES = [
 ] as const;
 type SsoErrorCode = (typeof SSO_ERROR_CODES)[number] | "default";
 
-// Shown only on a demo instance (seeded by auth/demo.py). Password is "password".
-// Labels/descriptions come from auth.login.demo.accounts.<user>.
+// Shown only on a demo instance (seeded by auth/demo.py). Labels/descriptions
+// come from auth.login.demo.accounts.<user>. The password is a credential, not
+// prose — it's interpolated into the demo message (never translator-visible,
+// so machine translation can't corrupt it) and must match the seed.
 const DEMO_ACCOUNTS = ["admin", "judge", "participant"] as const;
+const DEMO_PASSWORD = "password";
 
 // Split from the default export purely so useSearchParams (reading the SSO
 // `?error=` code) sits inside a Suspense boundary. Without one, Next refuses to
@@ -208,6 +211,7 @@ function LoginForm() {
             </div>
             <CardDescription>
               {t.rich("demo.description", {
+                password: DEMO_PASSWORD,
                 pw: (chunks) => (
                   <span className="font-mono text-foreground">{chunks}</span>
                 ),
@@ -221,7 +225,7 @@ function LoginForm() {
                 type="button"
                 onClick={() => {
                   setIdentifier(user);
-                  setPassword("password");
+                  setPassword(DEMO_PASSWORD);
                 }}
                 className="group flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2 text-left transition-colors hover:border-primary/50 hover:bg-accent"
               >

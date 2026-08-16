@@ -8,8 +8,9 @@ import { setStoredLocale } from "@/i18n/client";
 import { LOCALE_LABELS, LOCALES, type Locale } from "@/i18n/config";
 
 /** Language picker (ADR-0029). Renders nothing while only one locale ships, so
- *  it can be mounted ahead of the first translation — when a locale is added to
- *  `i18n/config.ts`, the picker appears everywhere with no further code change.
+ *  it's mounted ahead of the first translation on the auth screens, the app
+ *  shell, and the public boards — when a locale is added to `i18n/config.ts`,
+ *  the picker appears at those mount points with no further code change.
  *  Selection writes the locale cookie and refreshes the server render.
  *
  *  The single-locale guard lives in a hookless wrapper on purpose: while
@@ -20,7 +21,9 @@ export function LocaleSwitcher(props: { className?: string }) {
   return <LocaleSwitcherSelect {...props} />;
 }
 
-function LocaleSwitcherSelect({ className }: { className?: string }) {
+/** Exported for tests — via `LocaleSwitcher` it's unreachable until a second
+ *  locale ships, and its behavior must not first run in production. */
+export function LocaleSwitcherSelect({ className }: { className?: string }) {
   const router = useRouter();
   const locale = useLocale();
   const t = useTranslations("common");

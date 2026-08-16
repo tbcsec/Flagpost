@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { LocaleSwitcher } from "@/components/app/locale-switcher";
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
 import { Card, CardContent } from "@/components/ui/card";
@@ -62,7 +63,10 @@ export default function PublicDirectoryPage() {
         </div>
       )}
 
-      <PoweredByFooter className="mt-auto" />
+      <div className="mt-auto flex flex-col items-center">
+        <LocaleSwitcher />
+        <PoweredByFooter />
+      </div>
     </div>
   );
 }

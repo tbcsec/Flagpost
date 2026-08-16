@@ -17,10 +17,12 @@ export function IntlProvider({ children }: { children: React.ReactNode }) {
 }
 
 /** `render` with the intl context pre-wrapped. Tests that need their own
- *  wrapper (e.g. a QueryClientProvider) compose `IntlProvider` inside it. */
+ *  wrapper (e.g. a QueryClientProvider) compose `IntlProvider` inside it.
+ *  Spread order matters: the wrapper goes last so a caller-supplied options
+ *  object (whose type may structurally carry a `wrapper`) can't clobber it. */
 export function renderWithIntl(
   ui: React.ReactElement,
   options?: Omit<RenderOptions, "wrapper">,
 ) {
-  return render(ui, { wrapper: IntlProvider, ...options });
+  return render(ui, { ...options, wrapper: IntlProvider });
 }

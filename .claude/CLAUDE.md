@@ -145,8 +145,10 @@ Hard-won, non-obvious, and not visible from reading the code you're changing.
   against real Postgres: bring `docker compose up` up at least once before
   shipping one. CI has a Postgres migrations job that will catch you otherwise.
 - **`npm run build` is part of the frontend gauntlet.** tsc, eslint and vitest
-  do not exercise prerendering, so a client hook without a Suspense boundary
-  passes all three and fails CI.
+  miss build-only failures. Caveat: since i18n (ADR-0029) every route renders
+  dynamically, so the build no longer exercises prerendering and the old
+  missing-Suspense-boundary failure can't fire. Keep the Suspense boundaries
+  anyway — they're load-bearing again the moment any route goes static.
 - **Y.js must be a single instance.** `next.config.mjs` pins it with a webpack
   alias; remove that and collaborative editing breaks in ways that look like
   data corruption.

@@ -41,6 +41,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     <html lang={locale} data-palette="harbor" data-mode="dark" suppressHydrationWarning>
       <body className="min-h-screen bg-background text-foreground antialiased">
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH }} />
+        {/* Serializes the full catalog into every response — fine at today's
+            size; switch to a per-namespace pick when extraction grows the
+            catalog (ADR-0029, consequences). */}
         <NextIntlClientProvider locale={locale} messages={messages}>
           <Providers>{children}</Providers>
         </NextIntlClientProvider>

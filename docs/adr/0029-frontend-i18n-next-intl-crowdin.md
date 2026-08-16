@@ -103,11 +103,18 @@ requires a logical-properties audit of the whole component library and
   - Cookie locale doesn't follow the account across devices. Acceptable
     now; a `users.locale` column can layer on later without reworking the
     resolution order (explicit choice → cookie → `Accept-Language`).
-  - Pages that render translated strings on the server read the locale
-    cookie at request time and therefore render dynamically. Most of the
-    app is already dynamic (auth-gated, client-heavy); static shells keep
-    working by passing messages through the client provider. CI's
-    `npm run build` will catch any prerender regression.
+  - **Nothing prerenders anymore.** The root layout reads the locale
+    cookie, so every route — including `/_not-found` and the anonymous
+    `/public/*` spectator boards — renders per-request. Acceptable for an
+    auth-gated, client-heavy app, but it also disarms the build-time
+    prerender check that used to catch a `useSearchParams` without a
+    Suspense boundary ("Things that will bite you"). Keep writing the
+    boundaries: they cost nothing and are load-bearing again the moment
+    any route goes static (see Forecloses).
+  - The root provider serializes the **entire** message catalog into every
+    response (~2.5 KB today). Fine now; as extraction spreads across
+    domains, switch the provider to a per-namespace `pick` so admin-only
+    strings don't ship to anonymous spectators on every request.
   - A translated UI over an untranslated backend shows English API errors
     until the deferred backend phase happens — visible seam, called out
     rather than hidden.

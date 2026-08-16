@@ -9,6 +9,7 @@ import { AnnouncementBanner } from "@/components/announcements/announcement-bann
 import { DemoBanner } from "@/components/app/demo-banner";
 import { CertificateReleaseWatcher } from "@/components/certificates/certificate-release-watcher";
 import { UpdateNotice } from "@/components/admin/update-notice";
+import { LocaleSwitcher } from "@/components/app/locale-switcher";
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
 import { PaletteMenu } from "@/components/theme/palette-menu";
@@ -394,7 +395,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
             {/* One-time certificate-release celebration, once per release (#219). */}
             <CertificateReleaseWatcher />
-            <PoweredByFooter className="mt-auto" />
+            <div className="mt-auto flex flex-col items-center">
+              <LocaleSwitcher />
+              <PoweredByFooter />
+            </div>
           </div>
         </main>
       </div>

@@ -51,6 +51,85 @@
       "manage": "Manage competitions"
     }
   },
+  "scoreboard": {
+    "title": "Scoreboard",
+    "teamMode": "team mode",
+    "individualMode": "individual mode",
+    "frozen": "Frozen",
+    "live": "live",
+    "division": "Division",
+    "divisionAll": "All",
+    "divisionHint": "— set each competitor's division in the table below",
+    "you": "you",
+    "freeze": {
+      "confirmTitle": "Freeze the scoreboard?",
+      "confirmDescription": "Competitors keep solving and their points still count — the public board just stops showing movement until you unfreeze it. Staff can still view live standings.",
+      "confirmLabel": "Freeze",
+      "saving": "Saving…",
+      "unfreeze": "Unfreeze board",
+      "freeze": "Freeze board",
+      "unfrozenToast": "Scoreboard unfrozen",
+      "frozenToast": "Scoreboard frozen",
+      "errorToast": "Couldn't update the board"
+    },
+    "gate": {
+      "notStartedTitle": "This competition hasn't started yet",
+      "notStartedDescription": "The scoreboard opens once the organisers start the competition."
+    },
+    "endedBanner": {
+      "lead": "Final standings.",
+      "rest": "The competition has ended — these results are final."
+    },
+    "frozenBanner": {
+      "lead": "The scoreboard is frozen.",
+      "rest": "Competitors keep solving and their points still count — new solves are hidden here until the organisers unfreeze the board."
+    },
+    "empty": {
+      "title": "No scores yet",
+      "descriptionTeam": "The board fills in the moment a team lands a solve. First flag takes the top spot.",
+      "descriptionIndividual": "The board fills in the moment someone lands a solve. First flag takes the top spot."
+    },
+    "table": {
+      "rank": "Rank",
+      "team": "Team",
+      "participant": "Participant",
+      "points": "Points",
+      "lastSolve": "Last solve"
+    },
+    "chart": {
+      "rankName": "Rank {rank}: {name}",
+      "you": "you",
+      "yourTeam": "your team",
+      "pointsAria": "{points} points",
+      "lastSolveAria": "last solve {time}",
+      "noSolvesAria": "no solves yet",
+      "pointsLabel": "points",
+      "lastSolve": "Last solve {time}",
+      "noSolves": "No solves yet",
+      "division": "Division: {bracket}",
+      "divisionAria": "division {bracket}"
+    },
+    "public": {
+      "directoryTitle": "Public scoreboards",
+      "directorySubtitle": "Live standings for competitions open to spectators — no account needed.",
+      "directoryEmpty": "No public scoreboards are available right now.",
+      "teamCompetition": "Team competition",
+      "individualCompetition": "Individual competition",
+      "ends": "· ends {date}",
+      "venueMode": "Venue mode",
+      "notPublic": "This scoreboard isn't public, or the competition doesn't exist.",
+      "backToAll": "← All public scoreboards",
+      "teamScoreboard": "Team scoreboard",
+      "individualScoreboard": "Individual scoreboard",
+      "frozenSuffix": "· frozen",
+      "emptyBoard": "No scores yet — the board fills in on the first solve.",
+      "frozen": "Frozen",
+      "rank": "Rank",
+      "team": "Team",
+      "competitor": "Competitor",
+      "points": "Points"
+    }
+  },
   "auth": {
     "login": {
       "title": "Sign in",

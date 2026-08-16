@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 
 import { LocaleSwitcher } from "@/components/app/locale-switcher";
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
@@ -13,6 +14,7 @@ import { usePublicCompetitions } from "@/lib/hooks/use-public-scoreboard";
 // The public directory (no login): competitions that opted into a public
 // scoreboard. Selecting one opens its standalone board at /public/<id>.
 export default function PublicDirectoryPage() {
+  const t = useTranslations("scoreboard.public");
   const { data, isLoading } = usePublicCompetitions();
   const { data: settings } = useSiteSettings();
   const brand = settings ?? FALLBACK_SETTINGS;
@@ -29,9 +31,9 @@ export default function PublicDirectoryPage() {
       </header>
 
       <div>
-        <h1 className="text-2xl font-semibold">Public scoreboards</h1>
+        <h1 className="text-2xl font-semibold">{t("directoryTitle")}</h1>
         <p className="text-sm text-muted-foreground">
-          Live standings for competitions open to spectators — no account needed.
+          {t("directorySubtitle")}
         </p>
       </div>
 
@@ -40,7 +42,7 @@ export default function PublicDirectoryPage() {
       {data && data.length === 0 && (
         <Card>
           <CardContent className="p-8 text-center text-sm text-muted-foreground">
-            No public scoreboards are available right now.
+            {t("directoryEmpty")}
           </CardContent>
         </Card>
       )}
@@ -55,8 +57,10 @@ export default function PublicDirectoryPage() {
             >
               <div className="text-base font-semibold">{c.name}</div>
               <div className="text-xs text-muted-foreground">
-                {c.participation_mode === "team" ? "Team" : "Individual"} competition
-                {c.end_at && ` · ends ${new Date(c.end_at).toLocaleDateString()}`}
+                {c.participation_mode === "team"
+                  ? t("teamCompetition")
+                  : t("individualCompetition")}
+                {c.end_at && ` ${t("ends", { date: new Date(c.end_at).toLocaleDateString() })}`}
               </div>
             </Link>
           ))}

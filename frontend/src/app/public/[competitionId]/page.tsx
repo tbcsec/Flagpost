@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Suspense, use } from "react";
 
 import { LocaleSwitcher } from "@/components/app/locale-switcher";
@@ -65,6 +66,7 @@ function PublicScoreboardContent({
 }: {
   params: Promise<{ competitionId: string }>;
 }) {
+  const t = useTranslations("scoreboard.public");
   const { competitionId } = use(params);
   const router = useRouter();
   const pathname = usePathname();
@@ -114,10 +116,10 @@ function PublicScoreboardContent({
           showWordmark={brand.show_wordmark}
         />
         <div className="flex items-center gap-2">
-          {data?.frozen && <Badge variant="secondary">Frozen</Badge>}
+          {data?.frozen && <Badge variant="secondary">{t("frozen")}</Badge>}
           {data && (
             <Button variant="outline" size="sm" onClick={enterVenue}>
-              Venue mode
+              {t("venueMode")}
             </Button>
           )}
         </div>
@@ -127,7 +129,7 @@ function PublicScoreboardContent({
       {isError && (
         <Card>
           <CardContent className="p-8 text-center text-sm text-muted-foreground">
-            This scoreboard isn&apos;t public, or the competition doesn&apos;t exist.
+            {t("notPublic")}
           </CardContent>
         </Card>
       )}
@@ -136,12 +138,12 @@ function PublicScoreboardContent({
         <>
           <div>
             <Link href="/public" className="text-xs text-primary underline">
-              ← All public scoreboards
+              {t("backToAll")}
             </Link>
             <h1 className="mt-1 text-2xl font-semibold">{data.name}</h1>
             <p className="text-sm text-muted-foreground">
-              {data.mode === "team" ? "Team" : "Individual"} scoreboard
-              {data.frozen && " · frozen"}
+              {data.mode === "team" ? t("teamScoreboard") : t("individualScoreboard")}
+              {data.frozen && ` ${t("frozenSuffix")}`}
             </p>
           </div>
 
@@ -159,7 +161,7 @@ function PublicScoreboardContent({
           {data.entries.length === 0 ? (
             <Card>
               <CardContent className="p-8 text-center text-sm text-muted-foreground">
-                No scores yet — the board fills in on the first solve.
+                {t("emptyBoard")}
               </CardContent>
             </Card>
           ) : (
@@ -169,11 +171,11 @@ function PublicScoreboardContent({
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-12">Rank</TableHead>
+                        <TableHead className="w-12">{t("rank")}</TableHead>
                         <TableHead>
-                          {data.mode === "team" ? "Team" : "Competitor"}
+                          {data.mode === "team" ? t("team") : t("competitor")}
                         </TableHead>
-                        <TableHead className="text-right">Points</TableHead>
+                        <TableHead className="text-right">{t("points")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { RankBadge } from "@/components/scoreboard/rank-badge";
@@ -26,18 +27,6 @@ import { cn } from "@/lib/utils";
 // for its points label above it.
 const HEADROOM = 0.86;
 
-function label(entry: ScoreboardEntry, mine: boolean, isTeam: boolean): string {
-  const parts = [
-    `Rank ${entry.rank}: ${entry.name}${mine ? (isTeam ? " (your team)" : " (you)") : ""}`,
-    `${entry.points} points`,
-    entry.last_solve_at
-      ? `last solve ${relativeTime(entry.last_solve_at)}`
-      : "no solves yet",
-  ];
-  if (entry.bracket) parts.push(`division ${entry.bracket}`);
-  return parts.join(", ");
-}
-
 export function TopChart({
   entries,
   mySubjectId,
@@ -52,6 +41,23 @@ export function TopChart({
   // Which column's tooltip is open (subject id). One at a time, cleared on
   // leave/blur — hover and keyboard focus share the same state on purpose.
   const [openId, setOpenId] = useState<string | null>(null);
+  const t = useTranslations("scoreboard.chart");
+
+  // aria-label for a column — the same facts as the visual tooltip, so a
+  // screen reader gets parity. A closure over `t`/`isTeam` (relativeTime stays
+  // English until the date-formatting pass).
+  const label = (entry: ScoreboardEntry, mine: boolean): string => {
+    const parts = [
+      t("rankName", { rank: entry.rank, name: entry.name }) +
+        (mine ? ` (${t(isTeam ? "yourTeam" : "you")})` : ""),
+      t("pointsAria", { points: entry.points }),
+      entry.last_solve_at
+        ? t("lastSolveAria", { time: relativeTime(entry.last_solve_at) })
+        : t("noSolvesAria"),
+    ];
+    if (entry.bracket) parts.push(t("divisionAria", { bracket: entry.bracket }));
+    return parts.join(", ");
+  };
 
   return (
     <div className="flex h-44 items-end gap-2.5">
@@ -67,7 +73,7 @@ export function TopChart({
           <button
             type="button"
             key={entry.subject_id}
-            aria-label={label(entry, mine, isTeam)}
+            aria-label={label(entry, mine)}
             onMouseEnter={() => setOpenId(entry.subject_id)}
             onMouseLeave={() => setOpenId((id) => (id === entry.subject_id ? null : id))}
             onFocus={() => setOpenId(entry.subject_id)}
@@ -91,21 +97,22 @@ export function TopChart({
                   {entry.name}
                   {mine && (
                     <span className="ml-1.5 text-[11px] text-primary">
-                      {isTeam ? "your team" : "you"}
+                      {t(isTeam ? "yourTeam" : "you")}
                     </span>
                   )}
                 </span>
               </div>
               <div className="mt-1.5 grid gap-0.5 text-[11px] text-muted-foreground">
                 <span>
-                  <span className="font-mono text-foreground">{entry.points}</span> points
+                  <span className="font-mono text-foreground">{entry.points}</span>{" "}
+                  {t("pointsLabel")}
                 </span>
                 <span>
                   {entry.last_solve_at
-                    ? `Last solve ${relativeTime(entry.last_solve_at)}`
-                    : "No solves yet"}
+                    ? t("lastSolve", { time: relativeTime(entry.last_solve_at) })
+                    : t("noSolves")}
                 </span>
-                {entry.bracket && <span>Division: {entry.bracket}</span>}
+                {entry.bracket && <span>{t("division", { bracket: entry.bracket })}</span>}
               </div>
             </div>
 

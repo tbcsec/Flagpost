@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { NewAnnouncementDialog } from "@/components/announcements/new-announcement-dialog";
 import { NoCompetition } from "@/components/app/no-competition";
 import { SectionHeader } from "@/components/app/section-header";
@@ -18,6 +20,7 @@ import {
 // Managers (customize_dashboard) get the drag/resize/hide edit mode (Phase 6);
 // participants get the fixed default layout.
 export default function DashboardPage() {
+  const t = useTranslations("dashboard");
   const { competitionId, data: competition } = useActiveCompetition();
   const { data: competitions, isLoading: competitionsLoading } = useCompetitions();
   const access = useAccess();
@@ -51,8 +54,8 @@ export default function DashboardPage() {
   return (
     <>
       <SectionHeader
-        title="Dashboard"
-        subtitle={`${competition?.name ?? ""} · ${isManager ? "operational overview" : "your dashboard"}`}
+        title={t("title")}
+        subtitle={`${competition?.name ?? ""} · ${isManager ? t("subtitleManager") : t("subtitleParticipant")}`}
         actions={isManager ? <NewAnnouncementDialog competitionId={competitionId} /> : undefined}
       />
 

@@ -27,9 +27,20 @@ export interface WidgetSize {
   h: number;
 }
 
+/** Key into `dashboard.widgetLabels.*` — the edit-chrome name is resolved with
+ *  `t()` in the grid (§10.4), so the registry stays free of display strings. */
+export type WidgetLabelKey =
+  | "stats"
+  | "standing"
+  | "activity"
+  | "announcements"
+  | "challengeHealth"
+  | "supportQueue"
+  | "mySolves";
+
 export interface WidgetDef {
   id: string;
-  label: string; // shown in edit-mode chrome (§10.4)
+  labelKey: WidgetLabelKey; // shown in edit-mode chrome (§10.4), via t()
   minSize: WidgetSize; // smallest the widget may be dragged down to (issue #21)
   defaultSize: WidgetSize; // size in the code-defined default layout
   Component: React.ComponentType<{ competitionId: string }>;
@@ -38,49 +49,49 @@ export interface WidgetDef {
 export const WIDGETS: Record<string, WidgetDef> = {
   stats: {
     id: "stats",
-    label: "At a glance",
+    labelKey: "stats",
     minSize: { w: 4, h: 2 },
     defaultSize: { w: 12, h: 2 },
     Component: StatsWidget,
   },
   standing: {
     id: "standing",
-    label: "Your standing",
+    labelKey: "standing",
     minSize: { w: 4, h: 2 },
     defaultSize: { w: 12, h: 2 },
     Component: StandingWidget,
   },
   activity: {
     id: "activity",
-    label: "Recent solves",
+    labelKey: "activity",
     minSize: { w: 4, h: 3 },
     defaultSize: { w: 6, h: 5 },
     Component: ActivityWidget,
   },
   announcements: {
     id: "announcements",
-    label: "Announcements",
+    labelKey: "announcements",
     minSize: { w: 4, h: 3 },
     defaultSize: { w: 6, h: 5 },
     Component: AnnouncementsWidget,
   },
   "challenge-health": {
     id: "challenge-health",
-    label: "Challenge health",
+    labelKey: "challengeHealth",
     minSize: { w: 4, h: 3 },
     defaultSize: { w: 6, h: 5 },
     Component: ChallengeHealthWidget,
   },
   "support-queue": {
     id: "support-queue",
-    label: "Support queue",
+    labelKey: "supportQueue",
     minSize: { w: 4, h: 3 },
     defaultSize: { w: 6, h: 5 },
     Component: SupportQueueWidget,
   },
   "my-solves": {
     id: "my-solves",
-    label: "Your solves",
+    labelKey: "mySolves",
     minSize: { w: 4, h: 3 },
     defaultSize: { w: 6, h: 5 },
     Component: MySolvesWidget,

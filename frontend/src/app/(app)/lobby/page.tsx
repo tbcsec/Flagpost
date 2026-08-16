@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
@@ -34,6 +35,7 @@ type RulesPrompt = {
 // invite code for private ones. On success the shell's nav switches out of the
 // lobby (permissions are refetched) and the joined competition becomes active.
 export default function LobbyPage() {
+  const t = useTranslations("lobby");
   const router = useRouter();
   const { data: competitions } = useCompetitions();
   const join = useJoinCompetition();
@@ -49,7 +51,7 @@ export default function LobbyPage() {
   );
 
   function onJoined(name: string) {
-    toast(`Joined ${name}`, { variant: "success" });
+    toast(t("joined", { name }), { variant: "success" });
     router.push("/");
   }
 
@@ -60,14 +62,14 @@ export default function LobbyPage() {
     // import — components reach the API only through hooks (ARCHITECTURE.md §8).
     const e = err as { status?: unknown; message?: unknown };
     if (e.status === 403 && typeof e.message === "string" && e.message.includes("Verify your email")) {
-      toast("Couldn't join", {
-        description: `${e.message} — see your Profile page.`,
+      toast(t("cantJoin"), {
+        description: t("verifyEmailHint", { message: e.message }),
         variant: "destructive",
       });
       router.push("/profile");
       return;
     }
-    toast("Couldn't join", {
+    toast(t("cantJoin"), {
       description: (err as Error).message,
       variant: "destructive",
     });
@@ -85,7 +87,7 @@ export default function LobbyPage() {
         onSuccess: async (comp) => {
           setCode("");
           setPrompt(null);
-          toast(`Joined ${comp.name}`, { variant: "success" });
+          toast(t("joined", { name: comp.name }), { variant: "success" });
           // Display-only rules can't be shown pre-join on the code path (the
           // competition is undisclosed until the code resolves) — show them
           // now, and move on after Continue.
@@ -165,7 +167,7 @@ export default function LobbyPage() {
 
   return (
     <>
-      <SectionHeader title="Lobby" subtitle="You're not currently part of any competition." />
+      <SectionHeader title={t("title")} subtitle={t("subtitle")} />
 
       {prompt && (
         <RulesAcceptModal
@@ -180,20 +182,20 @@ export default function LobbyPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Join with an invite code</CardTitle>
-          <CardDescription>For invite-only competitions</CardDescription>
+          <CardTitle>{t("inviteTitle")}</CardTitle>
+          <CardDescription>{t("inviteDescription")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="flex max-w-md gap-3" onSubmit={onJoinByCode}>
             <Input
-              placeholder="Invite code"
+              placeholder={t("invitePlaceholder")}
               className="font-mono"
               value={code}
               onChange={(e) => setCode(e.target.value)}
               required
             />
             <Button type="submit" disabled={joinByCode.isPending}>
-              {joinByCode.isPending ? "Joining…" : "Join"}
+              {joinByCode.isPending ? t("joining") : t("join")}
             </Button>
           </form>
         </CardContent>
@@ -201,8 +203,8 @@ export default function LobbyPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Public competitions</CardTitle>
-          <CardDescription>Open to join right now</CardDescription>
+          <CardTitle>{t("publicTitle")}</CardTitle>
+          <CardDescription>{t("publicDescription")}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-3">
@@ -222,12 +224,12 @@ export default function LobbyPage() {
                   disabled={join.isPending}
                   onClick={() => onPublicJoin(c.id, c.name)}
                 >
-                  Join
+                  {t("join")}
                 </Button>
               </div>
             ))}
             {publicComps.length === 0 && (
-              <p className="text-sm text-muted-foreground">No public competitions right now.</p>
+              <p className="text-sm text-muted-foreground">{t("empty")}</p>
             )}
           </div>
         </CardContent>

@@ -71,9 +71,15 @@ Recorded so the setup is reproducible; already-done steps are just history.
 2. Apply for the **Open Source plan** (free): crowdin.com → Open Source
    Program. Needs the public repo URL and the OSI license.
 3. Install the **Crowdin GitHub integration** (the GitHub App) on the repo,
-   sync branch `main`. It reads [crowdin.yml](../crowdin.yml) at the repo
-   root — source `frontend/messages/en.json`, translations
-   `frontend/messages/%locale%.json`.
+   sync branch `main`, and set the file mapping — source
+   `/frontend/messages/en.json`, translations
+   `/frontend/messages/%locale%.json`. The App **owns and maintains**
+   [crowdin.yml](../crowdin.yml) at the repo root (it commits changes there
+   itself); treat that file as generated — configure paths in the Crowdin
+   UI, not by hand-editing it. Use **Language Mapping** in the UI so each
+   language's `%locale%` value equals the exact slug in
+   [`config.ts`](../frontend/src/i18n/config.ts) `LOCALES` (e.g. German →
+   `de`), since `%locale%` otherwise expands region-qualified (`de-DE`).
 4. In the project settings, enable **machine pre-translation** for new
    source strings, with human proofreading before export.
 5. Set the export policy to include untranslated strings as source text

@@ -722,5 +722,137 @@
       "colAverage": "Average",
       "colRatings": "Ratings"
     }
+  },
+  "profile": {
+    "title": "Profile",
+    "subtitle": "Your account and notification preferences",
+    "tabs": {
+      "account": "Account",
+      "notifications": "Notifications",
+      "tokens": "API tokens",
+      "certificates": "Certificates"
+    },
+    "verify": {
+      "title": "Verify your email",
+      "description": "This instance requires a verified email before you can join a competition.",
+      "sending": "Sending…",
+      "sent": "Sent — check your inbox",
+      "resend": "Resend verification email",
+      "sentToast": "Verification email sent",
+      "sendError": "Couldn't send it",
+      "noEmail": "Your account has no email address on file. Add one under <b>Email</b> below, and we'll send you a verification link."
+    },
+    "password": {
+      "title": "Account",
+      "description": "Change your password",
+      "displayName": "Display name",
+      "current": "Current password",
+      "new": "New password",
+      "saving": "Saving…",
+      "submit": "Change password",
+      "changed": "Password changed.",
+      "changedToast": "Password changed"
+    },
+    "email": {
+      "title": "Email",
+      "descriptionSet": "Used for password resets and account notices.",
+      "descriptionUnset": "No email set — add one to enable password reset.",
+      "address": "Email address",
+      "changeHintVerify": "Changing this will require verifying the new address before you can join a competition.",
+      "changeHintNotify": "We'll let your current address know it was changed.",
+      "current": "Current password",
+      "currentHint": "Confirming your password keeps someone with access to an open session from repointing where password resets are sent.",
+      "saving": "Saving…",
+      "update": "Update email",
+      "add": "Add email",
+      "remove": "Remove",
+      "updatedToast": "Email updated",
+      "addedToast": "Email added",
+      "removedToast": "Email removed",
+      "verifySuffix": " — check your inbox to verify it",
+      "removeConfirmTitle": "Remove your email address?",
+      "removeConfirmDescription": "You'll lose access to password reset, and an administrator will have to set an address for you to get it back.",
+      "removeConfirmLabel": "Remove"
+    },
+    "notifications": {
+      "title": "Notification preferences",
+      "description": "Control what reaches your notification bell, and how you're alerted.",
+      "inAppHeading": "In-app notifications",
+      "deliveryHeading": "Delivery",
+      "saving": "Saving…",
+      "save": "Save preferences",
+      "unsaved": "Unsaved changes",
+      "savedToast": "Preferences saved",
+      "saveError": "Couldn't save",
+      "browserBlockedTitle": "Browser notifications are blocked",
+      "browserBlockedBody": "Allow notifications for this site in your browser settings, then try again.",
+      "permissionDeniedTitle": "Permission not granted",
+      "permissionDeniedBody": "Browser notifications stay off until you allow them.",
+      "inApp": {
+        "inapp_tickets": {
+          "label": "Support tickets",
+          "hint": "New tickets, replies, assignments, and resolutions."
+        },
+        "inapp_automations": {
+          "label": "Automations & alerts",
+          "hint": "Notifications sent to you by competition automation rules."
+        },
+        "inapp_announcements": {
+          "label": "Announcements",
+          "hint": "Organiser announcements. Urgent ones always come through, even with this off."
+        }
+      },
+      "browser": {
+        "label": "Browser notifications",
+        "hint": "Show a desktop notification when something arrives while Flagpost is open."
+      },
+      "sound": {
+        "label": "Sound for support tickets",
+        "hint": "Play a short cue when a new ticket or reply comes in."
+      }
+    },
+    "tokens": {
+      "title": "API tokens",
+      "description": "Use a token instead of signing in to call the API from a script. Each one acts as you, with your permissions, and is shown only once.",
+      "create": "Create token",
+      "loadError": "Couldn't load your tokens: {message}",
+      "emptyTitle": "No API tokens",
+      "emptyDescription": "Create one to call the Flagpost API from a script or CI job.",
+      "colDescription": "Description",
+      "colExpires": "Expires",
+      "colLastUsed": "Last used",
+      "colStatus": "Status",
+      "colActions": "Actions",
+      "never": "Never",
+      "revoke": "Revoke",
+      "revokeConfirmTitle": "Revoke this token?",
+      "revokeConfirmDescription": "{description} will stop authenticating immediately. This can't be undone.",
+      "revokeConfirmLabel": "Revoke",
+      "revokedToast": "Token revoked",
+      "revokeError": "Couldn't revoke",
+      "createTitle": "Create API token",
+      "createDescription": "The token acts as you, with your own permissions. Tokens can only be created for your own account.",
+      "descLabel": "Description",
+      "descPlaceholder": "e.g. CI grading bot",
+      "descHint": "So you can tell your tokens apart later.",
+      "expiresLabel": "Expires in (days)",
+      "creating": "Creating…",
+      "createSubmit": "Create token",
+      "createError": "Couldn't create token",
+      "revealTitle": "Token created",
+      "revealDescription": "Copy it now — it won't be shown again. Send it in an <code>Authorization: Bearer</code> header.",
+      "copyError": "Couldn't copy — select and copy manually",
+      "copied": "Copied",
+      "copy": "Copy",
+      "done": "Done"
+    },
+    "certificates": {
+      "title": "Certificates",
+      "description": "Certificates you've earned across competitions.",
+      "empty": "No certificates yet. When an organiser releases certificates for a competition you took part in, they'll appear here.",
+      "released": "Released {date}",
+      "preparing": "Preparing…",
+      "download": "Download"
+    }
   }
 }

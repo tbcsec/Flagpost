@@ -3,6 +3,54 @@
     "poweredBy": "Propulsé par",
     "language": "Langue"
   },
+  "app": {
+    "skipToContent": "Skip to content",
+    "toggleSidebar": "Toggle sidebar",
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar",
+    "openMenu": "Open menu",
+    "signOut": "Sign out",
+    "profileSettings": "Profile & notification settings",
+    "adminNoAccess": "You don't have access to the admin area.",
+    "adminGlobalScope": "Admin is global — not scoped to a competition",
+    "mainNav": "Main",
+    "nav": {
+      "dashboard": "Dashboard",
+      "challenges": "Challenges",
+      "scoreboard": "Scoreboard",
+      "participants": "Participants",
+      "support": "Support",
+      "feedback": "Feedback",
+      "analytics": "Analytics",
+      "automations": "Automations",
+      "aiTranscripts": "AI transcripts",
+      "settings": "Settings",
+      "lobby": "Lobby",
+      "admin": "Admin"
+    },
+    "adminNav": {
+      "dashboard": "Dashboard",
+      "competitions": "Competitions",
+      "users": "Users",
+      "roles": "Roles",
+      "events": "Event log",
+      "automations": "Automations",
+      "siteSettings": "Site settings"
+    },
+    "notifications": {
+      "title": "Notifications",
+      "unread": "Notifications ({count} unread)",
+      "markAllRead": "Mark all read",
+      "empty": "No notifications yet."
+    },
+    "demoBanner": "Demo instance — data is public and <b>resets every hour, on the hour</b>.",
+    "noCompetition": {
+      "title": "No competition loaded",
+      "descriptionCanCreate": "There aren't any competitions yet. Create one to open its challenges, teams, scoreboard, and more.",
+      "description": "There aren't any competitions available to you yet. Check back soon.",
+      "manage": "Manage competitions"
+    }
+  },
   "auth": {
     "login": {
       "title": "Se connecter",

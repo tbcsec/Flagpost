@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { AiAssistantMount } from "@/components/ai/ai-assistant";
@@ -78,38 +79,62 @@ const transcriptIcon: Icon = (
 // module is disabled for the active competition (nothing there would work).
 // `permission` gates an item on one specific grant (for surfaces narrower than
 // the manage bundle, e.g. a transcripts-only reviewer role).
+// Labels are resolved through `t("nav.<key>")` at render (the arrays are
+// module-level, so they can't call the hook themselves) — the key is a typed
+// union so a stale key is a compile error, not a raw key path on screen.
+type NavKey =
+  | "dashboard"
+  | "challenges"
+  | "scoreboard"
+  | "participants"
+  | "support"
+  | "feedback"
+  | "analytics"
+  | "automations"
+  | "aiTranscripts"
+  | "settings";
+
 const COMP_NAV: {
   href: string;
-  label: string;
+  key: NavKey;
   icon: Icon;
   manage?: boolean;
   module?: string;
   permission?: string;
 }[] = [
-  { href: "/", label: "Dashboard", icon: dashIcon },
-  { href: "/challenges", label: "Challenges", icon: <span className="text-base leading-none">⚑</span> },
-  { href: "/scoreboard", label: "Scoreboard", icon: scoreboardIcon },
-  { href: "/participants", label: "Participants", icon: peopleIcon },
-  { href: "/support", label: "Support", icon: supportIcon },
-  { href: "/feedback", label: "Feedback", icon: feedbackIcon, module: "feedback" },
-  { href: "/analytics", label: "Analytics", icon: analyticsIcon, manage: true, module: "analytics" },
-  { href: "/automations", label: "Automations", icon: boltIcon, manage: true, module: "automations" },
+  { href: "/", key: "dashboard", icon: dashIcon },
+  { href: "/challenges", key: "challenges", icon: <span className="text-base leading-none">⚑</span> },
+  { href: "/scoreboard", key: "scoreboard", icon: scoreboardIcon },
+  { href: "/participants", key: "participants", icon: peopleIcon },
+  { href: "/support", key: "support", icon: supportIcon },
+  { href: "/feedback", key: "feedback", icon: feedbackIcon, module: "feedback" },
+  { href: "/analytics", key: "analytics", icon: analyticsIcon, manage: true, module: "analytics" },
+  { href: "/automations", key: "automations", icon: boltIcon, manage: true, module: "automations" },
   // Competitor-assistant transcript review (#98) — its own grant, not the
   // manage bundle, so a transcripts-only reviewer role reaches it.
-  { href: "/ai-transcripts", label: "AI transcripts", icon: transcriptIcon, module: "ai", permission: "ai_view_transcripts" },
-  { href: "/settings", label: "Settings", icon: settingsIcon, manage: true },
+  { href: "/ai-transcripts", key: "aiTranscripts", icon: transcriptIcon, module: "ai", permission: "ai_view_transcripts" },
+  { href: "/settings", key: "settings", icon: settingsIcon, manage: true },
 ];
 
-const ADMIN_SUBNAV: { href: string; label: string }[] = [
-  { href: "/admin/dashboard", label: "Dashboard" },
-  { href: "/admin/competitions", label: "Competitions" },
-  { href: "/admin/users", label: "Users" },
-  { href: "/admin/roles", label: "Roles" },
-  { href: "/admin/events", label: "Event log" },
-  { href: "/admin/automations", label: "Automations" },
+type AdminNavKey =
+  | "dashboard"
+  | "competitions"
+  | "users"
+  | "roles"
+  | "events"
+  | "automations"
+  | "siteSettings";
+
+const ADMIN_SUBNAV: { href: string; key: AdminNavKey }[] = [
+  { href: "/admin/dashboard", key: "dashboard" },
+  { href: "/admin/competitions", key: "competitions" },
+  { href: "/admin/users", key: "users" },
+  { href: "/admin/roles", key: "roles" },
+  { href: "/admin/events", key: "events" },
+  { href: "/admin/automations", key: "automations" },
   // Appearance (#104) and Auth providers (#58) are tabs under Site settings,
   // not their own pages.
-  { href: "/admin/settings", label: "Site settings" },
+  { href: "/admin/settings", key: "siteSettings" },
 ];
 
 function useActivePath() {
@@ -122,6 +147,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const isActive = useActivePath();
+  const t = useTranslations("app");
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [adminOpen, setAdminOpen] = React.useState(pathname.startsWith("/admin"));
@@ -230,7 +256,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
       >
-        Skip to content
+        {t("skipToContent")}
       </a>
       {/* Demo-instance banner spans the full width above the shell. */}
       <DemoBanner />
@@ -268,8 +294,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <button
             type="button"
             onClick={() => setCollapsed((c) => !c)}
-            title="Toggle sidebar"
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={t("toggleSidebar")}
+            aria-label={collapsed ? t("expandSidebar") : t("collapseSidebar")}
             aria-expanded={!collapsed}
             className={cn(
               "ml-auto hidden rounded-md px-2.5 py-1 text-xl leading-none text-muted-foreground hover:bg-accent/60 md:block",
@@ -280,19 +306,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
-        <nav aria-label="Main" className="flex flex-1 flex-col gap-1">
+        <nav aria-label={t("mainNav")} className="flex flex-1 flex-col gap-1">
           {showLobby ? (
-            <Link href="/lobby" title="Lobby" className={navItem(isActive("/lobby"))}>
+            <Link href="/lobby" title={t("nav.lobby")} className={navItem(isActive("/lobby"))}>
               <span className="flex h-4 w-4 items-center justify-center">{lobbyIcon}</span>
-              {navExpanded && <span>Lobby</span>}
+              {navExpanded && <span>{t("nav.lobby")}</span>}
             </Link>
           ) : (
-            compNav.map((item) => (
-              <Link key={item.href} href={item.href} title={item.label} className={navItem(isActive(item.href))}>
-                <span className="flex h-4 w-4 items-center justify-center">{item.icon}</span>
-                {navExpanded && <span>{item.label}</span>}
-              </Link>
-            ))
+            compNav.map((item) => {
+              const label = t(`nav.${item.key}`);
+              return (
+                <Link key={item.href} href={item.href} title={label} className={navItem(isActive(item.href))}>
+                  <span className="flex h-4 w-4 items-center justify-center">{item.icon}</span>
+                  {navExpanded && <span>{label}</span>}
+                </Link>
+              );
+            })
           )}
 
           {access.isAdmin && (
@@ -304,14 +333,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   if (collapsed) setCollapsed(false);
                   setAdminOpen((o) => !o);
                 }}
-                title="Admin"
+                title={t("nav.admin")}
                 aria-expanded={adminOpen}
                 className={navItem(isAdminSection)}
               >
                 <span className="flex h-4 w-4 items-center justify-center">{shieldIcon}</span>
                 {navExpanded && (
                   <>
-                    <span className="flex-1 text-left">Admin</span>
+                    <span className="flex-1 text-left">{t("nav.admin")}</span>
                     <span aria-hidden="true" className="text-[11px] text-muted-foreground">{adminOpen ? "▾" : "▸"}</span>
                   </>
                 )}
@@ -320,7 +349,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 adminOpen &&
                 ADMIN_SUBNAV.map((item) => (
                   <Link key={item.href} href={item.href} className={subNavItem(isActive(item.href))}>
-                    {item.label}
+                    {t(`adminNav.${item.key}`)}
                   </Link>
                 ))}
             </>
@@ -332,7 +361,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               it would refuse to shrink below its content and push "Sign out"
               out of the rail — the `truncate` below can't engage without it (#48). */}
           <div className="flex min-w-0 items-center gap-2">
-            <Link href="/profile" title="Profile & notification settings" className="flex min-w-0 flex-1 items-center gap-2">
+            <Link href="/profile" title={t("profileSettings")} className="flex min-w-0 flex-1 items-center gap-2">
               <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-secondary text-[13px] font-semibold text-secondary-foreground">
                 {initials}
               </span>
@@ -362,7 +391,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 // Never give up width to the identity block beside it.
                 className="flex-shrink-0"
               >
-                Sign out
+                {t("signOut")}
               </Button>
             )}
           </div>
@@ -386,7 +415,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {adminDenied ? (
                 <div className="rounded-lg border border-border bg-card p-10 text-center">
                   <p className="text-sm text-muted-foreground">
-                    You don&apos;t have access to the admin area.
+                    {t("adminNoAccess")}
                   </p>
                 </div>
               ) : (
@@ -428,6 +457,7 @@ function Topbar({
   pathname: string;
   onOpenMenu: () => void;
 }) {
+  const t = useTranslations("app");
   const activeCompetitionId = useAuthStore((s) => s.activeCompetitionId);
   const setActiveCompetition = useAuthStore((s) => s.setActiveCompetition);
   const { data: allCompetitions } = useCompetitions();
@@ -479,8 +509,8 @@ function Topbar({
     <div className="flex flex-shrink-0 items-center gap-3 border-b border-border bg-background px-4 py-3.5 md:gap-4 md:px-8">
       <button
         onClick={onOpenMenu}
-        title="Open menu"
-        aria-label="Open menu"
+        title={t("openMenu")}
+        aria-label={t("openMenu")}
         className="text-muted-foreground hover:text-foreground md:hidden"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
@@ -500,7 +530,7 @@ function Topbar({
       )}
       {isAdminSection && (
         <span className="text-xs text-muted-foreground">
-          Admin is global — not scoped to a competition
+          {t("adminGlobalScope")}
         </span>
       )}
       <div className="flex-1" />
@@ -509,9 +539,11 @@ function Topbar({
         <button
           type="button"
           onClick={() => setNotifOpen((o) => !o)}
-          title="Notifications"
+          title={t("notifications.title")}
           aria-label={
-            hasUnread ? `Notifications (${unreadCount} unread)` : "Notifications"
+            hasUnread
+              ? t("notifications.unread", { count: unreadCount })
+              : t("notifications.title")
           }
           aria-haspopup="menu"
           aria-expanded={notifOpen}
@@ -532,19 +564,19 @@ function Topbar({
         {notifOpen && (
           <div className="anim-drop absolute right-0 top-[calc(100%+10px)] z-50 w-[400px] overflow-hidden rounded-lg border border-border bg-card shadow-lg">
             <div className="flex items-center justify-between border-b border-border px-4 py-3.5">
-              <span className="text-sm font-semibold">Notifications</span>
+              <span className="text-sm font-semibold">{t("notifications.title")}</span>
               {hasUnread && (
                 <button
                   onClick={() => markAllRead.mutate()}
                   className="text-xs text-primary hover:underline"
                 >
-                  Mark all read
+                  {t("notifications.markAllRead")}
                 </button>
               )}
             </div>
             {items.length === 0 ? (
               <div className="px-4 py-8 text-center text-[13px] text-muted-foreground">
-                No notifications yet.
+                {t("notifications.empty")}
               </div>
             ) : (
               <ul className="max-h-80 overflow-y-auto">

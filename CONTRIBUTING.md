@@ -95,6 +95,16 @@ some enforced by ESLint):
   number in a component (§9).
 - Backend: Pydantic schemas are separate from SQLAlchemy models; one router per
   domain. One migration per PR, named `YYYY-MM-DD_<revid>_<desc>.py`.
+- Frontend UI strings in i18n-extracted areas go through
+  `frontend/messages/en.json` + `t()` (next-intl, ADR-0029), not literals.
+
+## Translating Flagpost
+
+You don't need to write code to contribute a translation — the UI is
+translated in Crowdin, with machine drafts reviewed by people. See
+[docs/TRANSLATIONS.md](docs/TRANSLATIONS.md) for how to join, and never
+hand-edit `frontend/messages/<locale>.json` in a PR (those files are
+generated; only the English source is edited in code PRs).
 
 ## Pull request flow
 

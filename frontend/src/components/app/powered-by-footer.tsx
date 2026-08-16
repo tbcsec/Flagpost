@@ -1,3 +1,5 @@
+import { useTranslations } from "next-intl";
+
 import { FlagpostMark } from "@/components/brand/flagpost-mark";
 
 // The Flagpost project's public home. This footer is a **mandatory** attribution:
@@ -9,6 +11,7 @@ const FLAGPOST_URL = "https://flagpost.io";
  *  (the app shell and the public auth screens) so attribution can't be removed by
  *  branding. Uses the built-in Flagpost mark, never the org's custom logo. */
 export function PoweredByFooter({ className }: { className?: string }) {
+  const t = useTranslations("common");
   return (
     <footer
       className={
@@ -16,7 +19,8 @@ export function PoweredByFooter({ className }: { className?: string }) {
         (className ? ` ${className}` : "")
       }
     >
-      <span>Powered by</span>
+      {/* "Flagpost" itself is the project name, never translated. */}
+      <span>{t("poweredBy")}</span>
       <a
         href={FLAGPOST_URL}
         target="_blank"

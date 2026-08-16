@@ -321,6 +321,12 @@ cd frontend && npm install && npm run dev
 - Frontend: server state through TanStack Query hooks only; Zustand is
   for client/UI state (auth, active competition, prefs) — don't put
   server data in a Zustand store.
+- Frontend i18n (ADR-0029, extraction in progress): in a domain already
+  extracted to next-intl (the file imports `useTranslations`), new
+  user-facing strings go through `messages/en.json` + `t()`, not literals.
+  Unextracted domains keep literals until their own extraction PR — don't
+  half-extract. Components under an intl'd tree need `renderWithIntl`
+  (`src/test/intl.tsx`) in tests.
 - Migrations: `YYYY-MM-DD_<revid>_<desc>.py`, one migration per PR. Never
   hand-edit a migration that's already been applied anywhere.
 

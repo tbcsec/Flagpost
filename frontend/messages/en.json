@@ -1,0 +1,95 @@
+{
+  "common": {
+    "poweredBy": "Powered by",
+    "language": "Language"
+  },
+  "auth": {
+    "login": {
+      "title": "Sign in",
+      "description": "Access your competitions.",
+      "identifier": "Username or email",
+      "password": "Password",
+      "forgotPassword": "Forgot password?",
+      "submit": "Sign in",
+      "submitting": "Signing in…",
+      "or": "or",
+      "ssoSignIn": "Sign in with {name}",
+      "noAccount": "No account?",
+      "register": "Register",
+      "ssoErrors": {
+        "invalid_state": "That sign-in link has expired or was already used. Please try again.",
+        "expired": "That sign-in attempt timed out. Please try again.",
+        "invalid_token": "We couldn't verify the response from your identity provider.",
+        "provider_unavailable": "That identity provider isn't reachable right now. Try again, or sign in with a password.",
+        "provider_denied": "Your identity provider declined the sign-in request.",
+        "invalid_response": "Your identity provider sent an incomplete response.",
+        "account_disabled": "That account has been disabled. Contact an administrator.",
+        "domain_not_allowed": "Your account isn't permitted to sign in to this instance. Contact an administrator.",
+        "registration_closed": "This instance isn't accepting new accounts. Contact an administrator.",
+        "default": "Single sign-on failed. Please try again, or sign in with a password."
+      },
+      "demo": {
+        "badge": "Demo",
+        "title": "Try it instantly",
+        "description": "Click an account to fill the form above — the password is <pw>password</pw>. Data is public and resets every hour, on the hour.",
+        "accounts": {
+          "admin": {
+            "label": "Administrator",
+            "description": "full platform control"
+          },
+          "judge": {
+            "label": "Judge",
+            "description": "run a competition"
+          },
+          "participant": {
+            "label": "Participant",
+            "description": "solve challenges"
+          }
+        }
+      }
+    },
+    "register": {
+      "title": "Create account",
+      "description": "Register to take part in competitions.",
+      "closed": "Registration is closed. Ask an administrator to create an account for you.",
+      "username": "Username",
+      "usernameHint": "How you'll sign in and appear to others. Must be unique.",
+      "email": "Email",
+      "emailOptional": "Email (optional)",
+      "emailHintRequired": "Required to register. You can also sign in with it.",
+      "emailHintOptional": "Optional — you can also sign in with it.",
+      "password": "Password",
+      "submit": "Create account",
+      "submitting": "Creating…",
+      "haveAccount": "Already have an account?",
+      "signIn": "Sign in"
+    },
+    "forgotPassword": {
+      "title": "Reset your password",
+      "description": "Enter your account email and we'll send a reset link.",
+      "success": "If an account exists for <b>{email}</b>, a reset link is on its way. Check your inbox (and spam).",
+      "email": "Email",
+      "submit": "Send reset link",
+      "submitting": "Sending…",
+      "backToSignIn": "Back to sign in"
+    },
+    "resetPassword": {
+      "title": "Choose a new password",
+      "description": "Enter a new password for your account.",
+      "missingToken": "This link is missing its reset token. Request a new one from <link>forgot password</link>.",
+      "newPassword": "New password",
+      "submit": "Set new password",
+      "submitting": "Saving…",
+      "successToast": "Password reset — please sign in"
+    },
+    "verifyEmail": {
+      "title": "Verify your email",
+      "description": "Confirming the address on your account.",
+      "missingToken": "This link is missing its verification token.",
+      "verifying": "Verifying…",
+      "success": "Your email is verified. You can now join competitions.",
+      "fallbackError": "This verification link is invalid or has expired.",
+      "continue": "Continue to sign in"
+    }
+  }
+}

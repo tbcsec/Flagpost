@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Suspense, useState } from "react";
 
+import { LocaleSwitcher } from "@/components/app/locale-switcher";
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
 import { SsoBrandIcon } from "@/components/brand/sso-brand-icons";
@@ -35,43 +37,43 @@ import { useSearchParams } from "next/navigation";
 // The callback redirects here with a short code rather than the provider's own
 // message — a failure is usually a misconfiguration whose detail (endpoints,
 // client ids, internal hostnames) shouldn't be reflected to a browser. Server
-// logs carry the specifics.
-const SSO_ERRORS: Record<string, string> = {
-  invalid_state:
-    "That sign-in link has expired or was already used. Please try again.",
-  expired: "That sign-in attempt timed out. Please try again.",
-  invalid_token: "We couldn't verify the response from your identity provider.",
-  provider_unavailable:
-    "That identity provider isn't reachable right now. Try again, or sign in with a password.",
-  provider_denied: "Your identity provider declined the sign-in request.",
-  invalid_response: "Your identity provider sent an incomplete response.",
-  account_disabled: "That account has been disabled. Contact an administrator.",
+// logs carry the specifics. The messages live under auth.login.ssoErrors; an
+// unknown code falls through to "default".
+const SSO_ERROR_CODES = [
+  "invalid_state",
+  "expired",
+  "invalid_token",
+  "provider_unavailable",
+  "provider_denied",
+  "invalid_response",
+  "account_disabled",
   // #118 — kept generic on purpose: neither reveals whether an account exists.
-  domain_not_allowed:
-    "Your account isn't permitted to sign in to this instance. Contact an administrator.",
-  registration_closed:
-    "This instance isn't accepting new accounts. Contact an administrator.",
-  default: "Single sign-on failed. Please try again, or sign in with a password.",
-};
+  "domain_not_allowed",
+  "registration_closed",
+] as const;
+type SsoErrorCode = (typeof SSO_ERROR_CODES)[number] | "default";
 
 // Shown only on a demo instance (seeded by auth/demo.py). Password is "password".
-const DEMO_ACCOUNTS = [
-  { user: "admin", label: "Administrator", desc: "full platform control" },
-  { user: "judge", label: "Judge", desc: "run a competition" },
-  { user: "participant", label: "Participant", desc: "solve challenges" },
-];
+// Labels/descriptions come from auth.login.demo.accounts.<user>.
+const DEMO_ACCOUNTS = ["admin", "judge", "participant"] as const;
 
 // Split from the default export purely so useSearchParams (reading the SSO
 // `?error=` code) sits inside a Suspense boundary. Without one, Next refuses to
 // statically prerender this route — `npm run build` fails rather than degrading,
 // so it's a build-time contract, not a runtime nicety.
 function LoginForm() {
+  const t = useTranslations("auth.login");
   const router = useRouter();
   const login = useLogin();
   const { data: settings } = useSiteSettings();
   const { data: providers } = useAuthProviders();
   const searchParams = useSearchParams();
   const ssoError = searchParams.get("error");
+  const ssoErrorKey: SsoErrorCode | null = ssoError
+    ? (SSO_ERROR_CODES as readonly string[]).includes(ssoError)
+      ? (ssoError as SsoErrorCode)
+      : "default"
+    : null;
   const brand = settings ?? FALLBACK_SETTINGS;
   const hasSso = (providers?.length ?? 0) > 0;
   const platformName = brand.platform_name;
@@ -108,16 +110,16 @@ function LoginForm() {
       )}
       <Card>
         <CardHeader>
-          <CardTitle>Sign in</CardTitle>
-          <CardDescription>Access your competitions.</CardDescription>
+          <CardTitle>{t("title")}</CardTitle>
+          <CardDescription>{t("description")}</CardDescription>
         </CardHeader>
         <CardContent>
-          {ssoError && (
+          {ssoErrorKey && (
             <p
               role="alert"
               className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
             >
-              {SSO_ERRORS[ssoError] ?? SSO_ERRORS.default}
+              {t(`ssoErrors.${ssoErrorKey}`)}
             </p>
           )}
 
@@ -134,12 +136,12 @@ function LoginForm() {
                   {/* Renders null for an unbranded provider, so those buttons
                       keep their exact previous appearance (gap needs 2 children). */}
                   <SsoBrandIcon brand={p.brand} className="shrink-0" />
-                  Sign in with {p.name}
+                  {t("ssoSignIn", { name: p.name })}
                 </a>
               ))}
               <div className="flex items-center gap-3 pt-2">
                 <span className="h-px flex-1 bg-border" />
-                <span className="text-xs text-muted-foreground">or</span>
+                <span className="text-xs text-muted-foreground">{t("or")}</span>
                 <span className="h-px flex-1 bg-border" />
               </div>
             </div>
@@ -147,7 +149,7 @@ function LoginForm() {
 
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="identifier">Username or email</Label>
+              <Label htmlFor="identifier">{t("identifier")}</Label>
               <Input
                 id="identifier"
                 type="text"
@@ -159,12 +161,12 @@ function LoginForm() {
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t("password")}</Label>
                 <Link
                   href="/forgot-password"
                   className="text-xs text-muted-foreground hover:text-primary hover:underline"
                 >
-                  Forgot password?
+                  {t("forgotPassword")}
                 </Link>
               </div>
               <Input
@@ -182,14 +184,14 @@ function LoginForm() {
               </p>
             )}
             <Button type="submit" className="w-full" disabled={login.isPending}>
-              {login.isPending ? "Signing in…" : "Sign in"}
+              {login.isPending ? t("submitting") : t("submit")}
             </Button>
           </form>
           {brand.registration_open && (
             <p className="mt-4 text-sm text-muted-foreground">
-              No account?{" "}
+              {t("noAccount")}{" "}
               <Link href="/register" className="text-primary hover:underline">
-                Register
+                {t("register")}
               </Link>
             </p>
           )}
@@ -200,39 +202,46 @@ function LoginForm() {
           <CardHeader className="space-y-1.5">
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-warning">
-                Demo
+                {t("demo.badge")}
               </span>
-              <CardTitle className="text-base">Try it instantly</CardTitle>
+              <CardTitle className="text-base">{t("demo.title")}</CardTitle>
             </div>
             <CardDescription>
-              Click an account to fill the form above — the password is{" "}
-              <span className="font-mono text-foreground">password</span>. Data
-              is public and resets every hour, on the hour.
+              {t.rich("demo.description", {
+                pw: (chunks) => (
+                  <span className="font-mono text-foreground">{chunks}</span>
+                ),
+              })}
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-2">
-            {DEMO_ACCOUNTS.map((a) => (
+            {DEMO_ACCOUNTS.map((user) => (
               <button
-                key={a.user}
+                key={user}
                 type="button"
                 onClick={() => {
-                  setIdentifier(a.user);
+                  setIdentifier(user);
                   setPassword("password");
                 }}
                 className="group flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2 text-left transition-colors hover:border-primary/50 hover:bg-accent"
               >
                 <span className="flex flex-col">
-                  <span className="text-sm font-medium">{a.label}</span>
-                  <span className="text-xs text-muted-foreground">{a.desc}</span>
+                  <span className="text-sm font-medium">
+                    {t(`demo.accounts.${user}.label`)}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {t(`demo.accounts.${user}.description`)}
+                  </span>
                 </span>
                 <span className="shrink-0 rounded-md border border-border bg-background px-2 py-1 font-mono text-xs text-muted-foreground group-hover:text-foreground">
-                  {a.user}
+                  {user}
                 </span>
               </button>
             ))}
           </CardContent>
         </Card>
       )}
+      <LocaleSwitcher className="mx-auto" />
       <PoweredByFooter />
     </main>
   );

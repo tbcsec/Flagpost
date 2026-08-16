@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Suspense, useEffect, useRef } from "react";
 
+import { LocaleSwitcher } from "@/components/app/locale-switcher";
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
 import { Button } from "@/components/ui/button";
@@ -18,6 +20,7 @@ import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-setting
 import { useVerifyEmail } from "@/lib/hooks/use-users";
 
 function VerifyForm() {
+  const t = useTranslations("auth.verifyEmail");
   const { data: settings } = useSiteSettings();
   const brand = settings ?? FALLBACK_SETTINGS;
   const params = useSearchParams();
@@ -42,31 +45,29 @@ function VerifyForm() {
       />
       <Card>
         <CardHeader>
-          <CardTitle>Verify your email</CardTitle>
-          <CardDescription>Confirming the address on your account.</CardDescription>
+          <CardTitle>{t("title")}</CardTitle>
+          <CardDescription>{t("description")}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           {!token ? (
             <p role="alert" className="text-sm text-destructive">
-              This link is missing its verification token.
+              {t("missingToken")}
             </p>
           ) : verify.isPending || verify.isIdle ? (
-            <p className="text-sm text-muted-foreground">Verifying…</p>
+            <p className="text-sm text-muted-foreground">{t("verifying")}</p>
           ) : verify.isSuccess ? (
-            <p className="text-sm text-success">
-              Your email is verified. You can now join competitions.
-            </p>
+            <p className="text-sm text-success">{t("success")}</p>
           ) : (
             <p role="alert" className="text-sm text-destructive">
-              {(verify.error as Error)?.message ??
-                "This verification link is invalid or has expired."}
+              {(verify.error as Error)?.message ?? t("fallbackError")}
             </p>
           )}
           <Button asChild className="w-fit">
-            <Link href="/login">Continue to sign in</Link>
+            <Link href="/login">{t("continue")}</Link>
           </Button>
         </CardContent>
       </Card>
+      <LocaleSwitcher className="mx-auto" />
       <PoweredByFooter />
     </main>
   );

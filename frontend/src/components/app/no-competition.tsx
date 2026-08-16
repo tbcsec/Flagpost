@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState, TrophyEmptyIcon } from "@/components/ui/empty-state";
@@ -10,21 +11,18 @@ import { useAccess } from "@/lib/hooks/use-permissions";
 // fresh install has none until an admin creates one. Role-aware: staff get a
 // create CTA, everyone else gets a reassuring "check back" message.
 export function NoCompetition() {
+  const t = useTranslations("app.noCompetition");
   const access = useAccess();
   const canCreate = access.has("create_competition");
   return (
     <EmptyState
       icon={<TrophyEmptyIcon />}
-      title="No competition loaded"
-      description={
-        canCreate
-          ? "There aren't any competitions yet. Create one to open its challenges, teams, scoreboard, and more."
-          : "There aren't any competitions available to you yet. Check back soon."
-      }
+      title={t("title")}
+      description={canCreate ? t("descriptionCanCreate") : t("description")}
       action={
         canCreate ? (
           <Button asChild>
-            <Link href="/admin/competitions">Manage competitions</Link>
+            <Link href="/admin/competitions">{t("manage")}</Link>
           </Button>
         ) : undefined
       }

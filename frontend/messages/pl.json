@@ -24,31 +24,31 @@
       "analytics": "Analityka",
       "automations": "Automatyzacja",
       "aiTranscripts": "Transkrypty SI",
-      "settings": "Settings",
+      "settings": "Ustawienia",
       "lobby": "Lobby",
-      "admin": "Admin"
+      "admin": "Administrator"
     },
     "adminNav": {
-      "dashboard": "Dashboard",
-      "competitions": "Competitions",
-      "users": "Users",
-      "roles": "Roles",
-      "events": "Event log",
-      "automations": "Automations",
-      "siteSettings": "Site settings"
+      "dashboard": "Pulpit",
+      "competitions": "Konkursy",
+      "users": "Użytkownicy",
+      "roles": "Role",
+      "events": "Dziennik zdarzeń",
+      "automations": "Automatyzacja",
+      "siteSettings": "Ustawienia witryny"
     },
     "notifications": {
-      "title": "Notifications",
-      "unread": "Notifications ({count} unread)",
-      "markAllRead": "Mark all read",
-      "empty": "No notifications yet."
+      "title": "Powiadomienia",
+      "unread": "Powiadomienia ({count} nieprzeczytane)",
+      "markAllRead": "Oznacz wszystkie jako przeczytane",
+      "empty": "Brak powiadomień."
     },
-    "demoBanner": "Demo instance — data is public and <b>resets every hour, on the hour</b>.",
+    "demoBanner": "Instancja demo — dane są publiczne i <b>resetuje się co godzinę, w godzinie</b>.",
     "noCompetition": {
-      "title": "No competition loaded",
-      "descriptionCanCreate": "There aren't any competitions yet. Create one to open its challenges, teams, scoreboard, and more.",
-      "description": "There aren't any competitions available to you yet. Check back soon.",
-      "manage": "Manage competitions"
+      "title": "Nie załadowano konkursu",
+      "descriptionCanCreate": "Nie ma jeszcze żadnych konkursów. Utwórz konkurs, aby otworzyć wyzwania, drużyny, tablicę wyników i więcej.",
+      "description": "Nie ma jeszcze żadnych lig dostępnych dla Ciebie. Sprawdź ponownie wkrótce.",
+      "manage": "Zarządzaj liniami"
     }
   },
   "auth": {

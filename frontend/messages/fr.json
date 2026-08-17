@@ -1,7 +1,98 @@
 {
   "common": {
     "poweredBy": "Propulsé par",
-    "language": "Langue"
+    "language": "Langue",
+    "dismiss": "Dismiss",
+    "time": {
+      "justNow": "just now",
+      "minutesAgo": "{count}m ago",
+      "hoursAgo": "{count}h ago",
+      "daysAgo": "{count}d ago"
+    },
+    "table": {
+      "range": "{from}–{to} of {total} {noun}",
+      "rows": "rows",
+      "display": "Display",
+      "previousPage": "Previous page",
+      "nextPage": "Next page",
+      "searchPlaceholder": "Search…"
+    },
+    "confirm": {
+      "cancel": "Cancel",
+      "confirm": "Confirm"
+    },
+    "combobox": {
+      "noMatches": "No matches",
+      "clear": "Clear"
+    },
+    "editor": {
+      "bold": "B",
+      "italic": "I",
+      "code": "Code",
+      "list": "• List",
+      "heading": "H2",
+      "alignLeft": "Left",
+      "alignCenter": "Center",
+      "alignRight": "Right",
+      "alignHint": "Alignment doesn't apply inside lists or code blocks",
+      "live": "Live",
+      "connecting": "Connecting…",
+      "reconnecting": "Reconnecting…"
+    },
+    "presence": {
+      "staffTitle": "{name} (staff)"
+    },
+    "nouns": {
+      "challenges": "challenges",
+      "teams": "teams",
+      "competitors": "competitors",
+      "tickets": "tickets"
+    },
+    "competitionMode": {
+      "team": "team",
+      "individual": "individual"
+    },
+    "visibility": {
+      "public": "public",
+      "private": "private"
+    }
+  },
+  "announcements": {
+    "severity": {
+      "info": "Announcement",
+      "warning": "Important",
+      "critical": "Urgent"
+    },
+    "severityHelp": {
+      "info": "Routine news. Sits in the banner briefly, then tucks into the bell.",
+      "warning": "Needs attention — stands out in the banner.",
+      "critical": "Stays on screen until dismissed and reaches everyone, even competitors who muted announcement notifications."
+    },
+    "banner": {
+      "dismiss": "Dismiss announcement"
+    },
+    "new": {
+      "trigger": "New announcement",
+      "title": "New announcement",
+      "descriptionAll": "Posts to everyone in this competition, live.",
+      "descriptionTeams": "Reaches only the {count} selected team(s).",
+      "descriptionUsers": "Reaches only the {count} selected competitor(s).",
+      "titleLabel": "Title",
+      "message": "Message",
+      "urgency": "Urgency",
+      "sendTo": "Send to",
+      "everyone": "Everyone in the competition",
+      "specificTeams": "Specific teams",
+      "specificCompetitors": "Specific competitors",
+      "teams": "Teams",
+      "competitors": "Competitors",
+      "selectedCount": "{count} selected",
+      "noTeams": "No teams yet.",
+      "noCompetitors": "No competitors yet.",
+      "posting": "Posting…",
+      "post": "Post announcement",
+      "postedToast": "Announcement posted"
+    }
   },
   "app": {
     "skipToContent": "Passer au contenu",
@@ -14,6 +105,12 @@
     "adminNoAccess": "Vous n'avez pas accès à la zone d'administration.",
     "adminGlobalScope": "L'administrateur est global — non limité à une compétition",
     "mainNav": "Principal",
+    "theme": {
+      "title": "Theme",
+      "useSiteDefault": "Use site default",
+      "dark": "Dark",
+      "light": "Light"
+    },
     "nav": {
       "dashboard": "Tableau de bord",
       "challenges": "Défi",
@@ -312,6 +409,9 @@
       "submit": "Définir un nouveau mot de passe",
       "submitting": "Enregistrement de…",
       "successToast": "Réinitialisation du mot de passe — veuillez vous connecter"
+    },
+    "callback": {
+      "signingIn": "Signing you in…"
     },
     "verifyEmail": {
       "title": "Vérifiez votre adresse e-mail",
@@ -824,6 +924,11 @@
       "colStatus": "Status",
       "colActions": "Actions",
       "never": "Never",
+      "status": {
+        "active": "Active",
+        "expired": "Expired",
+        "revoked": "Revoked"
+      },
       "revoke": "Revoke",
       "revokeConfirmTitle": "Revoke this token?",
       "revokeConfirmDescription": "{description} will stop authenticating immediately. This can't be undone.",

@@ -24,7 +24,7 @@ import { useAccess } from "@/lib/hooks/use-permissions";
 import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
 import { useLogout } from "@/lib/hooks/use-users";
 import { cn } from "@/lib/utils";
-import { relativeTime } from "@/lib/datetime";
+import { useRelativeTime } from "@/lib/hooks/use-relative-time";
 import {
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
@@ -458,6 +458,9 @@ function Topbar({
   onOpenMenu: () => void;
 }) {
   const t = useTranslations("app");
+  // Announcement severity chips translate through the announcements namespace.
+  const ta = useTranslations("announcements");
+  const rel = useRelativeTime();
   const activeCompetitionId = useAuthStore((s) => s.activeCompetitionId);
   const setActiveCompetition = useAuthStore((s) => s.setActiveCompetition);
   const { data: allCompetitions } = useCompetitions();
@@ -602,7 +605,7 @@ function Topbar({
                         <div className="flex items-baseline justify-between gap-2">
                           <span className="text-[13px] font-medium">{n.title}</span>
                           <span className="whitespace-nowrap text-[11px] text-muted-foreground">
-                            {relativeTime(n.created_at)}
+                            {rel(n.created_at)}
                           </span>
                         </div>
                         {announced && (
@@ -612,7 +615,7 @@ function Topbar({
                               announced.chip,
                             )}
                           >
-                            {announced.label}
+                            {ta(`severity.${announced.key}`)}
                           </span>
                         )}
                         {n.body && (

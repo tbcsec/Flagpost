@@ -1,5 +1,7 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { renderWithIntl } from "@/test/intl";
 
 import { AnnouncementBanner } from "@/components/announcements/announcement-banner";
 
@@ -35,20 +37,20 @@ describe("AnnouncementBanner", () => {
 
   it("shows the newest announcement", () => {
     mockUseAnnouncements.mockReturnValue({ data: [announcement("a1")] });
-    render(<AnnouncementBanner />);
+    renderWithIntl(<AnnouncementBanner />);
     expect(screen.getByText("Title a1")).toBeInTheDocument();
   });
 
   it("auto-dismisses after the dwell time", () => {
     mockUseAnnouncements.mockReturnValue({ data: [announcement("a1")] });
-    render(<AnnouncementBanner />);
+    renderWithIntl(<AnnouncementBanner />);
     act(() => vi.advanceTimersByTime(30_000));
     expect(screen.queryByText("Title a1")).not.toBeInTheDocument();
   });
 
   it("re-shows for a newer announcement after the previous auto-dismissed", () => {
     mockUseAnnouncements.mockReturnValue({ data: [announcement("a1")] });
-    const { rerender } = render(<AnnouncementBanner />);
+    const { rerender } = renderWithIntl(<AnnouncementBanner />);
     act(() => vi.advanceTimersByTime(30_000)); // a1 dismissed
 
     // A newer announcement arrives (prepended by the WS cache update).
@@ -67,7 +69,7 @@ describe("AnnouncementBanner", () => {
     mockUseAnnouncements.mockReturnValue({
       data: [announcement("a1", "Evacuate", "critical")],
     });
-    render(<AnnouncementBanner />);
+    renderWithIntl(<AnnouncementBanner />);
     // Far past any ordinary dwell — a self-dismissing "critical" would
     // undercut the whole tier.
     act(() => vi.advanceTimersByTime(10 * 60_000));
@@ -81,7 +83,7 @@ describe("AnnouncementBanner", () => {
     mockUseAnnouncements.mockReturnValue({
       data: [announcement("a1", "Heads up", "warning")],
     });
-    const { rerender } = render(<AnnouncementBanner />);
+    const { rerender } = renderWithIntl(<AnnouncementBanner />);
     expect(screen.getByText("Important")).toBeInTheDocument();
     expect(screen.getByRole("status")).toBeInTheDocument();
 
@@ -95,7 +97,7 @@ describe("AnnouncementBanner", () => {
 
   it("manual dismissal still works and doesn't hide a later announcement", () => {
     mockUseAnnouncements.mockReturnValue({ data: [announcement("a1")] });
-    const { rerender } = render(<AnnouncementBanner />);
+    const { rerender } = renderWithIntl(<AnnouncementBanner />);
     fireEvent.click(screen.getByRole("button", { name: "Dismiss announcement" }));
     expect(screen.queryByText("Title a1")).not.toBeInTheDocument();
 

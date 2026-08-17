@@ -10,6 +10,7 @@
 // input, arrow keys move a highlighted option via aria-activedescendant, and
 // Enter commits it — so the control is fully keyboard-operable, not mouse-only.
 
+import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { Input } from "@/components/ui/input";
@@ -28,7 +29,7 @@ export function EntityCombobox({
   id,
   placeholder,
   disabled,
-  emptyText = "No matches",
+  emptyText,
   freeText = false,
   className,
 }: {
@@ -46,6 +47,8 @@ export function EntityCombobox({
   freeText?: boolean;
   className?: string;
 }) {
+  const t = useTranslations("common.combobox");
+  const effectiveEmptyText = emptyText ?? t("noMatches");
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [activeIndex, setActiveIndex] = React.useState(0);
@@ -166,7 +169,7 @@ export function EntityCombobox({
       {value && !open && !disabled && (
         <button
           type="button"
-          aria-label="Clear"
+          aria-label={t("clear")}
           onMouseDown={(e) => {
             e.preventDefault();
             onChange("");
@@ -184,7 +187,7 @@ export function EntityCombobox({
           className="anim-drop absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-border bg-popover text-popover-foreground shadow-lg"
         >
           {filtered.length === 0 ? (
-            <li className="px-3 py-2 text-sm text-muted-foreground">{emptyText}</li>
+            <li className="px-3 py-2 text-sm text-muted-foreground">{effectiveEmptyText}</li>
           ) : (
             filtered.map((o, i) => (
               <li

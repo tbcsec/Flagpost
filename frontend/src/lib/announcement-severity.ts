@@ -7,8 +7,10 @@
 import type { AnnouncementSeverity } from "@/lib/types";
 
 export interface SeverityStyle {
-  /** Short label for the banner's eyebrow and the composer's option. */
-  label: string;
+  /** The effective severity — the key callers translate the label through
+   *  (`t(`severity.${style.key}`)`, announcements.severity.*). Carried here so
+   *  the unknown-severity fallback below stays in one place (ADR-0029). */
+  key: AnnouncementSeverity;
   /** Accent bar + icon colour. */
   accent: string;
   /** Banner surface + border. */
@@ -27,21 +29,21 @@ const DEFAULT_DWELL_MS = 30_000;
 
 export const SEVERITY_STYLES: Record<AnnouncementSeverity, SeverityStyle> = {
   info: {
-    label: "Announcement",
+    key: "info",
     accent: "text-primary",
     surface: "border-primary/30 bg-primary/10",
     chip: "bg-primary/15 text-primary",
     autoDismissMs: DEFAULT_DWELL_MS,
   },
   warning: {
-    label: "Important",
+    key: "warning",
     accent: "text-warning",
     surface: "border-warning/40 bg-warning/10",
     chip: "bg-warning/15 text-warning",
     autoDismissMs: DEFAULT_DWELL_MS,
   },
   critical: {
-    label: "Urgent",
+    key: "critical",
     accent: "text-destructive",
     surface: "border-destructive/50 bg-destructive/10",
     chip: "bg-destructive/15 text-destructive",

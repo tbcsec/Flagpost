@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { relativeTime } from "@/lib/datetime";
+import { useRelativeTime } from "@/lib/hooks/use-relative-time";
 import { usePresence } from "@/lib/hooks/use-presence";
 import {
   useAssignTicket,
@@ -60,6 +60,7 @@ export function TicketThread({
   // `t` is the ticket data below, so the translator is `tr` (whole `support`
   // namespace — it also needs the shared status labels).
   const tr = useTranslations("support");
+  const rel = useRelativeTime();
 
   const [body, setBody] = useState("");
   const [internal, setInternal] = useState(false);
@@ -159,7 +160,7 @@ export function TicketThread({
                 {m.is_internal && <span className="ml-2 text-[11px] text-warning">{tr("thread.internalNote")}</span>}
               </span>
               <span className="whitespace-nowrap text-[11px] text-muted-foreground">
-                {relativeTime(m.created_at)}
+                {rel(m.created_at)}
               </span>
             </div>
             <p className="mt-1 whitespace-pre-line text-sm text-foreground">{m.body}</p>

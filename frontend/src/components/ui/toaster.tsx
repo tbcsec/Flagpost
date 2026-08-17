@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { useToastStore } from "@/stores/toast";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +20,9 @@ const ACCENT_CLASS = {
 } as const;
 
 export function Toaster() {
+  // `t` is a toast in the map below, so the translator is `tr` (root-scoped:
+  // it reuses app.notifications.title for the region label).
+  const tr = useTranslations();
   const toasts = useToastStore((s) => s.toasts);
   const dismiss = useToastStore((s) => s.dismiss);
 
@@ -27,7 +32,7 @@ export function Toaster() {
     <div
       className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-full max-w-sm flex-col gap-2"
       role="region"
-      aria-label="Notifications"
+      aria-label={tr("app.notifications.title")}
     >
       {toasts.map((t) => (
         <div
@@ -50,7 +55,7 @@ export function Toaster() {
           <button
             onClick={() => dismiss(t.id)}
             className="flex-shrink-0 text-muted-foreground hover:text-foreground"
-            aria-label="Dismiss"
+            aria-label={tr("common.dismiss")}
           >
             ×
           </button>

@@ -1,5 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+
+import { renderWithIntl } from "@/test/intl";
 
 // Stub the domain hooks so the picker renders without a QueryClient/network.
 vi.mock("@/lib/hooks/use-competitions", () => ({
@@ -32,7 +34,7 @@ const noop = () => {};
 
 describe("EntityReferencePicker", () => {
   it("scoped rule: one dropdown, shows the entity name for a stored id", () => {
-    render(
+    renderWithIntl(
       <EntityReferencePicker entityType="challenge" competitionId="c1" value="ch1" onChange={noop} />,
     );
     const inputs = screen.getAllByRole("combobox") as HTMLInputElement[];
@@ -41,21 +43,21 @@ describe("EntityReferencePicker", () => {
   });
 
   it("global rule: prepends a competition scope selector", () => {
-    render(<EntityReferencePicker entityType="challenge" value="" onChange={noop} />);
+    renderWithIntl(<EntityReferencePicker entityType="challenge" value="" onChange={noop} />);
     const inputs = screen.getAllByRole("combobox") as HTMLInputElement[];
     expect(inputs).toHaveLength(2); // competition scope + challenge
     expect(inputs[0].placeholder).toBe("Pick a competition");
   });
 
   it("hint: cascades through a challenge selector before the hint dropdown", () => {
-    render(<EntityReferencePicker entityType="hint" competitionId="c1" value="" onChange={noop} />);
+    renderWithIntl(<EntityReferencePicker entityType="hint" competitionId="c1" value="" onChange={noop} />);
     const inputs = screen.getAllByRole("combobox") as HTMLInputElement[];
     expect(inputs).toHaveLength(2); // challenge selector + hint picker
     expect(inputs[0].placeholder).toBe("Pick a challenge");
   });
 
   it("competition: a single dropdown storing the id, showing the name", () => {
-    render(
+    renderWithIntl(
       <EntityReferencePicker entityType="competition" competitionId="c1" value="c2" onChange={noop} />,
     );
     const inputs = screen.getAllByRole("combobox") as HTMLInputElement[];

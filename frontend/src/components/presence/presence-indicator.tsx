@@ -4,6 +4,8 @@
 // — it renders whatever set the usePresence hook hands it, so the same component
 // serves the challenge detail and the ticket thread.
 
+import { useTranslations } from "next-intl";
+
 import type { PresenceMember } from "@/lib/hooks/use-presence";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +29,7 @@ export function PresenceIndicator({
   max?: number;
   className?: string;
 }) {
+  const t = useTranslations("common.presence");
   if (members.length === 0) return null;
   const shown = members.slice(0, max);
   const overflow = members.length - shown.length;
@@ -37,7 +40,7 @@ export function PresenceIndicator({
         {shown.map((m) => (
           <span
             key={m.id}
-            title={m.role === "staff" ? `${m.name} (staff)` : m.name}
+            title={m.role === "staff" ? t("staffTitle", { name: m.name }) : m.name}
             className={cn(
               "flex h-6 w-6 items-center justify-center rounded-full border-2 border-card text-[10px] font-semibold",
               m.role === "staff"

@@ -1,5 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { renderWithIntl } from "@/test/intl";
 
 import AdminEventLogPage from "@/app/(app)/admin/events/page";
 import type { AuditLogEntry } from "@/lib/types";
@@ -37,7 +39,7 @@ function renderPage(items: AuditLogEntry[]) {
     isLoading: false,
     isError: false,
   });
-  return render(<AdminEventLogPage />);
+  return renderWithIntl(<AdminEventLogPage />);
 }
 
 const toggleRow = (id: string) =>

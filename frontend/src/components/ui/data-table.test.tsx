@@ -1,5 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+
+import { renderWithIntl } from "@/test/intl";
 
 import {
   SortableTableHead,
@@ -7,7 +9,7 @@ import {
 } from "@/components/ui/data-table";
 
 function renderHead(active: "asc" | "desc" | null, onSort = vi.fn()) {
-  render(
+  renderWithIntl(
     <table>
       <thead>
         <tr>
@@ -53,26 +55,26 @@ function paginationState(overrides: Partial<Parameters<typeof TablePagination>[0
 
 describe("TablePagination", () => {
   it("renders nothing when the dataset fits in the smallest page size", () => {
-    const { container } = render(<TablePagination table={paginationState({ total: 10 })} />);
+    const { container } = renderWithIntl(<TablePagination table={paginationState({ total: 10 })} />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it("shows the visible range and disables Previous on the first page", () => {
-    render(<TablePagination table={paginationState()} noun="competitors" />);
+    renderWithIntl(<TablePagination table={paginationState()} noun="competitors" />);
     expect(screen.getByText("1–25 of 60 competitors")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Previous page" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Next page" })).toBeEnabled();
   });
 
   it("disables Next on the last page", () => {
-    render(<TablePagination table={paginationState({ page: 2 })} />);
+    renderWithIntl(<TablePagination table={paginationState({ page: 2 })} />);
     expect(screen.getByText("51–60 of 60 rows")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
   });
 
   it("steps pages and changes the page size through the state callbacks", () => {
     const state = paginationState();
-    render(<TablePagination table={state} />);
+    renderWithIntl(<TablePagination table={state} />);
     fireEvent.click(screen.getByRole("button", { name: "Next page" }));
     expect(state.setPage).toHaveBeenCalledWith(1);
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "50" } });

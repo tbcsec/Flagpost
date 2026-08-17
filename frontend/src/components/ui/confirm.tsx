@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ export function useConfirm(): ConfirmFn {
 }
 
 export function ConfirmProvider({ children }: { children: React.ReactNode }) {
+  const t = useTranslations("common.confirm");
   const [options, setOptions] = React.useState<ConfirmOptions | null>(null);
   const resolver = React.useRef<((value: boolean) => void) | null>(null);
 
@@ -66,14 +68,14 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
             </DialogHeader>
             <DialogFooter>
               <Button variant="ghost" onClick={() => close(false)}>
-                {options.cancelLabel ?? "Cancel"}
+                {options.cancelLabel ?? t("cancel")}
               </Button>
               <Button
                 variant={destructive ? "destructive" : "default"}
                 onClick={() => close(true)}
                 autoFocus
               >
-                {options.confirmLabel ?? "Confirm"}
+                {options.confirmLabel ?? t("confirm")}
               </Button>
             </DialogFooter>
           </DialogContent>

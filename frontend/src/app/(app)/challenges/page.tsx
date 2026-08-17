@@ -51,7 +51,7 @@ import { useCategories } from "@/lib/hooks/use-categories";
 import { ChallengeRatingPrompt } from "@/components/challenges/challenge-rating-prompt";
 import { useChallenges, useChallengeSolves } from "@/lib/hooks/use-challenges";
 import { useSubmitFlag } from "@/lib/hooks/use-submissions";
-import { relativeTime } from "@/lib/datetime";
+import { useRelativeTime } from "@/lib/hooks/use-relative-time";
 import { richTextToPlain } from "@/lib/rich-text";
 import type { Challenge } from "@/lib/types";
 import { useAuthStore } from "@/stores/auth";
@@ -62,6 +62,7 @@ import { cn } from "@/lib/utils";
 export default function ChallengesPage() {
   const { competitionId, data: competition } = useActiveCompetition();
   const t = useTranslations("challenges");
+  const tn = useTranslations("common.nouns");
   const access = useAccess();
   const challenges = useChallenges(competitionId ?? "");
   const categories = useCategories(competitionId ?? "");
@@ -336,7 +337,7 @@ export default function ChallengesPage() {
             </p>
           )}
         </div>
-        <TablePagination table={grid} noun="challenges" />
+        <TablePagination table={grid} noun={tn("challenges")} />
         </>
       )}
 
@@ -623,6 +624,7 @@ function ChallengeSolves({
   challengeId: string;
 }) {
   const t = useTranslations("challenges.solves");
+  const rel = useRelativeTime();
   const { data: solvers } = useChallengeSolves(competitionId, challengeId);
   if (!solvers || solvers.length === 0) {
     return (
@@ -654,7 +656,7 @@ function ChallengeSolves({
               <span className={cn(s.is_first_blood && "font-medium")}>{s.name}</span>
             </span>
             <span className="text-xs text-muted-foreground">
-              {relativeTime(s.solved_at)}
+              {rel(s.solved_at)}
             </span>
           </li>
         ))}

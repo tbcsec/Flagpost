@@ -47,6 +47,7 @@ import { cn } from "@/lib/utils";
 export default function ScoreboardPage() {
   const { competitionId, data: competition } = useActiveCompetition();
   const t = useTranslations("scoreboard");
+  const tn = useTranslations("common.nouns");
   const board = useScoreboard(competitionId ?? "");
   const isTeam = competition?.participation_mode !== "individual";
   const myTeam = useMyTeam(isTeam ? (competitionId ?? "") : "");
@@ -360,7 +361,7 @@ export default function ScoreboardPage() {
             </Table>
             <TablePagination
               table={table}
-              noun={isTeam ? "teams" : "competitors"}
+              noun={isTeam ? tn("teams") : tn("competitors")}
               className="mt-4 pb-3"
             />
           </CardContent>

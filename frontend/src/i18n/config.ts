@@ -2,7 +2,7 @@
 // stored. Adding a language is a two-line change here (LOCALES + LOCALE_LABELS)
 // plus a `messages/<locale>.json` from Crowdin — no routing or backend work.
 
-export const LOCALES = ["en"] as const;
+export const LOCALES = ["en", "fr", "es", "pl"] as const;
 
 export type Locale = (typeof LOCALES)[number];
 
@@ -18,4 +18,7 @@ export const LOCALE_COOKIE = "NEXT_LOCALE";
 // read must see "Deutsch", not "German".
 export const LOCALE_LABELS: Record<Locale, string> = {
   en: "English",
+  fr: "Français",
+  es: "Español",
+  pl: "Polski",
 };

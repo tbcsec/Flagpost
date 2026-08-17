@@ -26,9 +26,16 @@ function flatten(node: Catalog, prefix = "", out = new Map<string, string>()) {
   return out;
 }
 
-/** ICU argument names: {name} and {name, plural, ...} both yield "name". */
+/** ICU argument names: {name} and {name, plural, ...} both yield "name".
+ *  A real argument is always immediately closed by `}` or continued by `,`, so
+ *  we require that — otherwise the first word of a plural sub-message (the `Top`
+ *  in `one {Top # entrant}`) is mistaken for an argument, and a correct
+ *  translation of that word (`one {Les # premiers}`) is flagged as a dropped
+ *  placeholder. */
 function icuArgs(message: string): string[] {
-  return [...message.matchAll(/\{\s*([a-zA-Z0-9_]+)/g)].map((m) => m[1]).sort();
+  return [...message.matchAll(/\{\s*([a-zA-Z0-9_]+)\s*[,}]/g)]
+    .map((m) => m[1])
+    .sort();
 }
 
 /** Rich-text tag names: <pw>…</pw> yields "pw" (open and close counted). */

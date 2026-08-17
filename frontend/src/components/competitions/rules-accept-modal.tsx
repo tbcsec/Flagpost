@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,7 @@ export function RulesAcceptModal({
   open,
   mode,
   rules,
-  title = "Competition rules",
+  title,
   pending = false,
   dismissable = true,
   onConfirm,
@@ -44,6 +45,7 @@ export function RulesAcceptModal({
   onConfirm: () => void;
   onCancel?: () => void;
 }) {
+  const t = useTranslations("competitions.rules");
   const [agreed, setAgreed] = useState(false);
   // A reopened prompt (or a different competition's) starts unchecked —
   // adjust during render on the open transition, per the React idiom.
@@ -73,11 +75,9 @@ export function RulesAcceptModal({
         }}
       >
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle>{title ?? t("title")}</DialogTitle>
           <DialogDescription>
-            {mustAccept
-              ? "You must accept these rules before you can compete."
-              : "Please review the rules for this competition."}
+            {mustAccept ? t("acceptDescription") : t("displayDescription")}
           </DialogDescription>
         </DialogHeader>
 
@@ -89,7 +89,7 @@ export function RulesAcceptModal({
             <RichTextView value={rules} className="leading-relaxed" />
           ) : (
             <p className="text-sm leading-relaxed text-foreground">
-              No rules text.
+              {t("empty")}
             </p>
           )}
         </div>
@@ -103,14 +103,14 @@ export function RulesAcceptModal({
               checked={agreed}
               onChange={(e) => setAgreed(e.target.checked)}
             />
-            <span>I have read and accept these rules.</span>
+            <span>{t("agree")}</span>
           </label>
         )}
 
         <DialogFooter>
           {dismissable && (
             <Button type="button" variant="ghost" onClick={() => onCancel?.()}>
-              Cancel
+              {t("cancel")}
             </Button>
           )}
           <Button
@@ -118,7 +118,7 @@ export function RulesAcceptModal({
             disabled={(mustAccept && !agreed) || pending}
             onClick={onConfirm}
           >
-            {mustAccept ? (pending ? "Accepting…" : "Accept") : "Continue"}
+            {mustAccept ? (pending ? t("accepting") : t("accept")) : t("continue")}
           </Button>
         </DialogFooter>
       </DialogContent>

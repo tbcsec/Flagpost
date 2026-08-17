@@ -1,7 +1,8 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { RulesAcceptModal } from "@/components/competitions/rules-accept-modal";
+import { renderWithIntl } from "@/test/intl";
 import type { RichTextDoc } from "@/lib/types";
 
 const DOC: RichTextDoc = {
@@ -13,7 +14,7 @@ const DOC: RichTextDoc = {
 
 describe("RulesAcceptModal", () => {
   it("renders the rules text", () => {
-    render(
+    renderWithIntl(
       <RulesAcceptModal open mode="accept" rules={DOC} onConfirm={() => {}} />,
     );
     expect(screen.getByText("No flag sharing.")).toBeInTheDocument();
@@ -21,7 +22,7 @@ describe("RulesAcceptModal", () => {
 
   it("blocks Accept until the checkbox is ticked", () => {
     const onConfirm = vi.fn();
-    render(
+    renderWithIntl(
       <RulesAcceptModal open mode="accept" rules={DOC} onConfirm={onConfirm} />,
     );
     const accept = screen.getByRole("button", { name: "Accept" });
@@ -37,7 +38,7 @@ describe("RulesAcceptModal", () => {
 
   it("display mode has no checkbox and Continue works immediately", () => {
     const onConfirm = vi.fn();
-    render(
+    renderWithIntl(
       <RulesAcceptModal open mode="display" rules={DOC} onConfirm={onConfirm} />,
     );
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
@@ -48,7 +49,7 @@ describe("RulesAcceptModal", () => {
   });
 
   it("disables the confirm button while the accept is pending", () => {
-    render(
+    renderWithIntl(
       <RulesAcceptModal
         open
         mode="accept"
@@ -62,7 +63,7 @@ describe("RulesAcceptModal", () => {
   });
 
   it("hides Cancel when not dismissable (the in-app gate)", () => {
-    render(
+    renderWithIntl(
       <RulesAcceptModal
         open
         mode="accept"
@@ -76,7 +77,7 @@ describe("RulesAcceptModal", () => {
 
   it("offers Cancel when dismissable and reports it", () => {
     const onCancel = vi.fn();
-    render(
+    renderWithIntl(
       <RulesAcceptModal
         open
         mode="accept"

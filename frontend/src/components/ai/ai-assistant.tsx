@@ -17,6 +17,7 @@
 // staff-reviewable transcripts) inside the panel, and the chat only starts after
 // acceptance — which the backend enforces too.
 
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -42,36 +43,6 @@ const STAFF_MARKERS = [
   "feedback_view_responses",
   "announcement_create",
 ];
-
-const COPY: Record<
-  AiAssistantType,
-  { title: string; intro: string; suggestions: string[] }
-> = {
-  admin: {
-    title: "Organiser assistant",
-    intro:
-      "Ask about standings, tickets, challenge stats, feedback or announcements. " +
-      "I only read — I can't change anything — and I answer from what you're " +
-      "allowed to see.",
-    suggestions: [
-      "How is the competition going so far?",
-      "Are there any open support tickets?",
-      "Which challenges are the hardest right now?",
-    ],
-  },
-  competitor: {
-    title: "Assistant",
-    intro:
-      "Ask about the platform, scoring, your standing, or announcements. How " +
-      "much help I can give with challenges is set by the organisers — and I " +
-      "never reveal flags.",
-    suggestions: [
-      "How does flag submission work?",
-      "What's my current rank?",
-      "Any recent announcements?",
-    ],
-  },
-};
 
 const sparkIcon = (
   <svg
@@ -138,12 +109,13 @@ function AiAssistant({
   assistantType: AiAssistantType;
   disclosureAccepted: boolean;
 }) {
+  const t = useTranslations("ai.assistant");
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [input, setInput] = useState("");
 
   const isAdmin = assistantType === "admin";
-  const copy = COPY[assistantType];
+  const title = t(`${assistantType}.title`);
   const chat = useAiChat(competitionId, assistantType);
   // The usage endpoint is staff-gated — never fire it for the competitor.
   const usage = useAiUsage(competitionId, open && isAdmin);
@@ -196,7 +168,9 @@ function AiAssistant({
 
   const usageText =
     usage.data && usage.data.message_count > 0
-      ? `${(usage.data.input_tokens + usage.data.output_tokens).toLocaleString()} tokens`
+      ? t("tokens", {
+          count: (usage.data.input_tokens + usage.data.output_tokens).toLocaleString(),
+        })
       : null;
 
   if (!open) {
@@ -208,7 +182,7 @@ function AiAssistant({
           // The competitor chat may only start after the disclosure.
           if (!needsDisclosure) chat.ensureStarted();
         }}
-        aria-label={`Open the ${copy.title.toLowerCase()}`}
+        aria-label={t(`${assistantType}.openLabel`)}
         className="fixed bottom-4 right-4 z-[90] flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg outline-none transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       >
         {sparkIcon}
@@ -219,7 +193,7 @@ function AiAssistant({
   return (
     <div
       role="dialog"
-      aria-label={copy.title}
+      aria-label={title}
       className={cn(
         "fixed z-[90] flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl",
         // Mobile: fill most of the screen. sm+: dock bottom-right.
@@ -234,15 +208,15 @@ function AiAssistant({
           {sparkIcon}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold leading-tight">{copy.title}</div>
+          <div className="text-sm font-semibold leading-tight">{title}</div>
           <div className="truncate text-xs text-muted-foreground">
-            {competitionName ? `${competitionName} · read-only` : "Read-only"}
+            {competitionName ? t("readOnlyWithName", { name: competitionName }) : t("readOnly")}
           </div>
         </div>
         {usageText && (
           <span
             className="hidden text-[11px] text-muted-foreground sm:inline"
-            title="Tokens spent by the assistant in this competition"
+            title={t("tokensTitle")}
           >
             {usageText}
           </span>
@@ -250,7 +224,7 @@ function AiAssistant({
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          aria-label={expanded ? "Shrink the assistant" : "Expand the assistant"}
+          aria-label={expanded ? t("shrink") : t("expand")}
           className="hidden rounded-md p-1.5 text-muted-foreground hover:bg-accent/60 hover:text-foreground sm:block"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -264,7 +238,7 @@ function AiAssistant({
         <button
           type="button"
           onClick={() => setOpen(false)}
-          aria-label="Close the assistant"
+          aria-label={t("close")}
           className="rounded-md p-1.5 text-muted-foreground hover:bg-accent/60 hover:text-foreground"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
@@ -285,10 +259,14 @@ function AiAssistant({
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
             {chat.messages.length === 0 && chat.streaming === null && (
               <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">{copy.intro}</p>
+                <p className="text-sm text-muted-foreground">{t(`${assistantType}.intro`)}</p>
                 {chat.ready && !chat.closed && (
                   <div className="flex flex-col items-start gap-1.5">
-                    {copy.suggestions.map((s) => (
+                    {[
+                      t(`${assistantType}.suggestion1`),
+                      t(`${assistantType}.suggestion2`),
+                      t(`${assistantType}.suggestion3`),
+                    ].map((s) => (
                       <button
                         key={s}
                         type="button"
@@ -317,9 +295,7 @@ function AiAssistant({
 
             {chat.closed && (
               <div className="rounded-md border border-border bg-muted/40 p-3 text-xs">
-                <p className="text-muted-foreground">
-                  This conversation has reached its length limit.
-                </p>
+                <p className="text-muted-foreground">{t("lengthLimit")}</p>
                 <Button
                   type="button"
                   size="sm"
@@ -327,7 +303,7 @@ function AiAssistant({
                   className="mt-2"
                   onClick={() => chat.startNew()}
                 >
-                  Start a new chat
+                  {t("startNew")}
                 </Button>
               </div>
             )}
@@ -336,9 +312,9 @@ function AiAssistant({
           <div className="border-t border-border p-3">
             {!chat.ready && chat.error ? (
               <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span>Couldn&apos;t start the assistant.</span>
+                <span>{t("startError")}</span>
                 <Button type="button" size="sm" variant="outline" onClick={() => chat.startNew()}>
-                  Try again
+                  {t("tryAgain")}
                 </Button>
               </div>
             ) : (
@@ -359,10 +335,10 @@ function AiAssistant({
                   disabled={composerDisabled}
                   placeholder={
                     chat.ready
-                      ? "Ask the assistant…"
+                      ? t("placeholderReady")
                       : chat.starting
-                        ? "Connecting…"
-                        : "Starting…"
+                        ? t("placeholderConnecting")
+                        : t("placeholderStarting")
                   }
                   className="max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 />
@@ -372,7 +348,7 @@ function AiAssistant({
                   disabled={composerDisabled || !input.trim()}
                   className="h-10 flex-shrink-0"
                 >
-                  {chat.sending ? "…" : "Send"}
+                  {chat.sending ? "…" : t("send")}
                 </Button>
               </form>
             )}
@@ -398,29 +374,22 @@ function DisclosurePanel({
   onAccept: () => void;
   onDecline: () => void;
 }) {
+  const t = useTranslations("ai.assistant.disclosure");
   return (
     <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
-      <p className="text-sm font-medium">Before you start</p>
+      <p className="text-sm font-medium">{t("heading")}</p>
       <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
-        <li>
-          Your messages are sent to an AI model endpoint configured by this
-          site&apos;s operators.
-        </li>
-        <li>
-          Competition staff can review your conversations with the assistant.
-        </li>
-        <li>
-          The assistant is read-only, never reveals flags, and how much
-          challenge help it gives is set by the organisers.
-        </li>
+        <li>{t("point1")}</li>
+        <li>{t("point2")}</li>
+        <li>{t("point3")}</li>
       </ul>
       {error && <p className="text-xs text-destructive">{error}</p>}
       <div className="mt-auto flex items-center gap-2">
         <Button type="button" size="sm" onClick={onAccept} disabled={pending}>
-          {pending ? "Saving…" : "I understand — start chatting"}
+          {pending ? t("saving") : t("accept")}
         </Button>
         <Button type="button" size="sm" variant="ghost" onClick={onDecline}>
-          Not now
+          {t("decline")}
         </Button>
       </div>
     </div>
@@ -460,8 +429,9 @@ function BlinkingCursor() {
 }
 
 function TypingDots() {
+  const t = useTranslations("ai.assistant");
   return (
-    <span className="inline-flex gap-1 py-1" aria-label="Assistant is thinking">
+    <span className="inline-flex gap-1 py-1" aria-label={t("thinking")}>
       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]" />
       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]" />
       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground" />

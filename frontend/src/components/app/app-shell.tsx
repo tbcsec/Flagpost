@@ -10,7 +10,7 @@ import { AnnouncementBanner } from "@/components/announcements/announcement-bann
 import { DemoBanner } from "@/components/app/demo-banner";
 import { CertificateReleaseWatcher } from "@/components/certificates/certificate-release-watcher";
 import { UpdateNotice } from "@/components/admin/update-notice";
-import { LocaleSwitcher } from "@/components/app/locale-switcher";
+import { LanguageMenu } from "@/components/app/language-menu";
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
 import { PaletteMenu } from "@/components/theme/palette-menu";
@@ -425,7 +425,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {/* One-time certificate-release celebration, once per release (#219). */}
             <CertificateReleaseWatcher />
             <div className="mt-auto flex flex-col items-center">
-              <LocaleSwitcher />
               <PoweredByFooter />
             </div>
           </div>
@@ -664,6 +663,7 @@ function Topbar({
         )}
       </div>
 
+      <LanguageMenu />
       <PaletteMenu />
     </div>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Lockup } from "@/components/brand/flagpost-mark";
@@ -39,6 +40,7 @@ export function VenueMode({
   intervalSeconds: number;
   onExit: () => void;
 }) {
+  const t = useTranslations("scoreboard.public.venue");
   // Build the rotation from whatever data is loaded: the board always, insights
   // and timeline once their fetch lands (and the timeline only if anyone has
   // scored, matching the component's own empty guard).
@@ -51,7 +53,7 @@ export function VenueMode({
       slides.push({
         key: "timeline",
         node: (
-          <VenueSlide title="Points over time">
+          <VenueSlide title={t("pointsOverTime")}>
             <PointsTimeline
               series={insights.timeline.series}
               start={insights.timeline.start}
@@ -168,13 +170,13 @@ export function VenueMode({
       <header className="flex items-center gap-[1em] border-b border-border px-[2em] py-[1em]">
         <span className="flex items-center gap-[0.5em] text-[0.875em] font-medium text-primary">
           <span className="h-[0.625em] w-[0.625em] animate-pulse rounded-full bg-primary" />
-          LIVE
+          {t("live")}
         </span>
         <span className="truncate text-[1.25em] font-semibold">{scoreboard.name}</span>
         <Countdown startAt={scoreboard.start_at} endAt={scoreboard.end_at} />
         {scoreboard.frozen && (
           <span className="rounded-full bg-secondary px-[0.75em] py-[0.25em] text-[0.75em] font-medium text-secondary-foreground">
-            Frozen
+            {t("frozen")}
           </span>
         )}
         <Lockup
@@ -191,7 +193,7 @@ export function VenueMode({
       </main>
 
       <footer className="flex items-center gap-[1em] px-[2em] py-[1em]">
-        <div className="flex flex-1 items-center gap-[0.5em]" role="tablist" aria-label="Slides">
+        <div className="flex flex-1 items-center gap-[0.5em]" role="tablist" aria-label={t("slides")}>
           {slides.map((s, i) => (
             <button
               key={s.key}
@@ -233,12 +235,13 @@ function VenueSlide({ title, children }: { title: string; children: React.ReactN
 }
 
 function VenueBoard({ scoreboard }: { scoreboard: PublicScoreboard }) {
+  const t = useTranslations("scoreboard.public.venue");
   const top = scoreboard.entries.slice(0, 12);
   return (
-    <VenueSlide title="Scoreboard">
+    <VenueSlide title={t("scoreboard")}>
       {top.length === 0 ? (
         <div className="grid h-full place-items-center text-[1.5em] text-muted-foreground">
-          No scores yet — the board fills in on the first solve.
+          {t("emptyBoard")}
         </div>
       ) : (
         <div className="flex flex-col gap-[0.375em]">
@@ -288,16 +291,20 @@ function FirstBloodSplash({
   solve: PublicActivity["recent_solves"][number];
   unitPx: number;
 }) {
+  const t = useTranslations("scoreboard.public.venue");
   return (
     <div
       role="alert"
       className="anim-toast absolute inset-0 z-10 flex flex-col items-center justify-center gap-[1em] bg-warning/95 px-[2em] text-center text-warning-foreground"
     >
       <FirstBloodIcon size={Math.round(4.5 * unitPx)} className="text-warning-foreground" />
-      <div className="text-[0.875em] font-semibold uppercase tracking-widest">First blood</div>
+      <div className="text-[0.875em] font-semibold uppercase tracking-widest">{t("firstBlood")}</div>
       <div className="text-[3em] font-semibold">{solve.subject_name}</div>
       <div className="text-[1.5em]">
-        first to solve <span className="font-semibold">{solve.title}</span>
+        {t.rich("firstToSolve", {
+          title: solve.title,
+          b: (chunks) => <span className="font-semibold">{chunks}</span>,
+        })}
       </div>
     </div>
   );
@@ -310,6 +317,7 @@ function Countdown({
   startAt: string | null;
   endAt: string | null;
 }) {
+  const t = useTranslations("scoreboard.public.venue");
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -322,11 +330,11 @@ function Countdown({
   let label: string | null = null;
   let value: string | null = null;
   if (start !== null && now < start) {
-    label = "starts in";
+    label = t("startsIn");
     value = formatDuration(Math.floor((start - now) / 1000));
   } else if (end !== null) {
-    label = now >= end ? null : "remaining";
-    value = now >= end ? "Ended" : formatDuration(Math.floor((end - now) / 1000));
+    label = now >= end ? null : t("remaining");
+    value = now >= end ? t("ended") : formatDuration(Math.floor((end - now) / 1000));
   }
   if (value === null) return null;
 
@@ -366,11 +374,12 @@ function VenueControls({
   onToggleFullscreen: () => void;
   onExit: () => void;
 }) {
+  const t = useTranslations("scoreboard.public.venue");
   const btn =
     "rounded-md border border-border px-[0.75em] py-[0.375em] text-[0.875em] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground";
   return (
     <div className="flex items-center gap-[0.5em] opacity-60 transition-opacity hover:opacity-100">
-      <button type="button" className={btn} onClick={onPrev} aria-label="Previous slide">
+      <button type="button" className={btn} onClick={onPrev} aria-label={t("previousSlide")}>
         ←
       </button>
       <button
@@ -379,9 +388,9 @@ function VenueControls({
         onClick={onTogglePause}
         aria-pressed={paused}
       >
-        {paused ? "Play" : "Pause"}
+        {paused ? t("play") : t("pause")}
       </button>
-      <button type="button" className={btn} onClick={onNext} aria-label="Next slide">
+      <button type="button" className={btn} onClick={onNext} aria-label={t("nextSlide")}>
         →
       </button>
       <button
@@ -390,10 +399,10 @@ function VenueControls({
         onClick={onToggleFullscreen}
         aria-pressed={isFullscreen}
       >
-        {isFullscreen ? "Exit full screen" : "Full screen"}
+        {isFullscreen ? t("exitFullscreen") : t("enterFullscreen")}
       </button>
       <button type="button" className={btn} onClick={onExit}>
-        Exit venue
+        {t("exit")}
       </button>
     </div>
   );

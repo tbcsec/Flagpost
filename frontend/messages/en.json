@@ -224,7 +224,47 @@
       "rank": "Rank",
       "team": "Team",
       "competitor": "Competitor",
-      "points": "Points"
+      "points": "Points",
+      "insights": {
+        "participants": "Participants",
+        "solves": "Solves",
+        "challenges": "Challenges",
+        "unsolved": "Unsolved",
+        "mostSolved": "Most solved",
+        "mostSolvedDetail": "{count, plural, one {# solve} other {# solves}}",
+        "mostAttempted": "Most attempted",
+        "mostAttemptedDetail": "{count, plural, one {# attempt} other {# attempts}}",
+        "mostFirstBloods": "Most first bloods",
+        "mostFirstBloodsDetail": "{count, plural, one {# first blood} other {# first bloods}}",
+        "fastestSolve": "Fastest solve",
+        "fastestSolveDetail": "{name} · {elapsed}"
+      },
+      "timeline": {
+        "title": "Points over time",
+        "subtitle": "{count, plural, one {Top # entrant} other {Top # entrants}}",
+        "freezeSuffix": " · stops at the freeze",
+        "ariaLabel": "Cumulative points over time for the top {count} entrants. {leader} leads with {points} points. The full standings are in the table below."
+      },
+      "venue": {
+        "live": "LIVE",
+        "frozen": "Frozen",
+        "scoreboard": "Scoreboard",
+        "emptyBoard": "No scores yet — the board fills in on the first solve.",
+        "pointsOverTime": "Points over time",
+        "firstBlood": "First blood",
+        "firstToSolve": "first to solve <b>{title}</b>",
+        "startsIn": "starts in",
+        "remaining": "remaining",
+        "ended": "Ended",
+        "slides": "Slides",
+        "previousSlide": "Previous slide",
+        "nextSlide": "Next slide",
+        "play": "Play",
+        "pause": "Pause",
+        "enterFullscreen": "Full screen",
+        "exitFullscreen": "Exit full screen",
+        "exit": "Exit venue"
+      }
     }
   },
   "dashboard": {

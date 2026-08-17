@@ -1,7 +1,8 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { VenueMode } from "@/components/public/venue/venue-mode";
+import { renderWithIntl } from "@/test/intl";
 import type { PublicActivity, PublicScoreboard, PublicRecentSolve } from "@/lib/types";
 
 const brand = { platform_name: "Flagpost", logo_url: null, show_wordmark: true };
@@ -33,7 +34,7 @@ function fb(challenge_id: string): PublicRecentSolve {
 }
 
 function renderVenue(activity?: PublicActivity, onExit = vi.fn()) {
-  return render(
+  return renderWithIntl(
     <VenueMode
       scoreboard={scoreboard}
       insights={undefined}

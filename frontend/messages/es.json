@@ -1118,5 +1118,65 @@
       "ready": "Your certificate is ready 🎓",
       "hint": "Download it to share, or find it anytime in your profile."
     }
+  },
+  "ai": {
+    "assistant": {
+      "admin": {
+        "title": "Organiser assistant",
+        "openLabel": "Open the organiser assistant",
+        "intro": "Ask about standings, tickets, challenge stats, feedback or announcements. I only read — I can't change anything — and I answer from what you're allowed to see.",
+        "suggestion1": "How is the competition going so far?",
+        "suggestion2": "Are there any open support tickets?",
+        "suggestion3": "Which challenges are the hardest right now?"
+      },
+      "competitor": {
+        "title": "Assistant",
+        "openLabel": "Open the assistant",
+        "intro": "Ask about the platform, scoring, your standing, or announcements. How much help I can give with challenges is set by the organisers — and I never reveal flags.",
+        "suggestion1": "How does flag submission work?",
+        "suggestion2": "What's my current rank?",
+        "suggestion3": "Any recent announcements?"
+      },
+      "readOnly": "Read-only",
+      "readOnlyWithName": "{name} · read-only",
+      "tokensTitle": "Tokens spent by the assistant in this competition",
+      "tokens": "{count} tokens",
+      "expand": "Expand the assistant",
+      "shrink": "Shrink the assistant",
+      "close": "Close the assistant",
+      "lengthLimit": "This conversation has reached its length limit.",
+      "startNew": "Start a new chat",
+      "startError": "Couldn't start the assistant.",
+      "tryAgain": "Try again",
+      "placeholderReady": "Ask the assistant…",
+      "placeholderConnecting": "Connecting…",
+      "placeholderStarting": "Starting…",
+      "send": "Send",
+      "thinking": "Assistant is thinking",
+      "disclosure": {
+        "heading": "Before you start",
+        "point1": "Your messages are sent to an AI model endpoint configured by this site's operators.",
+        "point2": "Competition staff can review your conversations with the assistant.",
+        "point3": "The assistant is read-only, never reveals flags, and how much challenge help it gives is set by the organisers.",
+        "accept": "I understand — start chatting",
+        "saving": "Saving…",
+        "decline": "Not now"
+      }
+    }
+  },
+  "competitions": {
+    "rules": {
+      "title": "Competition rules",
+      "acceptDescription": "You must accept these rules before you can compete.",
+      "displayDescription": "Please review the rules for this competition.",
+      "empty": "No rules text.",
+      "agree": "I have read and accept these rules.",
+      "cancel": "Cancel",
+      "accept": "Accept",
+      "accepting": "Accepting…",
+      "continue": "Continue",
+      "acceptedToast": "Rules accepted",
+      "acceptErrorToast": "Couldn't record acceptance"
+    }
   }
 }

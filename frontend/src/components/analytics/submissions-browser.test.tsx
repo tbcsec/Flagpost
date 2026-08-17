@@ -1,5 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { renderWithIntl } from "@/test/intl";
 
 import { SubmissionsBrowser } from "@/components/analytics/submissions-browser";
 
@@ -62,7 +64,7 @@ describe("SubmissionsBrowser", () => {
       isLoading: false,
       isError: false,
     });
-    render(<SubmissionsBrowser competitionId="comp-1" mode="individual" />);
+    renderWithIntl(<SubmissionsBrowser competitionId="comp-1" mode="individual" />);
     expect(screen.getByRole("cell", { name: "Warmup" })).toBeInTheDocument();
     expect(screen.getByText("ada")).toBeInTheDocument();
     expect(screen.getByText("flag{nope}")).toBeInTheDocument();
@@ -75,7 +77,7 @@ describe("SubmissionsBrowser", () => {
       isLoading: false,
       isError: false,
     });
-    render(<SubmissionsBrowser competitionId="comp-1" mode="individual" />);
+    renderWithIntl(<SubmissionsBrowser competitionId="comp-1" mode="individual" />);
     expect(screen.getByText("No submissions match these filters.")).toBeInTheDocument();
   });
 
@@ -87,7 +89,7 @@ describe("SubmissionsBrowser", () => {
     });
     mockUseTeams.mockReturnValue({ data: [{ id: "t1", name: "Blue Team" }] });
 
-    const { rerender } = render(
+    const { rerender } = renderWithIntl(
       <SubmissionsBrowser competitionId="comp-1" mode="individual" />,
     );
     expect(screen.queryByText("Blue Team")).not.toBeInTheDocument();
@@ -102,7 +104,7 @@ describe("SubmissionsBrowser", () => {
       isLoading: false,
       isError: false,
     });
-    render(<SubmissionsBrowser competitionId="comp-1" mode="individual" />);
+    renderWithIntl(<SubmissionsBrowser competitionId="comp-1" mode="individual" />);
 
     fireEvent.change(screen.getByPlaceholderText("Search submitted payload…"), {
       target: { value: "haystack" },
@@ -127,7 +129,7 @@ describe("SubmissionsBrowser", () => {
       isLoading: false,
       isError: false,
     });
-    render(<SubmissionsBrowser competitionId="comp-1" mode="individual" />);
+    renderWithIntl(<SubmissionsBrowser competitionId="comp-1" mode="individual" />);
 
     fireEvent.change(screen.getByPlaceholderText("Search submitted payload…"), {
       target: { value: "haystack" },
@@ -148,7 +150,7 @@ describe("SubmissionsBrowser", () => {
       isLoading: false,
       isError: false,
     });
-    render(<SubmissionsBrowser competitionId="comp-1" mode="individual" />);
+    renderWithIntl(<SubmissionsBrowser competitionId="comp-1" mode="individual" />);
 
     expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
@@ -166,7 +168,7 @@ describe("SubmissionsBrowser", () => {
       isLoading: false,
       isError: false,
     });
-    render(<SubmissionsBrowser competitionId="comp-1" mode="individual" />);
+    renderWithIntl(<SubmissionsBrowser competitionId="comp-1" mode="individual" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
     expect(mutate).toHaveBeenCalledWith(

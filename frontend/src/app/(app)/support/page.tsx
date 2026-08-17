@@ -30,6 +30,7 @@ export default function SupportPage() {
   const { competitionId, data: competition } = useActiveCompetition();
   // `t` is a ticket in the loops below, so the translator is `tr`.
   const tr = useTranslations("support");
+  const tn = useTranslations("common.nouns");
   const access = useAccess();
   const isStaff = access.has("ticket_assign");
 
@@ -152,7 +153,7 @@ export default function SupportPage() {
               </li>
             )}
           </ul>
-          <TablePagination table={table} noun="tickets" className="mt-4" />
+          <TablePagination table={table} noun={tn("tickets")} className="mt-4" />
         </CardContent>
       </Card>
       )}

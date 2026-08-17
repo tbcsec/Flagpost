@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { severityStyle } from "@/lib/announcement-severity";
 import { cn } from "@/lib/utils";
-import { relativeTime } from "@/lib/datetime";
+import { useRelativeTime } from "@/lib/hooks/use-relative-time";
 import { useAnnouncements } from "@/lib/hooks/use-announcements";
 import { useChallenges } from "@/lib/hooks/use-challenges";
 import { useCompetition } from "@/lib/hooks/use-competitions";
@@ -96,6 +96,7 @@ export function StandingWidget({ competitionId }: WidgetProps) {
 
 export function ActivityWidget({ competitionId }: WidgetProps) {
   const t = useTranslations("dashboard.activity");
+  const rel = useRelativeTime();
   const solves = useRecentSolves(competitionId);
   return (
     <ListCard title={t("title")} description={t("description")}>
@@ -119,7 +120,7 @@ export function ActivityWidget({ competitionId }: WidgetProps) {
                 })}
               </span>
               <span className="whitespace-nowrap text-xs text-muted-foreground">
-                {relativeTime(ev.at)}
+                {rel(ev.at)}
               </span>
             </li>
           ))}
@@ -133,6 +134,8 @@ export function ActivityWidget({ competitionId }: WidgetProps) {
 
 export function AnnouncementsWidget({ competitionId }: WidgetProps) {
   const t = useTranslations("dashboard.announcements");
+  const ts = useTranslations("announcements");
+  const rel = useRelativeTime();
   // The shell banner already holds this competition's announcements socket;
   // read from the shared cache rather than opening a second (§8).
   const announcements = useAnnouncements(competitionId, { subscribe: false });
@@ -147,7 +150,7 @@ export function AnnouncementsWidget({ competitionId }: WidgetProps) {
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-[13px] font-medium">{an.title}</span>
                   <span className="whitespace-nowrap text-[11px] text-muted-foreground">
-                    {relativeTime(an.created_at)}
+                    {rel(an.created_at)}
                   </span>
                 </div>
                 {/* Only flag the elevated rungs — chipping every routine
@@ -159,7 +162,7 @@ export function AnnouncementsWidget({ competitionId }: WidgetProps) {
                       style.chip,
                     )}
                   >
-                    {style.label}
+                    {ts(`severity.${style.key}`)}
                   </span>
                 )}
                 <span className="text-[13px] text-muted-foreground">{an.body}</span>

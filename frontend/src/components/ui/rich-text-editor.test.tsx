@@ -1,5 +1,7 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
+
+import { renderWithIntl } from "@/test/intl";
 
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 
@@ -61,7 +63,7 @@ const CENTERED_DOC = {
 
 describe("RichTextEditor alignment gating", () => {
   it("enables the alignment buttons on a plain paragraph", async () => {
-    render(<RichTextEditor value={PARAGRAPH_DOC} onChange={vi.fn()} />);
+    renderWithIntl(<RichTextEditor value={PARAGRAPH_DOC} onChange={vi.fn()} />);
     // The toolbar renders disabled until the deferred editor mounts
     // (immediatelyRender: false) and its state propagates — wait it out.
     await waitFor(() =>
@@ -74,7 +76,7 @@ describe("RichTextEditor alignment gating", () => {
 
   it("disables the alignment buttons while the cursor is in a list", async () => {
     // The initial selection sits in the first textblock — the list item.
-    render(<RichTextEditor value={LIST_DOC} onChange={vi.fn()} />);
+    renderWithIntl(<RichTextEditor value={LIST_DOC} onChange={vi.fn()} />);
     await waitFor(() => expect(screen.getByText("item")).toBeInTheDocument());
     for (const label of ["Left", "Center", "Right"]) {
       expect(screen.getByRole("button", { name: label })).toBeDisabled();
@@ -83,7 +85,7 @@ describe("RichTextEditor alignment gating", () => {
 
   it("strips alignment when a paragraph is turned into a list", async () => {
     const onChange = vi.fn();
-    render(<RichTextEditor value={CENTERED_DOC} onChange={onChange} />);
+    renderWithIntl(<RichTextEditor value={CENTERED_DOC} onChange={onChange} />);
     await waitFor(() =>
       expect(screen.getByText("centered")).toBeInTheDocument(),
     );

@@ -1,5 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+
+import { renderWithIntl } from "@/test/intl";
 
 import { EntityCombobox } from "@/components/ui/entity-combobox";
 
@@ -14,7 +16,7 @@ describe("EntityCombobox — free-text field picker", () => {
   ];
 
   it("shows the resolved label at rest, the raw key when editing", () => {
-    render(
+    renderWithIntl(
       <EntityCombobox
         freeText
         options={fieldOptions}
@@ -31,7 +33,7 @@ describe("EntityCombobox — free-text field picker", () => {
   });
 
   it("surfaces the resolved option in the list even when the value is the raw key", () => {
-    render(
+    renderWithIntl(
       <EntityCombobox
         freeText
         options={fieldOptions}
@@ -47,7 +49,7 @@ describe("EntityCombobox — free-text field picker", () => {
   });
 
   it("keeps an uncatalogued field path exactly as typed (escape hatch)", () => {
-    render(
+    renderWithIntl(
       <EntityCombobox
         freeText
         options={fieldOptions}
@@ -62,7 +64,7 @@ describe("EntityCombobox — free-text field picker", () => {
 
 describe("EntityCombobox — id picker (non-free-text)", () => {
   it("shows the option label for a resolved id, not the id itself", () => {
-    render(
+    renderWithIntl(
       <EntityCombobox
         options={[
           { value: "u-123", label: "Alice" },

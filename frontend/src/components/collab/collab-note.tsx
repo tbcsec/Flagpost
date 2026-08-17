@@ -8,6 +8,7 @@
 import Collaboration from "@tiptap/extension-collaboration";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { useTranslations } from "next-intl";
 import * as React from "react";
 import * as Y from "yjs";
 
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils";
 import type { RoomSocketStatus } from "@/lib/ws";
 
 export function CollabNote({ docKey }: { docKey: string }) {
+  const t = useTranslations("common.editor");
   // A fresh Y.Doc whenever the note changes — a stale doc must never bleed
   // across resources. `docKey` is a real dependency even though the factory
   // doesn't read it (we want re-creation on change), so the lint is a false
@@ -76,22 +78,22 @@ export function CollabNote({ docKey }: { docKey: string }) {
     <div>
       <div className="flex flex-wrap items-center gap-1 rounded-t-md border border-input bg-muted/40 p-1">
         <ToolbarButton
-          label="B"
+          label={t("bold")}
           active={active?.bold ?? false}
           onClick={() => editor.chain().focus().toggleBold().run()}
         />
         <ToolbarButton
-          label="I"
+          label={t("italic")}
           active={active?.italic ?? false}
           onClick={() => editor.chain().focus().toggleItalic().run()}
         />
         <ToolbarButton
-          label="Code"
+          label={t("code")}
           active={active?.codeBlock ?? false}
           onClick={() => editor.chain().focus().toggleCodeBlock().run()}
         />
         <ToolbarButton
-          label="• List"
+          label={t("list")}
           active={active?.bulletList ?? false}
           onClick={() => editor.chain().focus().toggleBulletList().run()}
         />
@@ -105,7 +107,9 @@ export function CollabNote({ docKey }: { docKey: string }) {
 }
 
 function ConnectionDot({ status }: { status: RoomSocketStatus }) {
-  const label = status === "open" ? "Live" : status === "connecting" ? "Connecting…" : "Reconnecting…";
+  const t = useTranslations("common.editor");
+  const label =
+    status === "open" ? t("live") : status === "connecting" ? t("connecting") : t("reconnecting");
   return (
     <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
       <span

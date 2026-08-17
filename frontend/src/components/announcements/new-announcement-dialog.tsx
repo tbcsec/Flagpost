@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -32,14 +33,8 @@ import { toast } from "@/stores/toast";
 // surfaced inline. Whole-competition announcements are pushed live over the
 // announcements room; targeted ones reach only their recipients (#40).
 
-const SEVERITY_HELP: Record<AnnouncementSeverity, string> = {
-  info: "Routine news. Sits in the banner briefly, then tucks into the bell.",
-  warning: "Needs attention — stands out in the banner.",
-  critical:
-    "Stays on screen until dismissed and reaches everyone, even competitors who muted announcement notifications.",
-};
-
 export function NewAnnouncementDialog({ competitionId }: { competitionId: string }) {
+  const t = useTranslations("announcements");
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -94,7 +89,7 @@ export function NewAnnouncementDialog({ competitionId }: { competitionId: string
         onSuccess: () => {
           reset();
           setOpen(false);
-          toast("Announcement posted", { variant: "success" });
+          toast(t("new.postedToast"), { variant: "success" });
         },
       },
     );
@@ -109,22 +104,22 @@ export function NewAnnouncementDialog({ competitionId }: { competitionId: string
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline">New announcement</Button>
+        <Button variant="outline">{t("new.trigger")}</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New announcement</DialogTitle>
+          <DialogTitle>{t("new.title")}</DialogTitle>
           <DialogDescription>
             {audience === "all"
-              ? "Posts to everyone in this competition, live."
-              : `Reaches only the ${selected.size} selected ${
-                  isTeamMode ? "team(s)" : "competitor(s)"
-                }.`}
+              ? t("new.descriptionAll")
+              : t(isTeamMode ? "new.descriptionTeams" : "new.descriptionUsers", {
+                  count: selected.size,
+                })}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="announcement-title">Title</Label>
+            <Label htmlFor="announcement-title">{t("new.titleLabel")}</Label>
             <Input
               id="announcement-title"
               value={title}
@@ -133,7 +128,7 @@ export function NewAnnouncementDialog({ competitionId }: { competitionId: string
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="announcement-body">Message</Label>
+            <Label htmlFor="announcement-body">{t("new.message")}</Label>
             <textarea
               id="announcement-body"
               value={body}
@@ -145,7 +140,7 @@ export function NewAnnouncementDialog({ competitionId }: { competitionId: string
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="announcement-severity">Urgency</Label>
+            <Label htmlFor="announcement-severity">{t("new.urgency")}</Label>
             <Select
               id="announcement-severity"
               value={severity}
@@ -153,7 +148,7 @@ export function NewAnnouncementDialog({ competitionId }: { competitionId: string
             >
               {SEVERITY_ORDER.map((s) => (
                 <option key={s} value={s}>
-                  {severityStyle(s).label}
+                  {t(`severity.${severityStyle(s).key}`)}
                 </option>
               ))}
             </Select>
@@ -165,12 +160,12 @@ export function NewAnnouncementDialog({ competitionId }: { competitionId: string
                   : "text-muted-foreground",
               )}
             >
-              {SEVERITY_HELP[severity]}
+              {t(`severityHelp.${severity}`)}
             </p>
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="announcement-audience">Send to</Label>
+            <Label htmlFor="announcement-audience">{t("new.sendTo")}</Label>
             <Select
               id="announcement-audience"
               value={audience}
@@ -179,12 +174,12 @@ export function NewAnnouncementDialog({ competitionId }: { competitionId: string
                 setSelected(new Set());
               }}
             >
-              <option value="all">Everyone in the competition</option>
+              <option value="all">{t("new.everyone")}</option>
               {/* Team targeting only exists in team mode. */}
               {isTeamMode ? (
-                <option value="teams">Specific teams</option>
+                <option value="teams">{t("new.specificTeams")}</option>
               ) : (
-                <option value="users">Specific competitors</option>
+                <option value="users">{t("new.specificCompetitors")}</option>
               )}
             </Select>
           </div>
@@ -192,15 +187,15 @@ export function NewAnnouncementDialog({ competitionId }: { competitionId: string
           {needsRecipients && (
             <div className="grid gap-2">
               <div className="flex items-center justify-between">
-                <Label>{isTeamMode ? "Teams" : "Competitors"}</Label>
+                <Label>{isTeamMode ? t("new.teams") : t("new.competitors")}</Label>
                 <span className="text-xs text-muted-foreground">
-                  {selected.size} selected
+                  {t("new.selectedCount", { count: selected.size })}
                 </span>
               </div>
               <div className="max-h-44 overflow-y-auto rounded-md border border-border">
                 {options.length === 0 ? (
                   <p className="px-3 py-4 text-sm text-muted-foreground">
-                    {isTeamMode ? "No teams yet." : "No competitors yet."}
+                    {isTeamMode ? t("new.noTeams") : t("new.noCompetitors")}
                   </p>
                 ) : (
                   options.map((o) => (
@@ -228,7 +223,7 @@ export function NewAnnouncementDialog({ competitionId }: { competitionId: string
           )}
           <DialogFooter>
             <Button type="submit" disabled={create.isPending || !canSubmit}>
-              {create.isPending ? "Posting…" : "Post announcement"}
+              {create.isPending ? t("new.posting") : t("new.post")}
             </Button>
           </DialogFooter>
         </form>

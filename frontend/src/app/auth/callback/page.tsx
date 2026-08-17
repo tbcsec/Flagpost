@@ -9,6 +9,7 @@
 // reload: call /api/auth/refresh, put the access token in memory, and continue.
 
 import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Suspense, useEffect, useRef } from "react";
 
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
@@ -18,6 +19,7 @@ import { useRestoreSession } from "@/lib/hooks/use-users";
 import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
 
 function CallbackInner() {
+  const t = useTranslations("auth.callback");
   const router = useRouter();
   const params = useSearchParams();
   const restore = useRestoreSession();
@@ -60,7 +62,7 @@ function CallbackInner() {
         />
       </div>
       <div className="space-y-3 text-center">
-        <p className="text-sm text-muted-foreground">Signing you in…</p>
+        <p className="text-sm text-muted-foreground">{t("signingIn")}</p>
         <Skeleton className="h-2 w-full" />
       </div>
       <PoweredByFooter />

@@ -5,6 +5,7 @@
 // pagination footer. Each is optional — surfaces adopt only what fits (the
 // support card list uses search + pagination with no sortable headers).
 
+import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -97,18 +98,22 @@ type TableSearchInputProps = Omit<
 /** A controlled search box sized for table toolbars; the placeholder doubles
  *  as the accessible name. */
 const TableSearchInput = React.forwardRef<HTMLInputElement, TableSearchInputProps>(
-  ({ value, onChange, placeholder = "Search…", className, ...props }, ref) => (
-    <Input
-      ref={ref}
-      type="search"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      aria-label={props["aria-label"] ?? placeholder}
-      className={cn("h-9 max-w-xs", className)}
-      {...props}
-    />
-  ),
+  ({ value, onChange, placeholder, className, ...props }, ref) => {
+    const t = useTranslations("common.table");
+    const effectivePlaceholder = placeholder ?? t("searchPlaceholder");
+    return (
+      <Input
+        ref={ref}
+        type="search"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={effectivePlaceholder}
+        aria-label={props["aria-label"] ?? effectivePlaceholder}
+        className={cn("h-9 max-w-xs", className)}
+        {...props}
+      />
+    );
+  },
 );
 TableSearchInput.displayName = "TableSearchInput";
 
@@ -144,14 +149,16 @@ interface PaginationState {
 type TablePaginationProps = {
   /** The use-data-table state (structurally — anything with these fields works). */
   table: PaginationState;
-  /** What a row is, for the range text — "10 of 43 competitors". */
+  /** What a row is, for the range text — "10 of 43 competitors". Pass it
+   *  already translated (common.nouns.* holds the shared ones, ADR-0029). */
   noun?: string;
   className?: string;
 };
 
 /** "x–y of N" + page-size select + previous/next. Renders nothing when the
  *  whole dataset fits inside the smallest page size — nothing to paginate. */
-function TablePagination({ table, noun = "rows", className }: TablePaginationProps) {
+function TablePagination({ table, noun, className }: TablePaginationProps) {
+  const t = useTranslations("common.table");
   const { total, page, pageCount, pageSize, setPage, setPageSize } = table;
   if (total <= PAGE_SIZE_OPTIONS[0]) return null;
 
@@ -161,11 +168,11 @@ function TablePagination({ table, noun = "rows", className }: TablePaginationPro
   return (
     <div className={cn("flex flex-wrap items-center justify-between gap-3", className)}>
       <p className="text-sm text-muted-foreground">
-        {from}–{to} of {total} {noun}
+        {t("range", { from, to, total, noun: noun ?? t("rows") })}
       </p>
       <div className="flex items-center gap-2">
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
-          Display
+          {t("display")}
           <Select
             value={String(pageSize)}
             onChange={(e) => setPageSize(Number(e.target.value))}
@@ -182,7 +189,7 @@ function TablePagination({ table, noun = "rows", className }: TablePaginationPro
           variant="outline"
           size="icon"
           className="h-8 w-8"
-          aria-label="Previous page"
+          aria-label={t("previousPage")}
           disabled={page === 0}
           onClick={() => setPage(page - 1)}
         >
@@ -195,7 +202,7 @@ function TablePagination({ table, noun = "rows", className }: TablePaginationPro
           variant="outline"
           size="icon"
           className="h-8 w-8"
-          aria-label="Next page"
+          aria-label={t("nextPage")}
           disabled={page >= pageCount - 1}
           onClick={() => setPage(page + 1)}
         >

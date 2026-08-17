@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { severityStyle } from "@/lib/announcement-severity";
@@ -58,6 +59,7 @@ function SeverityIcon({ severity }: { severity: string }) {
 }
 
 export function AnnouncementBanner() {
+  const t = useTranslations("announcements");
   const competitionId = useAuthStore((s) => s.activeCompetitionId);
   const announcements = useAnnouncements(competitionId ?? "");
   const [dismissedId, setDismissedId] = React.useState<string | null>(null);
@@ -98,7 +100,7 @@ export function AnnouncementBanner() {
             style.accent,
           )}
         >
-          {style.label}
+          {t(`severity.${style.key}`)}
         </div>
         <div className="mt-0.5 text-sm font-semibold leading-snug">
           {latest.title}
@@ -110,7 +112,7 @@ export function AnnouncementBanner() {
       <button
         onClick={() => setDismissedId(latest.id)}
         className="-mr-1 flex-shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
-        aria-label="Dismiss announcement"
+        aria-label={t("banner.dismiss")}
       >
         <svg
           aria-hidden="true"

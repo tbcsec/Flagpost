@@ -33,7 +33,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { apiTokenStatus } from "@/lib/api-token-status";
-import { relativeTime } from "@/lib/datetime";
+import { useRelativeTime } from "@/lib/hooks/use-relative-time";
 import {
   useCreateApiToken,
   useMyApiTokens,
@@ -45,6 +45,7 @@ import { toast } from "@/stores/toast";
 export function MyApiTokensCard() {
   // `t` is a token in the row loop below, so the translator is `tr`.
   const tr = useTranslations("profile.tokens");
+  const rel = useRelativeTime();
   const tokens = useMyApiTokens();
   const revoke = useRevokeMyApiToken();
   const confirm = useConfirm();
@@ -115,10 +116,10 @@ export function MyApiTokensCard() {
                       {new Date(t.expires_at).toLocaleString()}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {t.last_used_at ? relativeTime(t.last_used_at) : tr("never")}
+                      {t.last_used_at ? rel(t.last_used_at) : tr("never")}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={status.variant}>{status.label}</Badge>
+                      <Badge variant={status.variant}>{tr(`status.${status.key}`)}</Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       {!t.revoked_at && (

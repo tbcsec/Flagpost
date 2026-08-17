@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { RankBadge } from "@/components/scoreboard/rank-badge";
-import { relativeTime } from "@/lib/datetime";
+import { useRelativeTime } from "@/lib/hooks/use-relative-time";
 import type { ScoreboardEntry } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -42,17 +42,17 @@ export function TopChart({
   // leave/blur — hover and keyboard focus share the same state on purpose.
   const [openId, setOpenId] = useState<string | null>(null);
   const t = useTranslations("scoreboard.chart");
+  const rel = useRelativeTime();
 
   // aria-label for a column — the same facts as the visual tooltip, so a
-  // screen reader gets parity. A closure over `t`/`isTeam` (relativeTime stays
-  // English until the date-formatting pass).
+  // screen reader gets parity. A closure over `t`/`rel`/`isTeam`.
   const label = (entry: ScoreboardEntry, mine: boolean): string => {
     const parts = [
       t("rankName", { rank: entry.rank, name: entry.name }) +
         (mine ? ` (${t(isTeam ? "yourTeam" : "you")})` : ""),
       t("pointsAria", { points: entry.points }),
       entry.last_solve_at
-        ? t("lastSolveAria", { time: relativeTime(entry.last_solve_at) })
+        ? t("lastSolveAria", { time: rel(entry.last_solve_at) })
         : t("noSolvesAria"),
     ];
     if (entry.bracket) parts.push(t("divisionAria", { bracket: entry.bracket }));
@@ -109,7 +109,7 @@ export function TopChart({
                 </span>
                 <span>
                   {entry.last_solve_at
-                    ? t("lastSolve", { time: relativeTime(entry.last_solve_at) })
+                    ? t("lastSolve", { time: rel(entry.last_solve_at) })
                     : t("noSolves")}
                 </span>
                 {entry.bracket && <span>{t("division", { bracket: entry.bracket })}</span>}

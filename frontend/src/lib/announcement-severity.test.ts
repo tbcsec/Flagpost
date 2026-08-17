@@ -7,10 +7,12 @@ import {
 } from "@/lib/announcement-severity";
 
 describe("severityStyle", () => {
-  it("returns the matching style for each rung", () => {
-    expect(severityStyle("info").label).toBe("Announcement");
-    expect(severityStyle("warning").label).toBe("Important");
-    expect(severityStyle("critical").label).toBe("Urgent");
+  it("returns the matching style for each rung, carrying its label key", () => {
+    // Labels themselves live in announcements.severity.* (ADR-0029) — the
+    // style carries the effective key callers translate through.
+    expect(severityStyle("info").key).toBe("info");
+    expect(severityStyle("warning").key).toBe("warning");
+    expect(severityStyle("critical").key).toBe("critical");
   });
 
   it("falls back to info for unknown / missing severities", () => {

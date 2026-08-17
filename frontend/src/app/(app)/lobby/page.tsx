@@ -36,6 +36,7 @@ type RulesPrompt = {
 // lobby (permissions are refetched) and the joined competition becomes active.
 export default function LobbyPage() {
   const t = useTranslations("lobby");
+  const tc = useTranslations("common");
   const router = useRouter();
   const { data: competitions } = useCompetitions();
   const join = useJoinCompetition();
@@ -216,7 +217,8 @@ export default function LobbyPage() {
                 <div>
                   <div className="text-sm font-medium">{c.name}</div>
                   <div className="text-xs capitalize text-muted-foreground">
-                    {c.participation_mode} · {c.visibility}
+                    {tc(`competitionMode.${c.participation_mode}`)} ·{" "}
+                    {tc(`visibility.${c.visibility}`)}
                   </div>
                 </div>
                 <Button

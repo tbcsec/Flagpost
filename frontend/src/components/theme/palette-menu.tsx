@@ -4,6 +4,7 @@
 // that wins over the admin's site-wide default; "Use site default" clears it.
 // Accent stays site-wide (not per-user), so it isn't offered here.
 
+import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
@@ -12,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 
 export function PaletteMenu() {
+  const t = useTranslations("app.theme");
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
 
@@ -33,15 +35,15 @@ export function PaletteMenu() {
   }, [open]);
 
   const groups: { label: string; mode: "dark" | "light" }[] = [
-    { label: "Dark", mode: "dark" },
-    { label: "Light", mode: "light" },
+    { label: t("dark"), mode: "dark" },
+    { label: t("light"), mode: "light" },
   ];
 
   return (
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
-        title="Theme"
+        title={t("title")}
         className="flex items-center text-muted-foreground hover:text-foreground"
       >
         {/* Contrast glyph — the conventional theme/appearance affordance (§9). */}
@@ -54,11 +56,11 @@ export function PaletteMenu() {
       {open && (
         <div className="anim-drop absolute right-0 top-8 z-50 w-60 overflow-hidden rounded-lg border border-border bg-popover shadow-lg">
           <div className="border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Theme
+            {t("title")}
           </div>
           <ul className="max-h-80 overflow-y-auto py-1">
             <PaletteRow
-              label="Use site default"
+              label={t("useSiteDefault")}
               swatch={PALETTES.find((p) => p.id === siteDefault)?.swatch}
               active={override === null}
               muted

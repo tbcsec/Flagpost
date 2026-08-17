@@ -1,6 +1,7 @@
 "use client";
 
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
+import { useTranslations } from "next-intl";
 import { useEffect } from "react";
 
 import { ToolbarButton } from "@/components/ui/editor-toolbar-button";
@@ -17,6 +18,7 @@ export function RichTextEditor({
   value: RichTextDoc;
   onChange: (doc: RichTextDoc) => void;
 }) {
+  const t = useTranslations("common.editor");
   const editor = useEditor({
     extensions: richTextExtensions(),
     // Avoid an SSR/CSR hydration mismatch in the App Router.
@@ -76,22 +78,22 @@ export function RichTextEditor({
     <div>
       <div className="flex flex-wrap gap-1 rounded-t-md border border-input bg-muted/40 p-1">
         <ToolbarButton
-          label="B"
+          label={t("bold")}
           active={active?.bold ?? false}
           onClick={() => editor.chain().focus().toggleBold().run()}
         />
         <ToolbarButton
-          label="I"
+          label={t("italic")}
           active={active?.italic ?? false}
           onClick={() => editor.chain().focus().toggleItalic().run()}
         />
         <ToolbarButton
-          label="Code"
+          label={t("code")}
           active={active?.codeBlock ?? false}
           onClick={() => editor.chain().focus().toggleCodeBlock().run()}
         />
         <ToolbarButton
-          label="• List"
+          label={t("list")}
           active={active?.bulletList ?? false}
           // Entering a list strips any alignment the paragraphs carried, so a
           // previously-centered line can't smuggle the half-aligned state the
@@ -101,7 +103,7 @@ export function RichTextEditor({
           }
         />
         <ToolbarButton
-          label="H2"
+          label={t("heading")}
           active={active?.heading2 ?? false}
           onClick={() =>
             editor.chain().focus().toggleHeading({ level: 2 }).run()
@@ -109,24 +111,24 @@ export function RichTextEditor({
         />
         <span aria-hidden className="mx-1 w-px self-stretch bg-border" />
         <ToolbarButton
-          label="Left"
+          label={t("alignLeft")}
           active={(active?.alignLeft ?? false) && alignable}
           disabled={!alignable}
-          title={alignable ? undefined : "Alignment doesn't apply inside lists or code blocks"}
+          title={alignable ? undefined : t("alignHint")}
           onClick={() => editor.chain().focus().setTextAlign("left").run()}
         />
         <ToolbarButton
-          label="Center"
+          label={t("alignCenter")}
           active={(active?.alignCenter ?? false) && alignable}
           disabled={!alignable}
-          title={alignable ? undefined : "Alignment doesn't apply inside lists or code blocks"}
+          title={alignable ? undefined : t("alignHint")}
           onClick={() => editor.chain().focus().setTextAlign("center").run()}
         />
         <ToolbarButton
-          label="Right"
+          label={t("alignRight")}
           active={(active?.alignRight ?? false) && alignable}
           disabled={!alignable}
-          title={alignable ? undefined : "Alignment doesn't apply inside lists or code blocks"}
+          title={alignable ? undefined : t("alignHint")}
           onClick={() => editor.chain().focus().setTextAlign("right").run()}
         />
       </div>

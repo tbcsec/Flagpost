@@ -6,6 +6,13 @@ import { renderWithIntl } from "@/test/intl";
 
 // Smoke coverage for the i18n reference extraction (ADR-0029) — asserts the
 // English source strings render, form and success state alike.
+
+// The page mounts LocaleSwitcher, which reads the router now that >1 locale
+// ships (ADR-0029); refresh() only fires on a language change, never at render.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: () => {} }),
+}));
+
 const mockUseForgotPassword = vi.fn();
 vi.mock("@/lib/hooks/use-users", () => ({
   useForgotPassword: () => mockUseForgotPassword(),

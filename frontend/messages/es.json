@@ -1,0 +1,1182 @@
+{
+  "common": {
+    "poweredBy": "Desarrollado por",
+    "language": "Idioma",
+    "dismiss": "Dismiss",
+    "time": {
+      "justNow": "just now",
+      "minutesAgo": "{count}m ago",
+      "hoursAgo": "{count}h ago",
+      "daysAgo": "{count}d ago"
+    },
+    "table": {
+      "range": "{from}–{to} of {total} {noun}",
+      "rows": "rows",
+      "display": "Display",
+      "previousPage": "Previous page",
+      "nextPage": "Next page",
+      "searchPlaceholder": "Search…"
+    },
+    "confirm": {
+      "cancel": "Cancel",
+      "confirm": "Confirm"
+    },
+    "combobox": {
+      "noMatches": "No matches",
+      "clear": "Clear"
+    },
+    "editor": {
+      "bold": "B",
+      "italic": "I",
+      "code": "Code",
+      "list": "• List",
+      "heading": "H2",
+      "alignLeft": "Left",
+      "alignCenter": "Center",
+      "alignRight": "Right",
+      "alignHint": "Alignment doesn't apply inside lists or code blocks",
+      "live": "Live",
+      "connecting": "Connecting…",
+      "reconnecting": "Reconnecting…"
+    },
+    "presence": {
+      "staffTitle": "{name} (staff)"
+    },
+    "nouns": {
+      "challenges": "challenges",
+      "teams": "teams",
+      "competitors": "competitors",
+      "tickets": "tickets"
+    },
+    "competitionMode": {
+      "team": "team",
+      "individual": "individual"
+    },
+    "visibility": {
+      "public": "public",
+      "private": "private"
+    }
+  },
+  "announcements": {
+    "severity": {
+      "info": "Announcement",
+      "warning": "Important",
+      "critical": "Urgent"
+    },
+    "severityHelp": {
+      "info": "Routine news. Sits in the banner briefly, then tucks into the bell.",
+      "warning": "Needs attention — stands out in the banner.",
+      "critical": "Stays on screen until dismissed and reaches everyone, even competitors who muted announcement notifications."
+    },
+    "banner": {
+      "dismiss": "Dismiss announcement"
+    },
+    "new": {
+      "trigger": "New announcement",
+      "title": "New announcement",
+      "descriptionAll": "Posts to everyone in this competition, live.",
+      "descriptionTeams": "Reaches only the {count} selected team(s).",
+      "descriptionUsers": "Reaches only the {count} selected competitor(s).",
+      "titleLabel": "Title",
+      "message": "Message",
+      "urgency": "Urgency",
+      "sendTo": "Send to",
+      "everyone": "Everyone in the competition",
+      "specificTeams": "Specific teams",
+      "specificCompetitors": "Specific competitors",
+      "teams": "Teams",
+      "competitors": "Competitors",
+      "selectedCount": "{count} selected",
+      "noTeams": "No teams yet.",
+      "noCompetitors": "No competitors yet.",
+      "posting": "Posting…",
+      "post": "Post announcement",
+      "postedToast": "Announcement posted"
+    }
+  },
+  "app": {
+    "skipToContent": "Ir al contenido",
+    "toggleSidebar": "Cambiar barra lateral",
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Colapsar barra lateral",
+    "openMenu": "Abrir menú",
+    "signOut": "Cerrar sesión",
+    "profileSettings": "Configuración de perfil y notificación",
+    "adminNoAccess": "No tienes acceso al área de administración.",
+    "adminGlobalScope": "El administrador es global — no se enfrenta a una competencia",
+    "mainNav": "Principal",
+    "theme": {
+      "title": "Theme",
+      "useSiteDefault": "Use site default",
+      "dark": "Dark",
+      "light": "Light"
+    },
+    "nav": {
+      "dashboard": "Tablero",
+      "challenges": "Desafíos",
+      "scoreboard": "Marcador",
+      "participants": "Participantes",
+      "support": "Soporte",
+      "feedback": "Comentarios",
+      "analytics": "Analíticas",
+      "automations": "Automatizaciones",
+      "aiTranscripts": "Transcripciones IA",
+      "settings": "Ajustes",
+      "lobby": "Lobby",
+      "admin": "Admin"
+    },
+    "adminNav": {
+      "dashboard": "Tablero",
+      "competitions": "Competiciones",
+      "users": "Usuarios",
+      "roles": "Roles",
+      "events": "Registro de eventos",
+      "automations": "Automatizaciones",
+      "siteSettings": "Ajustes del sitio"
+    },
+    "notifications": {
+      "title": "Notificaciones",
+      "unread": "Notificaciones ({count} no leídos)",
+      "markAllRead": "Marcar todos leídos",
+      "empty": "Aún no hay notificaciones."
+    },
+    "demoBanner": "Instancia demo — los datos son públicos y <b>se reinicia cada hora, en la hora</b>.",
+    "noCompetition": {
+      "title": "Ninguna competencia cargada",
+      "descriptionCanCreate": "No hay competiciones todavía. Crea una para abrir sus desafíos, equipos, marcadores y más.",
+      "description": "Todavía no hay competiciones disponibles para ti. Vuelve pronto.",
+      "manage": "Administrar competiciones"
+    }
+  },
+  "scoreboard": {
+    "title": "Scoreboard",
+    "teamMode": "team mode",
+    "individualMode": "individual mode",
+    "frozen": "Frozen",
+    "live": "live",
+    "division": "Division",
+    "divisionAll": "All",
+    "divisionHint": "— set each competitor's division in the table below",
+    "you": "you",
+    "freeze": {
+      "confirmTitle": "Freeze the scoreboard?",
+      "confirmDescription": "Competitors keep solving and their points still count — the public board just stops showing movement until you unfreeze it. Staff can still view live standings.",
+      "confirmLabel": "Freeze",
+      "saving": "Saving…",
+      "unfreeze": "Unfreeze board",
+      "freeze": "Freeze board",
+      "unfrozenToast": "Scoreboard unfrozen",
+      "frozenToast": "Scoreboard frozen",
+      "errorToast": "Couldn't update the board"
+    },
+    "gate": {
+      "notStartedTitle": "This competition hasn't started yet",
+      "notStartedDescription": "The scoreboard opens once the organisers start the competition."
+    },
+    "endedBanner": {
+      "lead": "Final standings.",
+      "rest": "The competition has ended — these results are final."
+    },
+    "frozenBanner": {
+      "lead": "The scoreboard is frozen.",
+      "rest": "Competitors keep solving and their points still count — new solves are hidden here until the organisers unfreeze the board."
+    },
+    "empty": {
+      "title": "No scores yet",
+      "descriptionTeam": "The board fills in the moment a team lands a solve. First flag takes the top spot.",
+      "descriptionIndividual": "The board fills in the moment someone lands a solve. First flag takes the top spot."
+    },
+    "table": {
+      "rank": "Rank",
+      "team": "Team",
+      "participant": "Participant",
+      "points": "Points",
+      "lastSolve": "Last solve"
+    },
+    "chart": {
+      "rankName": "Rank {rank}: {name}",
+      "you": "you",
+      "yourTeam": "your team",
+      "pointsAria": "{points} points",
+      "lastSolveAria": "last solve {time}",
+      "noSolvesAria": "no solves yet",
+      "pointsLabel": "points",
+      "lastSolve": "Last solve {time}",
+      "noSolves": "No solves yet",
+      "division": "Division: {bracket}",
+      "divisionAria": "division {bracket}"
+    },
+    "public": {
+      "directoryTitle": "Public scoreboards",
+      "directorySubtitle": "Live standings for competitions open to spectators — no account needed.",
+      "directoryEmpty": "No public scoreboards are available right now.",
+      "teamCompetition": "Team competition",
+      "individualCompetition": "Individual competition",
+      "ends": "· ends {date}",
+      "venueMode": "Venue mode",
+      "notPublic": "This scoreboard isn't public, or the competition doesn't exist.",
+      "backToAll": "← All public scoreboards",
+      "teamScoreboard": "Team scoreboard",
+      "individualScoreboard": "Individual scoreboard",
+      "frozenSuffix": "· frozen",
+      "emptyBoard": "No scores yet — the board fills in on the first solve.",
+      "frozen": "Frozen",
+      "rank": "Rank",
+      "team": "Team",
+      "competitor": "Competitor",
+      "points": "Points",
+      "insights": {
+        "participants": "Participants",
+        "solves": "Solves",
+        "challenges": "Challenges",
+        "unsolved": "Unsolved",
+        "mostSolved": "Most solved",
+        "mostSolvedDetail": "{count, plural, one {# solve} other {# solves}}",
+        "mostAttempted": "Most attempted",
+        "mostAttemptedDetail": "{count, plural, one {# attempt} other {# attempts}}",
+        "mostFirstBloods": "Most first bloods",
+        "mostFirstBloodsDetail": "{count, plural, one {# first blood} other {# first bloods}}",
+        "fastestSolve": "Fastest solve",
+        "fastestSolveDetail": "{name} · {elapsed}"
+      },
+      "timeline": {
+        "title": "Points over time",
+        "subtitle": "{count, plural, one {Top # entrant} other {Top # entrants}}",
+        "freezeSuffix": " · stops at the freeze",
+        "ariaLabel": "Cumulative points over time for the top {count} entrants. {leader} leads with {points} points. The full standings are in the table below."
+      },
+      "venue": {
+        "live": "LIVE",
+        "frozen": "Frozen",
+        "scoreboard": "Scoreboard",
+        "emptyBoard": "No scores yet — the board fills in on the first solve.",
+        "pointsOverTime": "Points over time",
+        "firstBlood": "First blood",
+        "firstToSolve": "first to solve <b>{title}</b>",
+        "startsIn": "starts in",
+        "remaining": "remaining",
+        "ended": "Ended",
+        "slides": "Slides",
+        "previousSlide": "Previous slide",
+        "nextSlide": "Next slide",
+        "play": "Play",
+        "pause": "Pause",
+        "enterFullscreen": "Full screen",
+        "exitFullscreen": "Exit full screen",
+        "exit": "Exit venue"
+      }
+    }
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitleManager": "operational overview",
+    "subtitleParticipant": "your dashboard",
+    "stats": {
+      "solves": "Solves",
+      "submissions": "Submissions",
+      "activeTeams": "Active teams",
+      "activeParticipants": "Active participants",
+      "publishedChallenges": "Published challenges"
+    },
+    "standing": {
+      "rank": "Your rank",
+      "points": "Your points",
+      "solved": "Solved"
+    },
+    "activity": {
+      "title": "Recent activity",
+      "description": "Latest solves across the competition",
+      "line": "<b>{name}</b> solved <c>{challenge}</c> <p>+{points}</p>",
+      "empty": "No solves yet."
+    },
+    "announcements": {
+      "title": "Announcements",
+      "description": "Archive, newest first",
+      "empty": "No announcements yet."
+    },
+    "health": {
+      "title": "Challenge health",
+      "description": "Solves vs. attempts",
+      "stat": "{solves} solved · {attempts} tries",
+      "empty": "No challenges yet."
+    },
+    "support": {
+      "title": "Support queue",
+      "open": "{count} open",
+      "emptyPrefix": "No open tickets.",
+      "emptyLink": "Support"
+    },
+    "mySolves": {
+      "title": "Your solves",
+      "solved": "{count} solved",
+      "empty": "No solves yet — head to Challenges to get started."
+    },
+    "widgetLabels": {
+      "stats": "At a glance",
+      "standing": "Your standing",
+      "activity": "Recent solves",
+      "announcements": "Announcements",
+      "challengeHealth": "Challenge health",
+      "supportQueue": "Support queue",
+      "mySolves": "Your solves"
+    },
+    "grid": {
+      "customize": "Customize",
+      "editHint": "Drag to move · drag a corner to resize · or use each widget's buttons",
+      "saving": "Saving…",
+      "saveLayout": "Save layout",
+      "cancel": "Cancel",
+      "resetDefault": "Reset to default",
+      "savedToast": "Dashboard layout saved",
+      "saveErrorToast": "Couldn't save layout",
+      "resetToast": "Dashboard reset to default",
+      "resetErrorToast": "Couldn't reset layout",
+      "dragToMove": "Drag to move {label}",
+      "hiddenSuffix": "· hidden",
+      "groupMove": "Move",
+      "groupResize": "Resize",
+      "moveLeft": "Move {label} left",
+      "moveRight": "Move {label} right",
+      "moveUp": "Move {label} up",
+      "moveDown": "Move {label} down",
+      "narrower": "Narrower {label}",
+      "wider": "Wider {label}",
+      "shorter": "Shorter {label}",
+      "taller": "Taller {label}",
+      "show": "Show {label}",
+      "hide": "Hide {label}"
+    },
+    "firstRun": {
+      "title": "Getting started",
+      "createChallenges": "Create challenges",
+      "createChallengesDesc": "Add and publish your first challenges so competitors have something to solve.",
+      "inviteTeams": "Invite teams",
+      "inviteTeamsDesc": "Share the join link or invite code so players can register and form teams.",
+      "brandEvent": "Brand your event",
+      "brandEventDesc": "Set the platform name, palette, and accent under Admin → Site settings → Appearance."
+    }
+  },
+  "lobby": {
+    "title": "Lobby",
+    "subtitle": "You're not currently part of any competition.",
+    "joined": "Joined {name}",
+    "cantJoin": "Couldn't join",
+    "verifyEmailHint": "{message} — see your Profile page.",
+    "inviteTitle": "Join with an invite code",
+    "inviteDescription": "For invite-only competitions",
+    "invitePlaceholder": "Invite code",
+    "joining": "Joining…",
+    "join": "Join",
+    "publicTitle": "Public competitions",
+    "publicDescription": "Open to join right now",
+    "empty": "No public competitions right now."
+  },
+  "auth": {
+    "login": {
+      "title": "Iniciar sesión",
+      "description": "Accede a tus competiciones.",
+      "identifier": "Usuario o email",
+      "password": "Contraseña",
+      "forgotPassword": "¿Olvidaste la contraseña?",
+      "submit": "Iniciar sesión",
+      "submitting": "Iniciando sesión…",
+      "or": "o",
+      "ssoSignIn": "Iniciar sesión con {name}",
+      "noAccount": "¿No tienes cuenta?",
+      "register": "Registrarse",
+      "ssoErrors": {
+        "invalid_state": "Ese enlace de inicio de sesión ha caducado o ya ha sido utilizado. Por favor, inténtelo de nuevo.",
+        "expired": "Se ha agotado el tiempo de inicio de sesión. Inténtalo de nuevo.",
+        "invalid_token": "No pudimos verificar la respuesta de su proveedor de identidad.",
+        "provider_unavailable": "Ese proveedor de identidad no es accesible en este momento. Inténtalo de nuevo o inicia sesión con una contraseña.",
+        "provider_denied": "Su proveedor de identidad rechazó la solicitud de inicio de sesión.",
+        "invalid_response": "Su proveedor de identidad ha enviado una respuesta incompleta.",
+        "account_disabled": "Esa cuenta ha sido deshabilitada. Contacte a un administrador.",
+        "domain_not_allowed": "Tu cuenta no puede iniciar sesión en esta instancia. Contacta a un administrador.",
+        "registration_closed": "Esta instancia no acepta nuevas cuentas. Contacte a un administrador.",
+        "default": "Error de inicio de sesión único. Por favor, inténtalo de nuevo o inicia sesión con una contraseña."
+      },
+      "demo": {
+        "badge": "Demo",
+        "title": "Pruébalo instantáneamente",
+        "description": "Haz clic en una cuenta para rellenar el formulario de arriba, la contraseña es <pw>{password}</pw>. Los datos son públicos y se reinician cada hora, en la hora.",
+        "accounts": {
+          "admin": {
+            "label": "Administrador",
+            "description": "control completo de la plataforma"
+          },
+          "judge": {
+            "label": "Judge",
+            "description": "Hacer una competición"
+          },
+          "participant": {
+            "label": "Participante",
+            "description": "resolver desafíos"
+          }
+        }
+      }
+    },
+    "register": {
+      "title": "Crear cuenta",
+      "description": "Regístrate para participar en las competiciones.",
+      "closed": "El registro está cerrado. Pídele a un administrador que cree una cuenta para usted.",
+      "username": "Usuario",
+      "usernameHint": "Cómo iniciarás sesión y aparecerá a otros. Debe ser único.",
+      "email": "E-mail",
+      "emailOptional": "Email (opcional)",
+      "emailHintRequired": "Necesario para registrarse. También puedes iniciar sesión con él.",
+      "emailHintOptional": "Opcional — también puede iniciar sesión con ella.",
+      "password": "Contraseña",
+      "submit": "Crear cuenta",
+      "submitting": "Creando…",
+      "haveAccount": "¿Ya tienes una cuenta?",
+      "signIn": "Iniciar sesión"
+    },
+    "forgotPassword": {
+      "title": "Restablecer su contraseña",
+      "description": "Introduce el correo electrónico de tu cuenta y te enviaremos un enlace de restablecimiento.",
+      "success": "Si existe una cuenta para <b>{email}</b>, un enlace de restablecimiento está en camino. Comprueba tu bandeja de entrada (y spam).",
+      "email": "E-mail",
+      "submit": "Enviar enlace de reinicio",
+      "submitting": "Envío…",
+      "backToSignIn": "Volver a iniciar sesión"
+    },
+    "resetPassword": {
+      "title": "Elija una nueva contraseña",
+      "description": "Introduzca una nueva contraseña para su cuenta.",
+      "missingToken": "Este enlace no tiene su token de restablecimiento. Solicita uno nuevo de <link>olvidó la contraseña</link>.",
+      "newPassword": "Nueva contraseña",
+      "submit": "Establecer nueva contraseña",
+      "submitting": "Guardando…",
+      "successToast": "Reinicio de contraseña — por favor inicia sesión"
+    },
+    "callback": {
+      "signingIn": "Signing you in…"
+    },
+    "verifyEmail": {
+      "title": "Verifique su correo electrónico",
+      "description": "Confirmando la dirección de tu cuenta.",
+      "missingToken": "Este enlace no tiene su token de verificación.",
+      "verifying": "Verificando…",
+      "success": "Tu correo electrónico ha sido verificado. Ahora puedes unirte a las competiciones.",
+      "fallbackError": "Este enlace de verificación no es válido o ha caducado.",
+      "continue": "Continuar con el inicio de sesión"
+    }
+  },
+  "challenges": {
+    "title": "Challenges",
+    "uncategorized": "uncategorized",
+    "solvedOfTotal": "{solved} of {total} solved",
+    "manage": "Manage challenges",
+    "doneManaging": "Done managing",
+    "points": "{value} pts",
+    "dynamic": "dynamic",
+    "dynamicSuffix": "(dynamic)",
+    "solvesCount": "{count, plural, one {# solve} other {# solves}}",
+    "chipAll": "All",
+    "layout": {
+      "group": "Challenge layout",
+      "cards": "Cards",
+      "list": "List"
+    },
+    "availability": {
+      "all": "all",
+      "available": "available",
+      "locked": "locked"
+    },
+    "status": {
+      "draft": "Draft",
+      "locked": "Locked",
+      "lockedBadge": "🔒 Locked",
+      "solved": "Solved",
+      "open": "Open"
+    },
+    "gate": {
+      "endedTitle": "This competition has ended",
+      "notStartedTitle": "This competition hasn't started yet",
+      "endedDescription": "Challenges are closed. Thanks for playing!",
+      "notStartedDescription": "Challenges will appear here once the organisers start the competition."
+    },
+    "paused": {
+      "banner": "⏸ The competition is paused.",
+      "manage": "Submissions are closed for competitors — you can still submit to test.",
+      "competitor": "Flag submissions are closed until the organisers resume it.",
+      "dialog": "⏸ The competition is paused — submissions are closed."
+    },
+    "empty": {
+      "title": "No challenges yet",
+      "manageDescription": "Add your first challenge to open the competition — save it as a draft and publish when it's ready.",
+      "competitorDescription": "The organisers haven't published any challenges yet. Check back once the competition opens.",
+      "create": "Create a challenge",
+      "categoryEmpty": "No challenges in this category yet.",
+      "filterEmpty": "No challenges match this filter."
+    },
+    "detail": {
+      "noDescription": "No description.",
+      "othersViewing": "{count, plural, one {# other viewing} other {# others viewing}}",
+      "lockedTitle": "Locked",
+      "lockedBy": "Solve {names} to unlock this challenge.",
+      "lockedByGeneric": "Solve this challenge's prerequisites to unlock it.",
+      "firstBlood": "First blood!",
+      "solved": "Solved!",
+      "pointsAwarded": "+{points} pts",
+      "reducedFrom": "(reduced from {value})",
+      "alreadySolved": "You've solved this challenge.",
+      "outOfGuesses": "You've used all your guesses for this question.",
+      "chooseAnswer": "Choose an answer",
+      "guessesRemaining": "{count, plural, one {# guess remaining.} other {# guesses remaining.}}",
+      "penaltyNote": "Each wrong guess lowers this question's value by {pct}%.",
+      "flag": "Flag",
+      "incorrectAnswer": "Incorrect answer.",
+      "incorrectFlag": "Incorrect flag.",
+      "submitting": "Submitting…",
+      "submitAnswer": "Submit answer",
+      "submitFlag": "Submit flag"
+    },
+    "solveToast": {
+      "description": "{title} · +{points} pts",
+      "descriptionReduced": "{title} · +{points} pts (reduced from {full})"
+    },
+    "notes": {
+      "team": "Team notes",
+      "mine": "My notes",
+      "sharedDescription": "A shared scratchpad for {name} — visible only to your team, live as you type.",
+      "privateDescription": "A private scratchpad for this challenge — only you can see it, and it stays in sync across your devices."
+    },
+    "solves": {
+      "title": "Solves",
+      "empty": "No solves yet — be the first to solve it.",
+      "firstBlood": "First blood"
+    },
+    "hints": {
+      "title": "Hints",
+      "cost": "Costs {cost} pts",
+      "free": "Free hint",
+      "reveal": "Reveal",
+      "revealing": "Revealing…",
+      "revealedToast": "Hint revealed",
+      "revealedCost": "−{cost} pts"
+    },
+    "rating": {
+      "prompt": "How was this challenge?",
+      "star": "Rate {n} out of 5",
+      "thanks": "Thanks for the feedback!",
+      "error": "Couldn't submit rating"
+    },
+    "admin": {
+      "listTitle": "Challenges",
+      "count": "{count, plural, one {# challenge} other {# challenges}}",
+      "export": "Export",
+      "exportFailed": "Export failed",
+      "import": "Import",
+      "importing": "Importing…",
+      "importFailed": "Import failed",
+      "imported": "Imported {created, plural, one {# challenge} other {# challenges}}",
+      "importedSkipped": "Imported {created, plural, one {# challenge} other {# challenges}}, {skipped} skipped",
+      "newChallenge": "New challenge",
+      "colTitle": "Title",
+      "colCategory": "Category",
+      "colPoints": "Points",
+      "colState": "State",
+      "colActions": "Actions",
+      "stateDraft": "draft",
+      "statePublished": "published",
+      "dyn": "dyn",
+      "scheduled": "· scheduled",
+      "releasesTooltip": "Releases {date}",
+      "dynamicTooltip": "Dynamic: {points}→{min} over ~{decay} solves",
+      "edit": "Edit",
+      "publish": "Publish",
+      "unpublish": "Unpublish",
+      "delete": "Delete",
+      "unpublishConfirmTitle": "Unpublish challenge?",
+      "unpublishConfirmDescription": "\"{title}\" will be hidden from competitors until you publish it again.",
+      "unpublishConfirmLabel": "Unpublish",
+      "deleteConfirmTitle": "Delete challenge?",
+      "deleteConfirmDescription": "\"{title}\" and its attachments, hints, and solve history will be permanently removed. This can't be undone.",
+      "deleteConfirmLabel": "Delete",
+      "editTitle": "Edit challenge",
+      "flagSetHint": "A flag is set. Leave the flag field blank to keep it.",
+      "noFlagHint": "No flag set yet — add one before publishing.",
+      "fieldTitle": "Title",
+      "fieldDescription": "Description",
+      "fieldCategory": "Category",
+      "uncategorized": "Uncategorized",
+      "initialPoints": "Initial points",
+      "points": "Points",
+      "scoring": "Scoring",
+      "scoringStatic": "Static (fixed points)",
+      "scoringDynamic": "Dynamic (decays as more solve)",
+      "minPoints": "Minimum points",
+      "decay": "Decay (solves)",
+      "dynamicHint": "Worth {points} until solves accumulate, decaying toward {min} over ~{decay} solves. Every solver always holds the current value.",
+      "difficulty": "Difficulty",
+      "tags": "Tags",
+      "releaseAt": "Release at",
+      "clear": "Clear",
+      "releaseHint": "Optional. A published challenge stays hidden from competitors until this time — leave blank to release as soon as it's published.",
+      "prerequisites": "Prerequisites",
+      "prerequisitesHint": "Competitors must solve these before this challenge unlocks (an unlock chain). Optional.",
+      "noOtherChallenges": "No other challenges yet.",
+      "flagType": "Flag type",
+      "flagStatic": "Static",
+      "flagRegex": "Regex",
+      "flagMultipleChoice": "Multiple choice",
+      "options": "Options",
+      "optionsHint": "Add the options a competitor picks from, and mark the correct one.",
+      "optionsHintKeep": "Add the options a competitor picks from, and mark the correct one. Leave unselected to keep the current answer.",
+      "markCorrect": "Mark option {n} correct",
+      "optionPlaceholder": "Option {n}",
+      "removeOption": "Remove option {n}",
+      "addOption": "+ Add option",
+      "flagPattern": "Flag pattern",
+      "flag": "Flag",
+      "flagUnchanged": "(unchanged)",
+      "caseInsensitive": "Case-insensitive flag",
+      "saving": "Saving…",
+      "saveChanges": "Save changes",
+      "createChallenge": "Create challenge",
+      "cancel": "Cancel",
+      "categories": "Categories",
+      "categoriesDescription": "Group challenges by topic.",
+      "deleteCategoryAria": "Delete {name}",
+      "noCategoriesYet": "No categories yet.",
+      "newCategory": "New category",
+      "add": "Add",
+      "deleteCategoryConfirmTitle": "Delete category?",
+      "deleteCategoryConfirmDescription": "\"{name}\" will be removed. Its challenges aren't deleted — they become uncategorised.",
+      "deleteCategoryConfirmLabel": "Delete",
+      "attachments": {
+        "title": "Attachments",
+        "download": "Download",
+        "remove": "Remove",
+        "removeConfirmTitle": "Remove attachment?",
+        "removeConfirmDescription": "\"{filename}\" will be deleted from this challenge.",
+        "removeConfirmLabel": "Remove",
+        "empty": "No files attached.",
+        "uploading": "Uploading…"
+      },
+      "hints": {
+        "title": "Hints",
+        "releases": "Releases {date}",
+        "hidden": "Hidden",
+        "cost": "{cost} pts",
+        "publish": "Publish",
+        "remove": "Remove",
+        "bodyPlaceholder": "Hint text",
+        "costAria": "Hint cost",
+        "add": "Add hint",
+        "hiddenUntilReleased": "Hidden until released",
+        "releaseLabel": "Release at (optional)",
+        "releaseTimeAria": "Hint release time",
+        "deleteConfirmTitle": "Delete hint?",
+        "deleteConfirmDescription": "This hint will be removed from the challenge.",
+        "deleteConfirmLabel": "Delete"
+      },
+      "guesses": {
+        "title": "Guesses",
+        "description": "Multiple-choice guesses are capped competition-wide. Reset them to grant a fresh set — history is kept.",
+        "selectTeam": "Select a team…",
+        "selectCompetitor": "Select a competitor…",
+        "resetSelected": "Reset for selected",
+        "resetEveryone": "Reset for everyone",
+        "resetToast": "Guesses reset",
+        "resetEveryoneToast": "Guesses reset for everyone",
+        "resetError": "Couldn't reset",
+        "resetEveryoneConfirmTitle": "Reset guesses for everyone?",
+        "resetEveryoneConfirmDescription": "Every competitor gets a fresh set of guesses on this challenge. Their submission history is kept.",
+        "resetEveryoneConfirmLabel": "Reset for everyone"
+      }
+    }
+  },
+  "support": {
+    "title": "Support",
+    "openCount": "{count} open",
+    "yourTickets": "your tickets",
+    "stats": {
+      "all": "All tickets",
+      "open": "Open",
+      "resolved": "Resolved"
+    },
+    "status": {
+      "all": "all",
+      "open": "open",
+      "resolved": "resolved"
+    },
+    "searchPlaceholder": "Search tickets…",
+    "you": "You",
+    "messageCount": "{count, plural, one {# message} other {# messages}}",
+    "noMatchSearch": "No {filter}tickets match your search.",
+    "noMatchFilter": "No {filter}tickets match this filter.",
+    "empty": {
+      "staffTitle": "No tickets yet",
+      "competitorTitle": "Need a hand?",
+      "staffDescription": "When competitors open support tickets they'll appear here — you'll get a cue the moment one lands.",
+      "competitorDescription": "Stuck on a challenge or hit a snag? Open a ticket and staff will pick it up live."
+    },
+    "new": {
+      "trigger": "New ticket",
+      "title": "New ticket",
+      "description": "Ask a question — staff will see it and reply.",
+      "subject": "Subject",
+      "challenge": "Related challenge (optional)",
+      "challengeNone": "None",
+      "message": "Message",
+      "screenshots": "Screenshots (optional)",
+      "opening": "Opening…",
+      "submit": "Open ticket",
+      "openedToast": "Ticket opened",
+      "openedPartialToast": "Ticket opened, but {files} couldn't be attached"
+    },
+    "thread": {
+      "fallbackTitle": "Ticket",
+      "assignedTo": "· assigned to {name}",
+      "loading": "Loading…",
+      "judgeLooking": "A judge is looking at this ticket",
+      "othersHere": "{count, plural, one {# other here} other {# others here}}",
+      "internalNote": "internal note",
+      "replyAria": "Reply",
+      "replyPlaceholder": "Write a reply…",
+      "internalCheckbox": "Internal note",
+      "assignToMe": "Assign to me",
+      "assignedToast": "Assigned to you",
+      "resolve": "Resolve",
+      "resolvedToast": "Ticket resolved",
+      "sending": "Sending…",
+      "send": "Send",
+      "replyPartialToast": "Reply sent, but {files} couldn't be attached",
+      "staffNotes": "Staff notes",
+      "staffNotesDesc": "A shared working pad for staff on this ticket — never shown to the competitor, live as you type."
+    },
+    "attachments": {
+      "previewUnavailable": "Preview unavailable",
+      "viewFull": "View {filename} full size",
+      "loadFailed": "This image could not be loaded.",
+      "removeConfirmTitle": "Remove attachment?",
+      "removeConfirmDescription": "\"{filename}\" will be deleted from this ticket.",
+      "removeConfirmLabel": "Remove",
+      "remove": "Remove"
+    },
+    "picker": {
+      "attachAria": "Attach screenshots",
+      "notImage": "{name} isn't a PNG, JPEG or WebP image",
+      "tooLarge": "{name} is larger than {max}",
+      "tooMany": "only {max} images can be attached to a ticket",
+      "skipped": "Skipped: {reasons}.",
+      "hint": "PNG, JPEG or WebP · up to {max} each · {remaining} left",
+      "limitReached": "Attachment limit reached for this ticket",
+      "remove": "Remove"
+    }
+  },
+  "feedback": {
+    "title": "Feedback",
+    "subtitle": "surveys",
+    "newSurvey": "New survey",
+    "untitledSurvey": "Untitled survey",
+    "createdToast": "Survey created",
+    "createError": "Couldn't create",
+    "moduleDisabled": "The feedback module is disabled for this competition.",
+    "empty": {
+      "staffTitle": "No surveys yet",
+      "competitorTitle": "No surveys open right now",
+      "staffDescription": "Build a survey to gather feedback — rating scales, multiple choice, and free text, with CSV export when responses come in.",
+      "competitorDescription": "When the organisers open a survey, you'll be able to answer it here.",
+      "create": "Create a survey"
+    },
+    "card": {
+      "open": "open",
+      "closed": "closed",
+      "responded": "responded",
+      "questionCount": "{count, plural, one {# question} other {# questions}}",
+      "responseCount": "{count, plural, one {# response} other {# responses}}",
+      "respond": "Respond",
+      "edit": "Edit",
+      "results": "Results",
+      "delete": "Delete",
+      "deleteConfirmTitle": "Delete \"{title}\"?",
+      "deleteConfirmDescription": "The survey and all of its responses are permanently removed.",
+      "deleteConfirmLabel": "Delete survey"
+    },
+    "types": {
+      "rating_1_10": "Rating (1–10)",
+      "rating_1_5": "Rating (1–5)",
+      "short_text": "Short text",
+      "long_text": "Long text",
+      "multiple_choice": "Multiple choice"
+    },
+    "editor": {
+      "title": "Edit survey",
+      "surveyTitle": "Title",
+      "description": "Description (optional)",
+      "openForResponses": "Open for responses",
+      "openHint": "(competitors only see open surveys)",
+      "saveDetails": "Save details",
+      "savedToast": "Survey saved",
+      "saveError": "Couldn't save",
+      "questions": "Questions",
+      "noQuestions": "No questions yet.",
+      "required": "required",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "edit": "Edit",
+      "delete": "Delete",
+      "deleteQuestionTitle": "Delete this question?",
+      "deleteQuestionDescription": "The question and any answers to it are removed.",
+      "deleteQuestionLabel": "Delete",
+      "saveQuestionError": "Couldn't save question",
+      "addQuestionError": "Couldn't add question",
+      "addQuestion": "+ Add question",
+      "questionLabel": "Question",
+      "questionPlaceholder": "e.g. How was the difficulty?",
+      "requiredCheckbox": "Required",
+      "optionsLabel": "Options (one per line, at least two)",
+      "saveQuestion": "Save question",
+      "cancel": "Cancel"
+    },
+    "response": {
+      "thanksToast": "Thanks for your feedback!",
+      "submitError": "Couldn't submit",
+      "noQuestions": "This survey has no questions yet.",
+      "cancel": "Cancel",
+      "submitting": "Submitting…",
+      "submit": "Submit"
+    },
+    "results": {
+      "title": "Results",
+      "titleFor": "Results — {title}",
+      "loading": "Loading results…",
+      "noResponses": "No responses yet.",
+      "responseCount": "{count, plural, one {# response} other {# responses}}",
+      "close": "Close",
+      "exporting": "Exporting…",
+      "exportCsv": "Export CSV",
+      "exportError": "Export failed",
+      "answered": "{count} answered",
+      "avgSuffix": "· avg {value}",
+      "noText": "No text answers."
+    },
+    "ratings": {
+      "title": "Challenge ratings",
+      "description": "Average competitor rating (1–5) per challenge — highest first.",
+      "colChallenge": "Challenge",
+      "colAverage": "Average",
+      "colRatings": "Ratings"
+    }
+  },
+  "profile": {
+    "title": "Profile",
+    "subtitle": "Your account and notification preferences",
+    "tabs": {
+      "account": "Account",
+      "notifications": "Notifications",
+      "tokens": "API tokens",
+      "certificates": "Certificates"
+    },
+    "verify": {
+      "title": "Verify your email",
+      "description": "This instance requires a verified email before you can join a competition.",
+      "sending": "Sending…",
+      "sent": "Sent — check your inbox",
+      "resend": "Resend verification email",
+      "sentToast": "Verification email sent",
+      "sendError": "Couldn't send it",
+      "noEmail": "Your account has no email address on file. Add one under <b>Email</b> below, and we'll send you a verification link."
+    },
+    "password": {
+      "title": "Account",
+      "description": "Change your password",
+      "displayName": "Display name",
+      "current": "Current password",
+      "new": "New password",
+      "saving": "Saving…",
+      "submit": "Change password",
+      "changed": "Password changed.",
+      "changedToast": "Password changed"
+    },
+    "email": {
+      "title": "Email",
+      "descriptionSet": "Used for password resets and account notices.",
+      "descriptionUnset": "No email set — add one to enable password reset.",
+      "address": "Email address",
+      "changeHintVerify": "Changing this will require verifying the new address before you can join a competition.",
+      "changeHintNotify": "We'll let your current address know it was changed.",
+      "current": "Current password",
+      "currentHint": "Confirming your password keeps someone with access to an open session from repointing where password resets are sent.",
+      "saving": "Saving…",
+      "update": "Update email",
+      "add": "Add email",
+      "remove": "Remove",
+      "updatedToast": "Email updated",
+      "addedToast": "Email added",
+      "removedToast": "Email removed",
+      "verifySuffix": " — check your inbox to verify it",
+      "removeConfirmTitle": "Remove your email address?",
+      "removeConfirmDescription": "You'll lose access to password reset, and an administrator will have to set an address for you to get it back.",
+      "removeConfirmLabel": "Remove"
+    },
+    "notifications": {
+      "title": "Notification preferences",
+      "description": "Control what reaches your notification bell, and how you're alerted.",
+      "inAppHeading": "In-app notifications",
+      "deliveryHeading": "Delivery",
+      "saving": "Saving…",
+      "save": "Save preferences",
+      "unsaved": "Unsaved changes",
+      "savedToast": "Preferences saved",
+      "saveError": "Couldn't save",
+      "browserBlockedTitle": "Browser notifications are blocked",
+      "browserBlockedBody": "Allow notifications for this site in your browser settings, then try again.",
+      "permissionDeniedTitle": "Permission not granted",
+      "permissionDeniedBody": "Browser notifications stay off until you allow them.",
+      "inApp": {
+        "inapp_tickets": {
+          "label": "Support tickets",
+          "hint": "New tickets, replies, assignments, and resolutions."
+        },
+        "inapp_automations": {
+          "label": "Automations & alerts",
+          "hint": "Notifications sent to you by competition automation rules."
+        },
+        "inapp_announcements": {
+          "label": "Announcements",
+          "hint": "Organiser announcements. Urgent ones always come through, even with this off."
+        }
+      },
+      "browser": {
+        "label": "Browser notifications",
+        "hint": "Show a desktop notification when something arrives while Flagpost is open."
+      },
+      "sound": {
+        "label": "Sound for support tickets",
+        "hint": "Play a short cue when a new ticket or reply comes in."
+      }
+    },
+    "tokens": {
+      "title": "API tokens",
+      "description": "Use a token instead of signing in to call the API from a script. Each one acts as you, with your permissions, and is shown only once.",
+      "create": "Create token",
+      "loadError": "Couldn't load your tokens: {message}",
+      "emptyTitle": "No API tokens",
+      "emptyDescription": "Create one to call the Flagpost API from a script or CI job.",
+      "colDescription": "Description",
+      "colExpires": "Expires",
+      "colLastUsed": "Last used",
+      "colStatus": "Status",
+      "colActions": "Actions",
+      "never": "Never",
+      "status": {
+        "active": "Active",
+        "expired": "Expired",
+        "revoked": "Revoked"
+      },
+      "revoke": "Revoke",
+      "revokeConfirmTitle": "Revoke this token?",
+      "revokeConfirmDescription": "{description} will stop authenticating immediately. This can't be undone.",
+      "revokeConfirmLabel": "Revoke",
+      "revokedToast": "Token revoked",
+      "revokeError": "Couldn't revoke",
+      "createTitle": "Create API token",
+      "createDescription": "The token acts as you, with your own permissions. Tokens can only be created for your own account.",
+      "descLabel": "Description",
+      "descPlaceholder": "e.g. CI grading bot",
+      "descHint": "So you can tell your tokens apart later.",
+      "expiresLabel": "Expires in (days)",
+      "creating": "Creating…",
+      "createSubmit": "Create token",
+      "createError": "Couldn't create token",
+      "revealTitle": "Token created",
+      "revealDescription": "Copy it now — it won't be shown again. Send it in an <code>Authorization: Bearer</code> header.",
+      "copyError": "Couldn't copy — select and copy manually",
+      "copied": "Copied",
+      "copy": "Copy",
+      "done": "Done"
+    },
+    "certificates": {
+      "title": "Certificates",
+      "description": "Certificates you've earned across competitions.",
+      "empty": "No certificates yet. When an organiser releases certificates for a competition you took part in, they'll appear here.",
+      "released": "Released {date}",
+      "preparing": "Preparing…",
+      "download": "Download"
+    }
+  },
+  "teams": {
+    "loading": "Loading team…",
+    "requireApproval": "Require captain approval to join",
+    "directory": {
+      "title": "Teams",
+      "count": "{count, plural, one {# team registered} other {# teams registered}}",
+      "empty": "No teams yet.",
+      "colName": "Name",
+      "colMembers": "Members"
+    },
+    "mine": {
+      "subtitle": "Your team",
+      "inviteCode": "Invite code",
+      "inviteHint": "Share this code with teammates so they can join.",
+      "captain": "captain",
+      "leave": "Leave team",
+      "leaving": "Leaving…",
+      "leaveConfirmTitle": "Leave this team?",
+      "leaveConfirmDescription": "You'll lose access to the team's shared progress. You can join or create another team while registration is open.",
+      "leaveConfirmAction": "Leave team",
+      "leftToast": "Left team"
+    },
+    "profile": {
+      "label": "Team profile",
+      "affiliation": "Affiliation",
+      "country": "Country",
+      "website": "Website",
+      "readonlyAffiliation": "Affiliation: {value}",
+      "readonlyCountry": "Country: {value}",
+      "readonlyWebsite": "Website: {value}",
+      "save": "Save profile",
+      "saving": "Saving…",
+      "savedToast": "Team profile saved"
+    },
+    "joinRequests": {
+      "label": "Join requests ({count})",
+      "approve": "Approve",
+      "reject": "Reject"
+    },
+    "create": {
+      "title": "Create a team",
+      "subtitle": "You'll be the captain.",
+      "nameLabel": "Team name",
+      "submit": "Create team",
+      "creating": "Creating…",
+      "createdToast": "Created {name}"
+    },
+    "join": {
+      "title": "Join a team",
+      "subtitle": "Use an invite code from a teammate.",
+      "codeLabel": "Invite code",
+      "submit": "Join team",
+      "joining": "Joining…",
+      "pendingToast": "Request sent — awaiting captain approval",
+      "joinedToast": "Joined team"
+    },
+    "rulesAcceptError": "Couldn't record acceptance"
+  },
+  "participants": {
+    "title": "Participants",
+    "subtitle": "{name} · {mode}",
+    "modeTeams": "teams",
+    "modeIndividual": "individual mode",
+    "empty": {
+      "title": "No competitors yet",
+      "description": "Registered competitors show up here as they join — share the join link to get people in."
+    },
+    "roster": {
+      "title": "Competitors",
+      "count": "{count} registered",
+      "createAward": "Create award",
+      "searchPlaceholder": "Search competitors…",
+      "colRank": "#",
+      "colCompetitor": "Competitor",
+      "colSolves": "Solves",
+      "colPoints": "Points",
+      "colJoined": "Joined",
+      "you": "You",
+      "noMatch": "No competitors match your search."
+    },
+    "you": {
+      "subtitle": "Your standing in this competition",
+      "rankLabel": "Rank",
+      "rankValue": "{rank} of {total}",
+      "pointsLabel": "Points",
+      "solvesLabel": "Solves"
+    },
+    "award": {
+      "title": "Create award",
+      "description": "Grant a titled award and its points to selected competitors. Points are added to their score on the scoreboard.",
+      "titleLabel": "Title",
+      "titlePlaceholder": "e.g. Best write-up",
+      "descLabel": "Description (optional)",
+      "pointsLabel": "Points",
+      "pointsHint": "0 for a badge with no scoring effect; negative to deduct.",
+      "recipients": "Recipients",
+      "selectedCount": "{count} selected",
+      "searchPlaceholder": "Search competitors…",
+      "noMatch": "No competitors match.",
+      "pts": "{points} pts",
+      "submit": "Grant award",
+      "submitting": "Awarding…",
+      "successToast": "{count, plural, one {Awarded # competitor} other {Awarded # competitors}}",
+      "errorToast": "Couldn't create award"
+    }
+  },
+  "certificates": {
+    "viewInProfile": "View in profile",
+    "preparing": "Preparing…",
+    "download": "Download",
+    "ready": {
+      "title": "Your certificate is ready!",
+      "description": "Congratulations on taking part in {competition}. Download your certificate to share it — you can always find it again under your profile."
+    },
+    "card": {
+      "ready": "Your certificate is ready 🎓",
+      "hint": "Download it to share, or find it anytime in your profile."
+    }
+  },
+  "ai": {
+    "assistant": {
+      "admin": {
+        "title": "Organiser assistant",
+        "openLabel": "Open the organiser assistant",
+        "intro": "Ask about standings, tickets, challenge stats, feedback or announcements. I only read — I can't change anything — and I answer from what you're allowed to see.",
+        "suggestion1": "How is the competition going so far?",
+        "suggestion2": "Are there any open support tickets?",
+        "suggestion3": "Which challenges are the hardest right now?"
+      },
+      "competitor": {
+        "title": "Assistant",
+        "openLabel": "Open the assistant",
+        "intro": "Ask about the platform, scoring, your standing, or announcements. How much help I can give with challenges is set by the organisers — and I never reveal flags.",
+        "suggestion1": "How does flag submission work?",
+        "suggestion2": "What's my current rank?",
+        "suggestion3": "Any recent announcements?"
+      },
+      "readOnly": "Read-only",
+      "readOnlyWithName": "{name} · read-only",
+      "tokensTitle": "Tokens spent by the assistant in this competition",
+      "tokens": "{count} tokens",
+      "expand": "Expand the assistant",
+      "shrink": "Shrink the assistant",
+      "close": "Close the assistant",
+      "lengthLimit": "This conversation has reached its length limit.",
+      "startNew": "Start a new chat",
+      "startError": "Couldn't start the assistant.",
+      "tryAgain": "Try again",
+      "placeholderReady": "Ask the assistant…",
+      "placeholderConnecting": "Connecting…",
+      "placeholderStarting": "Starting…",
+      "send": "Send",
+      "thinking": "Assistant is thinking",
+      "disclosure": {
+        "heading": "Before you start",
+        "point1": "Your messages are sent to an AI model endpoint configured by this site's operators.",
+        "point2": "Competition staff can review your conversations with the assistant.",
+        "point3": "The assistant is read-only, never reveals flags, and how much challenge help it gives is set by the organisers.",
+        "accept": "I understand — start chatting",
+        "saving": "Saving…",
+        "decline": "Not now"
+      }
+    }
+  },
+  "competitions": {
+    "rules": {
+      "title": "Competition rules",
+      "acceptDescription": "You must accept these rules before you can compete.",
+      "displayDescription": "Please review the rules for this competition.",
+      "empty": "No rules text.",
+      "agree": "I have read and accept these rules.",
+      "cancel": "Cancel",
+      "accept": "Accept",
+      "accepting": "Accepting…",
+      "continue": "Continue",
+      "acceptedToast": "Rules accepted",
+      "acceptErrorToast": "Couldn't record acceptance"
+    }
+  }
+}

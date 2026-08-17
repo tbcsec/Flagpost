@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -20,14 +20,13 @@ afterEach(() => {
 });
 
 describe("LocaleSwitcher", () => {
-  // While only English ships, the picker must stay invisible everywhere it's
-  // mounted — it appears by itself once a second locale lands in i18n/config.
-  // Rendered bare (no intl provider) on purpose: the hookless-wrapper contract
-  // says an inert mount needs no context, so hoisting the inner component's
-  // hooks above the guard must fail this test, not just inconvenience pages.
-  it("renders nothing — without needing any context — while only one locale ships", () => {
-    const { container } = render(<LocaleSwitcher />);
-    expect(container).toBeEmptyDOMElement();
+  // en/fr/es/pl now ship (ADR-0029), so the wrapper is live: it delegates to the
+  // picker at every mount point (auth screens, app shell, public boards). The
+  // single-locale guard (`LOCALES.length < 2 → null`) stays in the code for a
+  // hypothetical one-language build; it simply no longer fires with this config.
+  it("renders the language picker now that more than one locale ships", () => {
+    renderWithIntl(<LocaleSwitcher />);
+    expect(screen.getByLabelText("Language")).toBeInTheDocument();
   });
 });
 

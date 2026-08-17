@@ -1,0 +1,1182 @@
+{
+  "common": {
+    "poweredBy": "Wspierane przez",
+    "language": "Język",
+    "dismiss": "Odrzuć",
+    "time": {
+      "justNow": "właśnie teraz",
+      "minutesAgo": "{count}m ago",
+      "hoursAgo": "{count}h temu",
+      "daysAgo": "{count}d ago"
+    },
+    "table": {
+      "range": "{from}–{to} z {total} {noun}",
+      "rows": "wiersze",
+      "display": "Wyświetlanie",
+      "previousPage": "Poprzednia strona",
+      "nextPage": "Następna strona",
+      "searchPlaceholder": "Szukaj…"
+    },
+    "confirm": {
+      "cancel": "Anuluj",
+      "confirm": "Potwierdź"
+    },
+    "combobox": {
+      "noMatches": "Brak dopasowań",
+      "clear": "Wyczyść"
+    },
+    "editor": {
+      "bold": "B",
+      "italic": "I",
+      "code": "Kod",
+      "list": "• Lista",
+      "heading": "H2",
+      "alignLeft": "W lewo",
+      "alignCenter": "Środkowy",
+      "alignRight": "Prawy",
+      "alignHint": "Wyrównanie nie ma zastosowania w listach lub blokach kodu",
+      "live": "Żywe",
+      "connecting": "Łączenie…",
+      "reconnecting": "Ponowne łączenie…"
+    },
+    "presence": {
+      "staffTitle": "{name} (personel)"
+    },
+    "nouns": {
+      "challenges": "wyzwania",
+      "teams": "drużyny",
+      "competitors": "konkurenci",
+      "tickets": "bilety"
+    },
+    "competitionMode": {
+      "team": "drużyna",
+      "individual": "indywidualny"
+    },
+    "visibility": {
+      "public": "publiczna",
+      "private": "prywatny"
+    }
+  },
+  "announcements": {
+    "severity": {
+      "info": "Ogłoszenie",
+      "warning": "Ważne",
+      "critical": "Pilny"
+    },
+    "severityHelp": {
+      "info": "Rutynowe wiadomości. Krótko siedzi w banerze, a następnie wrzuca do dzwonka.",
+      "warning": "Potrzebna uwaga – wyróżnia się w banerze.",
+      "critical": "Zostaje na ekranie dopóki nie zostanie zwolniony i nie dotrze do wszystkich, nawet do konkurentów, którzy wyciszli powiadomienia o powiadomieniach."
+    },
+    "banner": {
+      "dismiss": "Odrzuć ogłoszenie"
+    },
+    "new": {
+      "trigger": "Nowe ogłoszenie",
+      "title": "Nowe ogłoszenie",
+      "descriptionAll": "Posty dla wszystkich w tym konkursie, żyć.",
+      "descriptionTeams": "Osiąga tylko wybraną drużynę {count}.",
+      "descriptionUsers": "Skontaktuj się tylko z wybranymi konkurentami {count}.",
+      "titleLabel": "Rozporządzenie Rady (EWG) nr 2658/87 z dnia 23 lipca 1987 r. w sprawie nomenklatury taryfowej i statystycznej oraz w sprawie Wspólnej Taryfy Celnej (Dz.U. L 256 z 7.9.1987, s. 1).",
+      "message": "Wiadomość",
+      "urgency": "Pilność",
+      "sendTo": "Wyślij do",
+      "everyone": "Wszyscy w konkursie",
+      "specificTeams": "Konkretne zespoły",
+      "specificCompetitors": "Konkretni konkurenci",
+      "teams": "Drużyny",
+      "competitors": "Konkurenci",
+      "selectedCount": "Wybrano {count}",
+      "noTeams": "Brak zespołów.",
+      "noCompetitors": "Nie ma jeszcze konkurentów.",
+      "posting": "Publikowanie…",
+      "post": "Ogłoszenie",
+      "postedToast": "Ogłoszenie opublikowane"
+    }
+  },
+  "app": {
+    "skipToContent": "Przejdź do treści",
+    "toggleSidebar": "Przełącz pasek boczny",
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Zwiń pasek boczny",
+    "openMenu": "Otwórz menu",
+    "signOut": "Wyloguj się",
+    "profileSettings": "Ustawienia profilu i powiadomień",
+    "adminNoAccess": "Nie masz dostępu do obszaru administracyjnego.",
+    "adminGlobalScope": "Administrator jest globalny — nie jest ustawiony na konkurs",
+    "mainNav": "Główny",
+    "theme": {
+      "title": "Motyw",
+      "useSiteDefault": "Użyj domyślnej witryny",
+      "dark": "Ciemny",
+      "light": "Światło"
+    },
+    "nav": {
+      "dashboard": "Pulpit",
+      "challenges": "Wyzwania",
+      "scoreboard": "Tablica wyników",
+      "participants": "Uczestnicy",
+      "support": "Wsparcie",
+      "feedback": "Informacje zwrotne",
+      "analytics": "Analityka",
+      "automations": "Automatyzacja",
+      "aiTranscripts": "Transkrypty SI",
+      "settings": "Ustawienia",
+      "lobby": "Lobby",
+      "admin": "Administrator"
+    },
+    "adminNav": {
+      "dashboard": "Pulpit",
+      "competitions": "Konkursy",
+      "users": "Użytkownicy",
+      "roles": "Role",
+      "events": "Dziennik zdarzeń",
+      "automations": "Automatyzacja",
+      "siteSettings": "Ustawienia witryny"
+    },
+    "notifications": {
+      "title": "Powiadomienia",
+      "unread": "Powiadomienia ({count} nieprzeczytane)",
+      "markAllRead": "Oznacz wszystkie jako przeczytane",
+      "empty": "Brak powiadomień."
+    },
+    "demoBanner": "Instancja demo — dane są publiczne i <b>resetuje się co godzinę, w godzinie</b>.",
+    "noCompetition": {
+      "title": "Nie załadowano konkursu",
+      "descriptionCanCreate": "Nie ma jeszcze żadnych konkursów. Utwórz konkurs, aby otworzyć wyzwania, drużyny, tablicę wyników i więcej.",
+      "description": "Nie ma jeszcze żadnych lig dostępnych dla Ciebie. Sprawdź ponownie wkrótce.",
+      "manage": "Zarządzaj liniami"
+    }
+  },
+  "scoreboard": {
+    "title": "Tablica wyników",
+    "teamMode": "tryb drużynowy",
+    "individualMode": "tryb indywidualny",
+    "frozen": "Frozen",
+    "live": "na żywo",
+    "division": "Rejon",
+    "divisionAll": "Wszystkie",
+    "divisionHint": "— określić podział każdego konkurenta w poniższej tabeli",
+    "you": "Ty",
+    "freeze": {
+      "confirmTitle": "Zablokować tabelę wyników?",
+      "confirmDescription": "Konkurenci kontynuują rozwiązywanie, a ich punkty nadal się liczą — dział publiczny po prostu przestaje pokazywać ruch do czasu odmrożenia go. Pracownicy mogą nadal przeglądać stanowiska na żywo.",
+      "confirmLabel": "Zamroź",
+      "saving": "Zapisywanie…",
+      "unfreeze": "Odmroź płytę",
+      "freeze": "Zamroź płytę",
+      "unfrozenToast": "Tablica wyników odblokowana",
+      "frozenToast": "Tablica wyników zamrożona",
+      "errorToast": "Nie można zaktualizować tablicy"
+    },
+    "gate": {
+      "notStartedTitle": "Ta konkurencja jeszcze się nie rozpoczęła",
+      "notStartedDescription": "Tablica wyników otwiera się po rozpoczęciu przez organizatorów konkursu."
+    },
+    "endedBanner": {
+      "lead": "Ostateczne stanowiska.",
+      "rest": "Konkurs zakończył się – wyniki te są ostateczne."
+    },
+    "frozenBanner": {
+      "lead": "Tablica wyników jest zamrożona.",
+      "rest": "Konkurenci nadal rozwiązują problemy, a ich punkty nadal się liczą — nowe rozwiązania są tutaj ukryte do czasu odmrożenia działu przez organizatorów."
+    },
+    "empty": {
+      "title": "Brak wyników",
+      "descriptionTeam": "Deska wypełnia w momencie, gdy drużyna wyląduje rozwiązanie. Pierwsza flaga zajmuje najlepsze miejsce.",
+      "descriptionIndividual": "Deska wypełnia w momencie, gdy ktoś wyląduje rozwiązanie. Pierwsza flaga zajmuje najlepsze miejsce."
+    },
+    "table": {
+      "rank": "Ranga",
+      "team": "Drużyna",
+      "participant": "Uczestnik",
+      "points": "Punkty",
+      "lastSolve": "Ostatnie rozwiązanie"
+    },
+    "chart": {
+      "rankName": "Ranga {rank}: {name}",
+      "you": "Ty",
+      "yourTeam": "Twój zespół",
+      "pointsAria": "{points} points",
+      "lastSolveAria": "ostatnie rozwiązanie {time}",
+      "noSolvesAria": "brak rozwiązań",
+      "pointsLabel": "punkty",
+      "lastSolve": "Ostatnie rozwiązanie {time}",
+      "noSolves": "Brak rozwiązań",
+      "division": "Dywizja: {bracket}",
+      "divisionAria": "dział {bracket}"
+    },
+    "public": {
+      "directoryTitle": "Publiczne tablice wyników",
+      "directorySubtitle": "Stacje na żywo otwarte dla widzów – nie jest potrzebne żadne konto.",
+      "directoryEmpty": "W tej chwili nie ma dostępnych publicznych tablic wyników.",
+      "teamCompetition": "Konkurs drużynowy",
+      "individualCompetition": "Konkurencja indywidualna",
+      "ends": "· kończy {date}",
+      "venueMode": "Tryb lokalu",
+      "notPublic": "Ta tablica wyników nie jest publiczna lub konkurencja nie istnieje.",
+      "backToAll": "◆ Wszystkie publiczne tablice wyników",
+      "teamScoreboard": "Tablica wyników zespołu",
+      "individualScoreboard": "Indywidualna tablica wyników",
+      "frozenSuffix": "· frozen",
+      "emptyBoard": "Brak wyników — płytka wypełnia pierwsze rozwiązanie.",
+      "frozen": "Frozen",
+      "rank": "Ranga",
+      "team": "Drużyna",
+      "competitor": "Konkurent",
+      "points": "Punkty",
+      "insights": {
+        "participants": "Uczestnicy",
+        "solves": "Rozwiązania",
+        "challenges": "Wyzwania",
+        "unsolved": "Nierozwiązane",
+        "mostSolved": "Najbardziej rozwiązane",
+        "mostSolvedDetail": "{count, plural, one {# rozwiązanie} other {# rozwiązuje}}",
+        "mostAttempted": "Najczęściej próbowane",
+        "mostAttemptedDetail": "{count, plural, one {# próba} other {# próby}}",
+        "mostFirstBloods": "Najwięcej pierwszych krwawień",
+        "mostFirstBloodsDetail": "{count, plural, one {# pierwsza krew} other {# pierwsze kwitnienia}}",
+        "fastestSolve": "Najszybsze rozwiązanie",
+        "fastestSolveDetail": "{name} · {elapsed}"
+      },
+      "timeline": {
+        "title": "Punkty na przestrzeni czasu",
+        "subtitle": "{count, plural, one {Najlepsza # uczestnik} other {Najwięcej uczestników}}",
+        "freezeSuffix": " · zatrzymuje się przy zamrożeniu",
+        "ariaLabel": "Łączne punkty na przestrzeni czasu dla najlepszych uczestników {count} . {leader} prowadzi z {points} punktami. Pełne stoiska znajdują się w poniższej tabeli."
+      },
+      "venue": {
+        "live": "ŻYWO",
+        "frozen": "Frozen",
+        "scoreboard": "Tablica wyników",
+        "emptyBoard": "Brak wyników — płytka wypełnia pierwsze rozwiązanie.",
+        "pointsOverTime": "Punkty na przestrzeni czasu",
+        "firstBlood": "Pierwsza krew",
+        "firstToSolve": "pierwszy rozwiązał <b>{title}</b>",
+        "startsIn": "zaczyna się za",
+        "remaining": "pozostało",
+        "ended": "Zakończono",
+        "slides": "Slajdy",
+        "previousSlide": "Poprzedni slajd",
+        "nextSlide": "Następny slajd",
+        "play": "Odtwórz",
+        "pause": "Wstrzymaj",
+        "enterFullscreen": "Pełny ekran",
+        "exitFullscreen": "Wyjdź z pełnego ekranu",
+        "exit": "Wyjdź z lokalu"
+      }
+    }
+  },
+  "dashboard": {
+    "title": "Pulpit",
+    "subtitleManager": "przegląd operacyjny",
+    "subtitleParticipant": "Twój panel",
+    "stats": {
+      "solves": "Rozwiązania",
+      "submissions": "Zgłoszenia",
+      "activeTeams": "Aktywne drużyny",
+      "activeParticipants": "Aktywni uczestnicy",
+      "publishedChallenges": "Opublikowane wyzwania"
+    },
+    "standing": {
+      "rank": "Twoja ranga",
+      "points": "Twoje punkty",
+      "solved": "Rozwiązany"
+    },
+    "activity": {
+      "title": "Ostatnia aktywność",
+      "description": "Najnowsze rozwiązania w całej konkurencji",
+      "line": "<b>{name}</b> rozwiązany <c>{challenge}</c> <p>+{points}</p>",
+      "empty": "Brak rozwiązań."
+    },
+    "announcements": {
+      "title": "Ogłoszenia",
+      "description": "Archiwum, najpierw najnowsze",
+      "empty": "Brak ogłoszeń."
+    },
+    "health": {
+      "title": "Wyzwania zdrowotne",
+      "description": "Rozwiązania vs. próby",
+      "stat": "{solves} rozwiązany· {attempts} próbuje",
+      "empty": "Brak wyzwań."
+    },
+    "support": {
+      "title": "Kolejka wsparcia",
+      "open": "Otwarto {count}",
+      "emptyPrefix": "Brak otwartych zgłoszeń.",
+      "emptyLink": "Wsparcie"
+    },
+    "mySolves": {
+      "title": "Twoje rozwiązania",
+      "solved": "{count} rozwiązany",
+      "empty": "Brak rozwiązań — wróć do wyzwań, aby rozpocząć."
+    },
+    "widgetLabels": {
+      "stats": "Na pierwszy rzut oka",
+      "standing": "Twój stojak",
+      "activity": "Najnowsze rozwiązania",
+      "announcements": "Ogłoszenia",
+      "challengeHealth": "Wyzwania zdrowotne",
+      "supportQueue": "Kolejka wsparcia",
+      "mySolves": "Twoje rozwiązania"
+    },
+    "grid": {
+      "customize": "Dostosuj",
+      "editHint": "Przeciągnij, aby przesunąć · przeciągnij narożnik, aby zmienić rozmiar · lub użyj przycisków każdego widżetu",
+      "saving": "Zapisywanie…",
+      "saveLayout": "Zapisz układ",
+      "cancel": "Anuluj",
+      "resetDefault": "Przywróć domyślne",
+      "savedToast": "Układ tablicy rozdzielczej zapisany",
+      "saveErrorToast": "Nie można zapisać układu",
+      "resetToast": "Przywróć domyślny pulpit",
+      "resetErrorToast": "Nie można zresetować układu",
+      "dragToMove": "Przeciągnij, aby przenieść {label}",
+      "hiddenSuffix": "· hidden",
+      "groupMove": "Przenieś",
+      "groupResize": "Zmień rozmiar",
+      "moveLeft": "Przesuń {label} w lewo",
+      "moveRight": "Przesuń {label} w prawo",
+      "moveUp": "Move {label} up",
+      "moveDown": "Przesuń {label} w dół",
+      "narrower": "Węższy {label}",
+      "wider": "Szersze {label}",
+      "shorter": "Krótsze {label}",
+      "taller": "Taller {label}",
+      "show": "Pokaż {label}",
+      "hide": "Ukryj {label}"
+    },
+    "firstRun": {
+      "title": "Pierwsze kroki",
+      "createChallenges": "Utwórz wyzwania",
+      "createChallengesDesc": "Dodaj i opublikuj swoje pierwsze wyzwania, aby konkurenci mieli coś do rozwiązania.",
+      "inviteTeams": "Zaproś zespoły",
+      "inviteTeamsDesc": "Udostępnij link dołączenia lub kod zaproszenia, aby gracze mogli się zarejestrować i tworzyć zespoły.",
+      "brandEvent": "Marka swojego wydarzenia",
+      "brandEventDesc": "Ustaw nazwę platformy, paletę i akcent w panelu administracyjnym → Ustawienia witryny → Wygląd."
+    }
+  },
+  "lobby": {
+    "title": "Lobby",
+    "subtitle": "Nie jesteś obecnie częścią żadnej konkurencji.",
+    "joined": "Joined {name}",
+    "cantJoin": "Nie można dołączyć",
+    "verifyEmailHint": "{message} — zobacz swoją stronę profilową.",
+    "inviteTitle": "Dołącz z kodem zaproszenia",
+    "inviteDescription": "Dla konkursów wyłącznie dla zaproszeń",
+    "invitePlaceholder": "Kod zaproszenia",
+    "joining": "Dołączanie do…",
+    "join": "Dołącz",
+    "publicTitle": "Konkursy publiczne",
+    "publicDescription": "Otwórz aby dołączyć teraz",
+    "empty": "Obecnie nie ma żadnych konkursów publicznych."
+  },
+  "auth": {
+    "login": {
+      "title": "Zaloguj się",
+      "description": "Uzyskaj dostęp do swoich konkursów.",
+      "identifier": "Nazwa użytkownika lub e-mail",
+      "password": "Hasło",
+      "forgotPassword": "Zapomniałeś hasła?",
+      "submit": "Zaloguj się",
+      "submitting": "Logowanie w…",
+      "or": "lub",
+      "ssoSignIn": "Zaloguj się za pomocą {name}",
+      "noAccount": "Brak konta?",
+      "register": "Rejestracja",
+      "ssoErrors": {
+        "invalid_state": "Ten link logowania wygasł lub był już używany. Spróbuj ponownie.",
+        "expired": "Upłynął limit czasu logowania. Spróbuj ponownie.",
+        "invalid_token": "Nie mogliśmy zweryfikować odpowiedzi od Twojego dostawcy tożsamości.",
+        "provider_unavailable": "Ten dostawca tożsamości nie jest teraz dostępny. Spróbuj ponownie lub zaloguj się przy użyciu hasła.",
+        "provider_denied": "Twój dostawca tożsamości odrzucił żądanie logowania.",
+        "invalid_response": "Twój dostawca tożsamości wysłał niekompletną odpowiedź.",
+        "account_disabled": "To konto zostało wyłączone. Skontaktuj się z administratorem.",
+        "domain_not_allowed": "Twoje konto nie może się zalogować w tej instancji. Skontaktuj się z administratorem.",
+        "registration_closed": "Ta instancja nie akceptuje nowych kont. Skontaktuj się z administratorem.",
+        "default": "Pojedyncze logowanie nie powiodło się. Spróbuj ponownie lub zaloguj się hasłem."
+      },
+      "demo": {
+        "badge": "Demo",
+        "title": "Wypróbuj natychmiast",
+        "description": "Kliknij konto, aby wypełnić powyższy formularz — hasło to <pw>{password}</pw>. Dane są publicznie dostępne i są resetowane co godzinę, o pełnej godzinie.",
+        "accounts": {
+          "admin": {
+            "label": "Administrator",
+            "description": "pełna kontrola platformy"
+          },
+          "judge": {
+            "label": "Sędzia",
+            "description": "uruchom konkurs"
+          },
+          "participant": {
+            "label": "Uczestnik",
+            "description": "rozwiązywanie wyzwań"
+          }
+        }
+      }
+    },
+    "register": {
+      "title": "Utwórz konto",
+      "description": "Zarejestruj się, aby wziąć udział w konkursach.",
+      "closed": "Rejestracja jest zamknięta. Poproś administratora o utworzenie konta dla Ciebie.",
+      "username": "Nazwa użytkownika",
+      "usernameHint": "Jak zalogujesz się i wyświetlisz innym. Musi być unikatowy.",
+      "email": "E-mail",
+      "emailOptional": "E-mail (opcjonalnie)",
+      "emailHintRequired": "Wymagane do rejestracji. Możesz również zalogować się za pomocą niej.",
+      "emailHintOptional": "Opcjonalnie — możesz również się z nim zalogować.",
+      "password": "Hasło",
+      "submit": "Utwórz konto",
+      "submitting": "Tworzenie…",
+      "haveAccount": "Masz już konto?",
+      "signIn": "Zaloguj się"
+    },
+    "forgotPassword": {
+      "title": "Zresetuj hasło",
+      "description": "Wprowadź adres e-mail swojego konta, a wyślemy link resetujący.",
+      "success": "Jeśli konto istnieje dla <b>{email}</b>, jest w drodze. Sprawdź swoją skrzynkę odbiorczą (i spam).",
+      "email": "E-mail",
+      "submit": "Wyślij link resetowania",
+      "submitting": "Wysyłanie…",
+      "backToSignIn": "Powrót do logowania"
+    },
+    "resetPassword": {
+      "title": "Wybierz nowe hasło",
+      "description": "Wprowadź nowe hasło dla swojego konta.",
+      "missingToken": "W tym linku brakuje jego tokenu resetującego. Poproś o nowe hasło od <link>zapomniałem hasła</link>.",
+      "newPassword": "Nowe hasło",
+      "submit": "Ustaw nowe hasło",
+      "submitting": "Zapisywanie…",
+      "successToast": "Resetowanie hasła — zaloguj się"
+    },
+    "callback": {
+      "signingIn": "Logowanie w…"
+    },
+    "verifyEmail": {
+      "title": "Potwierdź swój adres e-mail",
+      "description": "Potwierdzenie adresu na Twoim koncie.",
+      "missingToken": "W tym linku brakuje tokenu weryfikacyjnego.",
+      "verifying": "Weryfikowanie…",
+      "success": "Twój e-mail jest zweryfikowany. Możesz teraz dołączyć do ligi.",
+      "fallbackError": "Ten link weryfikacyjny jest nieprawidłowy lub wygasł.",
+      "continue": "Kontynuuj logowanie"
+    }
+  },
+  "challenges": {
+    "title": "Wyzwania",
+    "uncategorized": "nieskategoryzowane",
+    "solvedOfTotal": "{solved} z {total} rozwiązane",
+    "manage": "Zarządzaj wyzwaniami",
+    "doneManaging": "Zarządzanie zakończone",
+    "points": "{value} punktów",
+    "dynamic": "dynamiczny",
+    "dynamicSuffix": "(dynamiczny)",
+    "solvesCount": "{count, plural, one {# rozwiązanie} other {# rozwiązuje}}",
+    "chipAll": "Wszystkie",
+    "layout": {
+      "group": "Układ wyzwania",
+      "cards": "Karty",
+      "list": "Lista"
+    },
+    "availability": {
+      "all": "wszystkie",
+      "available": "dostępne",
+      "locked": "zablokowany"
+    },
+    "status": {
+      "draft": "Szkic",
+      "locked": "Zablokowane",
+      "lockedBadge": "🔒 Zablokowane",
+      "solved": "Rozwiązany",
+      "open": "Otwórz"
+    },
+    "gate": {
+      "endedTitle": "Konkurs zakończył się",
+      "notStartedTitle": "Ta konkurencja jeszcze się nie rozpoczęła",
+      "endedDescription": "Wyzwania są zamknięte. Dziękujemy za grę!",
+      "notStartedDescription": "Wyzwania pojawią się tutaj, gdy organizatorzy rozpoczną konkurs."
+    },
+    "paused": {
+      "banner": "⏸️ Konkurs jest wstrzymany.",
+      "manage": "Ogłoszenia są zamknięte dla konkurentów – nadal można poddać się testowi.",
+      "competitor": "Zgłoszenia flagowe są zamknięte do czasu wznowienia ich przez organizatorów.",
+      "dialog": "⏸️ Konkurs jest wstrzymany — zgłoszenia są zamknięte."
+    },
+    "empty": {
+      "title": "Brak wyzwań",
+      "manageDescription": "Dodaj swoje pierwsze wyzwanie, aby otworzyć konkurs — zapisz go jako szkic i opublikuj kiedy będzie gotowy.",
+      "competitorDescription": "Organizatorzy nie opublikowali jeszcze żadnych wyzwań. Sprawdź ponownie po otwarciu konkursu.",
+      "create": "Utwórz wyzwanie",
+      "categoryEmpty": "Brak wyzwań w tej kategorii.",
+      "filterEmpty": "Brak wyzwań pasujących do tego filtra."
+    },
+    "detail": {
+      "noDescription": "Brak opisu.",
+      "othersViewing": "{count, plural, one {# inne przeglądanie} other {# innych oglądających}}",
+      "lockedTitle": "Zablokowane",
+      "lockedBy": "Rozwiąż {names} , aby odblokować to wyzwanie.",
+      "lockedByGeneric": "Rozwiąż warunki wstępne tego wyzwania, aby go odblokować.",
+      "firstBlood": "Pierwsza krwi!",
+      "solved": "Rozwiązane!",
+      "pointsAwarded": "+{points} punktów",
+      "reducedFrom": "(zmniejszone z {value})",
+      "alreadySolved": "Rozwiązałeś to wyzwanie.",
+      "outOfGuesses": "Użyłeś wszystkich swoich odgadnięć do tego pytania.",
+      "chooseAnswer": "Wybierz odpowiedź",
+      "guessesRemaining": "{count, plural, one {# zgadnie pozostało.} other {Pozostało # odgadnięć.}}",
+      "penaltyNote": "Każda niewłaściwa zgadnia obniża wartość tego pytania o {pct}%.",
+      "flag": "Flaga",
+      "incorrectAnswer": "Nieprawidłowa odpowiedź.",
+      "incorrectFlag": "Nieprawidłowa flaga.",
+      "submitting": "Przesyłanie…",
+      "submitAnswer": "Wyślij odpowiedź",
+      "submitFlag": "Wyślij flagę"
+    },
+    "solveToast": {
+      "description": "{title} · +{points} punktów",
+      "descriptionReduced": "{title} · +{points} punktów (zmniejszone z {full})"
+    },
+    "notes": {
+      "team": "Notatki zespołu",
+      "mine": "Moje notatki",
+      "sharedDescription": "Współdzielona tablica rejestracyjna dla {name} — widoczna tylko dla twojej drużyny, na żywo podczas pisania.",
+      "privateDescription": "Prywatny szachownik dla tego wyzwania — tylko ty widzisz to i pozostaje w synchronizacji pomiędzy Twoimi urządzeniami."
+    },
+    "solves": {
+      "title": "Rozwiązania",
+      "empty": "Nie ma jeszcze żadnych rozwiązań — bądź pierwszym, który rozwiąże ten problem.",
+      "firstBlood": "Pierwsza krew"
+    },
+    "hints": {
+      "title": "Wskazówki",
+      "cost": "Koszt {cost} punktów",
+      "free": "Bezpłatna podpowiedź",
+      "reveal": "Ujawnij",
+      "revealing": "Ujawnianie…",
+      "revealedToast": "Wykryto podpowiedź",
+      "revealedCost": "−{cost} punktów"
+    },
+    "rating": {
+      "prompt": "Jak to było wyzwanie?",
+      "star": "Rate {n} out of 5",
+      "thanks": "Dziękujemy za opinię!",
+      "error": "Nie można przesłać oceny"
+    },
+    "admin": {
+      "listTitle": "Wyzwania",
+      "count": "{count, plural, one {# wyzwanie} other {# wyzwania}}",
+      "export": "Eksportuj",
+      "exportFailed": "Eksport nieudany",
+      "import": "Importuj",
+      "importing": "Importowanie…",
+      "importFailed": "Importowanie nie powiodło się",
+      "imported": "Zaimportowano {created, plural, one {# wyzwanie} other {# wyzwania}}",
+      "importedSkipped": "Zaimportowano {created, plural, one {# wyzwanie} other {# wyzwania}}, {skipped} pominięto",
+      "newChallenge": "Nowe wyzwanie",
+      "colTitle": "Rozporządzenie Rady (EWG) nr 2658/87 z dnia 23 lipca 1987 r. w sprawie nomenklatury taryfowej i statystycznej oraz w sprawie Wspólnej Taryfy Celnej (Dz.U. L 256 z 7.9.1987, s. 1).",
+      "colCategory": "Kategoria",
+      "colPoints": "Punkty",
+      "colState": "Stan",
+      "colActions": "Akcje",
+      "stateDraft": "szkic",
+      "statePublished": "opublikowane",
+      "dyn": "dyn",
+      "scheduled": "· zaplanowane",
+      "releasesTooltip": "Wydania {date}",
+      "dynamicTooltip": "Dynamiczny: {points}→{min} ponad ~{decay} rozwiązuje",
+      "edit": "Edytuj",
+      "publish": "Opublikuj",
+      "unpublish": "Cofnij publikację",
+      "delete": "Usuń",
+      "unpublishConfirmTitle": "Opublikować wyzwanie?",
+      "unpublishConfirmDescription": "\"{title}\" zostanie ukryty przed konkurentami, dopóki nie opublikujesz go ponownie.",
+      "unpublishConfirmLabel": "Cofnij publikację",
+      "deleteConfirmTitle": "Usunąć wyzwanie?",
+      "deleteConfirmDescription": "\"{title}\" wraz z załącznikami, wskazówkami i historią rozwiązywania zostaną trwale usunięte. Tej operacji nie można cofnąć.",
+      "deleteConfirmLabel": "Usuń",
+      "editTitle": "Edytuj wyzwanie",
+      "flagSetHint": "Flaga jest ustawiona. Pozostaw pole flagowe puste, aby go zachować.",
+      "noFlagHint": "Nie ustawiono jeszcze flagi — dodaj jedną przed publikacją.",
+      "fieldTitle": "Rozporządzenie Rady (EWG) nr 2658/87 z dnia 23 lipca 1987 r. w sprawie nomenklatury taryfowej i statystycznej oraz w sprawie Wspólnej Taryfy Celnej (Dz.U. L 256 z 7.9.1987, s. 1).",
+      "fieldDescription": "Opis",
+      "fieldCategory": "Kategoria",
+      "uncategorized": "Nieskategoryzowane",
+      "initialPoints": "Punkty początkowe",
+      "points": "Punkty",
+      "scoring": "Punkty",
+      "scoringStatic": "Statyczne (punkty stałe)",
+      "scoringDynamic": "Dynamiczne (rozkłada się jako więcej rozwiązania)",
+      "minPoints": "Minimalne punkty",
+      "decay": "Rozkład (rozpuszczalniki)",
+      "dynamicHint": "Wartość {points} dopóki nie rozwiąże akumulacji, rozpadając się w stronę {min} ponad ~{decay} . Każdy soler zawsze posiada aktualną wartość.",
+      "difficulty": "Trudności",
+      "tags": "Tagi",
+      "releaseAt": "Zwolnienie w",
+      "clear": "Wyczyść",
+      "releaseHint": "Opcjonalne. Opublikowane wyzwanie pozostaje ukryte przed konkurentami do tego czasu — pozostaw puste, aby opublikować zaraz po jego opublikowaniu.",
+      "prerequisites": "Wymagania wstępne",
+      "prerequisitesHint": "Konkurenci muszą je rozwiązać przed odblokowaniem tego wyzwania (łańcuch odblokowania). Opcjonalne.",
+      "noOtherChallenges": "Brak innych wyzwań.",
+      "flagType": "Typ flagi",
+      "flagStatic": "Statyczne",
+      "flagRegex": "Regex",
+      "flagMultipleChoice": "Wielokrotny wybór",
+      "options": "Opcje",
+      "optionsHint": "Dodaj opcje wybierane przez konkurenta i oznacz właściwy.",
+      "optionsHintKeep": "Dodaj opcje wybierane przez konkurenta i oznacz poprawne. Pozostaw niezaznaczone, aby zachować bieżącą odpowiedź.",
+      "markCorrect": "Opcja Oznacz {n} poprawna",
+      "optionPlaceholder": "Opcja {n}",
+      "removeOption": "Usuń opcję {n}",
+      "addOption": "+ Dodaj opcję",
+      "flagPattern": "Wzór flagi",
+      "flag": "Flaga",
+      "flagUnchanged": "(bez zmian)",
+      "caseInsensitive": "Flaga niewrażliwa na sprawy",
+      "saving": "Zapisywanie…",
+      "saveChanges": "Zapisz zmiany",
+      "createChallenge": "Utwórz wyzwanie",
+      "cancel": "Anuluj",
+      "categories": "Kategorie",
+      "categoriesDescription": "Grupuj wyzwania według tematu.",
+      "deleteCategoryAria": "Usuń {name}",
+      "noCategoriesYet": "Brak kategorii.",
+      "newCategory": "Nowa kategoria",
+      "add": "Dodaj",
+      "deleteCategoryConfirmTitle": "Usunąć kategorię?",
+      "deleteCategoryConfirmDescription": "\"{name}\" zostanie usunięty. Wyzwania nie zostaną usunięte — stają się niekategoryzowane.",
+      "deleteCategoryConfirmLabel": "Usuń",
+      "attachments": {
+        "title": "Załączniki",
+        "download": "Pobierz",
+        "remove": "Usuń",
+        "removeConfirmTitle": "Usunąć załącznik?",
+        "removeConfirmDescription": "\"{filename}\" zostanie usunięty z tego wyzwania.",
+        "removeConfirmLabel": "Usuń",
+        "empty": "Brak załączonych plików.",
+        "uploading": "Przesyłanie…"
+      },
+      "hints": {
+        "title": "Wskazówki",
+        "releases": "Wydania {date}",
+        "hidden": "Hidden",
+        "cost": "{cost} punktów",
+        "publish": "Opublikuj",
+        "remove": "Usuń",
+        "bodyPlaceholder": "Tekst podpowiedzi",
+        "costAria": "Koszt podpowiedzi",
+        "add": "Dodaj podpowiedź",
+        "hiddenUntilReleased": "Ukryte do czasu wydania",
+        "releaseLabel": "Zwolnienie w (opcjonalnie)",
+        "releaseTimeAria": "Czas wydania podpowiedzi",
+        "deleteConfirmTitle": "Usunąć podpowiedź?",
+        "deleteConfirmDescription": "Ta podpowiedź zostanie usunięta z wyzwania.",
+        "deleteConfirmLabel": "Usuń"
+      },
+      "guesses": {
+        "title": "Odgadnięcia",
+        "description": "Odgadnięcia wielokrotnego wyboru są ograniczone w całej konkurencji. Zresetuj je, aby przyznać nowy zestaw — historia jest zachowana.",
+        "selectTeam": "Wybierz zespół…",
+        "selectCompetitor": "Wybierz konkurenta…",
+        "resetSelected": "Resetuj dla wybranych",
+        "resetEveryone": "Resetuj dla wszystkich",
+        "resetToast": "Resetowanie odgadnięć",
+        "resetEveryoneToast": "Odgadnięcia zresetowane dla wszystkich",
+        "resetError": "Nie można zresetować",
+        "resetEveryoneConfirmTitle": "Zresetować odgadnięcia dla wszystkich?",
+        "resetEveryoneConfirmDescription": "Każdy konkurent otrzymuje nowy zestaw odgadnięć na to wyzwanie. Ich historia jest zachowana.",
+        "resetEveryoneConfirmLabel": "Resetuj dla wszystkich"
+      }
+    }
+  },
+  "support": {
+    "title": "Wsparcie",
+    "openCount": "Otwarto {count}",
+    "yourTickets": "Twoje bilety",
+    "stats": {
+      "all": "Wszystkie bilety",
+      "open": "Otwórz",
+      "resolved": "Rozwiązano"
+    },
+    "status": {
+      "all": "wszystkie",
+      "open": "Otwarty",
+      "resolved": "rozwiązane"
+    },
+    "searchPlaceholder": "Szukaj zgłoszeń…",
+    "you": "Ty",
+    "messageCount": "{count, plural, one {# wiadomość} other {# wiadomości}}",
+    "noMatchSearch": "Brak zgłoszeń {filter}pasujących do Twojego wyszukiwania.",
+    "noMatchFilter": "Żadne zgłoszenie {filter}nie pasuje do tego filtra.",
+    "empty": {
+      "staffTitle": "Brak biletów",
+      "competitorTitle": "Potrzebujesz ręki?",
+      "staffDescription": "Kiedy konkurenci otworzą bilety na wsparcie, pojawią się tutaj — otrzymasz ratunek w momencie, gdy jedna ziemię.",
+      "competitorDescription": "Uczcisz się na wyzwaniu lub uderzysz w nagę? Otwórz bilet i personel odbierze go na żywo."
+    },
+    "new": {
+      "trigger": "Nowe zgłoszenie",
+      "title": "Nowe zgłoszenie",
+      "description": "Zadanie pytania – pracownicy zobaczą je i odpowiedzą.",
+      "subject": "Temat",
+      "challenge": "Powiązane wyzwanie (opcjonalnie)",
+      "challengeNone": "Brak",
+      "message": "Wiadomość",
+      "screenshots": "Zrzuty ekranu (opcjonalne)",
+      "opening": "Otwieranie…",
+      "submit": "Otwórz bilet",
+      "openedToast": "Zgłoszenie otwarte",
+      "openedPartialToast": "Zgłoszenie otwarte, ale nie można dołączyć {files}"
+    },
+    "thread": {
+      "fallbackTitle": "Zgłoszenie",
+      "assignedTo": "· przypisany do {name}",
+      "loading": "Ładowanie…",
+      "judgeLooking": "Sędzia przygląda się temu zgłoszeniu",
+      "othersHere": "{count, plural, one {# jeszcze tutaj} other {# innych tutaj}}",
+      "internalNote": "notatka wewnętrzna",
+      "replyAria": "Odpowiedz",
+      "replyPlaceholder": "Napisz odpowiedź…",
+      "internalCheckbox": "Notatka wewnętrzna",
+      "assignToMe": "Przypisz do mnie",
+      "assignedToast": "Przypisane do Ciebie",
+      "resolve": "Rozwiąż",
+      "resolvedToast": "Zgłoszenie rozwiązane",
+      "sending": "Wysyłanie…",
+      "send": "Wyślij",
+      "replyPartialToast": "Odpowiedź wysłana, ale {files} nie może zostać dołączona",
+      "staffNotes": "Notatki personelu",
+      "staffNotesDesc": "Współdzielony dokument roboczy dla personelu na tym bilecie - nigdy nie pokazany konkurentowi, żyje jak pisasz."
+    },
+    "attachments": {
+      "previewUnavailable": "Podgląd niedostępny",
+      "viewFull": "Zobacz pełny rozmiar {filename}",
+      "loadFailed": "Nie można załadować tego obrazu.",
+      "removeConfirmTitle": "Usunąć załącznik?",
+      "removeConfirmDescription": "\"{filename}\" zostanie usunięty z tego zgłoszenia.",
+      "removeConfirmLabel": "Usuń",
+      "remove": "Usuń"
+    },
+    "picker": {
+      "attachAria": "Dołącz zrzuty ekranu",
+      "notImage": "{name} nie jest obrazem PNG, JPEG ani WebP",
+      "tooLarge": "{name} jest większy niż {max}",
+      "tooMany": "tylko obrazy {max} mogą być dołączone do zgłoszenia",
+      "skipped": "Pominięto: {reasons}.",
+      "hint": "PNG, JPEG lub WebP · do {max} każdy · {remaining} pozostało",
+      "limitReached": "Osiągnięto limit załączników dla tego zgłoszenia",
+      "remove": "Usuń"
+    }
+  },
+  "feedback": {
+    "title": "Informacje zwrotne",
+    "subtitle": "ankiety",
+    "newSurvey": "Nowa ankieta",
+    "untitledSurvey": "Ankieta bez tytułu",
+    "createdToast": "Ankieta utworzona",
+    "createError": "Nie można utworzyć",
+    "moduleDisabled": "Moduł informacji zwrotnej jest wyłączony dla tej ligi.",
+    "empty": {
+      "staffTitle": "Brak ankiet",
+      "competitorTitle": "Brak otwartych ankiet",
+      "staffDescription": "Zbuduj ankietę, aby zebrać informacje zwrotne — skala ocen, wielokrotny wybór i tekst z eksportem CSV kiedy pojawią się odpowiedzi.",
+      "competitorDescription": "Kiedy organizatorzy otworzą ankietę, będziesz w stanie odpowiedzieć na to tutaj.",
+      "create": "Utwórz ankietę"
+    },
+    "card": {
+      "open": "Otwarty",
+      "closed": "zamknięte",
+      "responded": "odpowiedział",
+      "questionCount": "{count, plural, one {# pytanie} other {# pytania}}",
+      "responseCount": "{count, plural, one {# odpowiedź} other {# odpowiedzi}}",
+      "respond": "Odpowiedz",
+      "edit": "Edytuj",
+      "results": "Wyniki",
+      "delete": "Usuń",
+      "deleteConfirmTitle": "Usunąć \"{title}\"?",
+      "deleteConfirmDescription": "Badanie i wszystkie jego odpowiedzi zostały trwale usunięte.",
+      "deleteConfirmLabel": "Usuń ankietę"
+    },
+    "types": {
+      "rating_1_10": "Rating (1–10)",
+      "rating_1_5": "Rating (1–5)",
+      "short_text": "Krótki tekst",
+      "long_text": "Długi tekst",
+      "multiple_choice": "Wielokrotny wybór"
+    },
+    "editor": {
+      "title": "Edytuj ankietę",
+      "surveyTitle": "Rozporządzenie Rady (EWG) nr 2658/87 z dnia 23 lipca 1987 r. w sprawie nomenklatury taryfowej i statystycznej oraz w sprawie Wspólnej Taryfy Celnej (Dz.U. L 256 z 7.9.1987, s. 1).",
+      "description": "Opis (opcjonalnie)",
+      "openForResponses": "Otwarte dla odpowiedzi",
+      "openHint": "(konkurenci widzą tylko badania otwarte)",
+      "saveDetails": "Zapisz szczegóły",
+      "savedToast": "Ankieta zapisana",
+      "saveError": "Nie można zapisać",
+      "questions": "Pytania",
+      "noQuestions": "Brak pytań.",
+      "required": "wymagane",
+      "moveUp": "Przesuń w górę",
+      "moveDown": "Przesuń w dół",
+      "edit": "Edytuj",
+      "delete": "Usuń",
+      "deleteQuestionTitle": "Usunąć to pytanie?",
+      "deleteQuestionDescription": "Pytanie i wszelkie odpowiedzi na nie są usuwane.",
+      "deleteQuestionLabel": "Usuń",
+      "saveQuestionError": "Nie można zapisać pytania",
+      "addQuestionError": "Nie można dodać pytania",
+      "addQuestion": "+ Dodaj pytanie",
+      "questionLabel": "Pytanie",
+      "questionPlaceholder": "np. w jaki sposób była trudność?",
+      "requiredCheckbox": "Wymagane",
+      "optionsLabel": "Opcje (jeden na linię, co najmniej dwa)",
+      "saveQuestion": "Zapisz pytanie",
+      "cancel": "Anuluj"
+    },
+    "response": {
+      "thanksToast": "Dziękujemy za opinię!",
+      "submitError": "Nie można przesłać",
+      "noQuestions": "Ta ankieta nie ma jeszcze żadnych pytań.",
+      "cancel": "Anuluj",
+      "submitting": "Przesyłanie…",
+      "submit": "Prześlij"
+    },
+    "results": {
+      "title": "Wyniki",
+      "titleFor": "Wyniki – {title}",
+      "loading": "Ładowanie wyników…",
+      "noResponses": "Brak odpowiedzi.",
+      "responseCount": "{count, plural, one {# odpowiedź} other {# odpowiedzi}}",
+      "close": "Zamknij",
+      "exporting": "Eksportowanie…",
+      "exportCsv": "Eksportuj CSV",
+      "exportError": "Eksport nieudany",
+      "answered": "{count} odpowiedział",
+      "avgSuffix": "· śr. {value}",
+      "noText": "Brak odpowiedzi tekstowych."
+    },
+    "ratings": {
+      "title": "Ocena wyzwań",
+      "description": "Średni rating konkurenta (1–5) na wyzwanie – najpierw najwyższy",
+      "colChallenge": "Wyzwanie",
+      "colAverage": "Średnia",
+      "colRatings": "Oceny"
+    }
+  },
+  "profile": {
+    "title": "Profil",
+    "subtitle": "Twoje konto i preferencje powiadomień",
+    "tabs": {
+      "account": "Konto",
+      "notifications": "Powiadomienia",
+      "tokens": "Tokeny API",
+      "certificates": "Certyfikaty"
+    },
+    "verify": {
+      "title": "Potwierdź swój adres e-mail",
+      "description": "Ta instancja wymaga zweryfikowanego adresu e-mail, zanim będziesz mógł dołączyć do zawodu.",
+      "sending": "Wysyłanie…",
+      "sent": "Wysłane — sprawdź swoją skrzynkę odbiorczą",
+      "resend": "Wyślij ponownie e-mail weryfikacyjny",
+      "sentToast": "E-mail weryfikacyjny wysłany",
+      "sendError": "Nie można wysłać tego",
+      "noEmail": "Twoje konto nie ma adresu e-mail w pliku. Dodaj je w polu <b>E-mail</b> poniżej, a my wyślemy Ci link weryfikacyjny."
+    },
+    "password": {
+      "title": "Konto",
+      "description": "Zmień hasło",
+      "displayName": "Wyświetlana nazwa",
+      "current": "Aktualne hasło",
+      "new": "Nowe hasło",
+      "saving": "Zapisywanie…",
+      "submit": "Zmień hasło",
+      "changed": "Hasło zmienione.",
+      "changedToast": "Hasło zmienione"
+    },
+    "email": {
+      "title": "E-mail",
+      "descriptionSet": "Używane do resetowania hasła i powiadomień o koncie.",
+      "descriptionUnset": "Nie ustawiono adresu e-mail — dodaj go, aby włączyć resetowanie hasła.",
+      "address": "Adres e-mail",
+      "changeHintVerify": "Zmiana tego będzie wymagała weryfikacji nowego adresu, zanim będziesz mógł dołączyć do zawodu.",
+      "changeHintNotify": "Informujemy, że Twój aktualny adres został zmieniony.",
+      "current": "Aktualne hasło",
+      "currentHint": "Potwierdzenie Twojego hasła umożliwia kogoś uzyskanie dostępu do otwartej sesji, wskazując miejsce resetowania hasła.",
+      "saving": "Zapisywanie…",
+      "update": "Aktualizuj e-mail",
+      "add": "Dodaj e-mail",
+      "remove": "Usuń",
+      "updatedToast": "E-mail zaktualizowany",
+      "addedToast": "E-mail dodany",
+      "removedToast": "E-mail usunięty",
+      "verifySuffix": " — sprawdź swoją skrzynkę odbiorczą aby ją zweryfikować",
+      "removeConfirmTitle": "Usunąć swój adres e-mail?",
+      "removeConfirmDescription": "Stracisz dostęp do resetowania hasła, a administrator będzie musiał ustawić adres, aby go odzyskać.",
+      "removeConfirmLabel": "Usuń"
+    },
+    "notifications": {
+      "title": "Preferencje powiadomień",
+      "description": "Kontroluj, co dociera do dzwonka powiadomień i jak jesteś ostrzeżony.",
+      "inAppHeading": "Powiadomienia w aplikacji",
+      "deliveryHeading": "Dostawa",
+      "saving": "Zapisywanie…",
+      "save": "Zapisz ustawienia",
+      "unsaved": "Niezapisane zmiany",
+      "savedToast": "Ustawienia zapisane",
+      "saveError": "Nie można zapisać",
+      "browserBlockedTitle": "Powiadomienia przeglądarki są zablokowane",
+      "browserBlockedBody": "Zezwalaj na powiadomienia dla tej witryny w ustawieniach przeglądarki, a następnie spróbuj ponownie.",
+      "permissionDeniedTitle": "Nie przyznano uprawnień",
+      "permissionDeniedBody": "Powiadomienia przeglądarki pozostają wyłączone do czasu ich dopuszczenia.",
+      "inApp": {
+        "inapp_tickets": {
+          "label": "Bilety wsparcia",
+          "hint": "Nowe zgłoszenia, odpowiedzi, zadania i rozwiązania."
+        },
+        "inapp_automations": {
+          "label": "Automatyzacja i alerty",
+          "hint": "Powiadomienia wysyłane do Ciebie przez reguły automatyzacji konkurencji."
+        },
+        "inapp_announcements": {
+          "label": "Ogłoszenia",
+          "hint": "Ogłoszenia organizatora. Pilne zawsze się pojawiają, nawet z tym wyłączone."
+        }
+      },
+      "browser": {
+        "label": "Powiadomienia przeglądarki",
+        "hint": "Pokaż powiadomienia na pulpicie, gdy coś się pojawi, gdy post jest otwarty."
+      },
+      "sound": {
+        "label": "Dźwięk dla biletów wsparcia",
+        "hint": "Odtwarzaj krótką pomoc po pojawieniu się nowego zgłoszenia lub odpowiedzi."
+      }
+    },
+    "tokens": {
+      "title": "Tokeny API",
+      "description": "Użyj tokenu zamiast logowania do wywołania API ze skryptu. Każdy z nich działa jako Ty, za twoimi pozwoleniami i jest wyświetlany tylko raz.",
+      "create": "Utwórz token",
+      "loadError": "Nie można załadować tokenów: {message}",
+      "emptyTitle": "Brak tokenów API",
+      "emptyDescription": "Utwórz jeden, aby wywołać flagowe API ze skryptu lub zadania CI.",
+      "colDescription": "Opis",
+      "colExpires": "Wygasa",
+      "colLastUsed": "Ostatnio używane",
+      "colStatus": "Status",
+      "colActions": "Akcje",
+      "never": "Nigdy",
+      "status": {
+        "active": "Aktywne",
+        "expired": "Wygasły",
+        "revoked": "Revoked"
+      },
+      "revoke": "Revoke",
+      "revokeConfirmTitle": "Unieważnić ten token?",
+      "revokeConfirmDescription": "{description} natychmiast przestanie uwierzytelniać. Tej operacji nie można cofnąć.",
+      "revokeConfirmLabel": "Revoke",
+      "revokedToast": "Token revoked",
+      "revokeError": "Nie można odwołać",
+      "createTitle": "Utwórz token API",
+      "createDescription": "Token działa jako Ty, z własnymi uprawnieniami. Tokeny mogą być tworzone tylko dla Twojego konta.",
+      "descLabel": "Opis",
+      "descPlaceholder": "e.g. CI grading bot",
+      "descHint": "Więc możesz później powiedzieć swoje tokeny.",
+      "expiresLabel": "Wygasa za (dni)",
+      "creating": "Tworzenie…",
+      "createSubmit": "Utwórz token",
+      "createError": "Nie można utworzyć tokenu",
+      "revealTitle": "Token utworzony",
+      "revealDescription": "Skopiuj go teraz — nie będzie wyświetlany ponownie. Wyślij go w nagłówku <code>Autoryzacji: Bearer</code>.",
+      "copyError": "Nie można skopiować — wybierz i skopiuj ręcznie",
+      "copied": "Skopiowano",
+      "copy": "Kopiuj",
+      "done": "Gotowe"
+    },
+    "certificates": {
+      "title": "Certyfikaty",
+      "description": "Certyfikaty, które zdobyłeś w różnych zawodach.",
+      "empty": "Jeszcze nie ma certyfikatów. Kiedy organizator wydaje certyfikaty dla konkursu, w którym uczestniczyłeś, pojawią się tutaj.",
+      "released": "Wydano {date}",
+      "preparing": "Przygotowywanie…",
+      "download": "Pobierz"
+    }
+  },
+  "teams": {
+    "loading": "Ładowanie zespołu…",
+    "requireApproval": "Wymagaj zgody kapitana aby dołączyć",
+    "directory": {
+      "title": "Drużyny",
+      "count": "{count, plural, one {# zespół zarejestrował się} other {# zespoły zarejestrowały się}}",
+      "empty": "Brak zespołów.",
+      "colName": "Nazwisko",
+      "colMembers": "Członkowie"
+    },
+    "mine": {
+      "subtitle": "Twoja drużyna",
+      "inviteCode": "Kod zaproszenia",
+      "inviteHint": "Podziel się tym kodem z drużynami, aby mogli do niego dołączyć.",
+      "captain": "kapitan",
+      "leave": "Opuść zespół",
+      "leaving": "Opuszczanie…",
+      "leaveConfirmTitle": "Opuścić ten zespół?",
+      "leaveConfirmDescription": "Stracisz dostęp do wspólnego postępu zespołu. Możesz dołączyć lub utworzyć inny zespół, gdy rejestracja jest otwarta.",
+      "leaveConfirmAction": "Opuść zespół",
+      "leftToast": "Opuszczona drużyna"
+    },
+    "profile": {
+      "label": "Profil zespołu",
+      "affiliation": "Partnerstwo",
+      "country": "W związku z powyższym Komisja stwierdza, że w okresie objętym dochodzeniem przeglądowym przywóz produktu objętego postępowaniem z ChRL nie mógł zostać objęty środkami antydumpingowymi.",
+      "website": "Strona internetowa",
+      "readonlyAffiliation": "Partnerstwo: {value}",
+      "readonlyCountry": "Kraj: {value}",
+      "readonlyWebsite": "Strona internetowa: {value}",
+      "save": "Zapisz profil",
+      "saving": "Zapisywanie…",
+      "savedToast": "Profil zespołu zapisany"
+    },
+    "joinRequests": {
+      "label": "Dołącz do próśb ({count})",
+      "approve": "Zatwierdź",
+      "reject": "Odrzuć"
+    },
+    "create": {
+      "title": "Utwórz zespół",
+      "subtitle": "Będziesz kapitanem.",
+      "nameLabel": "Nazwa zespołu",
+      "submit": "Utwórz zespół",
+      "creating": "Tworzenie…",
+      "createdToast": "Utworzono {name}"
+    },
+    "join": {
+      "title": "Dołącz do drużyny",
+      "subtitle": "Użyj kodu zaproszenia od kompana.",
+      "codeLabel": "Kod zaproszenia",
+      "submit": "Dołącz do zespołu",
+      "joining": "Dołączanie do…",
+      "pendingToast": "Wysłany wniosek – oczekiwanie na zatwierdzenie przez kapitana",
+      "joinedToast": "Dołączył do zespołu"
+    },
+    "rulesAcceptError": "Nie można zapisać akceptacji"
+  },
+  "participants": {
+    "title": "Uczestnicy",
+    "subtitle": "{name} · {mode}",
+    "modeTeams": "drużyny",
+    "modeIndividual": "tryb indywidualny",
+    "empty": {
+      "title": "Brak konkurentów",
+      "description": "Zarejestrowani konkurenci pojawiają się tutaj, gdy dołączają — udostępniaj łącze do połączenia, aby dotrzeć do ludzi."
+    },
+    "roster": {
+      "title": "Konkurenci",
+      "count": "{count} zarejestrowany",
+      "createAward": "Utwórz nagrodę",
+      "searchPlaceholder": "Szukaj konkurentów…",
+      "colRank": "#",
+      "colCompetitor": "Konkurent",
+      "colSolves": "Rozwiązania",
+      "colPoints": "Punkty",
+      "colJoined": "Dołączono",
+      "you": "Ty",
+      "noMatch": "Żaden z konkurentów nie pasuje do Twojego wyszukiwania."
+    },
+    "you": {
+      "subtitle": "Twoje stanowisko w tej konkursie",
+      "rankLabel": "Ranga",
+      "rankValue": "{rank} z {total}",
+      "pointsLabel": "Punkty",
+      "solvesLabel": "Rozwiązania"
+    },
+    "award": {
+      "title": "Utwórz nagrodę",
+      "description": "Przyznaj nagrodę z tytułem i jej punkty wybranym konkurentom. Punkty są dodawane do ich wyniku w tablicy wyników.",
+      "titleLabel": "Rozporządzenie Rady (EWG) nr 2658/87 z dnia 23 lipca 1987 r. w sprawie nomenklatury taryfowej i statystycznej oraz w sprawie Wspólnej Taryfy Celnej (Dz.U. L 256 z 7.9.1987, s. 1).",
+      "titlePlaceholder": "np. najlepszy zapis",
+      "descLabel": "Opis (opcjonalnie)",
+      "pointsLabel": "Punkty",
+      "pointsHint": "0 dla plakietki bez efektu punktowania; wartość ujemna do odliczenia.",
+      "recipients": "Odbiorcy",
+      "selectedCount": "Wybrano {count}",
+      "searchPlaceholder": "Szukaj konkurentów…",
+      "noMatch": "Żaden konkurent nie zgadza się.",
+      "pts": "{points} punktów",
+      "submit": "Przyznanie dotacji",
+      "submitting": "Nagroda…",
+      "successToast": "{count, plural, one {Przyznano # konkurentów} other {Przyznano # konkurentów}}",
+      "errorToast": "Nie można utworzyć nagrody"
+    }
+  },
+  "certificates": {
+    "viewInProfile": "Zobacz w profilu",
+    "preparing": "Przygotowywanie…",
+    "download": "Pobierz",
+    "ready": {
+      "title": "Twój certyfikat jest gotowy!",
+      "description": "Gratulacje z okazji wzięcia udziału w {competition}. Pobierz certyfikat, aby go udostępnić — zawsze możesz go znaleźć ponownie w swoim profilu."
+    },
+    "card": {
+      "ready": "Twój certyfikat jest gotowy 🎓",
+      "hint": "Pobierz go, aby udostępnić lub znajdź go w dowolnym momencie w swoim profilu."
+    }
+  },
+  "ai": {
+    "assistant": {
+      "admin": {
+        "title": "Asystent Organizatora",
+        "openLabel": "Otwórz asystenta organizatora",
+        "intro": "Zapytaj o stoiska, zgłoszenia, statystyki wyzwań, opinie lub ogłoszenia. Czytam tylko — nie mogę nic zmienić — i odpowiadam na to, co możesz zobaczyć.",
+        "suggestion1": "W jaki sposób do tej pory trwa konkurencja?",
+        "suggestion2": "Czy są jakieś otwarte zgłoszenia do wsparcia?",
+        "suggestion3": "Jakie wyzwania są obecnie najtrudniejsze?"
+      },
+      "competitor": {
+        "title": "Asystent",
+        "openLabel": "Otwórz asystenta",
+        "intro": "Zapytaj o platformę, ocenę, swoją pozycję lub ogłoszenia. Ile pomocy mogę udzielić z wyzwaniami, to organizatorzy - i nigdy nie ujawniam flag.",
+        "suggestion1": "Jak działa zgłoszenie flag?",
+        "suggestion2": "Jaka jest moja aktualna ranga?",
+        "suggestion3": "Jakiekolwiek ostatnie ogłoszenia?"
+      },
+      "readOnly": "Tylko do odczytu",
+      "readOnlyWithName": "{name} · tylko do odczytu",
+      "tokensTitle": "Tokeny wydane przez asystenta w tym konkursie",
+      "tokens": "{count} tokeny",
+      "expand": "Rozwiń asystenta",
+      "shrink": "Zmniejsz asystenta",
+      "close": "Zamknij asystenta",
+      "lengthLimit": "Ta konwersacja osiągnęła swój limit.",
+      "startNew": "Rozpocznij nowy czat",
+      "startError": "Nie można uruchomić asystenta.",
+      "tryAgain": "Spróbuj ponownie",
+      "placeholderReady": "Zapytaj asystenta…",
+      "placeholderConnecting": "Łączenie…",
+      "placeholderStarting": "Uruchamianie…",
+      "send": "Wyślij",
+      "thinking": "Asystent myśli",
+      "disclosure": {
+        "heading": "Zanim zaczniesz",
+        "point1": "Twoje wiadomości są wysyłane do punktu końcowego modelu AI skonfigurowanego przez operatorów tej witryny.",
+        "point2": "Pracownicy konkursu mogą przeglądać Twoje rozmowy z asystentem.",
+        "point3": "Asystent jest tylko do odczytu, nigdy nie ujawnia flagi i jak wiele wyzwań daje mu organizator.",
+        "accept": "Rozumiem — zacznij czatować",
+        "saving": "Zapisywanie…",
+        "decline": "Nie teraz"
+      }
+    }
+  },
+  "competitions": {
+    "rules": {
+      "title": "Reguły konkurencji",
+      "acceptDescription": "Musisz zaakceptować te reguły, zanim będziesz mógł konkurować.",
+      "displayDescription": "Przejrzyj zasady tej konkurencji.",
+      "empty": "Brak tekstu reguł.",
+      "agree": "Przeczytałem i akceptuję te zasady.",
+      "cancel": "Anuluj",
+      "accept": "Zaakceptuj",
+      "accepting": "Akceptowanie…",
+      "continue": "Kontynuuj",
+      "acceptedToast": "Reguły zaakceptowane",
+      "acceptErrorToast": "Nie można zapisać akceptacji"
+    }
+  }
+}

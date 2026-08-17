@@ -10,6 +10,9 @@ import { renderWithIntl } from "@/test/intl";
 const mockUseSearchParams = vi.fn();
 vi.mock("next/navigation", () => ({
   useSearchParams: () => mockUseSearchParams(),
+  // The page mounts LocaleSwitcher, which reads the router now that >1 locale
+  // ships (ADR-0029); refresh() only fires on a language change, never at render.
+  useRouter: () => ({ refresh: () => {} }),
 }));
 
 const mockMutate = vi.fn();

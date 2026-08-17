@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { RulesAcceptModal } from "@/components/competitions/rules-accept-modal";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
 import { useAcceptRules, useCompetitionRules } from "@/lib/hooks/use-rules";
@@ -12,6 +14,7 @@ import { toast } from "@/stores/toast";
 // not staff-exempt), so a non-member browsing a public competition is never
 // nagged, and display-only rules never block anyone.
 export function RulesGate() {
+  const t = useTranslations("competitions.rules");
   const { competitionId } = useActiveCompetition();
   const rules = useCompetitionRules(competitionId ?? "");
   const accept = useAcceptRules();
@@ -27,9 +30,9 @@ export function RulesGate() {
       pending={accept.isPending}
       onConfirm={() =>
         accept.mutate(competitionId, {
-          onSuccess: () => toast("Rules accepted", { variant: "success" }),
+          onSuccess: () => toast(t("acceptedToast"), { variant: "success" }),
           onError: (err) =>
-            toast("Couldn't record acceptance", {
+            toast(t("acceptErrorToast"), {
               description: (err as Error).message,
               variant: "destructive",
             }),

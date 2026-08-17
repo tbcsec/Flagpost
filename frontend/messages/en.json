@@ -1163,5 +1163,20 @@
         "decline": "Not now"
       }
     }
+  },
+  "competitions": {
+    "rules": {
+      "title": "Competition rules",
+      "acceptDescription": "You must accept these rules before you can compete.",
+      "displayDescription": "Please review the rules for this competition.",
+      "empty": "No rules text.",
+      "agree": "I have read and accept these rules.",
+      "cancel": "Cancel",
+      "accept": "Accept",
+      "accepting": "Accepting…",
+      "continue": "Continue",
+      "acceptedToast": "Rules accepted",
+      "acceptErrorToast": "Couldn't record acceptance"
+    }
   }
 }

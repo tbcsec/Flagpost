@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +28,7 @@ export function CertificateReleasedModal({
   competitionName: string;
   onClose: () => void;
 }) {
+  const t = useTranslations("certificates");
   const download = useDownloadMyCertificate(competitionId);
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -35,21 +37,20 @@ export function CertificateReleasedModal({
           <div className="text-5xl" aria-hidden>
             🎓
           </div>
-          <DialogTitle>Your certificate is ready!</DialogTitle>
+          <DialogTitle>{t("ready.title")}</DialogTitle>
           <DialogDescription>
-            Congratulations on taking part in {competitionName}. Download your
-            certificate to share it — you can always find it again under your profile.
+            {t("ready.description", { competition: competitionName })}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="sm:justify-center">
           <Button variant="outline" asChild onClick={onClose}>
-            <Link href="/profile?tab=certificates">View in profile</Link>
+            <Link href="/profile?tab=certificates">{t("viewInProfile")}</Link>
           </Button>
           <Button
             disabled={download.isPending}
             onClick={() => download.mutate(`certificate-${competitionName}.png`)}
           >
-            {download.isPending ? "Preparing…" : "Download"}
+            {download.isPending ? t("preparing") : t("download")}
           </Button>
         </DialogFooter>
       </DialogContent>

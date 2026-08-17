@@ -959,5 +959,111 @@
       "preparing": "Preparing…",
       "download": "Download"
     }
+  },
+  "teams": {
+    "loading": "Loading team…",
+    "requireApproval": "Require captain approval to join",
+    "directory": {
+      "title": "Teams",
+      "count": "{count, plural, one {# team registered} other {# teams registered}}",
+      "empty": "No teams yet.",
+      "colName": "Name",
+      "colMembers": "Members"
+    },
+    "mine": {
+      "subtitle": "Your team",
+      "inviteCode": "Invite code",
+      "inviteHint": "Share this code with teammates so they can join.",
+      "captain": "captain",
+      "leave": "Leave team",
+      "leaving": "Leaving…",
+      "leaveConfirmTitle": "Leave this team?",
+      "leaveConfirmDescription": "You'll lose access to the team's shared progress. You can join or create another team while registration is open.",
+      "leaveConfirmAction": "Leave team",
+      "leftToast": "Left team"
+    },
+    "profile": {
+      "label": "Team profile",
+      "affiliation": "Affiliation",
+      "country": "Country",
+      "website": "Website",
+      "readonlyAffiliation": "Affiliation: {value}",
+      "readonlyCountry": "Country: {value}",
+      "readonlyWebsite": "Website: {value}",
+      "save": "Save profile",
+      "saving": "Saving…",
+      "savedToast": "Team profile saved"
+    },
+    "joinRequests": {
+      "label": "Join requests ({count})",
+      "approve": "Approve",
+      "reject": "Reject"
+    },
+    "create": {
+      "title": "Create a team",
+      "subtitle": "You'll be the captain.",
+      "nameLabel": "Team name",
+      "submit": "Create team",
+      "creating": "Creating…",
+      "createdToast": "Created {name}"
+    },
+    "join": {
+      "title": "Join a team",
+      "subtitle": "Use an invite code from a teammate.",
+      "codeLabel": "Invite code",
+      "submit": "Join team",
+      "joining": "Joining…",
+      "pendingToast": "Request sent — awaiting captain approval",
+      "joinedToast": "Joined team"
+    },
+    "rulesAcceptError": "Couldn't record acceptance"
+  },
+  "participants": {
+    "title": "Participants",
+    "subtitle": "{name} · {mode}",
+    "modeTeams": "teams",
+    "modeIndividual": "individual mode",
+    "empty": {
+      "title": "No competitors yet",
+      "description": "Registered competitors show up here as they join — share the join link to get people in."
+    },
+    "roster": {
+      "title": "Competitors",
+      "count": "{count} registered",
+      "createAward": "Create award",
+      "searchPlaceholder": "Search competitors…",
+      "colRank": "#",
+      "colCompetitor": "Competitor",
+      "colSolves": "Solves",
+      "colPoints": "Points",
+      "colJoined": "Joined",
+      "you": "You",
+      "noMatch": "No competitors match your search."
+    },
+    "you": {
+      "subtitle": "Your standing in this competition",
+      "rankLabel": "Rank",
+      "rankValue": "{rank} of {total}",
+      "pointsLabel": "Points",
+      "solvesLabel": "Solves"
+    },
+    "award": {
+      "title": "Create award",
+      "description": "Grant a titled award and its points to selected competitors. Points are added to their score on the scoreboard.",
+      "titleLabel": "Title",
+      "titlePlaceholder": "e.g. Best write-up",
+      "descLabel": "Description (optional)",
+      "pointsLabel": "Points",
+      "pointsHint": "0 for a badge with no scoring effect; negative to deduct.",
+      "recipients": "Recipients",
+      "selectedCount": "{count} selected",
+      "searchPlaceholder": "Search competitors…",
+      "noMatch": "No competitors match.",
+      "pts": "{points} pts",
+      "submit": "Grant award",
+      "submitting": "Awarding…",
+      "successToast": "{count, plural, one {Awarded # competitor} other {Awarded # competitors}}",
+      "errorToast": "Couldn't create award"
+    }
   }
 }

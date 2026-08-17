@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { RulesAcceptModal } from "@/components/competitions/rules-accept-modal";
@@ -42,13 +43,14 @@ import { toast } from "@/stores/toast";
 // use-teams hooks; membership rules (one team per competition, invite-code
 // validity, mode gating) are enforced server-side and surfaced inline.
 export function TeamPanel({ competitionId }: { competitionId: string }) {
+  const t = useTranslations("teams");
   const myTeam = useMyTeam(competitionId);
   const teams = useTeams(competitionId);
 
   return (
     <div className="space-y-6">
       {myTeam.isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading team…</p>
+        <p className="text-sm text-muted-foreground">{t("loading")}</p>
       ) : myTeam.data ? (
         <MyTeamCard competitionId={competitionId} team={myTeam.data} />
       ) : (
@@ -57,11 +59,11 @@ export function TeamPanel({ competitionId }: { competitionId: string }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Teams</CardTitle>
+          <CardTitle>{t("directory.title")}</CardTitle>
           <CardDescription>
             {teams.data?.length
-              ? `${teams.data.length} team(s) registered`
-              : "No teams yet."}
+              ? t("directory.count", { count: teams.data.length })
+              : t("directory.empty")}
           </CardDescription>
         </CardHeader>
         {teams.data && teams.data.length > 0 && (
@@ -69,8 +71,8 @@ export function TeamPanel({ competitionId }: { competitionId: string }) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Members</TableHead>
+                  <TableHead>{t("directory.colName")}</TableHead>
+                  <TableHead>{t("directory.colMembers")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -96,6 +98,7 @@ function MyTeamCard({
   competitionId: string;
   team: NonNullable<ReturnType<typeof useMyTeam>["data"]>;
 }) {
+  const t = useTranslations("teams");
   const leave = useLeaveTeam(competitionId);
   const confirm = useConfirm();
 
@@ -103,16 +106,16 @@ function MyTeamCard({
     <Card>
       <CardHeader>
         <CardTitle>{team.name}</CardTitle>
-        <CardDescription>Your team</CardDescription>
+        <CardDescription>{t("mine.subtitle")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div>
-          <Label>Invite code</Label>
+          <Label>{t("mine.inviteCode")}</Label>
           <p className="mt-1 w-fit rounded-md bg-muted px-3 py-1.5 font-mono text-sm">
             {team.invite_code}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Share this code with teammates so they can join.
+            {t("mine.inviteHint")}
           </p>
         </div>
         <ul className="space-y-1 text-sm">
@@ -121,7 +124,7 @@ function MyTeamCard({
               {member.display_name}
               {member.is_captain && (
                 <span className="ml-2 text-xs text-muted-foreground">
-                  captain
+                  {t("mine.captain")}
                 </span>
               )}
             </li>
@@ -138,20 +141,20 @@ function MyTeamCard({
             onClick={async () => {
               if (
                 !(await confirm({
-                  title: "Leave this team?",
-                  description: "You'll lose access to the team's shared progress. You can join or create another team while registration is open.",
-                  confirmLabel: "Leave team",
+                  title: t("mine.leaveConfirmTitle"),
+                  description: t("mine.leaveConfirmDescription"),
+                  confirmLabel: t("mine.leaveConfirmAction"),
                 }))
               ) {
                 return;
               }
               leave.mutate(undefined, {
-                onSuccess: () => toast("Left team", { variant: "success" }),
+                onSuccess: () => toast(t("mine.leftToast"), { variant: "success" }),
               });
             }}
             disabled={leave.isPending}
           >
-            {leave.isPending ? "Leaving…" : "Leave team"}
+            {leave.isPending ? t("mine.leaving") : t("mine.leave")}
           </Button>
           {leave.isError && (
             <span className="text-sm text-destructive">
@@ -173,6 +176,7 @@ function TeamProfile({
   competitionId: string;
   team: NonNullable<ReturnType<typeof useMyTeam>["data"]>;
 }) {
+  const t = useTranslations("teams");
   const userId = useAuthStore((s) => s.user?.id);
   const amCaptain = team.members.some((m) => m.user_id === userId && m.is_captain);
   const update = useUpdateMyTeam(competitionId);
@@ -185,9 +189,9 @@ function TeamProfile({
     if (!team.affiliation && !team.country && !team.website) return null;
     return (
       <div className="grid gap-0.5 text-sm text-muted-foreground">
-        {team.affiliation && <div>Affiliation: {team.affiliation}</div>}
-        {team.country && <div>Country: {team.country}</div>}
-        {team.website && <div>Website: {team.website}</div>}
+        {team.affiliation && <div>{t("profile.readonlyAffiliation", { value: team.affiliation })}</div>}
+        {team.country && <div>{t("profile.readonlyCountry", { value: team.country })}</div>}
+        {team.website && <div>{t("profile.readonlyWebsite", { value: team.website })}</div>}
       </div>
     );
   }
@@ -206,28 +210,28 @@ function TeamProfile({
         website: website.trim() || null,
         approval_required: approval,
       },
-      { onSuccess: () => toast("Team profile saved", { variant: "success" }) },
+      { onSuccess: () => toast(t("profile.savedToast"), { variant: "success" }) },
     );
   }
 
   return (
     <div className="grid gap-2">
       <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-        Team profile
+        {t("profile.label")}
       </Label>
       <div className="grid gap-2 sm:grid-cols-3">
         <Input
-          placeholder="Affiliation"
+          placeholder={t("profile.affiliation")}
           value={affiliation}
           onChange={(e) => setAffiliation(e.target.value)}
         />
         <Input
-          placeholder="Country"
+          placeholder={t("profile.country")}
           value={country}
           onChange={(e) => setCountry(e.target.value)}
         />
         <Input
-          placeholder="Website"
+          placeholder={t("profile.website")}
           value={website}
           onChange={(e) => setWebsite(e.target.value)}
         />
@@ -240,7 +244,7 @@ function TeamProfile({
           checked={approval}
           onChange={(e) => setApproval(e.target.checked)}
         />
-        Require captain approval to join
+        {t("requireApproval")}
       </label>
       <Button
         variant="outline"
@@ -249,7 +253,7 @@ function TeamProfile({
         onClick={onSave}
         disabled={!dirty || update.isPending}
       >
-        {update.isPending ? "Saving…" : "Save profile"}
+        {update.isPending ? t("profile.saving") : t("profile.save")}
       </Button>
     </div>
   );
@@ -264,6 +268,7 @@ function JoinRequests({
   competitionId: string;
   team: NonNullable<ReturnType<typeof useMyTeam>["data"]>;
 }) {
+  const t = useTranslations("teams");
   const userId = useAuthStore((s) => s.user?.id);
   const amCaptain = team.members.some((m) => m.user_id === userId && m.is_captain);
   const { data: requests } = useJoinRequests(competitionId, amCaptain);
@@ -274,7 +279,7 @@ function JoinRequests({
   return (
     <div className="grid gap-2">
       <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-        Join requests ({requests.length})
+        {t("joinRequests.label", { count: requests.length })}
       </Label>
       <ul className="grid gap-1.5">
         {requests.map((r) => (
@@ -287,7 +292,7 @@ function JoinRequests({
                 onClick={() => review.mutate({ id: r.id, approve: true })}
                 disabled={review.isPending}
               >
-                Approve
+                {t("joinRequests.approve")}
               </Button>
               <Button
                 size="sm"
@@ -295,7 +300,7 @@ function JoinRequests({
                 onClick={() => review.mutate({ id: r.id, approve: false })}
                 disabled={review.isPending}
               >
-                Reject
+                {t("joinRequests.reject")}
               </Button>
             </span>
           </li>
@@ -306,6 +311,7 @@ function JoinRequests({
 }
 
 function JoinOrCreate({ competitionId }: { competitionId: string }) {
+  const t = useTranslations("teams");
   const create = useCreateTeam(competitionId);
   const join = useJoinTeam(competitionId);
   const fetchRules = useFetchRules();
@@ -341,7 +347,7 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
           prompt.proceed();
         },
         onError: (err) =>
-          toast("Couldn't record acceptance", {
+          toast(t("rulesAcceptError"), {
             description: (err as Error).message,
             variant: "destructive",
           }),
@@ -363,8 +369,8 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
       )}
       <Card>
         <CardHeader>
-          <CardTitle>Create a team</CardTitle>
-          <CardDescription>You&apos;ll be the captain.</CardDescription>
+          <CardTitle>{t("create.title")}</CardTitle>
+          <CardDescription>{t("create.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form
@@ -374,13 +380,13 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
               gated(() =>
                 create.mutate(
                   { name, approval_required: approvalRequired },
-                  { onSuccess: () => toast(`Created ${name}`, { variant: "success" }) },
+                  { onSuccess: () => toast(t("create.createdToast", { name }), { variant: "success" }) },
                 ),
               );
             }}
           >
             <div className="space-y-2">
-              <Label htmlFor="team-name">Team name</Label>
+              <Label htmlFor="team-name">{t("create.nameLabel")}</Label>
               <Input
                 id="team-name"
                 value={name}
@@ -396,7 +402,7 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
                 checked={approvalRequired}
                 onChange={(e) => setApprovalRequired(e.target.checked)}
               />
-              Require captain approval to join
+              {t("requireApproval")}
             </label>
             {create.isError && (
               <p role="alert" className="text-sm text-destructive">
@@ -404,7 +410,7 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
               </p>
             )}
             <Button type="submit" disabled={create.isPending}>
-              {create.isPending ? "Creating…" : "Create team"}
+              {create.isPending ? t("create.creating") : t("create.submit")}
             </Button>
           </form>
         </CardContent>
@@ -412,8 +418,8 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Join a team</CardTitle>
-          <CardDescription>Use an invite code from a teammate.</CardDescription>
+          <CardTitle>{t("join.title")}</CardTitle>
+          <CardDescription>{t("join.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form
@@ -427,8 +433,8 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
                     onSuccess: (res) =>
                       toast(
                         res.pending
-                          ? "Request sent — awaiting captain approval"
-                          : "Joined team",
+                          ? t("join.pendingToast")
+                          : t("join.joinedToast"),
                         { variant: "success" },
                       ),
                   },
@@ -437,7 +443,7 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
             }}
           >
             <div className="space-y-2">
-              <Label htmlFor="invite-code">Invite code</Label>
+              <Label htmlFor="invite-code">{t("join.codeLabel")}</Label>
               <Input
                 id="invite-code"
                 value={inviteCode}
@@ -451,7 +457,7 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
               </p>
             )}
             <Button type="submit" disabled={join.isPending}>
-              {join.isPending ? "Joining…" : "Join team"}
+              {join.isPending ? t("join.joining") : t("join.submit")}
             </Button>
           </form>
         </CardContent>

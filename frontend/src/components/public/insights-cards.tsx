@@ -1,3 +1,7 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+
 import { Card, CardContent } from "@/components/ui/card";
 import type { PublicInsights } from "@/lib/types";
 
@@ -7,11 +11,12 @@ import type { PublicInsights } from "@/lib/types";
 
 /** Headline counts, in the same compact card idiom as the analytics overview. */
 export function StatTiles({ stats }: { stats: PublicInsights["stats"] }) {
+  const t = useTranslations("scoreboard.public.insights");
   const tiles = [
-    { label: "Participants", value: stats.participants },
-    { label: "Solves", value: stats.solves },
-    { label: "Challenges", value: stats.challenges },
-    { label: "Unsolved", value: stats.unsolved },
+    { label: t("participants"), value: stats.participants },
+    { label: t("solves"), value: stats.solves },
+    { label: t("challenges"), value: stats.challenges },
+    { label: t("unsolved"), value: stats.unsolved },
   ];
   return (
     <div className="grid grid-cols-2 gap-[1em] md:grid-cols-4">
@@ -36,30 +41,32 @@ export function Highlights({
   // full-width venue slide (#77).
   variant?: "column" | "row";
 }) {
+  const t = useTranslations("scoreboard.public.insights");
   const { most_solved, most_attempted, first_blood_leader, fastest_solve } =
     highlights;
   const cards = [
     most_solved && {
-      label: "Most solved",
+      label: t("mostSolved"),
       value: most_solved.title,
-      detail: `${most_solved.count} ${most_solved.count === 1 ? "solve" : "solves"}`,
+      detail: t("mostSolvedDetail", { count: most_solved.count }),
     },
     most_attempted && {
-      label: "Most attempted",
+      label: t("mostAttempted"),
       value: most_attempted.title,
-      detail: `${most_attempted.count} attempts`,
+      detail: t("mostAttemptedDetail", { count: most_attempted.count }),
     },
     first_blood_leader && {
-      label: "Most first bloods",
+      label: t("mostFirstBloods"),
       value: first_blood_leader.name,
-      detail: `${first_blood_leader.count} first ${
-        first_blood_leader.count === 1 ? "blood" : "bloods"
-      }`,
+      detail: t("mostFirstBloodsDetail", { count: first_blood_leader.count }),
     },
     fastest_solve && {
-      label: "Fastest solve",
+      label: t("fastestSolve"),
       value: fastest_solve.title,
-      detail: `${fastest_solve.name} · ${formatElapsed(fastest_solve.seconds)}`,
+      detail: t("fastestSolveDetail", {
+        name: fastest_solve.name,
+        elapsed: formatElapsed(fastest_solve.seconds),
+      }),
     },
   ].filter(Boolean) as { label: string; value: string; detail: string }[];
 

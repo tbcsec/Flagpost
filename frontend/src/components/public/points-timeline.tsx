@@ -7,6 +7,7 @@
 // scoreboard's bar chart and the survey histograms. Geometry lives in
 // lib/timeline-chart.ts (pure + unit-tested); this file is presentation only.
 
+import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +41,7 @@ export function PointsTimeline({
   end: string | null;
   frozen?: boolean;
 }) {
+  const t = useTranslations("scoreboard.public.timeline");
   // Hovering a legend entry (or focusing it by keyboard) dims the rest, which
   // is what makes ten overlapping lines readable.
   const [active, setActive] = React.useState<string | null>(null);
@@ -57,10 +59,10 @@ export function PointsTimeline({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Points over time</CardTitle>
+        <CardTitle>{t("title")}</CardTitle>
         <CardDescription>
-          Top {scored.length} {scored.length === 1 ? "entrant" : "entrants"}
-          {frozen ? " · stops at the freeze" : ""}
+          {t("subtitle", { count: scored.length })}
+          {frozen ? t("freezeSuffix") : ""}
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-[0.75em]">
@@ -69,9 +71,11 @@ export function PointsTimeline({
           width="100%"
           className="h-[16em] w-full sm:h-[20em]"
           role="img"
-          aria-label={`Cumulative points over time for the top ${scored.length} entrants. ${leader.name} leads with ${
-            leader.points[leader.points.length - 1]?.points ?? 0
-          } points. The full standings are in the table below.`}
+          aria-label={t("ariaLabel", {
+            count: scored.length,
+            leader: leader.name,
+            points: leader.points[leader.points.length - 1]?.points ?? 0,
+          })}
         >
           {/* Horizontal gridlines + y labels */}
           {yTicks(scales).map((tick) => (

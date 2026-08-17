@@ -1105,5 +1105,18 @@
       "successToast": "{count, plural, one {Awarded # competitor} other {Awarded # competitors}}",
       "errorToast": "Couldn't create award"
     }
+  },
+  "certificates": {
+    "viewInProfile": "View in profile",
+    "preparing": "Preparing…",
+    "download": "Download",
+    "ready": {
+      "title": "Your certificate is ready!",
+      "description": "Congratulations on taking part in {competition}. Download your certificate to share it — you can always find it again under your profile."
+    },
+    "card": {
+      "ready": "Your certificate is ready 🎓",
+      "hint": "Download it to share, or find it anytime in your profile."
+    }
   }
 }

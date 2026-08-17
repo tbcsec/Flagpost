@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ export function AwardDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useTranslations("participants.award");
   const create = useCreateAward(competitionId);
   // Starts blank on mount: the call site keys this dialog by open-state, so
   // every open remounts it as a fresh award form.
@@ -70,14 +72,11 @@ export function AwardDialog({
       },
       {
         onSuccess: (awards) => {
-          toast(
-            `Awarded ${awards.length} competitor${awards.length === 1 ? "" : "s"}`,
-            { variant: "success" },
-          );
+          toast(t("successToast", { count: awards.length }), { variant: "success" });
           onOpenChange(false);
         },
         onError: (err) =>
-          toast("Couldn't create award", {
+          toast(t("errorToast"), {
             description: (err as Error).message,
             variant: "destructive",
           }),
@@ -89,26 +88,23 @@ export function AwardDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create award</DialogTitle>
-          <DialogDescription>
-            Grant a titled award and its points to selected competitors. Points
-            are added to their score on the scoreboard.
-          </DialogDescription>
+          <DialogTitle>{t("title")}</DialogTitle>
+          <DialogDescription>{t("description")}</DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={onSubmit}>
           <div className="grid gap-2">
-            <Label htmlFor="award-title">Title</Label>
+            <Label htmlFor="award-title">{t("titleLabel")}</Label>
             <Input
               id="award-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Best write-up"
+              placeholder={t("titlePlaceholder")}
               maxLength={200}
               required
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="award-desc">Description (optional)</Label>
+            <Label htmlFor="award-desc">{t("descLabel")}</Label>
             <textarea
               id="award-desc"
               className={TEXTAREA_CLASS}
@@ -118,7 +114,7 @@ export function AwardDialog({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="award-points">Points</Label>
+            <Label htmlFor="award-points">{t("pointsLabel")}</Label>
             <Input
               id="award-points"
               type="number"
@@ -128,25 +124,23 @@ export function AwardDialog({
               max={10000}
               className="w-32"
             />
-            <p className="text-xs text-muted-foreground">
-              0 for a badge with no scoring effect; negative to deduct.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("pointsHint")}</p>
           </div>
           <div className="grid gap-2">
             <div className="flex items-center justify-between">
-              <Label>Recipients</Label>
+              <Label>{t("recipients")}</Label>
               <span className="text-xs text-muted-foreground">
-                {selected.size} selected
+                {t("selectedCount", { count: selected.size })}
               </span>
             </div>
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search competitors…"
+              placeholder={t("searchPlaceholder")}
             />
             <div className="max-h-52 overflow-y-auto rounded-md border border-border">
               {filtered.length === 0 ? (
-                <p className="p-3 text-sm text-muted-foreground">No competitors match.</p>
+                <p className="p-3 text-sm text-muted-foreground">{t("noMatch")}</p>
               ) : (
                 filtered.map((p) => (
                   <label
@@ -162,7 +156,7 @@ export function AwardDialog({
                     />
                     <span className="flex-1">{p.display_name}</span>
                     <span className="font-mono text-xs text-muted-foreground">
-                      {p.points} pts
+                      {t("pts", { points: p.points })}
                     </span>
                   </label>
                 ))
@@ -177,7 +171,7 @@ export function AwardDialog({
               type="submit"
               disabled={create.isPending || selected.size === 0 || !title.trim()}
             >
-              {create.isPending ? "Awarding…" : "Grant award"}
+              {create.isPending ? t("submitting") : t("submit")}
             </Button>
           </DialogFooter>
         </form>

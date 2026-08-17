@@ -5,6 +5,7 @@
 // full roster with standing, all via the use-participants hook. Server state
 // only; no client-side ranking (the backend reuses the scoreboard computation).
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { AwardDialog } from "@/components/participants/award-dialog";
@@ -30,15 +31,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { relativeTime } from "@/lib/datetime";
 import { useDataTable } from "@/lib/hooks/use-data-table";
 import { useParticipants } from "@/lib/hooks/use-participants";
 import { useAccess } from "@/lib/hooks/use-permissions";
+import { useRelativeTime } from "@/lib/hooks/use-relative-time";
 import type { Participant } from "@/lib/types";
 import { useAuthStore } from "@/stores/auth";
 import { cn } from "@/lib/utils";
 
 export function ParticipantsPanel({ competitionId }: { competitionId: string }) {
+  const t = useTranslations("participants");
+  const tn = useTranslations("common.nouns");
+  const rel = useRelativeTime();
   const participants = useParticipants(competitionId);
   const selfId = useAuthStore((s) => s.user?.id);
   const access = useAccess();
@@ -73,8 +77,8 @@ export function ParticipantsPanel({ competitionId }: { competitionId: string }) 
     return (
       <EmptyState
         icon={<PeopleEmptyIcon />}
-        title="No competitors yet"
-        description="Registered competitors show up here as they join — share the join link to get people in."
+        title={t("empty.title")}
+        description={t("empty.description")}
       />
     );
   }
@@ -88,12 +92,12 @@ export function ParticipantsPanel({ competitionId }: { competitionId: string }) 
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-2">
           <div>
-            <CardTitle>Competitors</CardTitle>
-            <CardDescription>{roster.length} registered</CardDescription>
+            <CardTitle>{t("roster.title")}</CardTitle>
+            <CardDescription>{t("roster.count", { count: roster.length })}</CardDescription>
           </div>
           {canAward && (
             <Button size="sm" onClick={() => setAwardOpen(true)}>
-              Create award
+              {t("roster.createAward")}
             </Button>
           )}
         </CardHeader>
@@ -101,26 +105,26 @@ export function ParticipantsPanel({ competitionId }: { competitionId: string }) 
           <TableSearchInput
             value={table.query}
             onChange={table.setQuery}
-            placeholder="Search competitors…"
+            placeholder={t("roster.searchPlaceholder")}
             className="mb-4"
           />
           <Table>
             <TableHeader>
               <TableRow>
                 <SortableTableHead align="right" active={dir("rank")} onSort={() => table.toggleSort("rank")}>
-                  #
+                  {t("roster.colRank")}
                 </SortableTableHead>
                 <SortableTableHead active={dir("name")} onSort={() => table.toggleSort("name")}>
-                  Competitor
+                  {t("roster.colCompetitor")}
                 </SortableTableHead>
                 <SortableTableHead align="right" active={dir("solves")} onSort={() => table.toggleSort("solves")}>
-                  Solves
+                  {t("roster.colSolves")}
                 </SortableTableHead>
                 <SortableTableHead align="right" active={dir("points")} onSort={() => table.toggleSort("points")}>
-                  Points
+                  {t("roster.colPoints")}
                 </SortableTableHead>
                 <SortableTableHead align="right" active={dir("joined")} onSort={() => table.toggleSort("joined")}>
-                  Joined
+                  {t("roster.colJoined")}
                 </SortableTableHead>
               </TableRow>
             </TableHeader>
@@ -136,26 +140,26 @@ export function ParticipantsPanel({ competitionId }: { competitionId: string }) 
                   <TableCell className="font-medium">
                     {p.display_name}
                     {p.user_id === selfId && (
-                      <span className="ml-2 text-xs text-primary">You</span>
+                      <span className="ml-2 text-xs text-primary">{t("roster.you")}</span>
                     )}
                   </TableCell>
                   <TableCell className="text-right font-mono">{p.solve_count}</TableCell>
                   <TableCell className="text-right font-mono">{p.points}</TableCell>
                   <TableCell className="text-right text-muted-foreground">
-                    {relativeTime(p.joined_at)}
+                    {rel(p.joined_at)}
                   </TableCell>
                 </TableRow>
               ))}
               {table.rows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground">
-                    No competitors match your search.
+                    {t("roster.noMatch")}
                   </TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
-          <TablePagination table={table} noun="competitors" className="mt-4" />
+          <TablePagination table={table} noun={tn("competitors")} className="mt-4" />
         </CardContent>
       </Card>
 
@@ -173,16 +177,20 @@ export function ParticipantsPanel({ competitionId }: { competitionId: string }) 
 }
 
 function YouCard({ participant, total }: { participant: Participant; total: number }) {
+  const t = useTranslations("participants.you");
   const stats = [
-    { label: "Rank", value: participant.rank ? `${participant.rank} of ${total}` : "—" },
-    { label: "Points", value: participant.points },
-    { label: "Solves", value: participant.solve_count },
+    {
+      label: t("rankLabel"),
+      value: participant.rank ? t("rankValue", { rank: participant.rank, total }) : "—",
+    },
+    { label: t("pointsLabel"), value: participant.points },
+    { label: t("solvesLabel"), value: participant.solve_count },
   ];
   return (
     <Card>
       <CardHeader>
         <CardTitle>{participant.display_name}</CardTitle>
-        <CardDescription>Your standing in this competition</CardDescription>
+        <CardDescription>{t("subtitle")}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-3 gap-4">

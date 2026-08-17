@@ -7,7 +7,7 @@ pydantic[email]>=2.13.4,<3.0
 # Persistence — SQLAlchemy 2.x async + asyncpg + Alembic (§2)
 sqlalchemy[asyncio]>=2.0.51,<2.1
 asyncpg>=0.31.0,<0.32
-alembic>=1.19.0,<2.0
+alembic>=1.19.1,<2.0
 
 # Auth — JWT access tokens + argon2 password hashing (§7.7, ADR-0003).
 # The [crypto] extra pulls in `cryptography`, needed for two things our own

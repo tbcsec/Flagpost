@@ -41,6 +41,30 @@ async def _grant_custom_role(user_id: str, competition_id: str, name: str, perms
         await db.commit()
 
 
+async def test_module_catalog_lists_optional_modules(client):
+    """The at-creation picker source (#252): the site-level catalog lists the
+    optional modules by id + name, and never the required-core ones."""
+    admin = await admin_token(client)
+    resp = await client.get("/api/modules", headers=_auth(admin))
+    assert resp.status_code == 200
+    entries = resp.json()
+    ids = {m["id"] for m in entries}
+    assert {"ai", "analytics", "automations", "certificates", "feedback"} <= ids
+    # Required-core modules are always on and never offered as opt-outs.
+    assert "challenges" not in ids
+    assert "scoring" not in ids
+    # Every entry carries a display name and a one-line description for the row.
+    assert all(m["name"] for m in entries)
+    assert all(m["description"] for m in entries)
+
+
+async def test_module_catalog_requires_create_competition(client):
+    """Gated on create_competition — a plain participant can't read it."""
+    token, _ = await _register(client, "nocreate@example.com")
+    resp = await client.get("/api/modules", headers=_auth(token))
+    assert resp.status_code == 403
+
+
 async def test_edit_competition_alone_cannot_manage_modules(client):
     """The point of #168: edit_competition no longer implies module management."""
     comp = await _competition(client)

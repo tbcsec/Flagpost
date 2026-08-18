@@ -52,12 +52,13 @@ mechanism that already solves your problem. It names *where* things live; the
 authority on *how* they work is `docs/ARCHITECTURE.md` and the code.
 
 **Backend** is a small kernel (auth/RBAC, the Competition tenancy root, the
-event bus, the module loader) plus **20 modules** in `backend/plugins/`, each a
+event bus, the module loader) plus **21 modules** in `backend/plugins/`, each a
 `plugin.yaml` manifest + a `setup()` that mounts routers and subscribes
-listeners (§11.1). Exactly **four are optional** — per-competition toggleable
+listeners (§11.1). Exactly **five are optional** — per-competition toggleable
 via `competition_modules`: **`automations`**, **`feedback`**, **`analytics`**,
-and **`ai`** (the last additionally ships *inert* behind a site master switch —
-see the AI bullet below). The other sixteen are required-core and always on:
+**`certificates`**, and **`ai`** (this last one additionally ships *inert*
+behind a site master switch — see the AI bullet below). The other sixteen are
+required-core and always on:
 `announcements`, `audit_log`,
 `challenges`, `collab`, `competitions`, `dashboard`, `hints`, `notifications`,
 `roles`, `scoring`, `setup`, `site_settings`, `sso`, `teams`, `tickets`,

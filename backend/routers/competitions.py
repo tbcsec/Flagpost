@@ -28,8 +28,10 @@ from auth.membership import (
 )
 from db import get_db, utcnow
 from models.competition import Competition
+from models.competition_module import CompetitionModule
 from models.rules_acceptance import RulesAcceptance
 from models.user import User
+from plugins.loader import optional_modules
 from schemas.competition import (
     CompetitionCloneRequest,
     CompetitionCreate,
@@ -175,6 +177,18 @@ async def create_competition(
     current_user: User = Depends(require_permission("create_competition")),
     db: AsyncSession = Depends(get_db),
 ) -> Competition:
+    # Validate any module opt-outs (#252) up front: only known *optional*
+    # modules can be disabled — required-core and unknown ids are rejected.
+    disabled_modules = list(dict.fromkeys(body.disabled_modules))
+    if disabled_modules:
+        optional_ids = {m.id for m in optional_modules()}
+        unknown = [mid for mid in disabled_modules if mid not in optional_ids]
+        if unknown:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"Not an optional module: {', '.join(unknown)}",
+            )
+
     competition = Competition(
         name=body.name,
         description=body.description,
@@ -198,6 +212,17 @@ async def create_competition(
         rules_display_only=body.rules_display_only,
     )
     db.add(competition)
+    # Flush to assign competition.id, then write the opt-out override rows in the
+    # same transaction (optional modules default on, so only the off ones get a
+    # row). Deliberately no per-module event — this is one authoring op, covered
+    # by competition.created (bulk/creation ops emit no per-row events).
+    await db.flush()
+    for module_id in disabled_modules:
+        db.add(
+            CompetitionModule(
+                competition_id=competition.id, module_id=module_id, enabled=False
+            )
+        )
     await db.commit()
     await db.refresh(competition)
 

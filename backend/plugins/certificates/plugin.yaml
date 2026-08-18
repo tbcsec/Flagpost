@@ -1,6 +1,7 @@
 id: certificates
 name: Certificates
 version: 1.0.0
+description: "Design a certificate template and issue shareable participation and placement certificates to competitors."
 # The fifth optional module (§11.3, ROADMAP #219, ADR-0027): not required-core,
 # so it carries the per-competition enable/disable toggle (competition_modules —
 # default ON). Every route 404s when disabled for the competition. Organisers

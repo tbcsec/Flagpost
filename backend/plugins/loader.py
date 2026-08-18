@@ -41,6 +41,10 @@ class ModuleManifest:
     id: str
     name: str
     version: str
+    # One-line, human-facing summary of what the module does. Optional in the
+    # manifest; surfaced by the at-creation module picker (#252). Empty for
+    # modules that don't set it (required-core ones aren't offered there).
+    description: str = ""
     required_core: bool = False
     provides_routes: bool = False
     provides_event_listeners: bool = False
@@ -63,6 +67,7 @@ def parse_manifest(data: dict, *, source: str = "<dict>") -> ModuleManifest:
             id=data["id"],
             name=data["name"],
             version=str(data["version"]),
+            description=str(data.get("description", "")),
             required_core=bool(data.get("required_core", False)),
             provides_routes=bool(provides.get("routes", False)),
             provides_event_listeners=bool(provides.get("event_listeners", False)),

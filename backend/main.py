@@ -116,6 +116,7 @@ app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_request_body_
 app.include_router(auth_router.router)
 app.include_router(realtime_router)
 app.include_router(modules_router.router)
+app.include_router(modules_router.catalog_router)
 # Every feature above the kernel — including the audit-log admin surface — mounts
 # through the loader (§11.1). The audit-log event-bus *consumer* stays kernel
 # (register_audit_log above); the module only adds its query router.

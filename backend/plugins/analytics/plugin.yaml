@@ -1,6 +1,7 @@
 id: analytics
 name: Analytics
 version: 1.0.0
+description: "Submission, solve, and engagement dashboards that give organisers insight into how the competition is going."
 # Optional module (§11.3) — the third one, per-competition toggleable (default
 # on); its endpoints 404 when disabled. Pure read-only reporting off the
 # submissions/hints/tickets data the required-core modules already record, so it

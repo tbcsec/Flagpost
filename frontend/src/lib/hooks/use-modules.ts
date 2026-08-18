@@ -9,6 +9,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { modulesApi } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth";
 
+/** The site-level optional-module catalog — the source for the at-creation
+ *  module picker (#252). Competition-independent, so no id in the key. */
+export function useModuleCatalog(enabled = true) {
+  const isAuthenticated = useAuthStore((s) => s.status === "authenticated");
+  return useQuery({
+    queryKey: ["modules", "catalog"],
+    queryFn: () => modulesApi.catalog(),
+    enabled: isAuthenticated && enabled,
+  });
+}
+
 export function useModules(competitionId: string, enabled = true) {
   const isAuthenticated = useAuthStore((s) => s.status === "authenticated");
   return useQuery({

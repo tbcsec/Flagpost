@@ -65,6 +65,7 @@ import type {
   AdminOverview,
   Award,
   AwardInput,
+  ModuleCatalogEntry,
   ModuleState,
   MyTeam,
   Participant,
@@ -590,6 +591,9 @@ export const adminApi = {
 };
 
 export const modulesApi = {
+  // Site-level optional-module catalog — the at-creation picker source (#252),
+  // available before a competition exists (create_competition-gated).
+  catalog: () => apiFetch<ModuleCatalogEntry[]>("/api/modules"),
   // Per-competition module inventory + toggle (Admin → Plugins, §11.3).
   list: (competitionId: string) =>
     apiFetch<ModuleState[]>(`/api/competitions/${competitionId}/modules`),

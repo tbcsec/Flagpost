@@ -77,6 +77,50 @@ async def test_create_defaults_and_roundtrips_management_fields(client):
     assert body["participation_mode"] == "team"
 
 
+async def test_create_with_disabled_modules_writes_overrides(client):
+    """#252: opting a module out at creation writes an enabled=False override;
+    untouched optional modules stay on by default."""
+    token = await admin_token(client)
+    resp = await client.post(
+        "/api/competitions",
+        json={"name": "Lean CTF", "disabled_modules": ["analytics", "feedback"]},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 201
+    cid = resp.json()["id"]
+
+    listing = await client.get(
+        f"/api/competitions/{cid}/modules", headers=_auth(token)
+    )
+    states = {m["id"]: m["enabled"] for m in listing.json()}
+    assert states["analytics"] is False
+    assert states["feedback"] is False
+    # An optional module not opted out keeps the §11.3 default (enabled).
+    assert states["automations"] is True
+    assert states["ai"] is True
+
+
+async def test_create_rejects_required_core_module_optout(client):
+    """A required-core module can't be disabled — reject the whole create."""
+    token = await admin_token(client)
+    resp = await client.post(
+        "/api/competitions",
+        json={"name": "Bad", "disabled_modules": ["challenges"]},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 422
+
+
+async def test_create_rejects_unknown_module_optout(client):
+    token = await admin_token(client)
+    resp = await client.post(
+        "/api/competitions",
+        json={"name": "Bad", "disabled_modules": ["does-not-exist"]},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 422
+
+
 async def test_admin_can_update_competition_and_event_is_emitted(client):
     token = await admin_token(client)
     created = (

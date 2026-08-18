@@ -1,6 +1,7 @@
 id: automations
 name: Automations
 version: 1.0.0
+description: "Run actions like webhooks, emails, and score changes automatically in response to competition events."
 # The FIRST optional module (§11.3): not required-core, so it carries the
 # per-competition enable/disable toggle (competition_modules — default ON).
 # Disabling it for a competition stops every rule firing for that

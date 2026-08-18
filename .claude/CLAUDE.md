@@ -327,7 +327,12 @@ cd frontend && npm install && npm run dev
 - Frontend i18n (ADR-0029, extraction in progress): in a domain already
   extracted to next-intl (the file imports `useTranslations`), new
   user-facing strings go through `messages/en.json` + `t()`, not literals.
-  Unextracted domains keep literals until their own extraction PR — don't
+  **Every *new* page/surface is born extracted** (owner decision,
+  2026-08-18): its user-facing strings go into `frontend/messages/en.json`
+  + `t()` from the first commit — Crowdin's source is exactly that file
+  (`crowdin.yml`), so a page shipped as literals is invisible to
+  translators and silently grows the untranslated backlog. *Existing*
+  unextracted domains keep literals until their own extraction PR — don't
   half-extract. Components under an intl'd tree need `renderWithIntl`
   (`src/test/intl.tsx`) in tests.
 - Migrations: `YYYY-MM-DD_<revid>_<desc>.py`, one migration per PR. Never

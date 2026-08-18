@@ -27,6 +27,14 @@ jobs:
           cache-dependency-path: backend/requirements-dev.txt
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
+      - name: Install WeasyPrint system libraries
+        # So the post-event report PDF path (#134, ADR-0030) renders and its
+        # otherwise-skipped tests actually execute here, matching the backend image.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0 \
+            shared-mime-info fonts-dejavu-core
       - name: Run tests
         # The suite is SQLite-backed and self-configures its env (see conftest),
         # so it needs no services.

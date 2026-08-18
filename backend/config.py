@@ -308,6 +308,11 @@ class Settings(BaseSettings):
     minio_secret_key: str = "minioadmin"
     minio_bucket: str = "challenge-files"
     minio_secure: bool = False  # http in dev; true behind TLS in prod
+    # SigV4 region. Setting it lets the client sign presigned URLs *offline*; with
+    # it unset the client makes a GetBucketLocation call to the (browser-facing)
+    # public endpoint at sign time, which the backend can't reach when the public
+    # and internal endpoints differ (e.g. localhost:9000 vs minio:9000 in compose).
+    minio_region: str = "us-east-1"
     # Lifetime of a signed download URL, in seconds (§13.3 — short-lived).
     signed_url_ttl_seconds: int = 300
 

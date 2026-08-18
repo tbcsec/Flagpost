@@ -1223,7 +1223,8 @@
       },
       "delete": "Delete",
       "deletedToast": "Report deleted",
-      "deleteErrorToast": "Couldn't delete"
+      "deleteErrorToast": "Couldn't delete",
+      "downloadErrorToast": "Couldn't download"
     },
     "deleteConfirm": {
       "title": "Delete report v{version}?",

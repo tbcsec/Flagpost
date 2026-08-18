@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import {
   useCreateReport,
   useDeleteReport,
+  useDownloadReport,
   useReportCatalog,
   useReports,
 } from "@/lib/hooks/use-reports";
@@ -60,6 +61,7 @@ export function ReportsPanel({
   const reports = useReports(competitionId);
   const create = useCreateReport(competitionId);
   const remove = useDeleteReport(competitionId);
+  const download = useDownloadReport(competitionId);
   const confirm = useConfirm();
 
   // Catalog entries localise by id (the survey-editor pattern for
@@ -154,6 +156,19 @@ export function ReportsPanel({
           variant: "destructive",
         }),
     });
+  }
+
+  function onDownload(report: CompetitionReport, fmt: "pdf" | "html") {
+    download.mutate(
+      { reportId: report.id, fmt, version: report.version },
+      {
+        onError: (e) =>
+          toast(t("history.downloadErrorToast"), {
+            description: (e as Error).message,
+            variant: "destructive",
+          }),
+      },
+    );
   }
 
   const canGenerate =
@@ -287,17 +302,25 @@ export function ReportsPanel({
                 )}
                 <div className="ml-auto flex items-center gap-2">
                   {r.status === "ready" && r.pdf_url && (
-                    <Button asChild size="sm" variant="outline">
-                      <a href={r.pdf_url} download>
-                        {t("formats.pdf")}
-                      </a>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={download.isPending}
+                      onClick={() => onDownload(r, "pdf")}
+                    >
+                      {t("formats.pdf")}
                     </Button>
                   )}
                   {r.status === "ready" && r.html_url && (
-                    <Button asChild size="sm" variant="outline">
-                      <a href={r.html_url} download>
-                        {t("formats.html")}
-                      </a>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={download.isPending}
+                      onClick={() => onDownload(r, "html")}
+                    >
+                      {t("formats.html")}
                     </Button>
                   )}
                   <Button

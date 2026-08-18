@@ -628,6 +628,19 @@ export const reportsApi = {
     apiFetch<void>(`${reportsApi.base(competitionId)}/${reportId}`, {
       method: "DELETE",
     }),
+  // Streamed through the API (auth'd blob), not a presigned object-store URL —
+  // the report renders on any topology, incl. the tunnelled demo where MinIO
+  // isn't browser-reachable. Mirrors certificatesApi.downloadMine.
+  download: (
+    competitionId: string,
+    reportId: string,
+    fmt: "pdf" | "html",
+    filename: string,
+  ) =>
+    downloadFile(
+      `${reportsApi.base(competitionId)}/${reportId}/download/${fmt}`,
+      filename,
+    ),
 };
 
 export const categoriesApi = {

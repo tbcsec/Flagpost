@@ -8,6 +8,7 @@ import type { CompetitionReport } from "@/lib/types";
 
 const mockCreate = vi.fn();
 const mockRemove = vi.fn();
+const mockDownload = vi.fn();
 let mockReports: CompetitionReport[] = [];
 
 const ALL = ["overview", "participation", "results", "challenges", "support", "feedback"];
@@ -35,6 +36,7 @@ vi.mock("@/lib/hooks/use-reports", () => ({
   useReports: () => ({ data: mockReports, isLoading: false }),
   useCreateReport: () => ({ mutate: mockCreate, isPending: false }),
   useDeleteReport: () => ({ mutate: mockRemove }),
+  useDownloadReport: () => ({ mutate: mockDownload, isPending: false }),
 }));
 
 vi.mock("@/components/ui/confirm", () => ({
@@ -46,6 +48,7 @@ vi.mock("@/stores/toast", () => ({ toast: vi.fn() }));
 afterEach(() => {
   mockCreate.mockClear();
   mockRemove.mockClear();
+  mockDownload.mockClear();
   mockReports = [];
 });
 
@@ -81,22 +84,33 @@ describe("ReportsPanel", () => {
     expect(screen.getByText("Sponsor shout-outs")).toBeInTheDocument();
   });
 
-  it("offers download links for a ready report", () => {
+  it("downloads a ready report through the API hook (not a raw MinIO link)", () => {
     mockReports = [
       {
         id: "r1", version: 2, status: "ready", config: { sections: [], formats: [] },
         error: null, created_at: "2026-10-10T09:00:00Z",
         completed_at: "2026-10-10T09:01:00Z",
-        pdf_url: "https://x/report.pdf", html_url: "https://x/report.html",
+        pdf_url: "/api/competitions/c1/reports/r1/download/pdf",
+        html_url: "/api/competitions/c1/reports/r1/download/html",
       },
     ];
     renderWithIntl(<ReportsPanel competitionId="c1" status="ended" />);
     expect(screen.getByText("Version 2")).toBeInTheDocument();
     expect(screen.getByText("Ready")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "PDF" })).toHaveAttribute(
-      "href",
-      "https://x/report.pdf",
+
+    // Buttons, not <a href> — the file is fetched as an auth'd blob so a plain
+    // navigation (no bearer token) can't be the download path.
+    expect(screen.queryByRole("link", { name: "PDF" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "PDF" }));
+    expect(mockDownload).toHaveBeenCalledWith(
+      { reportId: "r1", fmt: "pdf", version: 2 },
+      expect.anything(),
     );
-    expect(screen.getByRole("link", { name: "HTML" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "HTML" }));
+    expect(mockDownload).toHaveBeenCalledWith(
+      { reportId: "r1", fmt: "html", version: 2 },
+      expect.anything(),
+    );
   });
 });

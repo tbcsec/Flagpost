@@ -86,6 +86,22 @@ Specifics that make this deterministic and safe:
   generation is an async job (the background/scheduler lane, ADR-0025/0026) and
   the render itself runs via `asyncio.to_thread`, never inline in a request —
   the same discipline ADR-0027 required for bulk certificate export.
+- **The finished file is streamed back through the API, not presigned.** A ready
+  report downloads via `GET …/reports/{id}/download/{fmt}`, which reads the
+  object with the backend's *internal* storage client and streams it to the
+  browser. It is deliberately **not** a presigned object-store URL, for two
+  reasons. First, topology: on a single-origin deployment — the default
+  `docker compose` behind Caddy, and the public demo behind a Cloudflare Tunnel
+  that only exposes Caddy — MinIO is not browser-reachable at all, so a signed
+  `minio:9000` URL resolves nowhere; proxying needs no object-store exposure and
+  works everywhere. Second, access: a report aggregates whole-competition data
+  and is gated on `generate_report`, so re-checking that permission on every
+  fetch is stronger than a bearer URL that grants read for its whole TTL. This
+  mirrors the ticket-attachment `/content` and per-user certificate download
+  routes; the certificates **bulk ZIP export** keeps presigning because it can be
+  large, and challenge attachments likewise presign and expect an exposed object
+  store on multi-host deploys (README → "Deploying to production"). The split is
+  by artefact size and exposure model, not inconsistency.
 
 This does **not** change ADR-0027 for certificates. Flagpost now has two
 renderers, each fit to its artefact: a **fixed-canvas social image** stays Pillow

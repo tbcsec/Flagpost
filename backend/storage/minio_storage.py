@@ -4,8 +4,10 @@ Two clients on purpose: one bound to the internal endpoint the backend uses to
 put/delete objects, and one bound to the *public* endpoint used only to sign
 download URLs — so a browser-facing signed URL points at a host the browser can
 actually reach (e.g. ``localhost:9000``) even when the backend talks to
-``minio:9000`` inside the compose network. Presigning is offline, so the second
-client never opens a connection.
+``minio:9000`` inside the compose network. Both clients are pinned to a region so
+signing is genuinely offline — without one the client makes a GetBucketLocation
+call to the public endpoint at sign time, which the backend can't reach when that
+endpoint is browser-facing only.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ class MinioStorage:
             access_key=settings.minio_access_key,
             secret_key=settings.minio_secret_key,
             secure=settings.minio_secure,
+            region=settings.minio_region,
         )
         public_endpoint = settings.minio_public_endpoint or settings.minio_endpoint
         self._presign_client = Minio(
@@ -33,6 +36,7 @@ class MinioStorage:
             access_key=settings.minio_access_key,
             secret_key=settings.minio_secret_key,
             secure=settings.minio_secure,
+            region=settings.minio_region,
         )
         self._ensure_bucket()
 

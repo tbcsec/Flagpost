@@ -56,3 +56,18 @@ export function useDeleteReport(competitionId: string) {
       qc.invalidateQueries({ queryKey: reportKeys.list(competitionId) }),
   });
 }
+
+/** Download a ready report's PDF/HTML. The file is streamed through the API as
+ *  an auth'd blob (not a presigned URL), so it works even where MinIO isn't
+ *  browser-reachable — e.g. the tunnelled demo. */
+export function useDownloadReport(competitionId: string) {
+  return useMutation({
+    mutationFn: (input: { reportId: string; fmt: "pdf" | "html"; version: number }) =>
+      reportsApi.download(
+        competitionId,
+        input.reportId,
+        input.fmt,
+        `report-v${input.version}.${input.fmt}`,
+      ),
+  });
+}

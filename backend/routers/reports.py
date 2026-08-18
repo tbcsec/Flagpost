@@ -6,18 +6,23 @@ module being enabled (§11.3). Generation is only allowed once the competition h
 report enqueues a ``pending`` :class:`CompetitionReport`; the scheduler tick
 renders it off the request path (``utils.automation_scheduler``) and fills the
 object-storage keys, mirroring the certificates bulk export. Clients poll the
-status route, which hands back short-lived signed download URLs once ready.
+status route; once ready, the PDF/HTML are **streamed back through this API**
+(``/{id}/download/{fmt}``), not handed out as presigned object-store URLs — so
+downloads work on any topology (single-origin proxy, Cloudflare Tunnel,
+un-exposed MinIO like the public demo) and every fetch re-checks
+``generate_report``. This matches the ticket-attachment ``/content`` and
+per-user certificate download routes; the certificates *bulk* ZIP export still
+presigns because it can be large.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import require_permission
-from config import settings
 from db import get_db
 from models.competition import Competition
 from models.report import CompetitionReport
@@ -55,25 +60,24 @@ async def _guard(db: AsyncSession, competition_id: str) -> Competition:
     return competition
 
 
-def _download_url(storage: ObjectStorage, key: str, version: int, fmt: str) -> str:
-    mime = "application/pdf" if fmt == "pdf" else "text/html"
-    return storage.presigned_get_url(
-        key,
-        settings.signed_url_ttl_seconds,
-        response_headers={
-            "response-content-type": mime,
-            "response-content-disposition": f'attachment; filename="report-v{version}.{fmt}"',
-        },
-    )
+def _download_path(competition_id: str, report_id: str, fmt: str) -> str:
+    """Same-origin API path the browser fetches the rendered file from.
+
+    Not a presigned object-store URL: the bytes are streamed back through the
+    API (see :func:`download_report`), so a download never needs MinIO to be
+    browser-reachable — which it isn't on a single-origin / Cloudflare-Tunnel
+    deployment like the public demo.
+    """
+    return f"/api/competitions/{competition_id}/reports/{report_id}/download/{fmt}"
 
 
-def _to_out(report: CompetitionReport, storage: ObjectStorage) -> CompetitionReportOut:
+def _to_out(report: CompetitionReport) -> CompetitionReportOut:
     out = CompetitionReportOut.model_validate(report)
     if report.status == "ready":
         if report.pdf_object_key:
-            out.pdf_url = _download_url(storage, report.pdf_object_key, report.version, "pdf")
+            out.pdf_url = _download_path(report.competition_id, report.id, "pdf")
         if report.html_object_key:
-            out.html_url = _download_url(storage, report.html_object_key, report.version, "html")
+            out.html_url = _download_path(report.competition_id, report.id, "html")
     return out
 
 
@@ -163,7 +167,6 @@ async def list_reports(
     competition_id: str,
     _user: User = Depends(require_permission("generate_report")),
     db: AsyncSession = Depends(get_db),
-    storage: ObjectStorage = Depends(get_storage),
 ) -> list[CompetitionReportOut]:
     """The generation history, newest version first."""
     await _guard(db, competition_id)
@@ -178,7 +181,7 @@ async def list_reports(
         .scalars()
         .all()
     )
-    return [_to_out(r, storage) for r in rows]
+    return [_to_out(r) for r in rows]
 
 
 async def _load(db: AsyncSession, competition_id: str, report_id: str) -> CompetitionReport:
@@ -196,10 +199,59 @@ async def get_report(
     report_id: str,
     _user: User = Depends(require_permission("generate_report")),
     db: AsyncSession = Depends(get_db),
-    storage: ObjectStorage = Depends(get_storage),
 ) -> CompetitionReportOut:
     await _guard(db, competition_id)
-    return _to_out(await _load(db, competition_id, report_id), storage)
+    return _to_out(await _load(db, competition_id, report_id))
+
+
+@router.get("/{report_id}/download/{fmt}")
+async def download_report(
+    competition_id: str,
+    report_id: str,
+    fmt: str,
+    _user: User = Depends(require_permission("generate_report")),
+    db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
+) -> Response:
+    """Stream a ready report's PDF/HTML back through the API (§13.3).
+
+    Proxied, not presigned, so the object store never has to be browser-reachable
+    (the backend reaches it internally at ``minio:9000``) — which is what a
+    single-origin / Cloudflare-Tunnel deployment like the demo needs. It also
+    re-checks ``generate_report`` on every fetch, where a presigned URL would be
+    a bearer secret good for its whole TTL. Served defensively (``nosniff`` +
+    sandbox CSP, attachment disposition) like the ticket-attachment ``/content``
+    and site-logo bytes.
+    """
+    await _guard(db, competition_id)
+    if fmt not in _FORMATS:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Unknown report format"
+        )
+    report = await _load(db, competition_id, report_id)
+    key = report.pdf_object_key if fmt == "pdf" else report.html_object_key
+    if report.status != "ready" or not key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No such report file"
+        )
+    try:
+        data = storage.get(key)
+    except Exception:  # noqa: BLE001 — a missing object is a 404, not a 500
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No such report file"
+        ) from None
+    media = "application/pdf" if fmt == "pdf" else "text/html; charset=utf-8"
+    return Response(
+        content=data,
+        media_type=media,
+        headers={
+            "Content-Disposition": f'attachment; filename="report-v{report.version}.{fmt}"',
+            # Organiser-private; keep it out of shared caches.
+            "Cache-Control": "private, max-age=60",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+        },
+    )
 
 
 @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)

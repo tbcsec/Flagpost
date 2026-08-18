@@ -41,6 +41,9 @@ class CompetitionReportOut(BaseModel):
     error: str | None
     created_at: datetime
     completed_at: datetime | None
-    # Present only when status == "ready": short-lived signed download URLs.
+    # Present only when status == "ready": same-origin API paths the client
+    # fetches the rendered file from. The bytes are streamed back through the API
+    # (routers.reports.download_report), not presigned — so a download works even
+    # where MinIO isn't browser-reachable (single-origin / tunnel deployments).
     pdf_url: str | None = None
     html_url: str | None = None

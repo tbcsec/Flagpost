@@ -168,6 +168,16 @@ class Settings(BaseSettings):
     # (N-1)/N of clients. Phase 3 computes a core-aware default in the
     # production image; it stays 1 here so nothing changes until then.
     web_concurrency: int = 1
+    # This backend runs as more than one app *instance* — containers/hosts
+    # behind a load balancer (ADR-0031, e.g. ECS/Fargate + ALB) — as opposed to
+    # multiple workers inside one container, which web_concurrency covers.
+    # Forces the cross-process realtime layer (Redis broadcast relay + shared
+    # presence, ADR-0025/0026) on regardless of the local worker count: without
+    # it, N single-worker tasks would each think they're the whole deployment
+    # and silently stop relaying broadcasts to each other's clients. Requires
+    # redis_url (enforced at startup); redundant-but-harmless when
+    # web_concurrency > 1 already.
+    multi_instance: bool = False
     # Password hashing (#207). argon2 parallelism=1 (one lane per hash) is the
     # OWASP-recommended server config — throughput comes from hashing many
     # logins *concurrently*, not from splitting one hash across cores. The
@@ -295,6 +305,16 @@ class Settings(BaseSettings):
     # How often the time-trigger scheduler ticks (competition.time_remaining,
     # §5.2). A minute is plenty for "N minutes before end" rules.
     automation_scheduler_interval_seconds: float = 60.0
+    # Whether THIS process/container may run the singleton background scheduler
+    # (time triggers, report + certificate-export jobs, retention purge, update
+    # check). True preserves every existing topology: in-process when
+    # single-worker, entrypoint sidecar when multi-worker. Set false on the web
+    # tasks of a multi-instance deployment (ADR-0031), where one dedicated
+    # `python -m scheduler` service is THE scheduler — job pickup has no
+    # cross-process claim locking, so N schedulers double-fire webhooks and
+    # render jobs twice. `python -m scheduler` itself deliberately ignores this
+    # flag: running it is the explicit opt-in.
+    scheduler_enabled: bool = True
 
     # --- Object storage (MinIO / S3, §13.3) ---
     # Endpoint the backend talks to. Defaults to the compose MinIO as exposed on
@@ -306,6 +326,13 @@ class Settings(BaseSettings):
     minio_public_endpoint: str | None = None
     minio_access_key: str = "minioadmin"
     minio_secret_key: str = "minioadmin"
+    # Authenticate to object storage with AWS IAM role credentials (ECS task
+    # role / EC2 instance profile) instead of the static keys above (ADR-0031).
+    # The client resolves and auto-refreshes them from the container/instance
+    # metadata endpoint, so there is no long-lived storage secret to distribute;
+    # the two key settings are ignored. Only meaningful against real S3 —
+    # MinIO has no metadata endpoint to serve role credentials.
+    minio_iam_auth: bool = False
     minio_bucket: str = "challenge-files"
     minio_secure: bool = False  # http in dev; true behind TLS in prod
     # SigV4 region. Setting it lets the client sign presigned URLs *offline*; with
@@ -427,6 +454,11 @@ class Settings(BaseSettings):
         window between "operator deploys" and "someone finds an open MinIO" is
         not one a log line closes.
         """
+        if self.minio_iam_auth:
+            # IAM-role auth (ADR-0031): no static credentials are in play at
+            # all — the storage client ignores the key settings this check
+            # would otherwise be inspecting.
+            return self
         if not (
             self.minio_access_key in _INSECURE_MINIO_DEFAULTS
             or self.minio_secret_key in _INSECURE_MINIO_DEFAULTS

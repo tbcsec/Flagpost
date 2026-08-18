@@ -486,6 +486,18 @@ async def process_report_jobs(db_factory) -> None:
                 await db.commit()
 
 
+def runs_in_process(app_settings=settings) -> bool:
+    """Should THIS web process start the scheduler in its lifespan (ADR-0031)?
+
+    Single-worker only — multi-worker runs the entrypoint's sidecar instead —
+    and only when the deployment hasn't delegated scheduling to a dedicated
+    ``python -m scheduler`` service (``SCHEDULER_ENABLED=false`` on the web
+    tasks of a multi-instance topology). Job pickup has no cross-process claim
+    locking, so the deployment must arrange for exactly one scheduler.
+    """
+    return app_settings.scheduler_enabled and app_settings.web_concurrency <= 1
+
+
 def start(db_factory, interval_seconds: float) -> None:
     """Launch the periodic tick (idempotent). Requires a running event loop."""
     global _task

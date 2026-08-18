@@ -117,3 +117,14 @@ def test_endpoint_host_parsing(value, expected):
 )
 def test_loopback_detection(host, expected):
     assert _is_loopback(host) is expected
+
+
+def test_iam_role_auth_bypasses_the_static_credential_guard():
+    """MINIO_IAM_AUTH=true (ADR-0031) means no static credentials exist at all —
+    the vendor-default check would be inspecting settings the storage client
+    ignores, so it must not block an otherwise-valid AWS deployment."""
+    assert Settings(
+        public_base_url="https://ctf.example.com",
+        minio_iam_auth=True,
+        **_MINIO_DEFAULTS,
+    )

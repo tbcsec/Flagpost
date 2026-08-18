@@ -49,6 +49,11 @@ logger = logging.getLogger("realtime")
 
 router = APIRouter()
 
+# A client keepalive ping is ~17 bytes; only frames at most this size are worth
+# parsing on broadcast-only rooms (whose other inbound traffic is drained
+# unparsed, as before).
+_PING_FRAME_MAX_BYTES = 512
+
 # May this user join this room?
 Authorizer = Callable[[AsyncSession, User, str], Awaitable[bool]]
 # Optional initial frame sent right after auth_ok (e.g. the current scoreboard).
@@ -181,15 +186,26 @@ async def room_socket(
     try:
         while True:
             raw = await websocket.receive_text()
+            # App-level keepalive (ADR-0031): browsers can't send protocol-level
+            # WS pings, so an idle socket has zero traffic and gets culled by
+            # proxy / load-balancer idle timeouts. The client sends a tiny
+            # ``{"type": "ping"}`` frame; answer it here, before any room
+            # dispatch, so a CRDT room's handler never sees it. The size gate
+            # keeps broadcast-only rooms' drain path parse-free for anything
+            # that can't be a ping.
+            frame: dict[str, Any] | None = None
+            if room.on_message is not None or len(raw) <= _PING_FRAME_MAX_BYTES:
+                try:
+                    parsed = json.loads(raw)
+                except ValueError:
+                    parsed = None
+                frame = parsed if isinstance(parsed, dict) else None
+            if frame is not None and frame.get("type") == "ping":
+                await websocket.send_json({"type": "pong"})
+                continue
             # Broadcast-only rooms drain (and ignore) client frames; rooms with a
             # handler (CRDT collab, §4.2) get each parsed JSON frame dispatched.
-            if room.on_message is None:
-                continue
-            try:
-                frame = json.loads(raw)
-            except ValueError:
-                continue
-            if isinstance(frame, dict):
+            if room.on_message is not None and frame is not None:
                 await room.on_message(user, room_type, room_id, websocket, frame)
     except WebSocketDisconnect:
         pass

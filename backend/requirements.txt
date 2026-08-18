@@ -54,3 +54,13 @@ python3-saml>=1.16,<2.0
 # Imported lazily by utils/ldap, so an install with no LDAP provider never
 # loads it (mirrors aiosmtplib / python3-saml).
 ldap3>=2.9.1,<3.0
+
+# Post-event report rendering (#134, ADR-0030). Jinja2 builds the report HTML —
+# its autoescaping keeps user-supplied strings (team names, challenge titles)
+# from injecting into the document — and WeasyPrint converts that same HTML to
+# PDF, no headless browser. WeasyPrint is imported lazily by the reports
+# renderer, so an install that never generates a report doesn't load it (and the
+# HTML deliverable renders without it). WeasyPrint needs system libraries
+# (Pango/cairo/gdk-pixbuf) — added to the backend image in the report ops stage.
+Jinja2>=3.1,<4.0
+weasyprint>=69,<70

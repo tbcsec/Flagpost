@@ -154,14 +154,66 @@ async def test_generate_html_stores_and_serves_download(client, object_storage, 
         )
     ).json()
     assert got["status"] == "ready"
-    assert got["html_url"] and got["html_url"].startswith("memory://")
+    # A same-origin API path, not a presigned object-store URL — so it resolves
+    # even where MinIO isn't browser-reachable (the tunnelled demo, #134).
+    assert got["html_url"] == (
+        f"/api/competitions/{comp}/reports/{created['id']}/download/html"
+    )
     assert got["pdf_url"] is None  # html-only request
+
+    # That path streams the stored HTML straight back through the API.
+    dl = await client.get(got["html_url"], headers=_auth(admin))
+    assert dl.status_code == 200
+    assert dl.headers["content-type"].startswith("text/html")
+    assert "attachment" in dl.headers["content-disposition"]
+    assert "Executive summary" in dl.text
+
+    # The format that wasn't produced 404s (no pdf_object_key), not 500s.
+    assert (
+        await client.get(
+            f"/api/competitions/{comp}/reports/{created['id']}/download/pdf",
+            headers=_auth(admin),
+        )
+    ).status_code == 404
 
     async with SessionLocal() as db:
         report = await db.get(CompetitionReport, created["id"])
     assert report.html_object_key and object_storage.exists(report.html_object_key)
-    html = object_storage.get(report.html_object_key).decode("utf-8")
-    assert "Executive summary" in html
+
+
+async def test_download_gated_by_permission_and_target(client, object_storage, monkeypatch):
+    monkeypatch.setattr("storage.get_storage", lambda: object_storage)
+    admin = await admin_token(client)
+    comp = await _ended_comp_with_data(client)
+    created = (
+        await client.post(
+            f"/api/competitions/{comp}/reports",
+            json={"sections": ["overview"], "formats": ["html"]},
+            headers=_auth(admin),
+        )
+    ).json()
+    base = f"/api/competitions/{comp}/reports/{created['id']}/download"
+
+    # Pending (not yet rendered) → 404: there is no file to serve yet.
+    assert (await client.get(f"{base}/html", headers=_auth(admin))).status_code == 404
+
+    await automation_scheduler.process_report_jobs(SessionLocal)
+
+    # Unknown format is rejected before ever touching storage.
+    assert (await client.get(f"{base}/docx", headers=_auth(admin))).status_code == 404
+    # Unknown report id → 404.
+    assert (
+        await client.get(
+            f"/api/competitions/{comp}/reports/nope/download/html", headers=_auth(admin)
+        )
+    ).status_code == 404
+    # Ready and downloadable for a manager.
+    assert (await client.get(f"{base}/html", headers=_auth(admin))).status_code == 200
+
+    # A participant without generate_report can't pull the bytes — the proxy
+    # re-checks the permission on every fetch, unlike a bearer presigned URL.
+    participant = await _register(client, "peer@example.com")
+    assert (await client.get(f"{base}/html", headers=_auth(participant))).status_code == 403
 
 
 @pytest.mark.skipif(not _WEASYPRINT, reason="weasyprint/system libs unavailable")

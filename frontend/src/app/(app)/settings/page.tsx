@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { AiCompetitionPanel } from "@/components/ai/ai-competition-panel";
@@ -26,6 +27,9 @@ type Tab =
   | "certificates"
   | "reports";
 
+// Labels stay literals until the settings-domain extraction (#248) — except
+// "reports", born extracted (ADR-0029): its label resolves via t("reports.tab")
+// where the tabs render below.
 const TABS: { value: Tab; label: string }[] = [
   { value: "general", label: "General" },
   { value: "schedule", label: "Controls" },
@@ -33,7 +37,7 @@ const TABS: { value: Tab; label: string }[] = [
   { value: "rules", label: "Rules" },
   { value: "assistant", label: "Assistant" },
   { value: "certificates", label: "Certificates" },
-  { value: "reports", label: "Reports" },
+  { value: "reports", label: "" },
   { value: "modules", label: "Modules" },
 ];
 
@@ -42,6 +46,7 @@ const TABS: { value: Tab; label: string }[] = [
 // tabs (kept hidden, not unmounted) so switching tabs never drops an unsaved edit;
 // Modules (§11.3, per-competition feature toggles) is its own tab.
 export default function CompetitionSettingsPage() {
+  const tReports = useTranslations("reports");
   const { competitionId, data, isLoading, isError, error } = useActiveCompetition();
   const [tab, setTab] = useState<Tab>("general");
   // The Assistant tab only exists while the ai module is enabled here — with it
@@ -69,6 +74,8 @@ export default function CompetitionSettingsPage() {
       (t.value !== "certificates" || certTabOn) &&
       (t.value !== "reports" || reportsTabOn) &&
       (t.value !== "modules" || canManageModules),
+  ).map((tab) =>
+    tab.value === "reports" ? { ...tab, label: tReports("tab") } : tab,
   );
   const activeTab: Tab =
     (tab === "assistant" && !aiEnabled) ||

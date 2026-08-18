@@ -64,3 +64,4 @@ Status is one of:
 | [0028](0028-competition-status-gate.md) | Competition status is an explicit gameplay gate; the schedule drives it | Accepted |
 | [0029](0029-frontend-i18n-next-intl-crowdin.md) | Frontend i18n — next-intl with a cookie locale, translations in Crowdin | Accepted |
 | [0030](0030-post-event-report-rendering-weasyprint.md) | Post-event report rendering — HTML + WeasyPrint, not Pillow or a headless browser | Proposed |
+| [0031](0031-multi-instance-deployment.md) | Multi-instance deployment behind a load balancer (Fargate/ALB) | Proposed |

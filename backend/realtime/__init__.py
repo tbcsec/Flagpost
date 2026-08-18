@@ -11,22 +11,29 @@ from realtime.router import register_room_type, router
 
 
 async def start_realtime() -> None:
-    """Wire the cross-worker realtime layer when running multi-worker (#189,
-    ADR-0025/0026): the broadcast relay and the shared presence store + its
-    heartbeat. Single-worker is a no-op. Raises if ``web_concurrency > 1``
-    without a ``redis_url`` — a multi-worker deployment that can't relay would
-    silently drop broadcasts to most clients and fragment presence, so it must
-    fail loudly at startup instead.
+    """Wire the cross-process realtime layer (#189, ADR-0025/0026/0031): the
+    broadcast relay and the shared presence store + its heartbeat.
+
+    Needed whenever more than one app process serves WS clients — multiple
+    workers in one container (``web_concurrency > 1``) *or* multiple
+    containers/hosts behind a load balancer (``MULTI_INSTANCE=1``, ADR-0031).
+    The relay is plain Redis pub/sub, so it spans hosts exactly as it spans
+    workers. A lone single-worker process is a no-op. Raises without a
+    ``redis_url`` when either signal says other processes exist — a deployment
+    that can't relay would silently drop broadcasts to the other processes'
+    clients and fragment presence, so it must fail loudly at startup instead.
     """
     from config import settings
 
-    if settings.web_concurrency <= 1:
+    if settings.web_concurrency <= 1 and not settings.multi_instance:
         return
     if not settings.redis_url:
         raise RuntimeError(
-            "web_concurrency > 1 requires REDIS_URL: multi-worker needs the "
-            "Redis broadcast relay + presence store (#189), or broadcasts reach "
-            "only the clients on the emitting worker and presence fragments."
+            "Cross-process realtime needs REDIS_URL: WEB_CONCURRENCY > 1 "
+            "and/or MULTI_INSTANCE=1 mean other processes serve WS clients "
+            "too, and without the Redis broadcast relay + presence store "
+            "(#189, ADR-0031) broadcasts reach only the emitting process's "
+            "clients and presence fragments."
         )
     from realtime.presence_store import RedisPresenceStore
     from realtime.relay import RedisRelay

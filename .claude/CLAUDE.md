@@ -233,6 +233,7 @@ to matter:
 | AI assistant provider & execution model | 0023 |
 | Built-in SSO provider presets (Google/Microsoft) | 0024 |
 | Multi-worker relay & cross-worker presence | 0025, 0026 |
+| Multi-instance / Fargate+ALB deployment flags | 0031 |
 
 If an ADR's decision looks wrong for what you're building, say so and propose a
 new one — don't quietly work around it.

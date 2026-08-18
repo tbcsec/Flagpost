@@ -75,10 +75,19 @@ async def lifespan(app: FastAPI):
     # The time-trigger scheduler is a singleton: under multi-worker it runs as a
     # sidecar process (scheduler.py), not in every web worker, or automations,
     # the update check and retention would fire N× (#189 Phase 3). Single-worker
-    # keeps running it here — no sidecar needed.
-    if settings.web_concurrency <= 1:
+    # keeps running it here — no sidecar needed. A multi-instance deployment
+    # (ADR-0031) sets SCHEDULER_ENABLED=false on every web task and runs one
+    # dedicated `python -m scheduler` service instead.
+    if automation_scheduler.runs_in_process(settings):
         automation_scheduler.start(
             SessionLocal, settings.automation_scheduler_interval_seconds
+        )
+    elif not settings.scheduler_enabled:
+        logger.warning(
+            "SCHEDULER_ENABLED=false — this process runs no background "
+            "scheduler. A dedicated `python -m scheduler` service must be "
+            "running somewhere, or automations, report/certificate jobs, "
+            "retention and the update check will never fire."
         )
     # Cross-worker realtime (#189, ADR-0025/0026): broadcast relay + shared
     # presence. A no-op single-worker; the guard inside refuses to boot a

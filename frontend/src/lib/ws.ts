@@ -41,6 +41,13 @@ interface RoomSocketOptions {
 const BASE_DELAY_MS = 1_000;
 const MAX_DELAY_MS = 30_000;
 
+/** App-level keepalive cadence (ADR-0031). Browsers can't send protocol-level
+ *  WS pings, so an idle socket (a quiet scoreboard) has zero traffic and gets
+ *  culled by proxy / load-balancer idle timeouts — default 60s on an AWS ALB —
+ *  forcing pointless reconnect churn. 30s keeps even a default-configured LB's
+ *  idle timer reset; the server answers `pong` (swallowed below). */
+export const PING_INTERVAL_MS = 30_000;
+
 /** Exponential backoff with full jitter, capped. Exported for tests. */
 export function backoffDelayMs(attempt: number, random: () => number = Math.random): number {
   const capped = Math.min(MAX_DELAY_MS, BASE_DELAY_MS * 2 ** attempt);
@@ -58,6 +65,7 @@ export function openRoomSocket(
   let closed = false;
   let authed = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let pingTimer: ReturnType<typeof setInterval> | null = null;
   // Frames requested before auth completes (or during a reconnect) wait here and
   // flush on auth_ok, so a caller never has to track connection state itself.
   const outbox: unknown[] = [];
@@ -65,6 +73,25 @@ export function openRoomSocket(
   function flush() {
     if (!authed || ws?.readyState !== WebSocket.OPEN) return;
     while (outbox.length) ws.send(JSON.stringify(outbox.shift()));
+  }
+
+  // Keepalive pings are sent directly, NOT via the outbox — buffered pings
+  // replayed after a reconnect would be stale noise. Started on auth_ok,
+  // stopped whenever the socket drops.
+  function stopPing() {
+    if (pingTimer) {
+      clearInterval(pingTimer);
+      pingTimer = null;
+    }
+  }
+
+  function startPing() {
+    stopPing();
+    pingTimer = setInterval(() => {
+      if (authed && ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "ping" }));
+      }
+    }, PING_INTERVAL_MS);
   }
 
   function connect() {
@@ -90,15 +117,18 @@ export function openRoomSocket(
       if (frame.type === "auth_ok") {
         attempt = 0; // healthy connection: reset the backoff
         authed = true;
+        startPing();
         onStatus?.("open");
         flush();
         return;
       }
+      if (frame.type === "pong") return; // keepalive reply — not a room frame
       onMessage(data);
     };
 
     ws.onclose = () => {
       authed = false;
+      stopPing();
       onStatus?.("closed");
       if (closed) return;
       timer = setTimeout(() => {
@@ -117,6 +147,7 @@ export function openRoomSocket(
     close() {
       closed = true;
       if (timer) clearTimeout(timer);
+      stopPing();
       ws?.close();
     },
     send(data: unknown) {

@@ -210,3 +210,27 @@ async def test_ticket_presence_reports_staff_role(client):
         presence = await ws.receive_json()
         assert presence["type"] == "presence"
         assert presence["members"][0]["role"] == "staff"
+
+
+async def test_keepalive_ping_gets_a_pong_on_a_broadcast_only_room(client):
+    """ADR-0031: the client's app-level keepalive is answered by the endpoint
+    itself, and other client frames on a broadcast-only room stay drained."""
+    comp, _ = await _competition_with_challenge(client)
+    token = await _joined_participant(client, comp, "pinger@example.com", "Pingers")
+
+    async with WsTestClient(main.app, f"/ws/scoreboard/{comp}") as ws:
+        await ws.send_json({"token": token})
+        assert (await ws.receive_json())["type"] == "auth_ok"
+        assert (await ws.receive_json())["type"] == "scoreboard"  # join snapshot
+
+        # Junk frames (including an oversized one, which skips the parse) are
+        # drained without killing the socket...
+        await ws.send_json({"noise": "ignored"})
+        await ws.send_json({"filler": "x" * 2048})
+        # ...so the ping that follows still gets its pong, in order.
+        await ws.send_json({"type": "ping"})
+        assert (await ws.receive_json())["type"] == "pong"
+
+        # And the connection is still live: pings keep working.
+        await ws.send_json({"type": "ping"})
+        assert (await ws.receive_json())["type"] == "pong"

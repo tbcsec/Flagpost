@@ -41,6 +41,7 @@ from models.identity_provider import (
     UserExternalIdentity,
 )
 from models.password_reset import PasswordResetToken
+from models.report import CompetitionReport
 from models.role import Role, RoleAssignment
 from models.rules_acceptance import RulesAcceptance
 from models.score_adjustment import ScoreAdjustment
@@ -73,6 +74,7 @@ __all__ = [
     "CollabDocument",
     "Competition",
     "CompetitionModule",
+    "CompetitionReport",
     "DashboardLayout",
     "EmailVerificationToken",
     "Hint",

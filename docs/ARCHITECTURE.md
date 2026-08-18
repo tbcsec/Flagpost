@@ -597,7 +597,10 @@ Competition Management   create_competition, edit_competition,
                           manage_modules  (enable/disable a competition's
                           optional modules, issue #168 — split from
                           edit_competition so module toggling can be delegated
-                          independently of general settings, §11.3)
+                          independently of general settings, §11.3),
+                          generate_report  (produce a post-event report for a
+                          finished competition, issue #134/ADR-0030 — the
+                          optional `reports` module)
 Challenges                challenge_view, challenge_create, challenge_edit,
                           challenge_delete, challenge_publish
 Scoring                   score_override, scoreboard_freeze

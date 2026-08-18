@@ -1,5 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { renderWithIntl } from "@/test/intl";
 
 import { ReportsPanel } from "@/components/reports/reports-panel";
 import type { CompetitionReport } from "@/lib/types";
@@ -14,7 +16,13 @@ const ALL = ["overview", "participation", "results", "challenges", "support", "f
 vi.mock("@/lib/hooks/use-reports", () => ({
   useReportCatalog: () => ({
     data: {
-      sections: ALL.map((id) => ({ id, label: id })),
+      // Server labels are deliberately the raw ids (plus one id the frontend
+      // catalog doesn't know) so the tests can tell the t() path from the
+      // server-label fallback apart.
+      sections: [
+        ...ALL.map((id) => ({ id, label: id })),
+        { id: "sponsors", label: "Sponsor shout-outs" },
+      ],
       presets: {
         executive: ["overview", "participation", "results"],
         technical: ALL,
@@ -46,7 +54,7 @@ afterEach(() => {
 
 describe("ReportsPanel", () => {
   it("blocks generation until the competition has ended", () => {
-    render(<ReportsPanel competitionId="c1" status="running" />);
+    renderWithIntl(<ReportsPanel competitionId="c1" status="running" />);
     expect(
       screen.getByText(/generated once the competition has ended/i),
     ).toBeInTheDocument();
@@ -54,7 +62,7 @@ describe("ReportsPanel", () => {
   });
 
   it("generates with the seeded technical preset + both formats when ended", () => {
-    render(<ReportsPanel competitionId="c1" status="ended" />);
+    renderWithIntl(<ReportsPanel competitionId="c1" status="ended" />);
     const button = screen.getByRole("button", { name: "Generate report" });
     expect(button).not.toBeDisabled();
     fireEvent.click(button);
@@ -64,6 +72,16 @@ describe("ReportsPanel", () => {
     expect(new Set(payload.sections)).toEqual(new Set(ALL));
     expect(new Set(payload.formats)).toEqual(new Set(["pdf", "html"]));
     expect(payload.preset).toBe("technical");
+  });
+
+  it("localises catalog entries by id, keeping the server label for unknown ids", () => {
+    renderWithIntl(<ReportsPanel competitionId="c1" status="ended" />);
+    // A known id resolves through the message catalog, not the server label…
+    expect(screen.getByText("Executive summary")).toBeInTheDocument();
+    expect(screen.queryByText("overview")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Executive" })).toBeInTheDocument();
+    // …while an id a newer backend ships falls back to the server's label.
+    expect(screen.getByText("Sponsor shout-outs")).toBeInTheDocument();
   });
 
   it("downloads a ready report through the API hook (not a raw MinIO link)", () => {
@@ -76,8 +94,9 @@ describe("ReportsPanel", () => {
         html_url: "/api/competitions/c1/reports/r1/download/html",
       },
     ];
-    render(<ReportsPanel competitionId="c1" status="ended" />);
+    renderWithIntl(<ReportsPanel competitionId="c1" status="ended" />);
     expect(screen.getByText("Version 2")).toBeInTheDocument();
+    expect(screen.getByText("Ready")).toBeInTheDocument();
 
     // Buttons, not <a href> — the file is fetched as an auth'd blob so a plain
     // navigation (no bearer token) can't be the download path.

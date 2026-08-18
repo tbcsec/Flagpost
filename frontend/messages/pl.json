@@ -1178,5 +1178,58 @@
       "acceptedToast": "Reguły zaakceptowane",
       "acceptErrorToast": "Nie można zapisać akceptacji"
     }
+  },
+  "reports": {
+    "tab": "Reports",
+    "title": "Generate a post-event report",
+    "intro": "A branded PDF/HTML summary of the competition — executive summary, participation, results, challenge analysis, and support. Pick an audience preset or choose sections, then generate.",
+    "notEnded": "Reports can be generated once the competition has ended.",
+    "loadingOptions": "Loading options…",
+    "presetLabel": "Audience preset",
+    "presets": {
+      "executive": "Executive",
+      "technical": "Technical",
+      "full": "Full"
+    },
+    "sectionsLabel": "Sections",
+    "sections": {
+      "overview": "Executive summary",
+      "participation": "Participation & engagement",
+      "results": "Results & scoreboard",
+      "challenges": "Challenge analysis",
+      "support": "Support & operations",
+      "feedback": "Feedback & sentiment"
+    },
+    "formatsLabel": "Formats",
+    "formats": {
+      "pdf": "PDF",
+      "html": "HTML"
+    },
+    "topNLabel": "Standings shown",
+    "generate": "Generate report",
+    "generateStarting": "Starting…",
+    "generateStartedToast": "Report generation started",
+    "generateErrorToast": "Couldn't start report",
+    "history": {
+      "title": "History",
+      "loading": "Loading…",
+      "empty": "No reports generated yet.",
+      "version": "Version {version}",
+      "status": {
+        "pending": "Pending",
+        "running": "Running",
+        "ready": "Ready",
+        "failed": "Failed"
+      },
+      "delete": "Delete",
+      "deletedToast": "Report deleted",
+      "deleteErrorToast": "Couldn't delete",
+      "downloadErrorToast": "Couldn't download"
+    },
+    "deleteConfirm": {
+      "title": "Delete report v{version}?",
+      "description": "The generated files are removed. You can regenerate a new version anytime.",
+      "confirm": "Delete"
+    }
   }
 }

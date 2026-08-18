@@ -3,8 +3,10 @@
 // The "Reports" competition-settings tab (#134, ADR-0030). Organiser picks an
 // audience preset (or sections) + formats, generates once the competition has
 // ended, and downloads from the history as each report finishes rendering.
-// Admin surface, so strings stay literals (not next-intl yet — see #248).
+// Born extracted to next-intl (ADR-0029): new surfaces don't wait for the
+// admin-domain sweep (#248).
 
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +24,7 @@ import {
 import type {
   CompetitionReport,
   CompetitionStatus,
+  ReportSection,
   ReportStatus,
 } from "@/lib/types";
 import { toast } from "@/stores/toast";
@@ -53,12 +56,27 @@ export function ReportsPanel({
   competitionId: string;
   status: CompetitionStatus;
 }) {
+  const t = useTranslations("reports");
   const catalog = useReportCatalog(competitionId);
   const reports = useReports(competitionId);
   const create = useCreateReport(competitionId);
   const remove = useDeleteReport(competitionId);
   const download = useDownloadReport(competitionId);
   const confirm = useConfirm();
+
+  // Catalog entries localise by id (the survey-editor pattern for
+  // backend-defined vocabularies). Unlike those closed enums the catalog is
+  // server-extensible, so ids arrive as plain strings rather than typed message
+  // keys — `t.has` guards the cast, and an id a newer backend ships before this
+  // build knows it falls back to the server's English label, never a raw key
+  // path.
+  type CatalogKey = Parameters<typeof t.has>[0];
+  const keyed = (key: string, fallback: string) =>
+    t.has(key as CatalogKey) ? t(key as CatalogKey) : fallback;
+  const sectionLabel = (s: ReportSection) => keyed(`sections.${s.id}`, s.label);
+  const presetLabel = (name: string) => keyed(`presets.${name}`, name);
+  const formatLabel = (format: string) =>
+    keyed(`formats.${format}`, format.toUpperCase());
 
   // `sections === null` means "untouched" — fall back to the technical preset the
   // catalog defines (derived, not seeded via an effect).
@@ -113,9 +131,9 @@ export function ReportsPanel({
       },
       {
         onSuccess: () =>
-          toast("Report generation started", { variant: "success" }),
+          toast(t("generateStartedToast"), { variant: "success" }),
         onError: (e) =>
-          toast("Couldn't start report", {
+          toast(t("generateErrorToast"), {
             description: (e as Error).message,
             variant: "destructive",
           }),
@@ -125,16 +143,15 @@ export function ReportsPanel({
 
   async function onDelete(report: CompetitionReport) {
     const ok = await confirm({
-      title: `Delete report v${report.version}?`,
-      description:
-        "The generated files are removed. You can regenerate a new version anytime.",
-      confirmLabel: "Delete",
+      title: t("deleteConfirm.title", { version: report.version }),
+      description: t("deleteConfirm.description"),
+      confirmLabel: t("deleteConfirm.confirm"),
     });
     if (!ok) return;
     remove.mutate(report.id, {
-      onSuccess: () => toast("Report deleted", { variant: "success" }),
+      onSuccess: () => toast(t("history.deletedToast"), { variant: "success" }),
       onError: (e) =>
-        toast("Couldn't delete", {
+        toast(t("history.deleteErrorToast"), {
           description: (e as Error).message,
           variant: "destructive",
         }),
@@ -146,7 +163,7 @@ export function ReportsPanel({
       { reportId: report.id, fmt, version: report.version },
       {
         onError: (e) =>
-          toast("Couldn't download", {
+          toast(t("history.downloadErrorToast"), {
             description: (e as Error).message,
             variant: "destructive",
           }),
@@ -160,22 +177,18 @@ export function ReportsPanel({
   return (
     <div className="grid gap-6">
       <div>
-        <h3 className="text-sm font-semibold">Generate a post-event report</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          A branded PDF/HTML summary of the competition — executive summary,
-          participation, results, challenge analysis, and support. Pick an
-          audience preset or choose sections, then generate.
-        </p>
+        <h3 className="text-sm font-semibold">{t("title")}</h3>
+        <p className="mt-1 text-sm text-muted-foreground">{t("intro")}</p>
       </div>
 
       {!ended && (
         <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-          Reports can be generated once the competition has ended.
+          {t("notEnded")}
         </p>
       )}
 
       {catalog.isLoading && (
-        <p className="text-sm text-muted-foreground">Loading options…</p>
+        <p className="text-sm text-muted-foreground">{t("loadingOptions")}</p>
       )}
       {catalog.isError && (
         <p role="alert" className="text-sm text-destructive">
@@ -186,7 +199,7 @@ export function ReportsPanel({
       {catalog.data && (
         <div className="grid gap-4">
           <div className="space-y-2">
-            <Label>Audience preset</Label>
+            <Label>{t("presetLabel")}</Label>
             <div className="flex flex-wrap gap-2">
               {Object.keys(catalog.data.presets).map((name) => (
                 <Button
@@ -194,17 +207,16 @@ export function ReportsPanel({
                   type="button"
                   size="sm"
                   variant={preset === name ? "default" : "outline"}
-                  className="capitalize"
                   onClick={() => applyPreset(name)}
                 >
-                  {name}
+                  {presetLabel(name)}
                 </Button>
               ))}
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label>Sections</Label>
+            <Label>{t("sectionsLabel")}</Label>
             <div className="grid gap-1.5 sm:grid-cols-2">
               {catalog.data.sections.map((s) => (
                 <label key={s.id} className="flex items-center gap-2.5 text-sm">
@@ -215,7 +227,7 @@ export function ReportsPanel({
                     checked={selected.has(s.id)}
                     onChange={() => toggleSection(s.id)}
                   />
-                  {s.label}
+                  {sectionLabel(s)}
                 </label>
               ))}
             </div>
@@ -223,13 +235,10 @@ export function ReportsPanel({
 
           <div className="flex flex-wrap items-end gap-6">
             <div className="space-y-2">
-              <Label>Formats</Label>
+              <Label>{t("formatsLabel")}</Label>
               <div className="flex gap-4">
                 {catalog.data.formats.map((f) => (
-                  <label
-                    key={f}
-                    className="flex items-center gap-2 text-sm uppercase"
-                  >
+                  <label key={f} className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
                       className={CHECKBOX}
@@ -237,13 +246,13 @@ export function ReportsPanel({
                       checked={formats.has(f)}
                       onChange={() => toggleFormat(f)}
                     />
-                    {f}
+                    {formatLabel(f)}
                   </label>
                 ))}
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="report-top-n">Standings shown</Label>
+              <Label htmlFor="report-top-n">{t("topNLabel")}</Label>
               <Input
                 id="report-top-n"
                 type="number"
@@ -258,21 +267,19 @@ export function ReportsPanel({
 
           <div>
             <Button type="button" onClick={onGenerate} disabled={!canGenerate}>
-              {create.isPending ? "Starting…" : "Generate report"}
+              {create.isPending ? t("generateStarting") : t("generate")}
             </Button>
           </div>
         </div>
       )}
 
       <div className="space-y-2 border-t border-border pt-4">
-        <h3 className="text-sm font-semibold">History</h3>
+        <h3 className="text-sm font-semibold">{t("history.title")}</h3>
         {reports.isLoading && (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-sm text-muted-foreground">{t("history.loading")}</p>
         )}
         {reports.data?.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            No reports generated yet.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("history.empty")}</p>
         )}
         {reports.data && reports.data.length > 0 && (
           <ul className="rounded-md border border-border">
@@ -281,9 +288,11 @@ export function ReportsPanel({
                 key={r.id}
                 className="flex flex-wrap items-center gap-3 border-b border-border px-3 py-3 last:border-0"
               >
-                <span className="text-sm font-medium">Version {r.version}</span>
-                <Badge variant={STATUS_VARIANT[r.status]} className="capitalize">
-                  {r.status}
+                <span className="text-sm font-medium">
+                  {t("history.version", { version: r.version })}
+                </span>
+                <Badge variant={STATUS_VARIANT[r.status]}>
+                  {t(`history.status.${r.status}`)}
                 </Badge>
                 <span className="text-xs text-muted-foreground">
                   {fmtDate(r.created_at)}
@@ -300,7 +309,7 @@ export function ReportsPanel({
                       disabled={download.isPending}
                       onClick={() => onDownload(r, "pdf")}
                     >
-                      PDF
+                      {t("formats.pdf")}
                     </Button>
                   )}
                   {r.status === "ready" && r.html_url && (
@@ -311,7 +320,7 @@ export function ReportsPanel({
                       disabled={download.isPending}
                       onClick={() => onDownload(r, "html")}
                     >
-                      HTML
+                      {t("formats.html")}
                     </Button>
                   )}
                   <Button
@@ -320,7 +329,7 @@ export function ReportsPanel({
                     variant="ghost"
                     onClick={() => onDelete(r)}
                   >
-                    Delete
+                    {t("history.delete")}
                   </Button>
                 </div>
               </li>

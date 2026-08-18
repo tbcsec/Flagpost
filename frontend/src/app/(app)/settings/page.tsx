@@ -45,6 +45,14 @@ const TABS: { value: Tab; label: string }[] = [
 // into tabs by category. The settings form stays mounted across the non-module
 // tabs (kept hidden, not unmounted) so switching tabs never drops an unsaved edit;
 // Modules (§11.3, per-competition feature toggles) is its own tab.
+//
+// Switching *competitions* is the opposite contract (#258): every panel below
+// holds per-competition local state seeded from props at mount, so the content
+// is keyed by competition id — a switch remounts it all and drafts re-derive
+// from the newly active competition. Without the key, React reconciles the same
+// components in place and competition A's unsaved edits survive into B, where
+// Save would write them across tenants. The tab selection lives above the key
+// and deliberately survives the switch.
 export default function CompetitionSettingsPage() {
   const tReports = useTranslations("reports");
   const { competitionId, data, isLoading, isError, error } = useActiveCompetition();
@@ -103,7 +111,8 @@ export default function CompetitionSettingsPage() {
       {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
       {isError && <p role="alert" className="text-sm text-destructive">{(error as Error).message}</p>}
       {data && (
-        <div className="grid gap-6">
+        // key: remount everything per competition — see the header comment (#258).
+        <div key={competitionId} className="grid gap-6">
           <Tabs tabs={visibleTabs} value={activeTab} onValueChange={(v) => setTab(v as Tab)} />
 
           <div className={isFormTab ? "" : "hidden"}>

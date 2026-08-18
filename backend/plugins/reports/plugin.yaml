@@ -9,11 +9,9 @@ description: "Generate a branded PDF/HTML post-event report — executive summar
 # being `ended` (ADR-0028) and renders off the request path (WeasyPrint, ADR-0030).
 # Depends on scoring (standings/analytics drive the report body) — required-core,
 # so always present.
-# routes flip to true when the API lands (staged build, #134); Stage 1 is the
-# module registration + data model + permission only.
 required_core: false
 provides:
-  routes: false
+  routes: true
 dependencies:
   - competitions
   - scoring

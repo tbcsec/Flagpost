@@ -17,7 +17,7 @@ fills the artefact keys, the same shape :class:`CertificateExportJob` uses.
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base, CompetitionScopedMixin, TimestampMixin, UtcDateTime
@@ -25,6 +25,14 @@ from db import Base, CompetitionScopedMixin, TimestampMixin, UtcDateTime
 
 class CompetitionReport(Base, CompetitionScopedMixin, TimestampMixin):
     __tablename__ = "competition_reports"
+    # Version is monotonic *and unique* per competition — the constraint makes the
+    # invariant hold under concurrent creates (two racing max()+1 inserts can't
+    # both land); the create route retries on the resulting conflict.
+    __table_args__ = (
+        UniqueConstraint(
+            "competition_id", "version", name="uq_competition_report_version"
+        ),
+    )
 
     id: Mapped[str] = mapped_column(
         String, primary_key=True, default=lambda: str(uuid4())

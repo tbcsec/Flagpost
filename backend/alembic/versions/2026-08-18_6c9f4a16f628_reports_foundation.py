@@ -47,6 +47,9 @@ def upgrade() -> None:
             ["requested_by"], ["users.id"], ondelete="SET NULL"
         ),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "competition_id", "version", name="uq_competition_report_version"
+        ),
     )
     op.create_index(
         "ix_competition_reports_competition_id",

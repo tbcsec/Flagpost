@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from db import ensure_aware_utc, utcnow
 from models.attachment import Attachment
+from models.report import CompetitionReport
 from models.competition import Competition
 from models.ticket_attachment import TicketAttachment
 from storage import get_storage
@@ -71,6 +72,21 @@ async def delete_competition_tree(
                 )
             )
         ).all(),
+        # Generated post-event report artefacts (#134): the PDF + HTML per report,
+        # both nullable, so drop the empties.
+        *(
+            key
+            for row in (
+                await db.execute(
+                    select(
+                        CompetitionReport.pdf_object_key,
+                        CompetitionReport.html_object_key,
+                    ).where(CompetitionReport.competition_id == competition_id)
+                )
+            ).all()
+            for key in row
+            if key
+        ),
     ]
     for key in object_keys:
         try:

@@ -57,6 +57,25 @@ SECTIONS: tuple[str, ...] = (
     "feedback",
 )
 
+# Human labels for the section picker (the API catalog surfaces these).
+SECTION_LABELS: dict[str, str] = {
+    "overview": "Executive summary",
+    "participation": "Participation & engagement",
+    "results": "Results & scoreboard",
+    "challenges": "Challenge analysis",
+    "support": "Support & operations",
+    "feedback": "Feedback & sentiment",
+}
+
+# Audience presets — a bundle of sections the settings tab pre-selects; the
+# organiser can still toggle individual sections. "executive" is the lean
+# stakeholder read; "technical"/"full" go deep.
+PRESETS: dict[str, list[str]] = {
+    "executive": ["overview", "participation", "results"],
+    "technical": list(SECTIONS),
+    "full": list(SECTIONS),
+}
+
 # Only awarded (first-correct) submissions count as solves (§13.2). Redefined
 # locally rather than importing utils.analytics._AWARDED — a one-line invariant,
 # kept explicit so this module doesn't reach into another's private.
@@ -690,7 +709,12 @@ async def build_report_data(
     """
     options = options or {}
     requested = [s for s in sections if s in SECTIONS]
-    top_n = int(options.get("top_n", 10))
+    # Clamp defensively: the create route bounds this, but a report re-renders from
+    # stored config, so tolerate any bad value (non-numeric, NaN/inf) at render time.
+    try:
+        top_n = max(3, min(int(options.get("top_n", 10)), 100))
+    except (TypeError, ValueError, OverflowError):
+        top_n = 10
 
     end = await _effective_end(db, competition)
     participants = await subject_count(db, competition)

@@ -12,13 +12,19 @@ import {
   type SettingsSection,
 } from "@/components/competitions/competition-settings-form";
 import { ModulesPanel } from "@/components/competitions/modules-panel";
+import { ReportsPanel } from "@/components/reports/reports-panel";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs } from "@/components/ui/tabs";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
 import { useEnabledModules } from "@/lib/hooks/use-modules";
 import { useAccess } from "@/lib/hooks/use-permissions";
 
-type Tab = SettingsSection | "modules" | "assistant" | "certificates";
+type Tab =
+  | SettingsSection
+  | "modules"
+  | "assistant"
+  | "certificates"
+  | "reports";
 
 const TABS: { value: Tab; label: string }[] = [
   { value: "general", label: "General" },
@@ -27,6 +33,7 @@ const TABS: { value: Tab; label: string }[] = [
   { value: "rules", label: "Rules" },
   { value: "assistant", label: "Assistant" },
   { value: "certificates", label: "Certificates" },
+  { value: "reports", label: "Reports" },
   { value: "modules", label: "Modules" },
 ];
 
@@ -51,15 +58,22 @@ export default function CompetitionSettingsPage() {
   const canManageModules = access.has("manage_modules");
   const canManageCertificates = access.has("manage_certificates");
   const certTabOn = certificatesEnabled && canManageCertificates;
+  // The Reports tab, like Certificates, needs the module on here and the
+  // generate_report grant (#134, §11.3).
+  const reportsEnabled =
+    !enabledModules.data || enabledModules.data.includes("reports");
+  const reportsTabOn = reportsEnabled && access.has("generate_report");
   const visibleTabs = TABS.filter(
     (t) =>
       (t.value !== "assistant" || aiEnabled) &&
       (t.value !== "certificates" || certTabOn) &&
+      (t.value !== "reports" || reportsTabOn) &&
       (t.value !== "modules" || canManageModules),
   );
   const activeTab: Tab =
     (tab === "assistant" && !aiEnabled) ||
     (tab === "certificates" && !certTabOn) ||
+    (tab === "reports" && !reportsTabOn) ||
     (tab === "modules" && !canManageModules)
       ? "general"
       : tab;
@@ -73,7 +87,8 @@ export default function CompetitionSettingsPage() {
   const isFormTab =
     activeTab !== "modules" &&
     activeTab !== "assistant" &&
-    activeTab !== "certificates";
+    activeTab !== "certificates" &&
+    activeTab !== "reports";
 
   return (
     <>
@@ -112,6 +127,15 @@ export default function CompetitionSettingsPage() {
             <Card>
               <CardContent className="pt-6">
                 <CertificateDesigner competitionId={competitionId} />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Post-event reports (#134) — mounted only when shown (own queries). */}
+          {activeTab === "reports" && (
+            <Card>
+              <CardContent className="pt-6">
+                <ReportsPanel competitionId={competitionId} status={data.status} />
               </CardContent>
             </Card>
           )}

@@ -65,7 +65,10 @@ import type {
   AdminOverview,
   Award,
   AwardInput,
+  CompetitionReport,
   ModuleCatalogEntry,
+  ReportCatalog,
+  ReportCreate,
   ModuleState,
   MyTeam,
   Participant,
@@ -604,6 +607,26 @@ export const modulesApi = {
     apiFetch<ModuleState>(`/api/competitions/${competitionId}/modules/${moduleId}`, {
       method: "PUT",
       body: JSON.stringify({ enabled }),
+    }),
+};
+
+// Post-event reports (#134, ADR-0030) — organiser-facing, gated on generate_report.
+export const reportsApi = {
+  base: (competitionId: string) => `/api/competitions/${competitionId}/reports`,
+  catalog: (competitionId: string) =>
+    apiFetch<ReportCatalog>(`${reportsApi.base(competitionId)}/catalog`),
+  list: (competitionId: string) =>
+    apiFetch<CompetitionReport[]>(reportsApi.base(competitionId)),
+  create: (competitionId: string, input: ReportCreate) =>
+    apiFetch<CompetitionReport>(reportsApi.base(competitionId), {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  get: (competitionId: string, reportId: string) =>
+    apiFetch<CompetitionReport>(`${reportsApi.base(competitionId)}/${reportId}`),
+  remove: (competitionId: string, reportId: string) =>
+    apiFetch<void>(`${reportsApi.base(competitionId)}/${reportId}`, {
+      method: "DELETE",
     }),
 };
 

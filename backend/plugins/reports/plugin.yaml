@@ -1,0 +1,17 @@
+id: reports
+name: Post-Event Reports
+version: 1.0.0
+description: "Generate a branded PDF/HTML post-event report — executive summary, participation, results, challenge analysis, and support breakdowns — once a competition has ended."
+# The sixth optional module (§11.3, ROADMAP #134, ADR-0030): not required-core,
+# so it carries the per-competition enable/disable toggle (competition_modules —
+# default ON) and appears in the at-creation module picker (#252). Every route
+# 404s when disabled for the competition. Generation is gated on the competition
+# being `ended` (ADR-0028) and renders off the request path (WeasyPrint, ADR-0030).
+# Depends on scoring (standings/analytics drive the report body) — required-core,
+# so always present.
+required_core: false
+provides:
+  routes: true
+dependencies:
+  - competitions
+  - scoring

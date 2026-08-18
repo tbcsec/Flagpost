@@ -181,16 +181,21 @@ async def challenge_analytics(
 
 
 async def team_analytics(
-    db: AsyncSession, competition: Competition
+    db: AsyncSession, competition: Competition, *, live: bool = False
 ) -> list[dict[str, Any]]:
     """Per-subject standing (rank/points/last solve from the scoreboard) plus a
     distinct-challenge solve count, first-blood count, and tickets opened — the
-    "team progress" view."""
+    "team progress" view.
+
+    ``live=True`` reads the scoreboard past a freeze (§13) — the organiser view;
+    the post-event report uses it so a lingering freeze can't hide final
+    standings. The default (freeze-aware) preserves the analytics endpoint's
+    behaviour."""
     from models.ticket import Ticket
 
     team_mode = competition.participation_mode == "team"
     subject_col = Submission.team_id if team_mode else Submission.user_id
-    board = await compute_scoreboard(db, competition)
+    board = await compute_scoreboard(db, competition, live=live)
 
     solve_rows = (
         await db.execute(

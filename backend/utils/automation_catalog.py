@@ -88,6 +88,7 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "survey.opened": ["competition_id", "survey_id", "title"],
     "certificate.template_updated": ["competition_id", "certificate_template_id"],
     "certificate.released": ["competition_id", "certificate_template_id"],
+    "report.generated": ["competition_id", "report_id", "version", "user_id"],
     "user.registered": ["user_id"],
     "user.email_verified": ["user_id"],
     "user.created": ["user_id", "email", "actor_user_id"],
@@ -169,6 +170,9 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     # a certificate), so it maps to the baseline a Participant holds.
     "certificate.template_updated": "manage_certificates",
     "certificate.released": "challenge_view",
+    # A generated report is an organiser artefact, so automating on it needs the
+    # same grant that produces one.
+    "report.generated": "generate_report",
     # Challenge authoring (draft/edit) is staff; play events are member-visible.
     "challenge.created": "challenge_edit",
     "challenge.updated": "challenge_edit",

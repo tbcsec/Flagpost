@@ -106,6 +106,8 @@ EVENT_TYPES: tuple[str, ...] = (
     # per-participant notification + celebratory modal.
     "certificate.template_updated",
     "certificate.released",
+    # Post-event report finished rendering (#134, ADR-0030).
+    "report.generated",
     "announcement.published",
     "site.settings_updated",
     "score.adjusted",

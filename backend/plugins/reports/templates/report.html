@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ meta.name }} — Post-Event Report</title>
+<style>
+  @font-face { font-family: "Report"; font-weight: 400; font-style: normal;
+    src: url("{{ font_dir }}/Lato-Regular.ttf"); }
+  @font-face { font-family: "Report"; font-weight: 700; font-style: normal;
+    src: url("{{ font_dir }}/Lato-Bold.ttf"); }
+  @font-face { font-family: "Report"; font-weight: 400; font-style: italic;
+    src: url("{{ font_dir }}/Lato-Italic.ttf"); }
+  @font-face { font-family: "ReportMono"; font-weight: 400; font-style: normal;
+    src: url("{{ font_dir }}/FiraCode-Regular.ttf"); }
+
+  :root {
+    --accent: {{ accent }};
+    --ink: #191c24;
+    --body: #363c49;
+    --muted: #6b7280;
+    --faint: #9aa1ad;
+    --line: #e4e7ec;
+    --line-soft: #eef1f5;
+    --tint: #f4f6fb;
+    --good: #15803d;
+    --warn: #b45309;
+    --crit: #b91c1c;
+  }
+
+  @page {
+    size: A4;
+    margin: 16mm 15mm 18mm;
+    @top-left { content: element(runhead); }
+    @bottom-right {
+      content: "Powered by Flagpost — " counter(page) " / " counter(pages);
+      font: 400 7.5pt "Report"; color: var(--faint);
+    }
+  }
+  @page :first {
+    margin: 0;
+    @top-left { content: none; }
+    @bottom-right { content: none; }
+  }
+
+  * { box-sizing: border-box; }
+  html { font-family: "Report", sans-serif; color: var(--body); font-size: 10pt; line-height: 1.5; }
+  body { margin: 0; }
+
+  .runhead {
+    position: running(runhead);
+    font-size: 7.5pt; color: var(--faint); letter-spacing: .02em;
+  }
+  .num { font-family: "ReportMono", monospace; font-variant-numeric: tabular-nums; }
+
+  /* ---- Cover ---- */
+  .cover { page-break-after: always; padding: 0; }
+  .cover-band {
+    background: var(--accent); color: #fff;
+    padding: 34mm 15mm 16mm; }
+  .brandrow { display: flex; align-items: center; gap: 8pt; margin-bottom: 24pt; }
+  .brandrow img { height: 22pt; max-width: 120pt; }
+  .brandrow .pname { font-weight: 700; font-size: 12pt; }
+  .brandrow .tag {
+    margin-left: auto; font-size: 8pt; letter-spacing: .14em; text-transform: uppercase;
+    border: 1px solid rgba(255,255,255,.5); padding: 3pt 8pt; border-radius: 20pt; }
+  .cover-kicker { font-size: 9pt; letter-spacing: .2em; text-transform: uppercase; opacity: .85; }
+  .cover-title { font-size: 30pt; font-weight: 700; line-height: 1.1; margin: 8pt 0 12pt; }
+  .cover-meta { display: flex; flex-wrap: wrap; gap: 18pt; font-size: 10pt; }
+  .cover-meta b { display: block; font-size: 7.5pt; letter-spacing: .08em; text-transform: uppercase;
+    opacity: .7; font-weight: 700; margin-bottom: 2pt; }
+  .cover-foot { padding: 12pt 15mm; display: flex; justify-content: space-between;
+    color: var(--muted); font-size: 9pt; }
+
+  /* ---- Sections ---- */
+  section.block { page-break-inside: auto; margin-bottom: 6pt; }
+  .sec-no { font: 400 8.5pt "ReportMono", monospace; letter-spacing: .1em; color: var(--accent); }
+  h2 { font-size: 15pt; font-weight: 700; color: var(--ink); margin: 2pt 0 2pt; }
+  .sec-sub { color: var(--muted); font-size: 9.5pt; margin: 0 0 12pt; }
+  h3 { font-size: 9.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--ink); margin: 16pt 0 7pt; padding-bottom: 4pt; border-bottom: 1px solid var(--line);
+    page-break-after: avoid; }
+
+  .lede { font-size: 11pt; line-height: 1.6; margin: 0 0 14pt; }
+  .lede b { color: var(--ink); }
+
+  .kpis { display: flex; flex-wrap: wrap; gap: 7pt; }
+  .kpi { border: 1px solid var(--line); border-radius: 6pt; padding: 8pt 10pt; width: 31%; }
+  .kpi.accent { background: var(--tint); border-color: #d9e0f5; }
+  .kpi .v { font-size: 17pt; font-weight: 700; color: var(--ink); }
+  .kpi.accent .v { color: var(--accent); }
+  .kpi .v small { font-size: 9pt; color: var(--muted); font-weight: 700; }
+  .kpi .l { font-size: 8pt; color: var(--muted); margin-top: 3pt; }
+
+  .highs { display: flex; flex-wrap: wrap; gap: 6pt; margin-top: 10pt; }
+  .high { width: 48.5%; background: var(--tint); border: 1px solid #e6ebf8; border-radius: 6pt;
+    padding: 7pt 9pt; font-size: 9pt; }
+  .high b { display: block; color: var(--ink); }
+  .high span { color: var(--muted); }
+
+  .callout { display: flex; gap: 8pt; padding: 8pt 10pt; border-radius: 6pt; margin: 10pt 0;
+    font-size: 9.5pt; page-break-inside: avoid; }
+  .callout.warn { background: #fdf4e6; border: 1px solid #f4e0bf; color: #7c4a12; }
+  .callout.good { background: #eafaf0; border: 1px solid #c4ebd2; color: #1a5e33; }
+  .callout.crit { background: #fdecec; border: 1px solid #f4cccc; color: #8a1c1c; }
+  .callout b { font-weight: 700; }
+
+  .chart { border: 1px solid var(--line); border-radius: 6pt; padding: 8pt 10pt; margin-top: 4pt; }
+  .chart-t { font-size: 9pt; font-weight: 700; color: var(--ink); margin-bottom: 4pt; }
+  svg { max-width: 100%; }
+  .legend { display: flex; flex-wrap: wrap; gap: 5pt 12pt; margin-top: 6pt; }
+  .legend span { font-size: 8.5pt; color: var(--muted); }
+  .legend i { display: inline-block; width: 8pt; height: 8pt; border-radius: 2pt; margin-right: 4pt; }
+
+  .cols { display: flex; gap: 14pt; }
+  .cols > * { flex: 1; }
+
+  .funnel { display: flex; flex-direction: column; gap: 4pt; }
+  .fbar { color: #fff; background: var(--accent); border-radius: 4pt; padding: 4pt 8pt;
+    font-size: 9pt; display: flex; }
+  .fbar .fv { margin-left: auto; font-weight: 700; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  th { text-align: left; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--muted); font-weight: 700; padding: 5pt 6pt; border-bottom: 1.5px solid var(--line); }
+  td { padding: 5pt 6pt; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+  tr { page-break-inside: avoid; }
+  thead { display: table-header-group; }
+  td.r, th.r { text-align: right; font-family: "ReportMono", monospace; font-variant-numeric: tabular-nums; }
+  td.name { color: var(--ink); font-weight: 700; }
+  .cat { font-size: 7.5pt; font-weight: 700; padding: 1pt 5pt; border-radius: 3pt;
+    background: var(--tint); color: var(--accent); }
+  .bar { display: flex; align-items: center; gap: 5pt; }
+  .bar .track { flex: 1; height: 5pt; border-radius: 3pt; background: var(--line); overflow: hidden; }
+  .bar .fill { height: 100%; background: var(--accent); }
+  .bar .fill.lo { background: var(--crit); } .bar .fill.mid { background: var(--warn); }
+  .bar .fill.hi { background: var(--good); }
+  .bar .p { width: 26pt; text-align: right; font-family: "ReportMono", monospace; font-size: 8pt; }
+
+  .podium { display: flex; gap: 8pt; margin-bottom: 10pt; }
+  .pod { flex: 1; border: 1px solid var(--line); border-radius: 7pt; padding: 8pt; text-align: center; }
+  .pod.first { border-color: #e6cf8f; background: #fffdf5; }
+  .pod .rk { font: 400 8pt "ReportMono", monospace; color: var(--faint); letter-spacing: .1em; }
+  .pod .nm { font-weight: 700; color: var(--ink); margin: 3pt 0; }
+  .pod .sc { color: var(--accent); font-weight: 700; }
+  .note { font-size: 8pt; color: var(--faint); font-style: italic; margin-top: 5pt; }
+  .tstats { display: flex; gap: 7pt; margin-bottom: 10pt; }
+  .tstat { flex: 1; border: 1px solid var(--line); border-radius: 6pt; padding: 7pt 9pt; }
+  .tstat .v { font-size: 14pt; font-weight: 700; color: var(--ink); }
+  .tstat .l { font-size: 8pt; color: var(--muted); margin-top: 2pt; }
+</style>
+</head>
+<body>
+
+<div class="runhead">{{ meta.name }} · Post-Event Report</div>
+
+{# ===================== COVER ===================== #}
+<section class="cover">
+  <div class="cover-band">
+    <div class="brandrow">
+      {% if branding.logo %}<img src="{{ branding.logo }}" alt="">{% endif %}
+      <span class="pname">{{ branding.platform_name }}</span>
+      <span class="tag">Post-Event Report</span>
+    </div>
+    <div class="cover-kicker">{{ meta.participation_mode|capitalize }} competition</div>
+    <div class="cover-title">{{ meta.name }}</div>
+    <div class="cover-meta">
+      <div><b>Dates</b>{% if meta.start_at %}{{ meta.start_at|date }} – {{ meta.effective_end|date }}{% else %}Through {{ meta.effective_end|date }}{% endif %}</div>
+      <div><b>Duration</b>{{ meta.duration_days }} day{{ 's' if meta.duration_days != 1 }}</div>
+      {% if data.overview %}<div><b>Participants</b>{{ data.overview.participants }}{% if data.overview.teams is not none %} · {{ data.overview.teams }} teams{% endif %}</div>{% endif %}
+    </div>
+  </div>
+  <div class="cover-foot">
+    <span>Prepared for stakeholder distribution</span>
+    {% if generated_at %}<span>Generated {{ generated_at|datetime }}</span>{% endif %}
+  </div>
+</section>
+
+{# ===================== OVERVIEW ===================== #}
+{% if data.overview %}
+{% set ov = data.overview %}
+<section class="block">
+  <div class="sec-no">01</div>
+  <h2>Executive summary</h2>
+  <p class="sec-sub">The one-page read — what ran, who took part, and how it landed.</p>
+
+  <p class="lede">
+    <b>{{ meta.name }}</b> ran for <b>{{ meta.duration_days }} day{{ 's' if meta.duration_days != 1 }}</b>,
+    drawing <b>{{ ov.participants }}</b> participant{{ 's' if ov.participants != 1 }}{% if ov.teams is not none %} across <b>{{ ov.teams }}</b> teams{% endif %}
+    who made <b class="num">{{ ov.total_submissions }}</b> submissions against
+    <b>{{ ov.published_challenges }}</b> challenges — solving <b class="num">{{ ov.total_solves }}</b>
+    at an average <b>{{ ov.avg_completion_rate|pct }}</b> solve rate.
+  </p>
+
+  <div class="kpis">
+    <div class="kpi accent"><div class="v num">{{ ov.participants }}</div><div class="l">Participants</div></div>
+    <div class="kpi accent"><div class="v num">{{ ov.published_challenges }}</div><div class="l">Challenges</div></div>
+    <div class="kpi accent"><div class="v num">{{ ov.total_solves }}</div><div class="l">Total solves</div></div>
+    <div class="kpi"><div class="v num">{{ ov.total_submissions }}</div><div class="l">Submissions</div></div>
+    <div class="kpi"><div class="v num">{{ ov.avg_completion_rate|pct }}</div><div class="l">Avg solve rate</div></div>
+    <div class="kpi"><div class="v num">{% if ov.avg_rating is not none %}{{ ov.avg_rating }}<small>/5</small>{% else %}—{% endif %}</div><div class="l">Avg rating</div></div>
+  </div>
+
+  <div class="highs">
+    {% if ov.highlights.most_solved %}<div class="high"><b>Most-solved challenge</b><span>{{ ov.highlights.most_solved.title }} — {{ ov.highlights.most_solved.solve_count }} solves</span></div>{% endif %}
+    {% if ov.highlights.hardest %}<div class="high"><b>Toughest challenge</b><span>{{ ov.highlights.hardest.title }} — {{ ov.highlights.hardest.completion_rate|pct }} solved</span></div>{% endif %}
+    {% if ov.highlights.first_blood_leader %}<div class="high"><b>First-blood leader</b><span>{{ ov.highlights.first_blood_leader.name }} — {{ ov.highlights.first_blood_leader.count }} first bloods</span></div>{% endif %}
+  </div>
+</section>
+{% endif %}
+
+{# ===================== PARTICIPATION ===================== #}
+{% if data.participation %}
+{% set p = data.participation %}
+{% set f = p.funnel %}
+<section class="block">
+  <div class="sec-no">02</div>
+  <h2>Participation &amp; engagement</h2>
+  <p class="sec-sub">Who took part, how far they got, and when the room was busiest.</p>
+
+  <div class="cols">
+    <div>
+      <h3>Engagement funnel</h3>
+      <div class="funnel">
+        <div class="fbar" style="width:100%">Registered <span class="fv num">{{ f.registered }}</span></div>
+        <div class="fbar" style="width:{{ (100 * f.active / f.registered)|round(0,'floor')|int if f.registered else 0 }}%; opacity:.85">Active <span class="fv num">{{ f.active }}</span></div>
+        <div class="fbar" style="width:{{ (100 * f.scored / f.registered)|round(0,'floor')|int if f.registered else 0 }}%; opacity:.7">Scored <span class="fv num">{{ f.scored }}</span></div>
+        <div class="fbar" style="width:{{ (100 * f.active_final_day / f.registered)|round(0,'floor')|int if f.registered else 0 }}%; opacity:.55">Active final day <span class="fv num">{{ f.active_final_day }}</span></div>
+      </div>
+    </div>
+    <div>
+      {% if svg.velocity %}
+      <h3>Cumulative solves</h3>
+      <div class="chart">{{ svg.velocity|safe }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if svg.heatmap %}
+  <h3>Activity by hour of day (UTC)</h3>
+  <div class="chart">{{ svg.heatmap|safe }}</div>
+  <p class="note">Useful for planning support staffing next year.</p>
+  {% endif %}
+
+  {% if p.team_size_distribution %}
+  <h3>Team size</h3>
+  <table>
+    <tbody>
+      {% for label, count in p.team_size_distribution.items() %}
+      <tr><td class="name">{{ label }}</td><td class="r">{{ count }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endif %}
+
+{# ===================== RESULTS ===================== #}
+{% if data.results %}
+{% set r = data.results %}
+<section class="block">
+  <div class="sec-no">03</div>
+  <h2>Results &amp; scoreboard</h2>
+  <p class="sec-sub">Final standings and how scores were distributed.</p>
+
+  {% if r.podium %}
+  <div class="podium">
+    {% for e in r.podium %}
+    <div class="pod {{ 'first' if loop.index == 1 }}">
+      <div class="rk">#{{ e.rank }}</div>
+      <div class="nm">{{ e.name }}</div>
+      <div class="sc num">{{ e.points }} pts</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if svg.score_hist %}
+  <h3>Score distribution</h3>
+  <div class="chart">{{ svg.score_hist|safe }}</div>
+  {% endif %}
+
+  {% if r.bracket_winners %}
+  <h3>Bracket winners</h3>
+  <table><tbody>
+    {% for b in r.bracket_winners %}
+    <tr><td class="name">{{ b.bracket }}</td><td>{{ b.name }}</td><td class="r">{{ b.points }}</td></tr>
+    {% endfor %}
+  </tbody></table>
+  {% endif %}
+
+  <h3>Standings — top {{ r.top|length }}</h3>
+  <table>
+    <thead><tr><th class="r">#</th><th>{{ 'Team' if meta.participation_mode == 'team' else 'Player' }}</th><th class="r">Solves</th><th class="r">First bloods</th><th class="r">Points</th></tr></thead>
+    <tbody>
+      {% for e in r.top %}
+      <tr><td class="r">{{ e.rank }}</td><td class="name">{{ e.name }}</td><td class="r">{{ e.solve_count }}</td><td class="r">{{ e.first_bloods }}</td><td class="r">{{ e.points }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if r.full_standings|length > r.top|length %}<p class="note">{{ r.full_standings|length }} total; top {{ r.top|length }} shown.</p>{% endif %}
+</section>
+{% endif %}
+
+{# ===================== CHALLENGES ===================== #}
+{% if data.challenges %}
+{% set c = data.challenges %}
+<section class="block">
+  <div class="sec-no">04</div>
+  <h2>Challenge analysis</h2>
+  <p class="sec-sub">Per-challenge performance, category balance, and difficulty calibration.</p>
+
+  <div class="cols">
+    <div>
+      {% if svg.category %}
+      <h3>Solves by category</h3>
+      <div class="chart" style="text-align:center">{{ svg.category|safe }}
+        <div class="legend" style="justify-content:center">
+          {% for row in c.category_rollup %}<span><i style="background:{{ category_colors[loop.index0 % category_colors|length] }}"></i>{{ row.category }} · {{ row.solves }}</span>{% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    <div>
+      {% if c.difficulty_calibration %}
+      <div class="callout warn"><div><b>Difficulty calibration.</b>
+        {{ c.difficulty_calibration|length }} challenge{{ 's' if c.difficulty_calibration|length != 1 }} drifted from their labelled tier —
+        {% for m in c.difficulty_calibration %}<b>{{ m.title }}</b> ({{ m.difficulty }}, {{ m.completion_rate|pct }} solved){{ ', ' if not loop.last }}{% endfor %}. Worth re-tiering.</div>
+      </div>
+      {% endif %}
+      {% if c.never_solved %}
+      <div class="callout crit"><div><b>{{ c.never_solved|length }} challenge{{ 's' if c.never_solved|length != 1 }} went unsolved</b> —
+        {% for n in c.never_solved %}{{ n.title }} ({{ n.attempt_count }} attempts){{ ', ' if not loop.last }}{% endfor %}.</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <h3>Per-challenge breakdown</h3>
+  <table>
+    <thead><tr><th>Challenge</th><th>Cat</th><th>Diff</th><th class="r">Pts</th><th style="width:70pt">Solve rate</th><th class="r">Avg time</th><th class="r">Hints</th><th class="r">Tix</th><th class="r">Rating</th></tr></thead>
+    <tbody>
+      {% for ch in c.table %}
+      {% set rate = ch.completion_rate %}
+      <tr>
+        <td class="name">{{ ch.title }}</td>
+        <td>{% if ch.category %}<span class="cat">{{ ch.category }}</span>{% endif %}</td>
+        <td>{{ ch.difficulty or '—' }}</td>
+        <td class="r">{{ ch.points }}</td>
+        <td><div class="bar"><div class="track"><div class="fill {{ 'lo' if rate < 0.25 else 'mid' if rate < 0.6 else 'hi' }}" style="width:{{ (rate * 100)|round(0,'floor')|int }}%"></div></div><span class="p">{{ rate|pct }}</span></div></td>
+        <td class="r">{{ ch.avg_solve_time_seconds|duration }}</td>
+        <td class="r">{{ ch.hints_used }}</td>
+        <td class="r">{{ ch.ticket_count }}</td>
+        <td class="r">{{ ch.avg_rating if ch.avg_rating is not none else '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="note">Flags and solutions are never included in the report.</p>
+</section>
+{% endif %}
+
+{# ===================== SUPPORT ===================== #}
+{% if data.support %}
+{% set s = data.support %}
+<section class="block">
+  <div class="sec-no">05</div>
+  <h2>Support &amp; operations</h2>
+  <p class="sec-sub">Ticket load, responsiveness, and where players got stuck.</p>
+
+  <div class="tstats">
+    <div class="tstat"><div class="v num">{{ s.total_opened }}</div><div class="l">Tickets opened</div></div>
+    <div class="tstat"><div class="v num">{{ s.resolved_count }}</div><div class="l">Resolved</div></div>
+    <div class="tstat"><div class="v num">{{ s.avg_first_response_seconds|duration }}</div><div class="l">Avg first response</div></div>
+    <div class="tstat"><div class="v num">{{ s.avg_resolution_seconds|duration }}</div><div class="l">Avg resolution</div></div>
+  </div>
+
+  {% if s.tickets_by_challenge %}
+  <h3>Tickets by challenge</h3>
+  {% set tmax = s.tickets_by_challenge[0].count %}
+  <table><tbody>
+    {% for t in s.tickets_by_challenge %}
+    <tr><td class="name">{{ t.title }}</td><td class="r" style="width:34pt">{{ t.count }}</td>
+      <td style="width:45%"><div class="bar"><div class="track"><div class="fill" style="width:{{ (100 * t.count / tmax)|round(0,'floor')|int if tmax else 0 }}%"></div></div></div></td></tr>
+    {% endfor %}
+  </tbody></table>
+  {% endif %}
+</section>
+{% endif %}
+
+{# ===================== FEEDBACK ===================== #}
+{% if data.feedback and (data.feedback.challenge_ratings or data.feedback.surveys) %}
+{% set fb = data.feedback %}
+<section class="block">
+  <div class="sec-no">06</div>
+  <h2>Feedback &amp; sentiment</h2>
+  <p class="sec-sub">How the challenges landed with competitors.</p>
+
+  {% if fb.challenge_ratings %}
+  <h3>Challenge ratings</h3>
+  <table>
+    <thead><tr><th>Challenge</th><th class="r">Rating</th><th class="r">Responses</th></tr></thead>
+    <tbody>
+      {% for cr in fb.challenge_ratings %}
+      <tr><td class="name">{{ cr.title }}</td><td class="r">{{ cr.avg_rating }}/5</td><td class="r">{{ cr.rating_count }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% for survey in fb.surveys %}
+  <h3>{{ survey.title }} — {{ survey.response_count }} responses</h3>
+  <table>
+    <tbody>
+      {% for q in survey.questions %}
+      <tr><td>{{ q.prompt }}</td><td class="r">{% if q.average is not none %}{{ q.average }} avg{% else %}{{ q.answered }} answered{% endif %}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endfor %}
+</section>
+{% endif %}
+
+</body>
+</html>

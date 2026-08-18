@@ -740,6 +740,48 @@ export interface ModuleCatalogEntry {
   description: string;
 }
 
+// --- Post-event reports (#134, ADR-0030) ------------------------------------
+
+export type ReportStatus = "pending" | "running" | "ready" | "failed";
+
+export interface ReportSection {
+  id: string;
+  label: string;
+}
+
+/** The section/preset/format catalog that drives the "Reports" settings tab. */
+export interface ReportCatalog {
+  sections: ReportSection[];
+  /** preset id → the section ids it pre-selects. */
+  presets: Record<string, string[]>;
+  formats: string[];
+}
+
+export interface ReportCreate {
+  sections: string[];
+  formats: string[];
+  preset?: string | null;
+  top_n?: number;
+}
+
+export interface CompetitionReport {
+  id: string;
+  version: number;
+  status: ReportStatus;
+  config: {
+    preset?: string | null;
+    sections: string[];
+    formats: string[];
+    options?: { top_n?: number };
+  };
+  error: string | null;
+  created_at: string;
+  completed_at: string | null;
+  /** Short-lived signed download URLs, present only when status is "ready". */
+  pdf_url: string | null;
+  html_url: string | null;
+}
+
 /** A single competitor in an individual-mode competition's roster. */
 export interface Participant {
   user_id: string;

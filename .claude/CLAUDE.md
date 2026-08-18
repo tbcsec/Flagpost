@@ -52,11 +52,11 @@ mechanism that already solves your problem. It names *where* things live; the
 authority on *how* they work is `docs/ARCHITECTURE.md` and the code.
 
 **Backend** is a small kernel (auth/RBAC, the Competition tenancy root, the
-event bus, the module loader) plus **21 modules** in `backend/plugins/`, each a
+event bus, the module loader) plus **22 modules** in `backend/plugins/`, each a
 `plugin.yaml` manifest + a `setup()` that mounts routers and subscribes
-listeners (§11.1). Exactly **five are optional** — per-competition toggleable
+listeners (§11.1). Exactly **six are optional** — per-competition toggleable
 via `competition_modules`: **`automations`**, **`feedback`**, **`analytics`**,
-**`certificates`**, and **`ai`** (this last one additionally ships *inert*
+**`certificates`**, **`reports`**, and **`ai`** (this last one additionally ships *inert*
 behind a site master switch — see the AI bullet below). The other sixteen are
 required-core and always on:
 `announcements`, `audit_log`,
@@ -79,7 +79,7 @@ Subsystem by subsystem, with the non-obvious bits called out:
   reset, email verification (admin-toggleable), self-service email change, a
   registration domain allowlist, and personal **API tokens** (`flp_`-prefixed,
   minting is self-only by route shape).
-- **RBAC** — permissions as data (ADR-0004), 41 of them in
+- **RBAC** — permissions as data (ADR-0004), 42 of them in
   `auth/permissions.py`, each with a category and a `global`/`competition`
   scope. System roles **re-sync from the catalog on every startup**
   (`seed_system_roles`), so a new permission reaches an already-migrated

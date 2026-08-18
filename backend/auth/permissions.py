@@ -52,6 +52,11 @@ PERMISSIONS: tuple[Permission, ...] = (
     # edit_competition so module management can be delegated (or withheld)
     # independently of general competition settings.
     Permission("manage_modules", "Competition Management", Scope.COMPETITION),
+    # Generate a post-event report for a finished competition (#134, ADR-0030).
+    # Its own competition-scoped grant (like manage_certificates / manage_modules)
+    # so report generation can be delegated or withheld independently of general
+    # settings. Reaches existing installs via the startup role re-sync.
+    Permission("generate_report", "Competition Management", Scope.COMPETITION),
     # Challenges
     Permission("challenge_view", "Challenges", Scope.COMPETITION),
     Permission("challenge_create", "Challenges", Scope.COMPETITION),
@@ -160,6 +165,8 @@ JUDGE_PERMISSIONS: list[str] = [
     "edit_competition",
     "manage_schedule",
     "manage_modules",
+    # Generate a post-event report for their competition (#134, ADR-0030).
+    "generate_report",
     "challenge_view",
     "challenge_create",
     "challenge_edit",

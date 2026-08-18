@@ -369,6 +369,123 @@ async def process_certificate_exports(db_factory) -> None:
             await db.commit()
 
 
+REPORT_STUCK_MINUTES = 15
+
+
+async def process_report_jobs(db_factory) -> None:
+    """Render one pending post-event report per tick (#134, ADR-0030): build its
+    data, render HTML/PDF off the event loop, store the artefacts, mark it ready,
+    and emit ``report.generated``. Mirrors ``process_certificate_exports`` — one
+    job per tick, stuck-job reclamation, a failure is recorded not raised."""
+    from models.competition import Competition
+    from models.report import CompetitionReport
+    from plugins.reports import render
+    from storage import get_storage
+    from utils.event_bus import event_bus
+    from utils.report_data import SECTIONS, build_report_data
+
+    storage = get_storage()
+    async with db_factory() as db:
+        stuck = (
+            await db.execute(
+                select(CompetitionReport).where(
+                    CompetitionReport.status == "running",
+                    CompetitionReport.created_at
+                    < utcnow() - timedelta(minutes=REPORT_STUCK_MINUTES),
+                )
+            )
+        ).scalars().all()
+        for s in stuck:
+            s.status = "failed"
+            s.error = "Report render timed out"
+            s.completed_at = utcnow()
+        if stuck:
+            await db.commit()
+
+        report = await db.scalar(
+            select(CompetitionReport)
+            .where(CompetitionReport.status == "pending")
+            .order_by(CompetitionReport.created_at)
+            .limit(1)
+        )
+        if report is None:
+            return
+        report.status = "running"
+        await db.commit()
+        report_id = report.id
+        competition_id = report.competition_id
+
+        stored_keys: list[str] = []
+        try:
+            competition = await db.get(Competition, competition_id)
+            if competition is None:
+                raise RuntimeError("competition no longer exists")
+            cfg = report.config or {}
+            sections = cfg.get("sections") or list(SECTIONS)
+            formats = tuple(cfg.get("formats") or ("pdf", "html"))
+            options = cfg.get("options") or {}
+            data = await build_report_data(
+                db, competition, sections=sections, options=options
+            )
+            branding = await render.fetch_branding(db)
+            artefacts = await asyncio.to_thread(
+                render.render_report,
+                data,
+                branding,
+                generated_at=utcnow(),
+                formats=formats,
+            )
+            # Track the key BEFORE the put, so a put that durably writes then
+            # raises (a network flake after the object lands) is still cleaned up.
+            if "pdf" in artefacts:
+                key = f"{competition_id}/reports/{report_id}.pdf"
+                stored_keys.append(key)
+                await asyncio.to_thread(
+                    storage.put, key, artefacts["pdf"], "application/pdf"
+                )
+                report.pdf_object_key = key
+            if "html" in artefacts:
+                key = f"{competition_id}/reports/{report_id}.html"
+                stored_keys.append(key)
+                await asyncio.to_thread(
+                    storage.put,
+                    key,
+                    artefacts["html"].encode("utf-8"),
+                    "text/html; charset=utf-8",
+                )
+                report.html_object_key = key
+            report.status = "ready"
+            report.completed_at = utcnow()
+            await db.commit()
+            await event_bus.emit(
+                "report.generated",
+                {
+                    "competition_id": competition_id,
+                    "report_id": report_id,
+                    "version": report.version,
+                    "user_id": report.requested_by,
+                },
+            )
+        except Exception as exc:  # noqa: BLE001 — a bad job must not kill the loop
+            logger.exception("report %s render failed", report_id)
+            # Roll back the failed transaction, drop any objects stored this run,
+            # then record the failure — but re-fetch first so a competition deleted
+            # mid-render (its report row cascade-gone) can't crash the whole tick on
+            # a commit against a row that no longer exists.
+            await db.rollback()
+            for key in stored_keys:
+                try:
+                    await asyncio.to_thread(storage.delete, key)
+                except Exception:  # noqa: BLE001 — cleanup is best-effort
+                    logger.warning("could not clean up report object %s", key)
+            fresh = await db.get(CompetitionReport, report_id)
+            if fresh is not None:
+                fresh.status = "failed"
+                fresh.error = str(exc)[:500]
+                fresh.completed_at = utcnow()
+                await db.commit()
+
+
 def start(db_factory, interval_seconds: float) -> None:
     """Launch the periodic tick (idempotent). Requires a running event loop."""
     global _task
@@ -399,6 +516,9 @@ async def _loop(db_factory, interval_seconds: float) -> None:
             # the same kernel tick; both are no-ops when nothing is due/pending.
             await release_scheduled_certificates(db_factory)
             await process_certificate_exports(db_factory)
+            # Post-event report rendering (#134) rides the same tick; a no-op when
+            # no report is pending.
+            await process_report_jobs(db_factory)
             # Archived-competition retention (#26) rides the same kernel tick —
             # platform housekeeping like the lifecycle events, active
             # regardless of any per-competition module toggle.

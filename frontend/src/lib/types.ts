@@ -576,9 +576,12 @@ export interface CompetitionCreate {
   paused?: boolean;
   rules_override?: RichTextDoc | null;
   rules_display_only?: boolean;
+  // Optional modules to turn off at creation (#252); optional modules default
+  // on, so only opt-outs are sent. Create-only — not part of the update shape.
+  disabled_modules?: string[];
 }
 
-export type CompetitionUpdate = Partial<CompetitionCreate>;
+export type CompetitionUpdate = Partial<Omit<CompetitionCreate, "disabled_modules">>;
 
 export interface TeamMember {
   user_id: string;
@@ -727,6 +730,14 @@ export interface ModuleState {
   version: string;
   enabled: boolean;
   required_core: boolean;
+}
+
+/** A site-level catalog entry for an optional module — the at-creation module
+ *  picker's source (#252), available before any competition exists. */
+export interface ModuleCatalogEntry {
+  id: string;
+  name: string;
+  description: string;
 }
 
 /** A single competitor in an individual-mode competition's roster. */

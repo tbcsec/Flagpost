@@ -45,6 +45,12 @@ class CompetitionCreate(BaseModel):
     # description.
     rules_override: dict[str, Any] | None = None
     rules_display_only: bool = False
+    # Optional modules to turn off for this competition at creation (#252).
+    # Optional modules default on, so only opt-outs are sent; each id must be a
+    # known optional (non-required-core) module or the request is rejected. This
+    # is a create-only convenience — post-creation, modules are managed through
+    # the per-competition toggle endpoint.
+    disabled_modules: list[str] = Field(default_factory=list, max_length=50)
 
 
 class CompetitionUpdate(BaseModel):

@@ -1,6 +1,7 @@
 id: ai
 name: AI Assistants
 version: 0.1.0
+description: "A read-only assistant for organisers and competitors, over an operator-configured AI provider. Never reveals flags."
 # The AI assistants module (#98, ADR-0023). Optional and — unlike the other
 # optional modules — it ships INERT: the site master switch (ai_settings.enabled)
 # defaults off, so nothing happens until an admin configures an OpenAI-compatible

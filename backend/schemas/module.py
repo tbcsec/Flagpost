@@ -16,3 +16,14 @@ class ModuleStateOut(BaseModel):
 
 class ModuleToggle(BaseModel):
     enabled: bool
+
+
+class ModuleCatalogEntry(BaseModel):
+    """A site-level catalog entry for an optional module — enough to render the
+    at-creation module picker (#252) before any competition exists: id, display
+    name, and a one-line description. Per-competition enabled state is a
+    separate read."""
+
+    id: str
+    name: str
+    description: str

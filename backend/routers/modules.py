@@ -26,12 +26,31 @@ from models.competition import Competition
 from models.competition_module import CompetitionModule
 from models.user import User
 from plugins.loader import all_manifests, loaded_manifest, optional_modules
-from schemas.module import ModuleStateOut, ModuleToggle
+from schemas.module import ModuleCatalogEntry, ModuleStateOut, ModuleToggle
 from utils.event_bus import event_bus
 
 router = APIRouter(
     prefix="/api/competitions/{competition_id}/modules", tags=["modules"]
 )
+
+# Site-level catalog (not competition-scoped): the optional modules a new
+# competition can turn off at creation (#252). Kernel like the toggle router,
+# and gated on ``create_competition`` since only a would-be creator needs it.
+catalog_router = APIRouter(prefix="/api/modules", tags=["modules"])
+
+
+@catalog_router.get("", response_model=list[ModuleCatalogEntry])
+async def module_catalog(
+    _user: User = Depends(require_permission("create_competition")),
+) -> list[ModuleCatalogEntry]:
+    """The optional (per-competition toggleable) modules, id-sorted — the source
+    for the at-creation module picker, which runs before a competition exists so
+    it can't use the competition-scoped inventory. Required-core modules are
+    always on and never offered here."""
+    return [
+        ModuleCatalogEntry(id=m.id, name=m.name, description=m.description)
+        for m in sorted(optional_modules(), key=lambda m: m.id)
+    ]
 
 
 async def _competition_or_404(db: AsyncSession, competition_id: str) -> Competition:

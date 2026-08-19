@@ -47,7 +47,7 @@ import {
 import type { AuthProvider, ProviderPreset } from "@/lib/types";
 import { toast } from "@/stores/toast";
 
-type Kind = "oidc" | "saml" | "ldap";
+type Kind = "oidc" | "oauth2" | "saml" | "ldap";
 
 interface FormState {
   kind: Kind;
@@ -65,6 +65,17 @@ interface FormState {
   // OIDC, multi-tenant Entra only (ADR-0032): the id_token `iss` validation
   // template; normally blank.
   issuer_template: string;
+  // OAuth2 (#193): endpoints + the claim map naming which userinfo fields
+  // carry identity. No issuer — a plain-OAuth2 provider has none.
+  authorize_url: string;
+  token_url: string;
+  userinfo_url: string;
+  emails_url: string;
+  subject_field: string;
+  email_field: string;
+  name_field: string;
+  email_verified_field: string;
+  use_pkce: boolean;
   // SAML
   idp_entity_id: string;
   idp_sso_url: string;
@@ -94,6 +105,15 @@ const EMPTY: FormState = {
   client_id: "",
   scopes: "openid email profile",
   issuer_template: "",
+  authorize_url: "",
+  token_url: "",
+  userinfo_url: "",
+  emails_url: "",
+  subject_field: "id",
+  email_field: "email",
+  name_field: "name",
+  email_verified_field: "",
+  use_pkce: false,
   idp_entity_id: "",
   idp_sso_url: "",
   idp_x509_cert: "",
@@ -128,6 +148,15 @@ function fromEditing(p: AuthProvider): FormState {
     client_id: str(c.client_id),
     scopes: str(c.scopes, "openid email profile"),
     issuer_template: str(c.issuer_template),
+    authorize_url: str(c.authorize_url),
+    token_url: str(c.token_url),
+    userinfo_url: str(c.userinfo_url),
+    emails_url: str(c.emails_url),
+    subject_field: str(c.subject_field, "id"),
+    email_field: str(c.email_field, "email"),
+    name_field: str(c.name_field, "name"),
+    email_verified_field: str(c.email_verified_field),
+    use_pkce: c.use_pkce === true,
     idp_entity_id: str(c.idp_entity_id),
     idp_sso_url: str(c.idp_sso_url),
     idp_x509_cert: str(c.idp_x509_cert),
@@ -170,6 +199,7 @@ function ProviderForm({
   const error = (create.error ?? update.error) as Error | null;
   const isSaml = form.kind === "saml";
   const isLdap = form.kind === "ldap";
+  const isOauth2 = form.kind === "oauth2";
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -198,18 +228,37 @@ function ProviderForm({
             email_attribute: form.email_attribute,
             name_attribute: form.name_attribute,
           }
-        : {
-            issuer: form.issuer,
-            client_id: form.client_id,
-            scopes: form.scopes,
-            // Blank for single-tenant; the backend stores null and validates
-            // exact-issuer as before (ADR-0032).
-            issuer_template: form.issuer_template.trim() || null,
-          };
-    // SAML/LDAP are always closed (the API enforces it). For OIDC the admin
-    // chooses. email_is_authoritative only means something for a closed
-    // directory, so switching a provider to open clears it rather than 400ing.
-    const posture = form.kind === "oidc" ? form.posture : "closed";
+        : isOauth2
+          ? {
+              authorize_url: form.authorize_url,
+              token_url: form.token_url,
+              userinfo_url: form.userinfo_url,
+              client_id: form.client_id,
+              scopes: form.scopes,
+              subject_field: form.subject_field,
+              // Optional claim-map entries: blank means "this provider doesn't
+              // expose one", which the backend stores as null rather than
+              // looking up an empty key.
+              email_field: form.email_field.trim() || null,
+              name_field: form.name_field.trim() || null,
+              email_verified_field: form.email_verified_field.trim() || null,
+              emails_url: form.emails_url.trim() || null,
+              use_pkce: form.use_pkce,
+            }
+          : {
+              issuer: form.issuer,
+              client_id: form.client_id,
+              scopes: form.scopes,
+              // Blank for single-tenant; the backend stores null and validates
+              // exact-issuer as before (ADR-0032).
+              issuer_template: form.issuer_template.trim() || null,
+            };
+    // SAML/LDAP are always closed (the API enforces it). The public-IdP kinds —
+    // OIDC and OAuth2 — let the admin choose. email_is_authoritative only means
+    // something for a closed directory, so switching a provider to open clears
+    // it rather than 400ing.
+    const posture =
+      form.kind === "oidc" || form.kind === "oauth2" ? form.posture : "closed";
     const email_is_authoritative =
       posture === "closed" && form.email_is_authoritative;
 
@@ -287,13 +336,16 @@ function ProviderForm({
                   }));
                 }}
               >
-                <option value="oidc">OpenID Connect (OAuth2)</option>
+                <option value="oidc">OpenID Connect</option>
+                <option value="oauth2">OAuth 2.0 (no OpenID Connect)</option>
                 <option value="saml">SAML 2.0</option>
                 <option value="ldap">LDAP / Active Directory</option>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Fixed after creation. SAML suits campus/enterprise IdPs
-                (Shibboleth, ADFS); OIDC suits most modern providers; LDAP binds
+                Fixed after creation. OIDC suits most modern providers; plain
+                OAuth 2.0 is for providers without OpenID Connect, like GitHub
+                and Discord, where identity comes from a userinfo API call; SAML
+                suits campus/enterprise IdPs (Shibboleth, ADFS); LDAP binds
                 directly against a directory (AD, OpenLDAP, FreeIPA).
               </p>
             </div>
@@ -513,6 +565,154 @@ function ProviderForm({
                 (must be persistent) becomes the account&apos;s identity.
               </p>
             </>
+          ) : isOauth2 ? (
+            <>
+              <div className="grid gap-2">
+                <Label htmlFor="ap-authorize-url">Authorization URL</Label>
+                <Input
+                  id="ap-authorize-url"
+                  type="url"
+                  value={form.authorize_url}
+                  onChange={(e) => set("authorize_url", e.target.value)}
+                  placeholder="https://github.com/login/oauth/authorize"
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="ap-token-url">Token URL</Label>
+                <Input
+                  id="ap-token-url"
+                  type="url"
+                  value={form.token_url}
+                  onChange={(e) => set("token_url", e.target.value)}
+                  placeholder="https://github.com/login/oauth/access_token"
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="ap-userinfo-url">Userinfo URL</Label>
+                <Input
+                  id="ap-userinfo-url"
+                  type="url"
+                  value={form.userinfo_url}
+                  onChange={(e) => set("userinfo_url", e.target.value)}
+                  placeholder="https://api.github.com/user"
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  There is no ID token in plain OAuth 2.0 — the account&apos;s
+                  identity is read from this endpoint&apos;s JSON response.
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="ap-client">Client ID</Label>
+                <Input
+                  id="ap-client"
+                  value={form.client_id}
+                  onChange={(e) => set("client_id", e.target.value)}
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="ap-scopes">Scopes</Label>
+                <Input
+                  id="ap-scopes"
+                  value={form.scopes}
+                  onChange={(e) => set("scopes", e.target.value)}
+                  placeholder="read:user user:email"
+                />
+              </div>
+
+              <div className="grid gap-3 rounded-md border border-border p-3">
+                <p className="text-xs font-medium">Claim map</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-2">
+                    <Label htmlFor="ap-subject-field">Subject field</Label>
+                    <Input
+                      id="ap-subject-field"
+                      value={form.subject_field}
+                      onChange={(e) => set("subject_field", e.target.value)}
+                      placeholder="id"
+                      required
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="ap-email-field">Email field</Label>
+                    <Input
+                      id="ap-email-field"
+                      value={form.email_field}
+                      onChange={(e) => set("email_field", e.target.value)}
+                      placeholder="email"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="ap-name-field">Name field</Label>
+                    <Input
+                      id="ap-name-field"
+                      value={form.name_field}
+                      onChange={(e) => set("name_field", e.target.value)}
+                      placeholder="login"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="ap-email-verified-field">
+                      Email-verified field
+                    </Label>
+                    <Input
+                      id="ap-email-verified-field"
+                      value={form.email_verified_field}
+                      onChange={(e) =>
+                        set("email_verified_field", e.target.value)
+                      }
+                      placeholder="verified"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Which fields of the userinfo response carry identity. The
+                  subject must be the provider&apos;s stable user ID, never the
+                  email address — it&apos;s what keeps an account attached when
+                  the user renames or changes address upstream.
+                </p>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="ap-emails-url">
+                  Verified-emails URL{" "}
+                  <span className="text-muted-foreground">(optional)</span>
+                </Label>
+                <Input
+                  id="ap-emails-url"
+                  type="url"
+                  value={form.emails_url}
+                  onChange={(e) => set("emails_url", e.target.value)}
+                  placeholder="https://api.github.com/user/emails"
+                />
+                <p className="text-xs text-muted-foreground">
+                  For providers that keep verified addresses on a separate
+                  endpoint (GitHub). Only the primary, verified address is
+                  trusted. Leave blank if the userinfo response already carries
+                  a verified flag.
+                </p>
+              </div>
+
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={form.use_pkce}
+                  onChange={(e) => set("use_pkce", e.target.checked)}
+                />
+                <span>
+                  Use PKCE
+                  <span className="block text-xs text-muted-foreground">
+                    Extra protection where the provider supports it (Discord
+                    does; GitHub&apos;s OAuth Apps ignore it). Leave off if
+                    sign-in fails with an unexpected-parameter error.
+                  </span>
+                </span>
+              </label>
+            </>
           ) : (
             <>
               <div className="grid gap-2">
@@ -619,8 +819,9 @@ function ProviderForm({
           </div>
 
           {/* SAML and LDAP are always closed directories (the API enforces
-              it), so the posture control only appears for OIDC. */}
-          {form.kind === "oidc" && (
+              it), so the posture control only appears for the public-IdP kinds:
+              OIDC and plain OAuth2. */}
+          {(form.kind === "oidc" || form.kind === "oauth2") && (
             <div className="grid gap-2">
               <Label htmlFor="ap-posture">Sign-in policy</Label>
               <Select
@@ -892,9 +1093,11 @@ export function AuthProvidersPanel() {
                       ? p.config.idp_entity_id
                       : p.kind === "ldap"
                         ? p.config.server_url
-                        : p.config.issuer}
+                        : p.kind === "oauth2"
+                          ? p.config.authorize_url
+                          : p.config.issuer}
                   </span>
-                  {p.kind === "oidc" ? (
+                  {p.kind === "oidc" || p.kind === "oauth2" ? (
                     <span className="font-mono text-[11px] text-muted-foreground">
                       Redirect URI: {p.redirect_uri}
                     </span>

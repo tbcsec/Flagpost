@@ -53,31 +53,80 @@ export function resolvePresetIssuer(
   return issuer;
 }
 
-/** What a preset seeds into the panel's existing create form — the same
- *  FormState fields the admin would otherwise type by hand. `kind` is narrowed
- *  to the form's protocol union (presets are OIDC today; an unknown kind falls
- *  back to "oidc" rather than widening the form's type). Returns null when the
- *  issuer can't be resolved from `values` yet. */
-export function presetToFormPrefill(
-  preset: ProviderPreset,
-  values: Record<string, string> = {},
-): {
-  kind: "oidc" | "saml" | "ldap";
+/** The create-form fields a preset seeds. Kind-specific keys are optional
+ *  because an OIDC preset fills an issuer while an `oauth2` one fills an
+ *  endpoint set and claim map (#193); the panel spreads this over its EMPTY
+ *  FormState, so absent keys simply keep their defaults. */
+export interface PresetFormPrefill {
+  kind: "oidc" | "oauth2" | "saml" | "ldap";
   name: string;
   slug: string;
   posture: "open" | "closed";
-  issuer: string;
   scopes: string;
-  issuer_template: string;
-} | null {
+  // OIDC
+  issuer?: string;
+  issuer_template?: string;
+  // OAuth2
+  authorize_url?: string;
+  token_url?: string;
+  userinfo_url?: string;
+  emails_url?: string;
+  subject_field?: string;
+  email_field?: string;
+  name_field?: string;
+  email_verified_field?: string;
+  use_pkce?: boolean;
+}
+
+/** What a preset seeds into the panel's existing create form — the same
+ *  FormState fields the admin would otherwise type by hand. `kind` is narrowed
+ *  to the form's protocol union (an unknown kind falls back to "oidc" rather
+ *  than widening the form's type). Returns null when the preset can't be turned
+ *  into a usable form yet: an OIDC issuer still missing its params, or a
+ *  malformed catalog entry — either way the caller keeps the card inert rather
+ *  than opening a form that would fail on save. */
+export function presetToFormPrefill(
+  preset: ProviderPreset,
+  values: Record<string, string> = {},
+): PresetFormPrefill | null {
+  const kind: PresetFormPrefill["kind"] =
+    preset.kind === "saml" || preset.kind === "ldap" || preset.kind === "oauth2"
+      ? preset.kind
+      : "oidc";
+  const base = {
+    kind,
+    name: preset.name,
+    slug: preset.default_slug,
+    posture: (preset.posture === "closed" ? "closed" : "open") as
+      | "open"
+      | "closed",
+  };
+
+  if (preset.kind === "oauth2") {
+    // No issuer to resolve — a plain-OAuth2 provider is described entirely by
+    // its endpoints and claim map (ADR-0033). Nullable claim fields become ""
+    // so they round-trip through the form's string inputs.
+    const config = preset.oauth2;
+    if (!config) return null;
+    return {
+      ...base,
+      scopes: config.scopes || preset.scopes,
+      authorize_url: config.authorize_url,
+      token_url: config.token_url,
+      userinfo_url: config.userinfo_url,
+      emails_url: config.emails_url ?? "",
+      subject_field: config.subject_field,
+      email_field: config.email_field ?? "",
+      name_field: config.name_field ?? "",
+      email_verified_field: config.email_verified_field ?? "",
+      use_pkce: config.use_pkce,
+    };
+  }
+
   const issuer = resolvePresetIssuer(preset, values);
   if (issuer === null) return null;
   return {
-    kind:
-      preset.kind === "saml" || preset.kind === "ldap" ? preset.kind : "oidc",
-    name: preset.name,
-    slug: preset.default_slug,
-    posture: preset.posture === "closed" ? "closed" : "open",
+    ...base,
     issuer,
     scopes: preset.scopes,
     // Multi-tenant Entra (ADR-0032): the per-tenant iss-validation template. Blank
@@ -93,6 +142,8 @@ const SETUP_LINK_LABELS: Record<string, string> = {
   google: "Open Google Cloud Console",
   microsoft: "Open Microsoft Entra",
   "microsoft-multi-tenant": "Open Microsoft Entra",
+  github: "Open GitHub developer settings",
+  discord: "Open the Discord developer portal",
 };
 
 export function setupLinkLabel(preset: ProviderPreset): string {

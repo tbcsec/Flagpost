@@ -820,8 +820,8 @@ backends against it. That contract held: **OIDC/OAuth2 shipped in v1.2.0**
 required-core module owns site-wide `IdentityProvider` rows (each independently
 `enabled`), because authentication is a property of the install, not of a
 competition — `competition_modules` (§11.3) is per-competition and has no
-site-scoped equivalent. A provider row carries a `kind` (`oidc`, `saml` or
-`ldap`), a **trust posture** (`open`: the public-signup gate
+site-scoped equivalent. A provider row carries a `kind` (`oidc`, `oauth2`,
+`saml` or `ldap`), a **trust posture** (`open`: the public-signup gate
 applies; `closed`: enablement *is* the admission decision and email is
 display-only unless the admin sets `email_is_authoritative`), one encrypted
 `secret`, and a per-kind `config` JSON validated at write and re-parsed at
@@ -866,6 +866,23 @@ password verification fails, so the ADR-0017 owner never touches a directory
 and a directory outage degrades to "LDAP users can't log in", never "nobody
 can". A banned user's directory bind still succeeds, which is why the route's
 post-resolve `is_active` check is load-bearing.
+
+**Plain OAuth2 (#193) shipped** as a third redirect `kind` (ADR-0033), for
+providers that speak OAuth 2.0 but not OIDC — GitHub and Discord being the
+motivating pair. It has no discovery document and **no ID token**: after the
+code exchange the transport calls the provider's `userinfo_url` server-side and
+reads identity out of the JSON via a configured **claim map**
+(`subject_field`/`email_field`/`name_field`), so a new OAuth2 IdP is a preset
+rather than an integration. Two consequences worth holding onto. First, there is
+no signed assertion to verify, so the trust chain is TLS plus the flow staying
+server-to-server — a browser-supplied token or profile is never accepted, and
+all four endpoint URLs go through the same https-only SSRF check the OIDC issuer
+uses. Second, `email_verified` is only ever true when the provider actually says
+so: Discord exposes a `verified` boolean, while GitHub's verified set lives at a
+separate `emails_url` whose *primary verified* address is the only one trusted
+for linking (ADR-0022 §3). PKCE is opt-in here (`use_pkce`) rather than
+mandatory as it is for OIDC, because arbitrary OAuth2 servers vary in supporting
+it; `state` remains the CSRF control.
 
 ---
 

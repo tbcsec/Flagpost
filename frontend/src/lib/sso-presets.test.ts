@@ -29,6 +29,7 @@ const MICROSOFT: ProviderPreset = {
   issuer: null,
   issuer_template: "https://login.microsoftonline.com/{tenant_id}/v2.0",
   config_issuer_template: null,
+  oauth2: null,
   params: [TENANT_PARAM],
   scopes: "openid profile email",
   default_slug: "microsoft",
@@ -44,6 +45,7 @@ const GOOGLE: ProviderPreset = {
   issuer: "https://accounts.google.com",
   issuer_template: null,
   config_issuer_template: null,
+  oauth2: null,
   params: [],
   scopes: "openid email profile",
   default_slug: "google",
@@ -61,12 +63,43 @@ const MICROSOFT_MULTI_TENANT: ProviderPreset = {
   issuer: "https://login.microsoftonline.com/common/v2.0",
   issuer_template: null,
   config_issuer_template: "https://login.microsoftonline.com/{tenantid}/v2.0",
+  oauth2: null,
   params: [],
   scopes: "openid profile email",
   default_slug: "microsoft",
   posture: "open",
   setup_url: "https://entra.microsoft.com/",
   notes: "Register a multi-tenant app in Microsoft Entra.",
+};
+
+// Plain OAuth2 (#193, ADR-0033): no issuer at all — the endpoint set and claim
+// map arrive in `oauth2`. GitHub reads verified addresses from a second
+// endpoint; Discord carries its own verified flag.
+const GITHUB: ProviderPreset = {
+  id: "github",
+  name: "GitHub",
+  kind: "oauth2",
+  issuer: null,
+  issuer_template: null,
+  config_issuer_template: null,
+  oauth2: {
+    authorize_url: "https://github.com/login/oauth/authorize",
+    token_url: "https://github.com/login/oauth/access_token",
+    userinfo_url: "https://api.github.com/user",
+    scopes: "read:user user:email",
+    subject_field: "id",
+    email_field: "email",
+    name_field: "login",
+    email_verified_field: null,
+    emails_url: "https://api.github.com/user/emails",
+    use_pkce: false,
+  },
+  params: [],
+  scopes: "read:user user:email",
+  default_slug: "github",
+  posture: "open",
+  setup_url: "https://github.com/settings/developers",
+  notes: "Register an OAuth App in GitHub's developer settings.",
 };
 
 const GUID = "d1c9061b-5e24-4a86-9db3-6a45f6f5f0d3";
@@ -173,12 +206,42 @@ describe("presetToFormPrefill", () => {
     expect(presetToFormPrefill(MICROSOFT, {})).toBeNull();
     expect(presetToFormPrefill(MICROSOFT, { tenant_id: "nope" })).toBeNull();
   });
+
+  it("seeds the endpoint set and claim map for an oauth2 preset", () => {
+    // No issuer to resolve, so this must not go down the OIDC path — before
+    // #193 a null issuer meant "unresolvable" and the card would be dead.
+    expect(presetToFormPrefill(GITHUB)).toEqual({
+      kind: "oauth2",
+      name: "GitHub",
+      slug: "github",
+      posture: "open",
+      scopes: "read:user user:email",
+      authorize_url: "https://github.com/login/oauth/authorize",
+      token_url: "https://github.com/login/oauth/access_token",
+      userinfo_url: "https://api.github.com/user",
+      emails_url: "https://api.github.com/user/emails",
+      subject_field: "id",
+      email_field: "email",
+      name_field: "login",
+      // Nullable claim fields become "" so they round-trip through the form's
+      // string inputs and submit back as null.
+      email_verified_field: "",
+      use_pkce: false,
+    });
+  });
+
+  it("returns null for an oauth2 preset with no config block", () => {
+    // A malformed catalog entry must leave the card inert rather than opening
+    // a form that would fail on save.
+    expect(presetToFormPrefill({ ...GITHUB, oauth2: null })).toBeNull();
+  });
 });
 
 describe("setupLinkLabel", () => {
   it("names the known consoles and degrades for unknown presets", () => {
     expect(setupLinkLabel(GOOGLE)).toBe("Open Google Cloud Console");
     expect(setupLinkLabel(MICROSOFT)).toBe("Open Microsoft Entra");
+    expect(setupLinkLabel(GITHUB)).toBe("Open GitHub developer settings");
     expect(setupLinkLabel({ ...GOOGLE, id: "acme", name: "Acme" })).toBe(
       "Open the Acme setup page",
     );

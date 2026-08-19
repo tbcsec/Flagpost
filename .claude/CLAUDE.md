@@ -70,12 +70,15 @@ Subsystem by subsystem, with the non-obvious bits called out:
   (ADR-0003, ADR-0008). Identity is **username-primary with optional email**
   (ADR-0015): the display name is the case-insensitively-unique login handle,
   and login accepts name *or* email via `auth/identity.find_by_identifier`.
-  **External auth is OIDC + SAML + LDAP** (`sso` module, ADR-0021/0022): one
-  `IdentityProvider` framework — sub-first linking, posture-aware trust
-  (`open`/`closed`), JIT provisioning as Participant, local login surviving as
-  break-glass because a JIT user gets an undisclosed random password hash.
-  LDAP is not a redirect: it's a bind inside `POST /api/auth/login`, tried
-  only after local verify fails. Also: self-service password
+  **External auth is OIDC + OAuth2 + SAML + LDAP** (`sso` module,
+  ADR-0021/0022): one `IdentityProvider` framework — sub-first linking,
+  posture-aware trust (`open`/`closed`), JIT provisioning as Participant, local
+  login surviving as break-glass because a JIT user gets an undisclosed random
+  password hash. Two kinds break the OIDC-shaped mould: **LDAP** is not a
+  redirect (a bind inside `POST /api/auth/login`, tried only after local verify
+  fails), and **`oauth2`** (ADR-0033) has no ID token — identity comes from a
+  server-side userinfo call plus a configured claim map, which is what makes
+  GitHub/Discord presets rather than integrations. Also: self-service password
   reset, email verification (admin-toggleable), self-service email change, a
   registration domain allowlist, and personal **API tokens** (`flp_`-prefixed,
   minting is self-only by route shape).
@@ -225,7 +228,7 @@ home — keep it that way.
 
 ## Read the ADR before touching
 
-`docs/adr/` — 32 records, indexed in `docs/adr/README.md`. The ones most likely
+`docs/adr/` — 33 records, indexed in `docs/adr/README.md`. The ones most likely
 to matter:
 
 | Area | ADR |
@@ -243,6 +246,7 @@ to matter:
 | Storing secrets (hash vs encrypt) | 0020 — facility is `utils/crypto.EncryptedString` |
 | OIDC identity framework | 0021 |
 | External auth: SAML + LDAP | 0022 |
+| Plain-OAuth2 kind (GitHub/Discord), userinfo as identity | 0033 |
 | AI assistant provider & execution model | 0023 |
 | Built-in SSO provider presets (Google/Microsoft) | 0024 |
 | Multi-worker relay & cross-worker presence | 0025, 0026 |

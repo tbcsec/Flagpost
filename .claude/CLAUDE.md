@@ -150,9 +150,15 @@ Hard-won, non-obvious, and not visible from reading the code you're changing.
   dynamically, so the build no longer exercises prerendering and the old
   missing-Suspense-boundary failure can't fire. Keep the Suspense boundaries
   anyway — they're load-bearing again the moment any route goes static.
-- **Y.js must be a single instance.** `next.config.mjs` pins it with a webpack
-  alias; remove that and collaborative editing breaks in ways that look like
-  data corruption.
+- **Y.js must be a single instance**, or collaborative editing breaks in ways
+  that look like data corruption. This was pinned by a webpack alias in
+  `next.config.mjs`; it isn't any more (#159). Next 16 builds with Turbopack,
+  which ignores the `webpack` hook without warning, and whose `resolveAlias`
+  was measured not to apply here either. What holds it today is an ESM-only
+  client graph plus one `yjs` in the lockfile — emergent, so it is enforced
+  rather than assumed: `npm run build` runs
+  `frontend/scripts/check-yjs-singleton.mjs`, which fails the build on more
+  than one copy in the emitted chunks.
 - **Object storage has no local-filesystem backend.** `get_storage()` needs
   MinIO, so the zero-infra SQLite preview stack needs
   `docker compose -f docker-compose.dev.yml up -d minio` before any attachment

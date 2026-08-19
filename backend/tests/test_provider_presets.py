@@ -72,7 +72,7 @@ async def test_presets_list_google_and_microsoft(client):
     assert resp.status_code == 200, resp.text
 
     body = resp.json()
-    assert [p["id"] for p in body] == ["google", "microsoft"]
+    assert [p["id"] for p in body] == ["google", "microsoft", "microsoft-multi-tenant"]
     # Every entry round-trips the response model — the frontend builds forms
     # from exactly this shape.
     for entry in body:
@@ -134,6 +134,39 @@ def test_microsoft_template_resolves_to_a_valid_oidc_config():
         issuer=issuer, client_id="dummy-client", scopes=microsoft["scopes"]
     )
     assert parsed.issuer == f"https://login.microsoftonline.com/{SAMPLE_TENANT}/v2.0"
+
+
+def test_multi_tenant_preset_is_open_and_tenant_templated():
+    """ADR-0032: the multi-tenant preset fixes the `common` authority and carries
+    the per-tenant validation template. Open posture because `common` trusts every
+    Entra tenant — admission is the email-domain allowlist, not the tenant."""
+    mt = _preset("microsoft-multi-tenant")
+    assert mt["kind"] == "oidc"
+    assert mt["issuer"] == "https://login.microsoftonline.com/common/v2.0"
+    assert mt["issuer_template"] is None  # no form-fill; the authority is fixed
+    assert (
+        mt["config_issuer_template"]
+        == "https://login.microsoftonline.com/{tenantid}/v2.0"
+    )
+    assert mt["params"] == []
+    assert mt["posture"] == "open"
+    # Brands as Microsoft off the common authority (the prefix match).
+    assert brand_for_provider("oidc", {"issuer": mt["issuer"]}) == "microsoft"
+
+
+def test_multi_tenant_preset_config_round_trips_the_write_path():
+    """The config the preset prefills — the common authority plus the tenant
+    template — must be exactly what the create API's OidcConfig accepts, or the
+    setup card is a dead end (ADR-0032)."""
+    mt = _preset("microsoft-multi-tenant")
+    parsed = OidcConfig(
+        issuer=mt["issuer"],
+        client_id="dummy-client",
+        scopes=mt["scopes"],
+        issuer_template=mt["config_issuer_template"],
+    )
+    assert parsed.issuer == "https://login.microsoftonline.com/common/v2.0"
+    assert parsed.issuer_template == "https://login.microsoftonline.com/{tenantid}/v2.0"
 
 
 def test_exactly_one_of_issuer_and_template_per_preset():

@@ -1,6 +1,6 @@
 # ADR-0031: Multi-instance deployment behind a load balancer
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-08-18
 **Architecture reference:** `ARCHITECTURE.md` §4.1 (real-time), §5.2 (scheduler), §13.3 (object storage); extends ADR-0025/0026 from one host to many.
 

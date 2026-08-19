@@ -1,8 +1,8 @@
 # ADR-0030: Post-event report rendering — HTML + WeasyPrint (not Pillow, not a headless browser)
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-08-18
-**Architecture reference:** `ARCHITECTURE.md` §11.3 (the optional `reports` module — to be written when the feature is built); supersedes nothing, extends ADR-0027.
+**Architecture reference:** `ARCHITECTURE.md` §11.3 (the optional `reports` module); supersedes nothing, extends ADR-0027.
 
 ## Context
 

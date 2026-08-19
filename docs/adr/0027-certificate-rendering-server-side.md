@@ -1,8 +1,8 @@
 # ADR-0027: Certificate rendering — server-side compositing (Pillow → PNG), not a headless browser
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-08-13
-**Architecture reference:** `ARCHITECTURE.md` §11.3 (the optional `certificates` module — to be written when the feature is built)
+**Architecture reference:** `ARCHITECTURE.md` §11.3 (the optional `certificates` module)
 
 ## Context
 

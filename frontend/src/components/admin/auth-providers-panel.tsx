@@ -62,6 +62,9 @@ interface FormState {
   issuer: string;
   client_id: string;
   scopes: string;
+  // OIDC, multi-tenant Entra only (ADR-0032): the id_token `iss` validation
+  // template; normally blank.
+  issuer_template: string;
   // SAML
   idp_entity_id: string;
   idp_sso_url: string;
@@ -90,6 +93,7 @@ const EMPTY: FormState = {
   issuer: "",
   client_id: "",
   scopes: "openid email profile",
+  issuer_template: "",
   idp_entity_id: "",
   idp_sso_url: "",
   idp_x509_cert: "",
@@ -123,6 +127,7 @@ function fromEditing(p: AuthProvider): FormState {
     issuer: str(c.issuer),
     client_id: str(c.client_id),
     scopes: str(c.scopes, "openid email profile"),
+    issuer_template: str(c.issuer_template),
     idp_entity_id: str(c.idp_entity_id),
     idp_sso_url: str(c.idp_sso_url),
     idp_x509_cert: str(c.idp_x509_cert),
@@ -197,6 +202,9 @@ function ProviderForm({
             issuer: form.issuer,
             client_id: form.client_id,
             scopes: form.scopes,
+            // Blank for single-tenant; the backend stores null and validates
+            // exact-issuer as before (ADR-0032).
+            issuer_template: form.issuer_template.trim() || null,
           };
     // SAML/LDAP are always closed (the API enforces it). For OIDC the admin
     // chooses. email_is_authoritative only means something for a closed
@@ -544,6 +552,26 @@ function ProviderForm({
                   required
                 />
               </div>
+              <div className="grid gap-2">
+                <Label htmlFor="ap-issuer-template">
+                  Tenant issuer template{" "}
+                  <span className="text-muted-foreground">(optional)</span>
+                </Label>
+                <Input
+                  id="ap-issuer-template"
+                  value={form.issuer_template}
+                  onChange={(e) => set("issuer_template", e.target.value)}
+                  placeholder="https://login.microsoftonline.com/{tenantid}/v2.0"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Multi-tenant Microsoft Entra only — leave blank for a normal
+                  provider. When set, the token&apos;s issuer is validated against
+                  this template with the signing-in tenant&apos;s GUID substituted
+                  for <span className="font-mono">{"{tenantid}"}</span>. Trusts
+                  every Entra tenant, so restrict access with the registration
+                  email-domain allowlist.
+                </p>
+              </div>
             </>
           )}
 
@@ -695,7 +723,10 @@ function PresetCard({
     <Card>
       <CardContent className="flex flex-col gap-3 py-4">
         <div className="flex items-center gap-2">
-          <SsoBrandIcon brand={preset.id} className="shrink-0" />
+          <SsoBrandIcon
+            brand={preset.id.startsWith("microsoft") ? "microsoft" : preset.id}
+            className="shrink-0"
+          />
           <span className="font-medium">{preset.name}</span>
         </div>
         <p className="text-xs text-muted-foreground">{preset.notes}</p>

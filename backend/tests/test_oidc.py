@@ -16,10 +16,15 @@ from sqlalchemy import func, select, text
 
 from auth.security import create_access_token
 from db import SessionLocal
+from pydantic import ValidationError
+
 from models.identity_provider import IdentityProvider, UserExternalIdentity
 from models.role import RoleAssignment
 from models.user import User
+from schemas.auth_providers import OidcConfig
 from tests.conftest import admin_token
+from utils import oidc as oidc_utils
+from utils.oidc import OidcError
 
 ISSUER = "https://idp.example.com"
 CLIENT_ID = "flagpost-test-client"
@@ -72,7 +77,7 @@ def idp(monkeypatch):
 
     state = {"nonce": None, "token_response": None, "userinfo": {}}
 
-    async def _discover(issuer):
+    async def _discover(issuer, *, issuer_template=None):
         return _discovery()
 
     async def _exchange(**kwargs):
@@ -965,3 +970,247 @@ async def test_corrupt_stored_config_is_a_skip_not_a_500(client, idp):
     # ...and the login page's button list hides it too, so the skip is
     # consistent — no button whose click lands on that 404.
     assert (await client.get("/api/auth/providers")).json() == []
+
+
+# --- multi-tenant Entra: tenant-templated issuer validation (#194, ADR-0032) --
+#
+# The single-tenant strictness these relax from is asserted throughout the file
+# above (test_wrong_issuer_is_rejected et al.); the cases here prove the templated
+# path is *added* without loosening it — a template must be set for any of this to
+# engage, and even then `iss` is bound to the token's own GUID `tid`.
+
+ENTRA_AUTHORITY = "https://login.microsoftonline.com/common/v2.0"
+ENTRA_TEMPLATE = "https://login.microsoftonline.com/{tenantid}/v2.0"
+ENTRA_TENANT = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+ENTRA_ISS = f"https://login.microsoftonline.com/{ENTRA_TENANT}/v2.0"
+
+
+@pytest.fixture
+def stub_signing_key(monkeypatch):
+    """Return the test keypair's public key for any token, so a directly-called
+    ``validate_id_token`` verifies a real signature without a network JWKS fetch —
+    the one seam the ``idp`` fixture stubs, isolated for the unit-level cases."""
+
+    async def _signing_key(jwks_uri, token):
+        return _KEY.public_key()
+
+    monkeypatch.setattr(oidc_utils, "_signing_key", _signing_key)
+
+
+async def _validate(token: str, *, issuer, issuer_template, nonce="n"):
+    return await oidc_utils.validate_id_token(
+        id_token=token,
+        document={"jwks_uri": "https://login.microsoftonline.com/common/discovery/v2.0/keys"},
+        issuer=issuer,
+        client_id=CLIENT_ID,
+        nonce=nonce,
+        issuer_template=issuer_template,
+    )
+
+
+# --- validate_id_token: the tenant-substituted iss check ----------------------
+
+
+async def test_multi_tenant_accepts_a_token_whose_iss_matches_its_tid(stub_signing_key):
+    token = _id_token(nonce="n", issuer=ENTRA_ISS, extra={"tid": ENTRA_TENANT})
+    claims = await _validate(token, issuer=ENTRA_AUTHORITY, issuer_template=ENTRA_TEMPLATE)
+    assert claims["iss"] == ENTRA_ISS
+    assert claims["tid"] == ENTRA_TENANT
+
+
+async def test_multi_tenant_rejects_iss_that_disagrees_with_tid(stub_signing_key):
+    """The core binding: a token signed for tenant A (its `iss`) can't present
+    tenant B's `tid`. Without this, `common`'s union JWKS would validate the
+    signature and the substituted issuer would drift from the real signer."""
+    other_tenant = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    token = _id_token(nonce="n", issuer=ENTRA_ISS, extra={"tid": other_tenant})
+    with pytest.raises(OidcError):
+        await _validate(token, issuer=ENTRA_AUTHORITY, issuer_template=ENTRA_TEMPLATE)
+
+
+async def test_multi_tenant_rejects_a_non_guid_tid(stub_signing_key):
+    token = _id_token(nonce="n", issuer=ENTRA_ISS, extra={"tid": "not-a-guid"})
+    with pytest.raises(OidcError):
+        await _validate(token, issuer=ENTRA_AUTHORITY, issuer_template=ENTRA_TEMPLATE)
+
+
+async def test_multi_tenant_rejects_a_missing_tid(stub_signing_key):
+    token = _id_token(nonce="n", issuer=ENTRA_ISS)  # no tid claim at all
+    with pytest.raises(OidcError):
+        await _validate(token, issuer=ENTRA_AUTHORITY, issuer_template=ENTRA_TEMPLATE)
+
+
+async def test_multi_tenant_rejects_a_foreign_issuer_host(stub_signing_key):
+    """Right (GUID) tid, but the token's `iss` host isn't the template's — the
+    substituted expectation is login.microsoftonline.com, so a lookalike host is
+    a mismatch even though tid is well-formed."""
+    token = _id_token(
+        nonce="n",
+        issuer=f"https://login.microsoftonline.com.evil.example/{ENTRA_TENANT}/v2.0",
+        extra={"tid": ENTRA_TENANT},
+    )
+    with pytest.raises(OidcError):
+        await _validate(token, issuer=ENTRA_AUTHORITY, issuer_template=ENTRA_TEMPLATE)
+
+
+async def test_multi_tenant_rejects_a_mismatched_issuer_path(stub_signing_key):
+    token = _id_token(
+        nonce="n",
+        issuer=f"https://login.microsoftonline.com/{ENTRA_TENANT}/oauth2",  # not /v2.0
+        extra={"tid": ENTRA_TENANT},
+    )
+    with pytest.raises(OidcError):
+        await _validate(token, issuer=ENTRA_AUTHORITY, issuer_template=ENTRA_TEMPLATE)
+
+
+async def test_single_tenant_still_rejects_a_foreign_issuer(stub_signing_key):
+    """With no template, an Entra-shaped token is not accepted by an ordinary
+    provider — PyJWT's exact-issuer match is untouched (the regression guard)."""
+    token = _id_token(nonce="n", issuer=ENTRA_ISS, extra={"tid": ENTRA_TENANT})
+    with pytest.raises(OidcError):
+        await _validate(token, issuer=ISSUER, issuer_template=None)
+
+
+# --- discover: the advertised-issuer relaxation -------------------------------
+
+
+def _stub_discovery(monkeypatch, advertised_issuer):
+    oidc_utils._discovery_cache.clear()
+
+    async def _get_json(url):
+        return {
+            "issuer": advertised_issuer,
+            "authorization_endpoint": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+            "token_endpoint": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+            "jwks_uri": "https://login.microsoftonline.com/common/discovery/v2.0/keys",
+        }
+
+    monkeypatch.setattr(oidc_utils, "_get_json", _get_json)
+
+
+async def test_discover_accepts_the_templated_advertised_issuer(monkeypatch):
+    # Entra's common document advertises the literal template, not the authority.
+    _stub_discovery(monkeypatch, ENTRA_TEMPLATE)
+    document = await oidc_utils.discover(ENTRA_AUTHORITY, issuer_template=ENTRA_TEMPLATE)
+    assert document["issuer"] == ENTRA_TEMPLATE
+
+
+async def test_discover_templated_still_rejects_an_unrelated_issuer(monkeypatch):
+    _stub_discovery(monkeypatch, "https://evil.example.com/common/v2.0")
+    with pytest.raises(OidcError):
+        await oidc_utils.discover(ENTRA_AUTHORITY, issuer_template=ENTRA_TEMPLATE)
+
+
+async def test_discover_without_a_template_still_requires_exact_issuer(monkeypatch):
+    # No template: the advertised template string doesn't equal the authority, so
+    # a single-tenant provider still refuses it — strictness preserved.
+    _stub_discovery(monkeypatch, ENTRA_TEMPLATE)
+    with pytest.raises(OidcError):
+        await oidc_utils.discover(ENTRA_AUTHORITY)
+
+
+# --- OidcConfig: write-time template validation -------------------------------
+
+
+def test_oidc_config_accepts_a_wellformed_issuer_template():
+    cfg = OidcConfig(
+        issuer=ENTRA_AUTHORITY, client_id="c", issuer_template=ENTRA_TEMPLATE
+    )
+    assert cfg.issuer_template == ENTRA_TEMPLATE
+
+
+def test_oidc_config_without_a_template_is_unchanged():
+    assert OidcConfig(issuer=ISSUER, client_id="c").issuer_template is None
+
+
+def test_oidc_config_rejects_a_template_with_no_placeholder():
+    with pytest.raises(ValidationError):
+        OidcConfig(
+            issuer=ENTRA_AUTHORITY,
+            client_id="c",
+            issuer_template="https://login.microsoftonline.com/common/v2.0",
+        )
+
+
+def test_oidc_config_rejects_a_placeholder_in_the_host():
+    """The whole point of the write-time check: a template that resolves the
+    tenant into the *host* could point a login at an attacker-controlled origin."""
+    with pytest.raises(ValidationError):
+        OidcConfig(
+            issuer="https://login.microsoftonline.com/common/v2.0",
+            client_id="c",
+            issuer_template="https://{tenantid}.evil.example/v2.0",
+        )
+
+
+def test_oidc_config_rejects_a_non_https_template():
+    with pytest.raises(ValidationError):
+        OidcConfig(
+            issuer=ENTRA_AUTHORITY,
+            client_id="c",
+            issuer_template="http://login.microsoftonline.com/{tenantid}/v2.0",
+        )
+
+
+def test_oidc_config_rejects_a_template_on_a_different_host_than_the_issuer():
+    """Discovery is fetched from `issuer`; tokens are validated against the
+    template. A split host would trust an origin discovery never talked to."""
+    with pytest.raises(ValidationError):
+        OidcConfig(
+            issuer="https://login.microsoftonline.com/common/v2.0",
+            client_id="c",
+            issuer_template="https://other.example.com/{tenantid}/v2.0",
+        )
+
+
+# --- end to end: multi-tenant sign-in through the router ----------------------
+
+
+async def test_multi_tenant_entra_sign_in_end_to_end(client, idp):
+    """A `common`-configured provider provisions a user from a token whose `iss`
+    carries a real tenant GUID — the case single-tenant validation can't serve."""
+    admin = await admin_token(client)
+    resp = await client.post(
+        "/api/admin/auth-providers",
+        json={
+            "kind": "oidc",
+            "name": "Entra (multi-tenant)",
+            "slug": "entra",
+            "posture": "open",
+            "secret": "s",
+            "config": {
+                "issuer": ENTRA_AUTHORITY,
+                "client_id": CLIENT_ID,
+                "issuer_template": ENTRA_TEMPLATE,
+            },
+            "enabled": True,
+        },
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 201, resp.text
+
+    state, _ = await _begin_login(client, idp, slug="entra")
+    idp["token_response"] = {
+        "id_token": _id_token(
+            nonce=idp["nonce"],
+            issuer=ENTRA_ISS,
+            sub="entra-subject-1",
+            email="user@contoso.example",
+            extra={"tid": ENTRA_TENANT},
+        ),
+        "access_token": "stub-access-token",
+    }
+    resp = await client.get(
+        f"/api/auth/oidc/entra/callback?code=abc&state={state}",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302, resp.text
+    assert "error=" not in resp.headers["location"]
+
+    async with SessionLocal() as db:
+        link = await db.scalar(
+            select(UserExternalIdentity).where(
+                UserExternalIdentity.subject == "entra-subject-1"
+            )
+        )
+        assert link is not None

@@ -17,8 +17,15 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+
+from utils.oidc import TENANT_ID_PLACEHOLDER
+
+# A syntactically valid tenant GUID, used only to probe an ``issuer_template``'s
+# shape at write time (OidcConfig below) — never a real tenant.
+_SAMPLE_TENANT_ID = "00000000-0000-0000-0000-000000000000"
 
 
 class OidcConfig(BaseModel):
@@ -34,6 +41,48 @@ class OidcConfig(BaseModel):
     issuer: str = Field(min_length=1, max_length=500)
     client_id: str = Field(min_length=1, max_length=500)
     scopes: str = Field(default="openid email profile", max_length=500)
+
+    # Multi-tenant issuer validation (ADR-0032, #194). None for every ordinary
+    # provider — single-tenant Entra included — which keeps its issuer checks
+    # byte-for-byte as strict as before. When set, this provider's id_token
+    # ``iss`` is validated against this template with the token's own ``tid``
+    # substituted for ``{tenantid}`` (Entra's own placeholder) rather than by
+    # exact string match — the standard fix for the multi-tenant Entra
+    # authorities (``common`` / ``organizations``), whose ``iss`` carries the
+    # signing-in user's tenant GUID. ``issuer`` stays the discovery authority
+    # (``…/common/v2.0``).
+    #
+    # Distinct from ``ProviderPresetOut.issuer_template`` despite the shared
+    # name: that one is *form-fill* (``{tenant_id}`` resolved from an admin param
+    # at setup to produce a fixed ``issuer``); this one is *validation*
+    # (``{tenantid}`` resolved from the token at every login).
+    issuer_template: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def _issuer_template_is_safe(self) -> "OidcConfig":
+        """Keep a set template from becoming an open redirect or a split-origin
+        trust (ADR-0032). The placeholder must resolve into the *path* of an
+        https URL on the **same host** as the discovery authority — never into
+        the host itself, which would let a login be pointed at an attacker's
+        origin, and never a different host than discovery is fetched from."""
+        template = self.issuer_template
+        if template is None:
+            return self
+        if template.count(TENANT_ID_PLACEHOLDER) != 1:
+            raise ValueError(
+                f"issuer_template must contain exactly one {TENANT_ID_PLACEHOLDER} placeholder"
+            )
+        probe = urlsplit(template.replace(TENANT_ID_PLACEHOLDER, _SAMPLE_TENANT_ID))
+        if probe.scheme != "https":
+            raise ValueError("issuer_template must be https")
+        host = probe.hostname or ""
+        if not host or _SAMPLE_TENANT_ID in host:
+            raise ValueError(
+                "issuer_template placeholder must be in the path, not the host"
+            )
+        if urlsplit(self.issuer).hostname != host:
+            raise ValueError("issuer_template host must match the issuer host")
+        return self
 
 
 class SamlConfig(BaseModel):
@@ -216,6 +265,12 @@ class ProviderPresetOut(BaseModel):
     # ``{key}`` placeholders are filled from ``params``.
     issuer: str | None = None
     issuer_template: str | None = None
+    # Multi-tenant only (ADR-0032): the value the create form drops into the new
+    # provider's ``config.issuer_template`` — the pattern the id_token ``iss`` is
+    # validated against at *login*. Distinct from ``issuer_template`` above, which
+    # is *form-fill* resolved from ``params`` into ``config.issuer`` at *setup*.
+    # None for every single-value preset.
+    config_issuer_template: str | None = None
     params: list[PresetParamOut] = Field(default_factory=list)
     scopes: str
     default_slug: str

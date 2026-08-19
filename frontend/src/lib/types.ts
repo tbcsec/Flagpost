@@ -223,6 +223,11 @@ export interface ProviderPreset {
   kind: string;
   issuer: string | null;
   issuer_template: string | null;
+  /** Multi-tenant only (ADR-0032): dropped into the new provider's
+   *  `config.issuer_template` — the pattern the id_token `iss` is validated
+   *  against at login. Distinct from `issuer_template` above (form-fill into
+   *  `config.issuer`). null for every single-value preset. */
+  config_issuer_template: string | null;
   params: PresetParam[];
   scopes: string;
   default_slug: string;

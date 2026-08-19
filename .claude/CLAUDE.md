@@ -79,12 +79,12 @@ Subsystem by subsystem, with the non-obvious bits called out:
   reset, email verification (admin-toggleable), self-service email change, a
   registration domain allowlist, and personal **API tokens** (`flp_`-prefixed,
   minting is self-only by route shape).
-- **RBAC** — permissions as data (ADR-0004), 42 of them in
+- **RBAC** — permissions as data (ADR-0004), 43 of them in
   `auth/permissions.py`, each with a category and a `global`/`competition`
   scope. System roles **re-sync from the catalog on every startup**
   (`seed_system_roles`), so a new permission reaches an already-migrated
   Administrator without a migration.
-- **Events** — `utils/event_bus`, 73 event types in `utils/event_catalog.py`.
+- **Events** — `utils/event_bus`, 76 event types in `utils/event_catalog.py`.
   `emit()` awaits foreground handlers (audit + WS broadcasts) and schedules
   `background=True` ones fire-and-forget (ADR-0012) — that's the lane
   webhooks/email use.
@@ -159,6 +159,13 @@ Hard-won, non-obvious, and not visible from reading the code you're changing.
   rather than assumed: `npm run build` runs
   `frontend/scripts/check-yjs-singleton.mjs`, which fails the build on more
   than one copy in the emitted chunks.
+- **A frontend dependency change needs `--renew-anon-volumes` in the dev stack.**
+  `docker-compose.dev.yml` mounts `/app/node_modules` as an anonymous volume to
+  shadow the bind mount, and `up --build` **reuses** it — so the image rebuilds
+  but the container keeps the old packages and quietly runs a different version
+  from `package.json` (during the Next 16 bump the container still reported
+  Next 15). Use `up -d --build --renew-anon-volumes frontend`, and confirm with
+  `exec frontend node -e "console.log(require('next/package.json').version)"`.
 - **Object storage has no local-filesystem backend.** `get_storage()` needs
   MinIO, so the zero-infra SQLite preview stack needs
   `docker compose -f docker-compose.dev.yml up -d minio` before any attachment
@@ -218,7 +225,7 @@ home — keep it that way.
 
 ## Read the ADR before touching
 
-`docs/adr/` — 26 records, indexed in `docs/adr/README.md`. The ones most likely
+`docs/adr/` — 32 records, indexed in `docs/adr/README.md`. The ones most likely
 to matter:
 
 | Area | ADR |
@@ -344,6 +351,14 @@ cd frontend && npm install && npm run dev
   (`src/test/intl.tsx`) in tests.
 - Migrations: `YYYY-MM-DD_<revid>_<desc>.py`, one migration per PR. Never
   hand-edit a migration that's already been applied anywhere.
+
+## Git workflow
+
+Unless the user says otherwise, **a feature is built on its own branch, not
+`main`**: branch from `main`, do the work, and once it's finished and the
+five-check gauntlet passes, commit and open a PR (`gh pr create`) — don't push a
+feature to `main` directly. Merge only once CI is green. (A trivial inline
+fix/typo the user asks for is the "otherwise".)
 
 ## Testing
 

@@ -13,17 +13,25 @@ and a client secret shipped in an open-source repo would be public. What a
 preset ships is the part that is identical everywhere — issuer, scopes, and the
 guidance an admin needs to produce the rest.
 
-Both presets are plain OIDC (kind ``"oidc"``): a preset is configuration for an
-existing protocol, never a new one. Microsoft is **single-tenant only** — the
-multi-tenant "common" endpoint advertises a literal ``{tenantid}`` template as
-its issuer, which the strict issuer-equality checks in ``utils/oidc.py``
-correctly reject; supporting it is its own decision (ADR-0024), not a preset.
+All presets are plain OIDC (kind ``"oidc"``): a preset is configuration for an
+existing protocol, never a new one. Microsoft ships as **two** presets — a
+single-tenant one (a fixed-GUID issuer) and a multi-tenant one whose id_token
+``iss`` is tenant-templated and validated against the signing-in tenant's own
+GUID (ADR-0032, carried in ``config.issuer_template``). The multi-tenant
+"common" authority advertises a literal ``{tenantid}`` issuer that exact
+issuer-equality would reject; the tenant-substituted validation path in
+``utils/oidc.py`` is what admits it, scoped to providers that opt in.
 """
 
 from __future__ import annotations
 
 _GOOGLE_ISSUER = "https://accounts.google.com"
 _MICROSOFT_ISSUER_PREFIX = "https://login.microsoftonline.com/"
+# The fixed multi-tenant authority (discovery is fetched here) and the template
+# the per-tenant id_token ``iss`` is validated against (ADR-0032). ``{tenantid}``
+# is Entra's own placeholder — the same token utils/oidc substitutes at login.
+_MICROSOFT_MULTI_TENANT_AUTHORITY = "https://login.microsoftonline.com/common/v2.0"
+_MICROSOFT_TENANT_ISSUER_TEMPLATE = "https://login.microsoftonline.com/{tenantid}/v2.0"
 
 # Presets as plain dicts for the response model (schemas/auth_providers.py's
 # ProviderPresetOut), mirroring build_catalog(). Exactly one of ``issuer`` /
@@ -94,6 +102,36 @@ PROVIDER_PRESETS: list[dict] = [
             "posture: being in your tenant is the admission decision, and "
             "email stays display-only unless you mark it authoritative "
             "(ADR-0022 trust rules)."
+        ),
+    },
+    {
+        "id": "microsoft-multi-tenant",
+        "name": "Microsoft (multi-tenant)",
+        "kind": "oidc",
+        # The fixed multi-tenant *authority* — discovery is fetched here. Unlike
+        # the single-tenant preset there is no tenant to fill in, so `issuer` is
+        # fixed and `params` empty; the per-tenant issuer the token actually
+        # carries is validated via `config_issuer_template` (ADR-0032).
+        "issuer": _MICROSOFT_MULTI_TENANT_AUTHORITY,
+        "issuer_template": None,
+        "config_issuer_template": _MICROSOFT_TENANT_ISSUER_TEMPLATE,
+        "params": [],
+        "scopes": "openid profile email",
+        "default_slug": "microsoft",
+        # `common` trusts *every* Entra tenant on Earth for authentication, so
+        # admission has to be the public-signup gate (registration_open + the
+        # email-domain allowlist), never tenant membership — hence open, the
+        # opposite of the single-tenant preset. Flagpost never authorizes on the
+        # `tid` claim (ADR-0021); the allowlist is the control.
+        "posture": "open",
+        "setup_url": "https://entra.microsoft.com",
+        "notes": (
+            "Register a multi-tenant app in Microsoft Entra so anyone with a "
+            "work or school Microsoft account can sign in. This trusts every "
+            "Entra tenant for authentication - restrict who actually gets an "
+            "account with the registration email-domain allowlist, not the "
+            "tenant, since Flagpost never authorizes on IdP claims "
+            "(ADR-0021/0032)."
         ),
     },
 ]

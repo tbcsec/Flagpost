@@ -60,8 +60,9 @@ Status is one of:
 | [0024](0024-builtin-sso-provider-presets.md) | Built-in SSO provider presets — configuration, never credentials | Accepted |
 | [0025](0025-multi-worker-broadcast-relay.md) | Multi-worker via a Redis broadcast relay behind the connection manager | Accepted |
 | [0026](0026-cross-worker-presence.md) | Cross-worker presence via heartbeat-TTL liveness in Redis | Accepted |
-| [0027](0027-certificate-rendering-server-side.md) | Certificate rendering — server-side Pillow → PNG, not a headless browser | Proposed |
+| [0027](0027-certificate-rendering-server-side.md) | Certificate rendering — server-side Pillow → PNG, not a headless browser | Accepted |
 | [0028](0028-competition-status-gate.md) | Competition status is an explicit gameplay gate; the schedule drives it | Accepted |
 | [0029](0029-frontend-i18n-next-intl-crowdin.md) | Frontend i18n — next-intl with a cookie locale, translations in Crowdin | Accepted |
-| [0030](0030-post-event-report-rendering-weasyprint.md) | Post-event report rendering — HTML + WeasyPrint, not Pillow or a headless browser | Proposed |
-| [0031](0031-multi-instance-deployment.md) | Multi-instance deployment behind a load balancer (Fargate/ALB) | Proposed |
+| [0030](0030-post-event-report-rendering-weasyprint.md) | Post-event report rendering — HTML + WeasyPrint, not Pillow or a headless browser | Accepted |
+| [0031](0031-multi-instance-deployment.md) | Multi-instance deployment behind a load balancer (Fargate/ALB) | Accepted |
+| [0032](0032-multi-tenant-entra-issuer-validation.md) | Multi-tenant Entra issuer validation via a tenant-substituted issuer template | Accepted |

@@ -149,7 +149,9 @@ async def oidc_login(
     provider, config = loaded
 
     try:
-        document = await oidc_utils.discover(config.issuer)
+        document = await oidc_utils.discover(
+            config.issuer, issuer_template=config.issuer_template
+        )
     except OidcError as exc:
         return _fail(f"discovery failed for {slug}: {exc}", "provider_unavailable")
 
@@ -225,7 +227,9 @@ async def oidc_callback(
     provider, config = loaded
 
     try:
-        document = await oidc_utils.discover(config.issuer)
+        document = await oidc_utils.discover(
+            config.issuer, issuer_template=config.issuer_template
+        )
         tokens = await oidc_utils.exchange_code(
             document=document,
             code=code,
@@ -240,6 +244,7 @@ async def oidc_callback(
             issuer=config.issuer,
             client_id=config.client_id,
             nonce=login_state.nonce,
+            issuer_template=config.issuer_template,
         )
     except OidcError as exc:
         return _fail(f"token/id_token validation failed for {slug}: {exc}", "invalid_token")

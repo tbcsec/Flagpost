@@ -17,7 +17,9 @@ vulnerability rather than a bug:
 - the signature is checked against the provider's JWKS (RS256/ES256 family
   only — never ``none``, and never an HMAC algorithm, which would let the
   *public* key double as a signing secret);
-- ``iss`` must equal the configured issuer, and ``aud`` must contain our
+- ``iss`` must equal the configured issuer — or, for a tenant-templated
+  multi-tenant Entra provider, the token's own ``tid`` substituted into the
+  configured template (ADR-0032, #194) — and ``aud`` must contain our
   ``client_id``;
 - ``exp``/``iat`` are enforced by PyJWT;
 - ``nonce`` must match the one minted for this login, which is what stops a
@@ -29,6 +31,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import logging
+import re
 import secrets
 import time
 from typing import Any
@@ -48,6 +51,20 @@ logger = logging.getLogger("oidc")
 # accepting it alongside a published JWKS would let an attacker sign a token
 # with the provider's public key.
 ALLOWED_ID_TOKEN_ALGORITHMS = ["RS256", "RS384", "RS512", "ES256", "ES384", "ES512"]
+
+# Tenant-templated issuer validation for multi-tenant Entra (ADR-0032, #194).
+# ``TENANT_ID_PLACEHOLDER`` is Entra's own spelling — its ``common`` discovery
+# document advertises the literal ``…/{tenantid}/v2.0`` as its issuer, and an
+# admin's ``issuer_template`` must use the same token so the two match. Shared
+# with ``schemas.auth_providers`` (write-time validation) so the placeholder a
+# template must carry, and the GUID a token's ``tid`` must be, can't drift from
+# what login substitutes. The GUID shape is load-bearing: it pins the tenant slot
+# of the substituted issuer so a token can't smuggle a foreign host or path
+# through it (see ``_validate_tenant_issuer``).
+TENANT_ID_PLACEHOLDER = "{tenantid}"
+_TENANT_ID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
 
 _DISCOVERY_TTL_SECONDS = 3600
 _JWKS_TTL_SECONDS = 3600
@@ -110,8 +127,16 @@ async def _get_json(url: str) -> dict[str, Any]:
     return response.json()
 
 
-async def discover(issuer: str) -> dict[str, Any]:
-    """Fetch (and cache) the provider's discovery document."""
+async def discover(issuer: str, *, issuer_template: str | None = None) -> dict[str, Any]:
+    """Fetch (and cache) the provider's discovery document.
+
+    ``issuer_template`` is set only for a tenant-templated provider (multi-tenant
+    Entra, ADR-0032): its ``common``/``organizations`` discovery document
+    advertises the *template* (``…/{tenantid}/v2.0``) rather than the configured
+    authority (``…/common/v2.0``), so both are accepted. For every other provider
+    it is ``None`` and the advertised issuer must equal the configured one
+    exactly, unchanged.
+    """
     now = time.monotonic()
     cached = _discovery_cache.get(issuer)
     if cached and now - cached[1] < _DISCOVERY_TTL_SECONDS:
@@ -123,10 +148,15 @@ async def discover(issuer: str) -> dict[str, Any]:
         if not document.get(required):
             raise OidcError(f"discovery document is missing {required}")
     # A provider that advertises a different issuer than the one configured is
-    # either misconfigured or an impersonation attempt; either way, refuse.
+    # either misconfigured or an impersonation attempt; either way, refuse. A
+    # tenant-templated provider legitimately advertises the template verbatim.
     advertised = document.get("issuer")
-    if advertised and advertised.rstrip("/") != issuer.rstrip("/"):
-        raise OidcError("discovery issuer does not match the configured issuer")
+    if advertised:
+        allowed = {issuer.rstrip("/")}
+        if issuer_template is not None:
+            allowed.add(issuer_template.rstrip("/"))
+        if advertised.rstrip("/") not in allowed:
+            raise OidcError("discovery issuer does not match the configured issuer")
 
     _discovery_cache[issuer] = (document, now)
     return document
@@ -201,6 +231,29 @@ async def exchange_code(
     return payload
 
 
+def _validate_tenant_issuer(claims: dict[str, Any], issuer_template: str) -> None:
+    """Validate a multi-tenant id_token's ``iss`` against its own ``tid`` (ADR-0032).
+
+    The multi-tenant Entra authorities (``common`` / ``organizations``) mint a
+    token whose ``iss`` carries the *signing-in user's* tenant GUID, so there is
+    no single fixed issuer to string-match. Instead the token's own ``tid`` claim
+    — constrained to a GUID — is substituted into the admin-validated template and
+    ``iss`` must equal the result exactly.
+
+    Constraining ``tid`` to a GUID is what keeps this safe: the template's host and
+    path are fixed at write time (``schemas.auth_providers``), and a GUID tenant
+    slot means the substituted issuer's shape can't be bent by the token, so this
+    binds ``iss`` to the tenant that actually signed the token without trusting any
+    claim for *authorization* (ADR-0021 — admission stays the email allowlist).
+    """
+    tid = claims.get("tid")
+    if not isinstance(tid, str) or not _TENANT_ID_RE.match(tid):
+        raise OidcError("id_token has no GUID tid claim for a tenant-templated issuer")
+    expected = issuer_template.replace(TENANT_ID_PLACEHOLDER, tid)
+    if claims.get("iss") != expected:
+        raise OidcError("id_token iss does not match the tenant-substituted issuer")
+
+
 async def validate_id_token(
     *,
     id_token: str,
@@ -208,20 +261,35 @@ async def validate_id_token(
     issuer: str,
     client_id: str,
     nonce: str,
+    issuer_template: str | None = None,
 ) -> dict[str, Any]:
-    """Verify the ID token's signature and claims, returning them."""
+    """Verify the ID token's signature and claims, returning them.
+
+    For an ordinary provider (``issuer_template is None``) ``iss`` must equal the
+    configured ``issuer`` exactly and PyJWT enforces it. For a tenant-templated
+    provider (multi-tenant Entra, ADR-0032) ``iss`` is instead validated against
+    the token's own ``tid`` substituted into the template (``_validate_tenant_issuer``);
+    signature, ``aud``, ``exp``/``iat`` and ``nonce`` are checked identically either
+    way. ``iss`` is required-present in both branches — only its *value* check moves.
+    """
     key = await _signing_key(document["jwks_uri"], id_token)
+    decode_kwargs: dict[str, Any] = {
+        "key": key,
+        "algorithms": ALLOWED_ID_TOKEN_ALGORITHMS,
+        "audience": client_id,
+        "options": {"require": ["exp", "iat", "iss", "aud", "sub"]},
+    }
+    # Templated providers can't use PyJWT's exact-string issuer match; their `iss`
+    # is value-checked by hand below, after the signature is verified.
+    if issuer_template is None:
+        decode_kwargs["issuer"] = issuer
     try:
-        claims = jwt.decode(
-            id_token,
-            key=key,
-            algorithms=ALLOWED_ID_TOKEN_ALGORITHMS,
-            audience=client_id,
-            issuer=issuer,
-            options={"require": ["exp", "iat", "iss", "aud", "sub"]},
-        )
+        claims = jwt.decode(id_token, **decode_kwargs)
     except jwt.InvalidTokenError as exc:
         raise OidcError(f"invalid id_token: {exc}") from exc
+
+    if issuer_template is not None:
+        _validate_tenant_issuer(claims, issuer_template)
 
     # Binds the token to *this* login attempt. Without it, an ID token obtained
     # through any other flow for the same client could be replayed here.

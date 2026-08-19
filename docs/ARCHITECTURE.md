@@ -827,7 +827,9 @@ display-only unless the admin sets `email_is_authoritative`), one encrypted
 `secret`, and a per-kind `config` JSON validated at write and re-parsed at
 login. An OIDC login is the standard authorization-code flow with **mandatory
 PKCE and `state`**; the callback validates the ID token (signature via cached
-JWKS, plus `iss`/`aud`/`exp`/`nonce`) and then resolves identity
+JWKS, plus `iss`/`aud`/`exp`/`nonce` — `iss` by exact match, or, for a
+tenant-templated multi-tenant Entra provider, against the token's own `tid`
+substituted into the configured template, ADR-0032) and then resolves identity
 (`auth/external_identity.resolve_identity`):
 
 - **`(provider_id, subject)` matches** → existing linked user.
@@ -1177,16 +1179,16 @@ later. Modules split by **provenance and trust**, not by capability:
 - **Marketplace modules** are third-party, opt-in from the start, and need
   the stronger isolation story flagged in §15 before that ships.
 
-**What actually shipped**, against the prediction above. Twenty modules load
-through §11.1; exactly **four are optional** (per-competition toggleable via
-`competition_modules`): `automations`, `feedback`, `analytics`, `ai`. The other
-sixteen are required-core: `announcements`, `audit_log`, `challenges`,
-`collab`, `competitions`, `dashboard`, `hints`, `notifications`, `roles`,
-`scoring`, `setup`, `site_settings`, `sso`, `teams`, `tickets`, `users`. The
-`ai` module (§12) is the odd one out among the optional four: even when enabled
-for a competition it ships **inert** behind a site master switch
-(`ai_settings.enabled`, default off), so nothing runs until an administrator
-configures a provider and turns it on (ADR-0023).
+**What actually shipped**, against the prediction above. Twenty-two modules load
+through §11.1; exactly **six are optional** (per-competition toggleable via
+`competition_modules`): `automations`, `feedback`, `analytics`, `certificates`,
+`reports`, and `ai`. The other sixteen are required-core: `announcements`,
+`audit_log`, `challenges`, `collab`, `competitions`, `dashboard`, `hints`,
+`notifications`, `roles`, `scoring`, `setup`, `site_settings`, `sso`, `teams`,
+`tickets`, `users`. The `ai` module (§12) is the odd one out among the optional
+six: even when enabled for a competition it ships **inert** behind a site master
+switch (`ai_settings.enabled`, default off), so nothing runs until an
+administrator configures a provider and turns it on (ADR-0023).
 
 One prediction was wrong and is worth naming: this section listed **SSO
 providers as an optional/third-party module**, and it shipped **required-core**

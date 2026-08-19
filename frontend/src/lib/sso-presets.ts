@@ -68,6 +68,7 @@ export function presetToFormPrefill(
   posture: "open" | "closed";
   issuer: string;
   scopes: string;
+  issuer_template: string;
 } | null {
   const issuer = resolvePresetIssuer(preset, values);
   if (issuer === null) return null;
@@ -79,6 +80,9 @@ export function presetToFormPrefill(
     posture: preset.posture === "closed" ? "closed" : "open",
     issuer,
     scopes: preset.scopes,
+    // Multi-tenant Entra (ADR-0032): the per-tenant iss-validation template. Blank
+    // for every single-tenant preset, so it round-trips as an empty config field.
+    issuer_template: preset.config_issuer_template ?? "",
   };
 }
 
@@ -88,6 +92,7 @@ export function presetToFormPrefill(
 const SETUP_LINK_LABELS: Record<string, string> = {
   google: "Open Google Cloud Console",
   microsoft: "Open Microsoft Entra",
+  "microsoft-multi-tenant": "Open Microsoft Entra",
 };
 
 export function setupLinkLabel(preset: ProviderPreset): string {

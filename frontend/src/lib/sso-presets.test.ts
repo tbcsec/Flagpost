@@ -28,6 +28,7 @@ const MICROSOFT: ProviderPreset = {
   kind: "oidc",
   issuer: null,
   issuer_template: "https://login.microsoftonline.com/{tenant_id}/v2.0",
+  config_issuer_template: null,
   params: [TENANT_PARAM],
   scopes: "openid profile email",
   default_slug: "microsoft",
@@ -42,12 +43,30 @@ const GOOGLE: ProviderPreset = {
   kind: "oidc",
   issuer: "https://accounts.google.com",
   issuer_template: null,
+  config_issuer_template: null,
   params: [],
   scopes: "openid email profile",
   default_slug: "google",
   posture: "open",
   setup_url: "https://console.cloud.google.com/apis/credentials",
   notes: "Create an OAuth client in Google Cloud Console.",
+};
+
+// Multi-tenant Entra (ADR-0032): a fixed `common` authority plus the per-tenant
+// iss-validation template carried in config_issuer_template — no params.
+const MICROSOFT_MULTI_TENANT: ProviderPreset = {
+  id: "microsoft-multi-tenant",
+  name: "Microsoft (multi-tenant)",
+  kind: "oidc",
+  issuer: "https://login.microsoftonline.com/common/v2.0",
+  issuer_template: null,
+  config_issuer_template: "https://login.microsoftonline.com/{tenantid}/v2.0",
+  params: [],
+  scopes: "openid profile email",
+  default_slug: "microsoft",
+  posture: "open",
+  setup_url: "https://entra.microsoft.com/",
+  notes: "Register a multi-tenant app in Microsoft Entra.",
 };
 
 const GUID = "d1c9061b-5e24-4a86-9db3-6a45f6f5f0d3";
@@ -119,6 +138,7 @@ describe("presetToFormPrefill", () => {
       posture: "open",
       issuer: "https://accounts.google.com",
       scopes: "openid email profile",
+      issuer_template: "",
     });
   });
 
@@ -130,6 +150,22 @@ describe("presetToFormPrefill", () => {
       posture: "closed",
       issuer: `https://login.microsoftonline.com/${GUID}/v2.0`,
       scopes: "openid profile email",
+      issuer_template: "",
+    });
+  });
+
+  it("carries the tenant validation template for a multi-tenant preset", () => {
+    // ADR-0032: the fixed `common` authority becomes `issuer`, and the per-tenant
+    // template rides through as `issuer_template` so the created provider validates
+    // the token issuer against the signing-in tenant, not `common`.
+    expect(presetToFormPrefill(MICROSOFT_MULTI_TENANT)).toEqual({
+      kind: "oidc",
+      name: "Microsoft (multi-tenant)",
+      slug: "microsoft",
+      posture: "open",
+      issuer: "https://login.microsoftonline.com/common/v2.0",
+      scopes: "openid profile email",
+      issuer_template: "https://login.microsoftonline.com/{tenantid}/v2.0",
     });
   });
 

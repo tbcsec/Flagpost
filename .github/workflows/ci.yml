@@ -11,10 +11,21 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Every job below sets `timeout-minutes`. Without one a job inherits GitHub's
+# 6-hour default, so a hung step sits there for an afternoon instead of failing:
+# an apt mirror stall once held "Install WeasyPrint system libraries" for ~58
+# minutes, and a stuck job blocks the merge queue while looking merely slow.
+# These are hang-catchers, not performance budgets — each is a generous multiple
+# of the observed duration, so hitting one means something is wrong, not that the
+# suite grew. Raise them deliberately if a job legitimately outgrows its limit.
 jobs:
   backend:
     name: Backend (pytest)
     runs-on: ubuntu-latest
+    # ~8 min typical after the argon2 test-cost reduction (was ~12). Contended
+    # runners have stretched this 3-4x on unchanged code, so the cap is well
+    # clear of a bad day but far short of six hours.
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: backend
@@ -43,6 +54,8 @@ jobs:
   migrations:
     name: Migrations (real Postgres)
     runs-on: ubuntu-latest
+    # ~1 min typical; the extra room absorbs waiting on the Postgres service.
+    timeout-minutes: 15
     # The pytest suite builds the schema from Base.metadata, never running the
     # migrations, and SQLite silently accepts things Postgres rejects. So run the
     # migration chain against a real Postgres to catch Postgres-only bugs (e.g.
@@ -94,6 +107,8 @@ jobs:
   frontend:
     name: Frontend (types, lint, unit, build)
     runs-on: ubuntu-latest
+    # ~2 min typical for install + tsc + eslint + vitest + build.
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: frontend
@@ -132,6 +147,8 @@ jobs:
   merge-result:
     name: Merge result vs. current main
     runs-on: ubuntu-latest
+    # ~1 min typical (lint + build only, see below).
+    timeout-minutes: 20
     # Only meaningful for PRs; on a push to main the merge result *is* main.
     if: github.event_name == 'pull_request'
     steps:

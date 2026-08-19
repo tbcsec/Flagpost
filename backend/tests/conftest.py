@@ -13,6 +13,26 @@ _TMPDIR = tempfile.mkdtemp(prefix="flagpost-test-")
 os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_TMPDIR}/test.db")
 os.environ.setdefault("JWT_SECRET", "test-secret-at-least-32-bytes-long-000000")
 
+# Argon2 at a test-only cost. In production it is deliberately expensive — 64 MiB
+# and t=3, about 130 ms per hash — and the suite hashes constantly: a fresh admin
+# is seeded for *every* test, plus ~570 `admin_token` logins and ~70
+# registrations. At production cost that is ~3.5 minutes of a ~12 minute run
+# spent entirely in the KDF, and on a contended two-core CI runner it amplifies
+# (measured excursions to 30 and 50 minutes on unchanged code).
+#
+# Dropping to 8 MiB / t=1 makes a hash ~4 ms — 29x faster — and costs the suite
+# nothing it actually asserts: tests care that hashing and verification *work*,
+# never that they are slow. `parallelism` is deliberately NOT lowered here: p=1
+# is a correctness property from the multi-worker load testing (#207), not a cost
+# knob, and `test_hash_executor` pins it.
+#
+# `setdefault`, so a real environment still wins — run with production values via
+# `ARGON2_MEMORY_COST=65536 ARGON2_TIME_COST=3 pytest`. The shipped defaults are
+# pinned independently by `test_hash_executor.test_production_argon2_defaults_are_strong`,
+# which reads the *declared* field defaults and so cannot be masked by these.
+os.environ.setdefault("ARGON2_MEMORY_COST", "8192")  # KiB (8 MiB)
+os.environ.setdefault("ARGON2_TIME_COST", "1")
+
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 

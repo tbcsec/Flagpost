@@ -16,7 +16,10 @@ from config import settings
 
 
 def test_argon2_uses_parallelism_one():
-    # p=1 is the OWASP server config; m/t stay at the recommended strong values.
+    # p=1 is the OWASP server config. m/t are compared against `settings` rather
+    # than literals because the suite runs argon2 at a reduced cost (conftest);
+    # what this asserts is that the hasher actually uses the configured params.
+    # The *shipped* values are pinned by the test below.
     h = security.hash_password("correct horse")
     assert "$argon2id$" in h
     import re
@@ -24,8 +27,25 @@ def test_argon2_uses_parallelism_one():
     m = re.search(r"m=(\d+),t=(\d+),p=(\d+)", h)
     memory, time_cost, parallelism = (int(x) for x in m.groups())
     assert parallelism == settings.argon2_parallelism == 1
-    assert memory == settings.argon2_memory_cost  # 64 MiB, unchanged
+    assert memory == settings.argon2_memory_cost
     assert time_cost == settings.argon2_time_cost
+
+
+def test_production_argon2_defaults_are_strong():
+    """The cost reduction in conftest must never leak into what ships.
+
+    Reads the *declared* field defaults, which no environment variable can
+    change, so this keeps asserting the production posture (pwdlib's recommended
+    64 MiB / t=3, well above OWASP's minimum) even though the suite itself runs
+    the KDF cheaply. Without this, weakening the test environment would silently
+    delete the only coverage of the real parameters.
+    """
+    from config import Settings
+
+    fields = Settings.model_fields
+    assert fields["argon2_memory_cost"].default == 65536  # KiB = 64 MiB
+    assert fields["argon2_time_cost"].default == 3
+    assert fields["argon2_parallelism"].default == 1
 
 
 def test_verifies_a_legacy_p4_hash():

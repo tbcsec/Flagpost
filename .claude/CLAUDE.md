@@ -376,6 +376,12 @@ Established in Tier 0 (see `docs/adr/0006-testing-stack.md`):
   each to `running` (via a `competition.created` listener) so gameplay tests
   aren't blocked by the #221 status gate. A test that needs the real
   `not_started` default marks itself `@pytest.mark.competition_lifecycle`.
+  **Argon2 runs at a reduced cost under test** (`conftest` sets
+  `ARGON2_MEMORY_COST`/`ARGON2_TIME_COST`): a fresh admin is hashed per test, so
+  production params cost ~3.5 min of a run. Don't read hashing *speed* off the
+  suite, and don't relax `argon2_parallelism` — p=1 is a correctness property
+  (#207). The shipped defaults are pinned by
+  `test_hash_executor.test_production_argon2_defaults_are_strong`.
 - **Frontend:** Vitest + Testing Library + jsdom.
   `cd frontend && npm run test`.
 

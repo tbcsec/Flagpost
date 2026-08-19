@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import dynamic from "next/dynamic";
 
 import { NoCompetition } from "@/components/app/no-competition";
+import { ChallengeConnection } from "@/components/challenges/challenge-connection";
 import { ChallengeHints } from "@/components/challenges/challenge-hints";
 import { ChallengeList } from "@/components/challenges/challenge-list";
 import { ChallengeValue } from "@/components/challenges/challenge-value";
@@ -462,6 +463,12 @@ function ChallengeDialogBody({
       <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">
         {richTextToPlain(challenge.description) || t("detail.noDescription")}
       </p>
+
+      {/* Null whenever the server withheld it — locked challenges included, so
+          no client-side lock check here would add anything (#262). */}
+      {challenge.connection_info && (
+        <ChallengeConnection value={challenge.connection_info} />
+      )}
 
       {challenge.locked ? (
         <div className="grid gap-2 rounded-lg border border-border bg-muted/40 p-6 text-center">

@@ -29,7 +29,13 @@ async def _competition(client, admin, **over) -> str:
 
 
 async def _challenge(client, admin, comp, flag="flag{clone}", points=100, category_id=None):
-    body = {"title": "Chal", "points": points, "flag": flag}
+    body = {
+        "title": "Chal",
+        "points": points,
+        "flag": flag,
+        # Copied to the clone, unlike release_at (#262).
+        "connection_info": "nc box.example.com 1337",
+    }
     if category_id:
         body["category_id"] = category_id
     cid = (
@@ -101,6 +107,9 @@ async def test_clone_copies_config_with_new_name_and_clean_slate(client):
     assert len(chals) == 1 and chals[0]["title"] == "Chal"
     # The cloned challenge is categorized under the *clone's* category, not the source's.
     assert chals[0]["category_id"] == cats[0]["id"]
+    # Connection info comes along — a clone usually re-runs the same event, and
+    # silently dropping authored data would be worse than editing it (#262).
+    assert chals[0]["connection_info"] == "nc box.example.com 1337"
     new_chal = chals[0]["id"]
     hints = (
         await client.get(

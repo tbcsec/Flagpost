@@ -24,6 +24,7 @@ function mk(partial: Partial<Challenge> & { id: string; title: string }): Challe
     locked: false,
     tags: [],
     difficulty: null,
+    connection_info: null,
     state: "published",
     flag_type: "static",
     case_insensitive: false,

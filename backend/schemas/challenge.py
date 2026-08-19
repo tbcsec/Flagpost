@@ -36,6 +36,9 @@ class ChallengeCreate(BaseModel):
     # Metadata from the competition's managed vocab (Phase 9).
     tags: list[str] = Field(default_factory=list, max_length=50)
     difficulty: str | None = Field(default=None, max_length=50)
+    # Where the live service lives (#262) — free-form: a URL, a host:port, or
+    # instructions. Same key and shape as ctfcli's `connection_info`.
+    connection_info: str | None = Field(default=None, max_length=500)
     flag_type: FlagType = "static"
     case_insensitive: bool = False
     # Plaintext flag (static), pattern (regex), or the **correct option**
@@ -80,6 +83,7 @@ class ChallengeUpdate(BaseModel):
     prerequisites: list[str] | None = Field(default=None, max_length=50)
     tags: list[str] | None = Field(default=None, max_length=50)
     difficulty: str | None = Field(default=None, max_length=50)
+    connection_info: str | None = Field(default=None, max_length=500)
     flag_type: FlagType | None = None
     case_insensitive: bool | None = None
     flag: str | None = Field(default=None, min_length=1, max_length=500)
@@ -112,6 +116,13 @@ class ChallengeOut(BaseModel):
     locked: bool = False
     tags: list[str] = []
     difficulty: str | None = None
+    # Where the live service lives (#262). **Null unless the requesting subject
+    # can actually play this challenge**: staff always see it, competitors only
+    # once it's unlocked — the router blanks it on the response object for a
+    # locked challenge (_redact_for_competitor). Unlike the flag, nothing about
+    # this schema makes it structurally unreachable, so that redaction is the
+    # whole guarantee.
+    connection_info: str | None = None
     state: ChallengeState
     flag_type: FlagType
 

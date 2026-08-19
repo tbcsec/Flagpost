@@ -181,6 +181,13 @@ export function ChallengeAdmin({ competitionId }: { competitionId: string }) {
 
       {editing && (
         <ChallengeForm
+          // Keyed so switching edit targets (or Edit → New) REMOUNTS the form:
+          // every field is seeded from props by a useState initializer, which
+          // only runs on mount. Without this the table + New button stay mounted,
+          // React reconciles the same instance, and the previous challenge's
+          // values persist — then get saved onto the new target (same bug class
+          // as #258/#260 on the settings page).
+          key={editing === "new" ? "new" : editing.id}
           competitionId={competitionId}
           challenge={editing === "new" ? null : editing}
           categories={categories.data ?? []}
@@ -337,6 +344,9 @@ function ChallengeForm({
   );
   const [tags, setTags] = useState<string[]>(challenge?.tags ?? []);
   const [difficulty, setDifficulty] = useState(challenge?.difficulty ?? "");
+  const [connectionInfo, setConnectionInfo] = useState(
+    challenge?.connection_info ?? "",
+  );
   const [flagType, setFlagType] = useState<FlagType>(
     challenge?.flag_type ?? "static",
   );
@@ -378,6 +388,8 @@ function ChallengeForm({
     base.prerequisites = prerequisites;
     base.tags = tags;
     base.difficulty = difficulty || null;
+    // Blank clears it — this same object is the PATCH body, so "" must become null.
+    base.connection_info = connectionInfo.trim() || null;
     if (flagType === "multiple_choice") {
       const trimmed = choices.map((c) => c.trim());
       const hasCorrect = correctIndex !== null && !!trimmed[correctIndex];
@@ -422,6 +434,19 @@ function ChallengeForm({
           <div className="space-y-2">
             <Label>{t("fieldDescription")}</Label>
             <RichTextEditor value={description} onChange={setDescription} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="connection-info">{t("fieldConnectionInfo")}</Label>
+            <Input
+              id="connection-info"
+              className="font-mono"
+              value={connectionInfo}
+              onChange={(e) => setConnectionInfo(e.target.value)}
+              placeholder="nc host 1337"
+            />
+            <p className="text-xs text-muted-foreground">
+              {t("fieldConnectionInfoHint")}
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">

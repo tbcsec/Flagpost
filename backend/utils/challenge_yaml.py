@@ -18,7 +18,9 @@ Field mapping (ctfcli ⇄ Flagpost):
   ``tags`` ⇄ ``tags`` (unioned into the competition vocab on import);
   ``extra.difficulty`` ⇄ ``difficulty``; ``hints`` ⇄ hints; ``files`` ⇄
   attachments; ``state`` (visible/hidden) ⇄ published/draft;
-  ``prerequisites`` (challenge *titles*) ⇄ the prerequisite ids.
+  ``prerequisites`` (challenge *titles*) ⇄ the prerequisite ids;
+  ``connection_info`` ⇄ ``connection_info`` (top-level in the ctfcli spec, so
+  it round-trips with real ctfcli/CTFd bundles — *not* under ``extra``).
 """
 
 from __future__ import annotations
@@ -107,6 +109,11 @@ async def export_challenges(
                 "value": ch.points,
                 "state": "visible" if ch.state == "published" else "hidden",
             }
+            # Top-level key, exactly as ctfcli/CTFd spell it — deliberately not
+            # inside `extra` (the dynamic-scoring bag plus our `difficulty`
+            # escape hatch), so real ctfcli bundles round-trip.
+            if ch.connection_info:
+                data["connection_info"] = ch.connection_info
             if ch.scoring_type == "dynamic":
                 data["type"] = "dynamic"
                 data["extra"] = {
@@ -259,6 +266,12 @@ async def import_challenges(
             decay=int(extra["decay"]) if is_dynamic and extra.get("decay") is not None else None,
             flag_type=flag_type,
             state="published" if str(spec.get("state")) == "visible" else "draft",
+            # Coerced + clamped here because this path never sees the Pydantic
+            # schema: `connection_info: 1337` parses as an int (SQLite accepts
+            # it, Postgres rejects it), and an unbounded string from an
+            # untrusted zip would otherwise land straight in the column. Mirrors
+            # ChallengeCreate's max_length=500.
+            connection_info=str(spec.get("connection_info") or "").strip()[:500] or None,
         )
         # Flag material.
         if flag_type == "regex":

@@ -218,6 +218,13 @@ async def _get_challenge(db, user, competition, args) -> dict:
     data["description"] = _truncate(doc_to_text(challenge.description))
     data["has_flag"] = out.has_flag
     data["choices"] = out.choices  # options only; the correct one is never marked
+    # Where to connect, so "how do I reach this box?" works (#262). Detail tool
+    # only — the list projection deliberately omits it — and never while locked,
+    # matching what the challenge route serves a competitor. Note the guard is
+    # explicit: `data` came from _challenge_summary, which is shared with the
+    # list tool, so anything added here must re-check visibility itself.
+    if not data["locked"]:
+        data["connection_info"] = challenge.connection_info
     return data
 
 
@@ -270,8 +277,9 @@ _TOOLS: dict[str, Tool] = {
         Tool(
             "get_challenge",
             "Public details of one challenge by id: description, points, tags, "
-            "difficulty, multiple-choice options. Never includes the flag or the "
-            "correct option.",
+            "difficulty, multiple-choice options, and connection info (where to "
+            "reach the live service, when the challenge is unlocked). Never "
+            "includes the flag or the correct option.",
             {
                 "type": "object",
                 "properties": {"challenge_id": {"type": "string"}},

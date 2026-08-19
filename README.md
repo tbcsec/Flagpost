@@ -282,7 +282,7 @@ once before shipping one.
 
 **Backend** — Python · FastAPI · SQLAlchemy 2 (async) · Alembic · PostgreSQL ·
 Redis · MinIO/S3 · JWT + argon2 + OIDC/SAML/LDAP · a first-class async event bus.
-**Frontend** — TypeScript · Next.js 15 (App Router) · React 19 · TanStack Query ·
+**Frontend** — TypeScript · Next.js 16 (App Router) · React 19 · TanStack Query ·
 Zustand · Tailwind v4 · TipTap + Y.js (CRDT).
 **Realtime** — WebSockets throughout. **Deploy** — Docker Compose + Caddy.
 

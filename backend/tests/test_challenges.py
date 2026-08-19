@@ -6,6 +6,7 @@ from sqlalchemy import select
 
 from db import SessionLocal
 from models.audit_log import AuditLogEntry
+from models.challenge import Challenge
 from models.role import Role, RoleAssignment
 from tests.conftest import admin_token
 
@@ -372,6 +373,9 @@ async def test_challenge_yaml_import_and_export_roundtrip(client):
                 "tags": ["easy-tag"],
                 "state": "visible",
                 "hints": [{"content": "wave", "cost": 5}],
+                # Top-level in the ctfcli spec — a real challenge.yml carries it
+                # here, not under `extra` (#262).
+                "connection_info": "nc chal.example.com 1337",
             }),
         )
         zf.writestr(
@@ -400,6 +404,7 @@ async def test_challenge_yaml_import_and_export_roundtrip(client):
     assert set(listing) == {"Welcome", "Hard One"}
     assert listing["Hard One"]["scoring_type"] == "dynamic"
     assert listing["Hard One"]["decay"] == 20 and listing["Hard One"]["difficulty"] == "Hard"
+    assert listing["Welcome"]["connection_info"] == "nc chal.example.com 1337"
     # Prerequisite resolved by title → the Welcome challenge's id.
     assert listing["Hard One"]["prerequisites"] == [listing["Welcome"]["id"]]
 
@@ -420,3 +425,215 @@ async def test_challenge_yaml_import_and_export_roundtrip(client):
     # The regex flag round-trips; the static one is omitted (hashed).
     hard = yaml.safe_load(out.read([n for n in ymls if n.startswith("hard-one")][0]))
     assert hard["flags"] == [{"type": "regex", "content": "flag\\{.*\\}"}]
+    # connection_info completes the round-trip, back out as a TOP-LEVEL key so
+    # the file stays readable by real ctfcli (#262).
+    welcome = yaml.safe_load(out.read([n for n in ymls if n.startswith("welcome")][0]))
+    assert welcome["connection_info"] == "nc chal.example.com 1337"
+    assert "connection_info" not in welcome.get("extra", {})
+
+
+async def test_connection_info_authored_and_withheld_while_locked(client):
+    """#262: connection info reaches a competitor who can play the challenge, and
+    is withheld while it's locked — it's an infrastructure address for content
+    they haven't unlocked, unlike the description (which stays visible)."""
+    admin = await admin_token(client)
+    comp = (
+        await client.post(
+            "/api/competitions",
+            # Individual mode so a lone user is a subject; in team mode a
+            # teamless user has no subject and is never gated.
+            json={"name": "Conn", "participation_mode": "individual"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+
+    base = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges",
+            json={"title": "Base", "points": 100, "flag": "flag{base}"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    await client.post(
+        f"/api/competitions/{comp}/challenges/{base}/publish", headers=_auth(admin)
+    )
+
+    created = await client.post(
+        f"/api/competitions/{comp}/challenges",
+        json={
+            "title": "Gated",
+            "points": 200,
+            "flag": "flag{gate}",
+            "prerequisites": [base],
+            "connection_info": "nc box.example.com 1337",
+        },
+        headers=_auth(admin),
+    )
+    assert created.status_code == 201, created.text
+    # Authoring round-trips on the create response (staff view).
+    assert created.json()["connection_info"] == "nc box.example.com 1337"
+    gated = created.json()["id"]
+    await client.post(
+        f"/api/competitions/{comp}/challenges/{gated}/publish", headers=_auth(admin)
+    )
+
+    player, pid = await _register(client, "conn@example.com")
+    await _assign_participant(pid, comp)
+
+    # Locked: withheld on BOTH competitor read paths, while the description that
+    # sits next to it stays readable.
+    listing = {
+        c["title"]: c
+        for c in (
+            await client.get(
+                f"/api/competitions/{comp}/challenges", headers=_auth(player)
+            )
+        ).json()
+    }
+    assert listing["Gated"]["locked"] is True
+    assert listing["Gated"]["connection_info"] is None
+    detail = (
+        await client.get(
+            f"/api/competitions/{comp}/challenges/{gated}", headers=_auth(player)
+        )
+    ).json()
+    assert detail["locked"] is True and detail["connection_info"] is None
+
+    # Staff are never redacted, locked or not.
+    staff_detail = (
+        await client.get(
+            f"/api/competitions/{comp}/challenges/{gated}", headers=_auth(admin)
+        )
+    ).json()
+    assert staff_detail["connection_info"] == "nc box.example.com 1337"
+
+    # Solving the prerequisite unlocks it → the address appears.
+    await client.post(
+        f"/api/competitions/{comp}/challenges/{base}/submit",
+        json={"flag": "flag{base}"},
+        headers=_auth(player),
+    )
+    unlocked = (
+        await client.get(
+            f"/api/competitions/{comp}/challenges/{gated}", headers=_auth(player)
+        )
+    ).json()
+    assert unlocked["locked"] is False
+    assert unlocked["connection_info"] == "nc box.example.com 1337"
+
+    # The redaction must never have been written back to the row (it's a real
+    # column, so a plain assignment + autoflush would have UPDATEd it to NULL).
+    async with SessionLocal() as session:
+        stored = await session.get(Challenge, gated)
+    assert stored.connection_info == "nc box.example.com 1337"
+
+
+async def test_connection_info_is_editable_and_clearable(client):
+    admin = await admin_token(client)
+    comp = await _make_competition(client)
+    cid = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges",
+            json={"title": "Box", "points": 100, "connection_info": "https://a.example"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+
+    # Infrastructure moves mid-event: PATCH it (the generic setattr path).
+    patched = await client.patch(
+        f"/api/competitions/{comp}/challenges/{cid}",
+        json={"connection_info": "https://b.example"},
+        headers=_auth(admin),
+    )
+    assert patched.status_code == 200
+    assert patched.json()["connection_info"] == "https://b.example"
+
+    # Explicit null clears it.
+    cleared = await client.patch(
+        f"/api/competitions/{comp}/challenges/{cid}",
+        json={"connection_info": None},
+        headers=_auth(admin),
+    )
+    assert cleared.json()["connection_info"] is None
+
+
+async def test_connection_info_withheld_from_a_teamless_viewer_in_team_mode(client):
+    """#262 bypass guard: in TEAM mode a competitor who never joins a team has no
+    subject, so `locked` is False for them on every gated challenge. Keying the
+    redaction off `locked` would have let anyone read gated addresses just by not
+    joining a team — it's re-derived from solve history instead, and no solves at
+    all means nothing is unlocked."""
+    admin = await admin_token(client)
+    comp = (
+        await client.post(
+            "/api/competitions",
+            json={"name": "TeamMode", "participation_mode": "team"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    base = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges",
+            json={"title": "Base", "points": 100, "flag": "flag{base}"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    await client.post(
+        f"/api/competitions/{comp}/challenges/{base}/publish", headers=_auth(admin)
+    )
+    gated = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges",
+            json={
+                "title": "Gated",
+                "points": 200,
+                "flag": "flag{gate}",
+                "prerequisites": [base],
+                "connection_info": "nc secret.example.com 1337",
+            },
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    await client.post(
+        f"/api/competitions/{comp}/challenges/{gated}/publish", headers=_auth(admin)
+    )
+    # An open one with no prerequisites stays visible to everyone — the redaction
+    # must not over-reach into ungated content.
+    open_id = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges",
+            json={
+                "title": "Open",
+                "points": 50,
+                "flag": "flag{open}",
+                "connection_info": "https://open.example.com",
+            },
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    await client.post(
+        f"/api/competitions/{comp}/challenges/{open_id}/publish", headers=_auth(admin)
+    )
+
+    player, pid = await _register(client, "teamless@example.com")
+    await _assign_participant(pid, comp)  # joins the competition, but no team
+
+    listing = {
+        c["title"]: c
+        for c in (
+            await client.get(
+                f"/api/competitions/{comp}/challenges", headers=_auth(player)
+            )
+        ).json()
+    }
+    # `locked` is False (no subject to gate) — yet the address is still withheld.
+    assert listing["Gated"]["locked"] is False
+    assert listing["Gated"]["connection_info"] is None
+    assert listing["Open"]["connection_info"] == "https://open.example.com"
+
+    detail = (
+        await client.get(
+            f"/api/competitions/{comp}/challenges/{gated}", headers=_auth(player)
+        )
+    ).json()
+    assert detail["connection_info"] is None

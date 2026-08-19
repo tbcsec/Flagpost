@@ -18,6 +18,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_committed_value
 
 from auth.deps import require_permission, user_has_permission
 from db import ensure_aware_utc, get_db, utcnow
@@ -162,6 +163,41 @@ async def _validate_prerequisites(
 def _is_locked(challenge: Challenge, solved_ids: set[str]) -> bool:
     """Whether a challenge is locked for a subject: any prerequisite unsolved."""
     return any(pid not in solved_ids for pid in _prereq_ids(challenge))
+
+
+def _redact_for_competitor(
+    challenge: Challenge, *, can_edit: bool, solved_ids: set[str] | None
+) -> None:
+    """Withhold ``connection_info`` unless the viewer has unlocked it (#262).
+
+    ``locked`` is an annotation, not an access gate: a locked challenge is
+    returned in full (title, description, points) to competitors, and only
+    ``POST /submit`` refuses. That's right for a description but wrong for an
+    infrastructure address the competitor hasn't unlocked — so the two read
+    paths both call this.
+
+    Deliberately re-derived from ``solved_ids`` instead of reading the ``locked``
+    annotation, because ``locked`` is **per-subject and False when there is no
+    subject**. In team mode (the default) a competitor who never joins a team
+    has no subject, so every gated challenge reports ``locked=False`` for them —
+    keying off that would have let anyone bypass this simply by not joining a
+    team. ``solved_ids=None`` means "no subject", i.e. has demonstrably solved
+    nothing, so anything with a prerequisite is still gated content for them.
+    A challenge with no prerequisites is unlocked for everyone and never
+    redacted.
+
+    ``set_committed_value`` rather than a plain assignment because
+    ``connection_info`` is a **real column**, unlike the other annotations
+    (``value``/``solved``/``locked``) the read paths hang on the instance: a
+    plain ``challenge.connection_info = None`` marks the instance dirty and,
+    with autoflush on, the next query in the same session writes that NULL to
+    the row. ``get_db`` never commits so it would roll back today — but that is
+    one added commit away from silent data loss.
+    """
+    if can_edit:
+        return
+    if _is_locked(challenge, solved_ids or set()):
+        set_committed_value(challenge, "connection_info", None)
 
 
 def _validate_metadata(competition: Competition, challenge: Challenge) -> None:
@@ -348,6 +384,11 @@ async def list_challenges(
         challenge.locked = (
             not can_edit and subject is not None and _is_locked(challenge, solved)
         )
+        _redact_for_competitor(
+            challenge,
+            can_edit=can_edit,
+            solved_ids=solved if subject is not None else None,
+        )
         challenge.my_rating = ratings.get(challenge.id)
         if challenge.flag_type == "multiple_choice" and challenge.id not in solved:
             wrong = attempts.get(challenge.id, 0)
@@ -462,11 +503,16 @@ async def get_challenge(
         else False
     )
     # Locked = an unsolved prerequisite (per subject; staff/subjectless unlocked).
-    if _prereq_ids(challenge) and subject is not None:
+    # Both are also what the connection_info redaction below keys off, so they're
+    # resolved for any challenge that HAS prerequisites — not only when a subject
+    # exists — while a challenge with none still costs no extra query.
+    can_edit = False
+    solved_ids: set[str] | None = None
+    if _prereq_ids(challenge):
         can_edit = await user_has_permission(
             db, current_user.id, "challenge_edit", competition_id
         )
-        if not can_edit:
+        if not can_edit and subject is not None:
             solved_ids = await solved_challenge_ids(db, competition_id, subject)
             challenge.locked = _is_locked(challenge, solved_ids)
     limit = competition.mc_guess_limit if competition is not None else None
@@ -491,6 +537,7 @@ async def get_challenge(
                 ChallengeRating.user_id == current_user.id,
             )
         )
+    _redact_for_competitor(challenge, can_edit=can_edit, solved_ids=solved_ids)
     return challenge
 
 
@@ -580,6 +627,7 @@ async def create_challenge(
         prerequisites=body.prerequisites or None,
         tags=body.tags or None,
         difficulty=body.difficulty,
+        connection_info=body.connection_info,
         flag_type=body.flag_type,
         case_insensitive=body.case_insensitive,
     )

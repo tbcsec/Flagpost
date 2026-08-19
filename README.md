@@ -52,7 +52,7 @@ The things that set Flagpost apart — every one of them **built and working tod
   or site-wide scope.
 - **🧩 A genuinely deep challenge model.** Static, regex, and multiple-choice flags;
   dynamic (decay) scoring; prerequisite unlock chains; scheduled/waved release;
-  tags & difficulty; and per-competition guess caps.
+  tags & difficulty; connection info for live services; and per-competition guess caps.
 - **🏆 A scoreboard done right.** Live standings with first-blood, parallel
   **brackets/divisions**, a **freeze** for the final stretch, a public **spectator
   board**, and a **CTFtime feed** so rated events just work.
@@ -118,6 +118,7 @@ The things that set Flagpost apart — every one of them **built and working tod
 - Hints, file attachments (S3/MinIO)
 - **Prerequisite unlock chains**, scheduled release
 - Managed **tags & difficulty** vocab
+- **Connection info** (URL / `host:port`) for challenges that run a live service
 - Bulk **ctfcli YAML** import/export
 - Manual guess-cap resets for multiple-choice
 

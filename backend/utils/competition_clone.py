@@ -110,6 +110,10 @@ async def clone_competition(
             choices=chal.choices,
             tags=chal.tags,
             difficulty=chal.difficulty,
+            # Copied, unlike release_at: a clone usually re-runs the same event
+            # against the same infrastructure, and it's editable afterwards —
+            # dropping it silently would lose authored data (#262).
+            connection_info=chal.connection_info,
         )
         db.add(new_chal)
         await db.flush()

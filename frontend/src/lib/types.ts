@@ -847,6 +847,10 @@ export interface Challenge {
   /** Metadata from the competition's managed vocab. */
   tags: string[];
   difficulty: string | null;
+  /** Where to reach the live service — a URL, `host:port`, or instructions.
+   *  Null when the challenge has none, **and** whenever the server withholds it:
+   *  competitors don't get it while the challenge is locked (#262). */
+  connection_info: string | null;
   state: ChallengeState;
   flag_type: FlagType;
   case_insensitive: boolean;
@@ -882,6 +886,7 @@ export interface ChallengeCreate {
   prerequisites?: string[];
   tags?: string[];
   difficulty?: string | null;
+  connection_info?: string | null;
   flag_type?: FlagType;
   case_insensitive?: boolean;
   flag?: string | null;

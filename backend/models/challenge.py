@@ -72,6 +72,14 @@ class Challenge(Base, CompetitionScopedMixin, TimestampMixin):
     # subset of its tag names, and one of its difficulty tiers (or null).
     tags: Mapped[list | None] = mapped_column(JSON, nullable=True)
     difficulty: Mapped[str | None] = mapped_column(String, nullable=True)
+    # How a competitor reaches the live service, if any (#262): a URL, a
+    # host:port, or free-form instructions ("nc host 1337"). Free text on
+    # purpose — this mirrors ctfcli/CTFd's `connection_info` key verbatim so a
+    # real challenge.yml round-trips. Null = nothing to connect to.
+    # Withheld from competitors while the challenge is *locked* (see
+    # routers.challenges._redact_for_competitor): unlike the description, this is
+    # an infrastructure address for content they haven't unlocked yet.
+    connection_info: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # --- Flag config (§13.2) — the secret parts are never serialized ---
     # "static" | "regex" | "multiple_choice"

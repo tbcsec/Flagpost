@@ -181,6 +181,13 @@ export function ChallengeAdmin({ competitionId }: { competitionId: string }) {
 
       {editing && (
         <ChallengeForm
+          // Keyed so switching edit targets (or Edit → New) REMOUNTS the form:
+          // every field is seeded from props by a useState initializer, which
+          // only runs on mount. Without this the table + New button stay mounted,
+          // React reconciles the same instance, and the previous challenge's
+          // values persist — then get saved onto the new target (same bug class
+          // as #258/#260 on the settings page).
+          key={editing === "new" ? "new" : editing.id}
           competitionId={competitionId}
           challenge={editing === "new" ? null : editing}
           categories={categories.data ?? []}

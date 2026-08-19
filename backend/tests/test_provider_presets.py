@@ -15,6 +15,7 @@ from pydantic import ValidationError
 
 from schemas.auth_providers import (
     PROVIDER_CONFIG_MODELS,
+    OAuth2Config,
     OidcConfig,
     ProviderPresetOut,
 )
@@ -72,7 +73,13 @@ async def test_presets_list_google_and_microsoft(client):
     assert resp.status_code == 200, resp.text
 
     body = resp.json()
-    assert [p["id"] for p in body] == ["google", "microsoft", "microsoft-multi-tenant"]
+    assert [p["id"] for p in body] == [
+        "google",
+        "microsoft",
+        "microsoft-multi-tenant",
+        "github",
+        "discord",
+    ]
     # Every entry round-trips the response model — the frontend builds forms
     # from exactly this shape.
     for entry in body:
@@ -169,11 +176,14 @@ def test_multi_tenant_preset_config_round_trips_the_write_path():
     assert parsed.issuer_template == "https://login.microsoftonline.com/{tenantid}/v2.0"
 
 
-def test_exactly_one_of_issuer_and_template_per_preset():
+def test_exactly_one_of_issuer_and_template_per_oidc_preset():
     """The response model enforces the XOR (a bad future entry must fail at
     the route, not ship as a dead setup card), and every template placeholder
-    must be resolvable from the preset's own params."""
+    must be resolvable from the preset's own params. OIDC-only: an `oauth2`
+    preset has no issuer at all and carries an `oauth2` block instead."""
     for preset in PROVIDER_PRESETS:
+        if preset["kind"] != "oidc":
+            continue
         assert (preset["issuer"] is None) != (
             preset["issuer_template"] is None
         ), preset["id"]
@@ -182,6 +192,102 @@ def test_exactly_one_of_issuer_and_template_per_preset():
             assert placeholders == {
                 p["key"] for p in preset["params"]
             }, preset["id"]
+
+
+@pytest.mark.parametrize("preset_id", ["github", "discord"])
+def test_oauth2_preset_config_round_trips_the_write_path(preset_id):
+    """A preset whose config the create API would refuse is a dead card. This
+    is the oauth2 analogue of the OIDC issuer round-trip above."""
+    preset = _preset(preset_id)
+    assert preset["kind"] == "oauth2"
+    # No issuer — that's the whole point of the kind (ADR-0033).
+    assert preset["issuer"] is None and preset["issuer_template"] is None
+    parsed = OAuth2Config(client_id="dummy-client", **preset["oauth2"])
+    assert parsed.authorize_url.startswith("https://")
+    assert parsed.subject_field == "id"
+
+
+def test_github_preset_reads_verified_addresses_from_the_second_endpoint():
+    """GitHub asserts verification on /user/emails, not the profile — so the
+    preset must carry the emails URL and the scope that unlocks it, or every
+    GitHub sign-in would land as unverified (ADR-0022 §3)."""
+    github = _preset("github")["oauth2"]
+    assert github["emails_url"] == "https://api.github.com/user/emails"
+    assert "user:email" in github["scopes"]
+    assert github["email_verified_field"] is None
+    # GitHub's display name is null for most accounts; the handle always exists.
+    assert github["name_field"] == "login"
+    # GitHub's OAuth Apps ignore PKCE.
+    assert github["use_pkce"] is False
+
+
+def test_discord_preset_uses_its_own_verified_flag():
+    discord = _preset("discord")["oauth2"]
+    assert discord["email_verified_field"] == "verified"
+    assert discord["emails_url"] is None
+    assert discord["use_pkce"] is True
+
+
+def test_public_oauth2_presets_are_open_posture():
+    """Anyone can hold a GitHub/Discord account, so admission has to be the
+    site's public-signup gate, never possession of an account (ADR-0022 §2)."""
+    for preset_id in ("github", "discord"):
+        assert _preset(preset_id)["posture"] == "open"
+
+
+def test_brand_derives_from_the_oauth2_authorize_host():
+    assert (
+        brand_for_provider("oauth2", {"authorize_url": "https://github.com/login/oauth/authorize"})
+        == "github"
+    )
+    assert (
+        brand_for_provider("oauth2", {"authorize_url": "https://discord.com/oauth2/authorize"})
+        == "discord"
+    )
+
+
+def test_brand_oauth2_requires_host_equality_not_a_prefix():
+    """A prefix match would brand an attacker-controlled lookalike host."""
+    assert (
+        brand_for_provider(
+            "oauth2",
+            {"authorize_url": "https://github.com.evil.example/login/oauth/authorize"},
+        )
+        is None
+    )
+
+
+def test_preset_model_rejects_a_mismatched_config_block():
+    """Each kind must carry exactly the block it can use — a catalog entry that
+    mixes them should fail loudly at the route, not ship as a broken card."""
+    oauth2_block = _preset("github")["oauth2"]
+    base = {
+        "id": "broken", "name": "Broken", "scopes": "openid",
+        "default_slug": "broken", "posture": "open",
+        "setup_url": "https://example.com", "notes": "n",
+    }
+    with pytest.raises(ValidationError):  # oauth2 preset with no oauth2 block
+        ProviderPresetOut.model_validate(base | {"kind": "oauth2"})
+    with pytest.raises(ValidationError):  # oauth2 preset carrying an issuer
+        ProviderPresetOut.model_validate(
+            base
+            | {
+                "kind": "oauth2",
+                "oauth2": oauth2_block,
+                "issuer": "https://a.example",
+            }
+        )
+    with pytest.raises(ValidationError):  # oidc preset carrying an oauth2 block
+        ProviderPresetOut.model_validate(
+            base
+            | {
+                "kind": "oidc",
+                "issuer": "https://a.example",
+                "oauth2": oauth2_block,
+            }
+        )
+    with pytest.raises(ValidationError):  # a kind with no defined block at all
+        ProviderPresetOut.model_validate(base | {"kind": "saml"})
 
 
 def test_preset_model_rejects_issuer_and_template_both_unset():

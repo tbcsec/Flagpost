@@ -85,6 +85,75 @@ class OidcConfig(BaseModel):
         return self
 
 
+# Field naming an attribute inside the provider's userinfo JSON (OAuth2Config's
+# claim map). Deliberately narrow — these are looked up as plain dict keys, and
+# a tight charset keeps a typo'd or hostile manifest from naming something
+# unexpected. Dots are allowed for providers that nest under one level.
+_JSON_FIELD_RE = r"^[A-Za-z_][A-Za-z0-9_.-]{0,99}$"
+
+
+class OAuth2Config(BaseModel):
+    """Non-secret settings for a plain-OAuth2 (non-OIDC) provider (#193, ADR-0033).
+
+    Unlike OIDC there is no discovery document, so all three endpoints are given
+    explicitly, and no ID token, so identity is read out of the provider's
+    userinfo JSON by the **claim map** below. The one secret — the OAuth client
+    secret — lives in ``IdentityProvider.secret``, not here.
+
+    ``extra="forbid"`` so a typo'd key is a 400, not a silently ignored setting.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # --- The provider's three endpoints. https + SSRF checks are applied at
+    #     write time and again on every call (utils.oauth2.validate_endpoint_url),
+    #     not here, so a dev-only insecure issuer stays expressible exactly as it
+    #     is for OIDC. ---
+    authorize_url: str = Field(min_length=1, max_length=500)
+    token_url: str = Field(min_length=1, max_length=500)
+    userinfo_url: str = Field(min_length=1, max_length=500)
+    client_id: str = Field(min_length=1, max_length=500)
+    # No mandatory scope (OAuth2 has no `openid`); what's needed is per-provider,
+    # so the presets carry it and a hand-configured provider may legitimately
+    # send none.
+    scopes: str = Field(default="", max_length=500)
+
+    # --- Claim map: which userinfo JSON keys carry identity. ---
+    # The provider's own stable user id — GitHub's numeric `id`, Discord's
+    # snowflake. Never the email (ADR-0021 sub-first).
+    subject_field: str = Field(default="id", pattern=_JSON_FIELD_RE)
+    email_field: str | None = Field(default="email", pattern=_JSON_FIELD_RE)
+    name_field: str | None = Field(default="name", pattern=_JSON_FIELD_RE)
+    # A boolean field asserting the address is verified (Discord: `verified`).
+    # Unset means the provider gives us no such assertion, so the address is
+    # treated as unverified — never optimistically trusted (ADR-0022 §3).
+    email_verified_field: str | None = Field(default=None, pattern=_JSON_FIELD_RE)
+    # Providers that keep verified addresses on a separate list endpoint
+    # (GitHub `/user/emails` → [{email, primary, verified}, …]). When set, the
+    # primary verified address wins over the profile one.
+    emails_url: str | None = Field(default=None, max_length=500)
+
+    # PKCE is defence in depth here rather than the primary control (`state` +
+    # client_secret + an exact redirect_uri are), and this kind must work against
+    # arbitrary servers — some reject unrecognised parameters, and GitHub's OAuth
+    # Apps simply ignore them. Off by default; presets opt in where supported.
+    use_pkce: bool = False
+
+    @model_validator(mode="after")
+    def _endpoints_are_urls(self) -> "OAuth2Config":
+        """Catch a typo'd endpoint at write time rather than at someone's first
+        login. Shape only — scheme-and-host; the https requirement and the SSRF
+        blocklist are enforced on every outbound call."""
+        for name in ("authorize_url", "token_url", "userinfo_url", "emails_url"):
+            value = getattr(self, name)
+            if value is None:
+                continue
+            parts = urlsplit(value)
+            if parts.scheme not in ("http", "https") or not parts.hostname:
+                raise ValueError(f"{name} must be an absolute http(s) URL")
+        return self
+
+
 class SamlConfig(BaseModel):
     """Non-secret SAML SP settings carried in ``IdentityProvider.config`` (#100,
     ADR-0022 §4). The one secret — the SP private key used to sign AuthnRequests —
@@ -183,6 +252,7 @@ class LdapConfig(BaseModel):
 # through the admin API (its transport must exist too, of course).
 PROVIDER_CONFIG_MODELS: dict[str, type[BaseModel]] = {
     "oidc": OidcConfig,
+    "oauth2": OAuth2Config,
     "saml": SamlConfig,
     "ldap": LdapConfig,
 }
@@ -190,7 +260,7 @@ PROVIDER_CONFIG_MODELS: dict[str, type[BaseModel]] = {
 # Provider kinds whose login is a browser redirect (a "Sign in with…" button),
 # as opposed to the local username/password form (LDAP, #101). Drives the
 # public provider list so a non-redirect kind never grows a dead button.
-REDIRECT_KINDS: frozenset[str] = frozenset({"oidc", "saml"})
+REDIRECT_KINDS: frozenset[str] = frozenset({"oidc", "oauth2", "saml"})
 
 
 def parse_provider_config(kind: str, config: dict) -> BaseModel:
@@ -252,6 +322,28 @@ class PresetParamOut(BaseModel):
     help: str
 
 
+class OAuth2PresetOut(BaseModel):
+    """The ``oauth2``-kind config a preset prefills (#193, ADR-0033).
+
+    A plain-OAuth2 provider has no issuer to derive anything from, so where an
+    OIDC preset ships one URL this ships the whole endpoint set plus the claim
+    map. Mirrors the non-secret half of :class:`OAuth2Config` — the client id
+    and secret still come from the administrator's own registered app, never
+    from a preset (ADR-0024).
+    """
+
+    authorize_url: str
+    token_url: str
+    userinfo_url: str
+    scopes: str
+    subject_field: str
+    email_field: str | None = None
+    name_field: str | None = None
+    email_verified_field: str | None = None
+    emails_url: str | None = None
+    use_pkce: bool = False
+
+
 class ProviderPresetOut(BaseModel):
     """A built-in provider preset (ADR-0024): form-prefill for the admin
     "add provider" flow, served from ``utils/provider_presets``. Configuration
@@ -261,8 +353,8 @@ class ProviderPresetOut(BaseModel):
     id: str
     name: str
     kind: str
-    # Exactly one of the two is set: a fixed issuer, or a template whose
-    # ``{key}`` placeholders are filled from ``params``.
+    # OIDC presets only. Exactly one of the two is set: a fixed issuer, or a
+    # template whose ``{key}`` placeholders are filled from ``params``.
     issuer: str | None = None
     issuer_template: str | None = None
     # Multi-tenant only (ADR-0032): the value the create form drops into the new
@@ -272,6 +364,9 @@ class ProviderPresetOut(BaseModel):
     # None for every single-value preset.
     config_issuer_template: str | None = None
     params: list[PresetParamOut] = Field(default_factory=list)
+    # ``oauth2``-kind presets only: the endpoint set + claim map, since a plain
+    # OAuth2 provider has no issuer to derive them from (#193, ADR-0033).
+    oauth2: OAuth2PresetOut | None = None
     scopes: str
     default_slug: str
     posture: str
@@ -279,16 +374,32 @@ class ProviderPresetOut(BaseModel):
     notes: str
 
     @model_validator(mode="after")
-    def _issuer_xor_template(self) -> "ProviderPresetOut":
-        # Enforce the docstring's contract: both set is ambiguous, neither set
-        # is a dead setup card (the frontend gates the form on a resolved
-        # issuer). A bad future catalog entry should fail at the route, loudly,
-        # not ship as a button that does nothing.
-        if (self.issuer is None) == (self.issuer_template is None):
-            raise ValueError(
-                "exactly one of issuer / issuer_template must be set"
-            )
-        return self
+    def _config_block_matches_kind(self) -> "ProviderPresetOut":
+        """Each kind carries exactly the config block it can actually use.
+
+        A bad future catalog entry should fail at the route, loudly, rather than
+        ship as a setup card that does nothing — the frontend gates the create
+        form on having something to prefill.
+        """
+        if self.kind == "oidc":
+            # Both set is ambiguous; neither is a dead card.
+            if (self.issuer is None) == (self.issuer_template is None):
+                raise ValueError(
+                    "exactly one of issuer / issuer_template must be set"
+                )
+            if self.oauth2 is not None:
+                raise ValueError("oauth2 config block is not valid on an oidc preset")
+            return self
+        if self.kind == "oauth2":
+            if self.oauth2 is None:
+                raise ValueError("an oauth2 preset must carry an oauth2 config block")
+            if self.issuer is not None or self.issuer_template is not None:
+                raise ValueError(
+                    "issuer / issuer_template are OIDC-only and must be unset on an "
+                    "oauth2 preset"
+                )
+            return self
+        raise ValueError(f"no preset config block is defined for kind {self.kind!r}")
 
 
 class ProviderOut(BaseModel):

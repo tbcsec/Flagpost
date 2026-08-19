@@ -31,6 +31,7 @@ from models.identity_provider import IdentityProvider
 from models.user import User
 from schemas.auth_providers import (
     PROVIDER_CONFIG_MODELS,
+    OAuth2Config,
     OidcConfig,
     ProviderCreate,
     ProviderOut,
@@ -38,13 +39,24 @@ from schemas.auth_providers import (
     ProviderUpdate,
     parse_provider_config,
 )
+from routers.oauth2 import redirect_uri_for as oauth2_redirect_uri_for
 from routers.oidc import redirect_uri_for
+from utils import oauth2 as oauth2_utils
 from utils import oidc as oidc_utils
 from utils.event_bus import event_bus
+from utils.oauth2 import OAuth2Error
 from utils.oidc import OidcError
 from utils.provider_presets import PROVIDER_PRESETS
 
 router = APIRouter(prefix="/api/admin/auth-providers", tags=["auth-providers-admin"])
+
+# Kinds whose posture is fixed to "closed" (ADR-0022 §2). A directory bind
+# (LDAP) or a federation trust (SAML) is by construction an admin-vetted
+# population, so "open" would be a category error. The public-IdP kinds — `oidc`
+# and, since #193, `oauth2` — let the administrator choose: Google/GitHub/Discord
+# are open (anyone may hold an account, so the public-signup gate is the control),
+# while a single-tenant Entra directory is closed.
+_CLOSED_ONLY_KINDS: frozenset[str] = frozenset({"saml", "ldap"})
 
 # Appears in the callback URL registered at the IdP, so keep it boring.
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,58}[a-z0-9]$")
@@ -55,6 +67,11 @@ def _to_out(provider: IdentityProvider, request: Request) -> ProviderOut:
     out.secret_set = bool(provider.secret)
     if provider.kind == "oidc":
         out.redirect_uri = redirect_uri_for(request, provider.slug)
+    elif provider.kind == "oauth2":
+        # Same reasoning as OIDC: the value has to be registered at the provider
+        # and depends on PUBLIC_BASE_URL, which the browser can't know — and a
+        # mismatch is the single most common reason a setup fails.
+        out.redirect_uri = oauth2_redirect_uri_for(request, provider.slug)
     return out
 
 
@@ -104,12 +121,38 @@ async def _validated_config(kind: str, config: dict) -> dict:
                 status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
             ) from exc
 
+    if isinstance(parsed, OAuth2Config):
+        parsed.authorize_url = parsed.authorize_url.strip()
+        parsed.token_url = parsed.token_url.strip()
+        parsed.userinfo_url = parsed.userinfo_url.strip()
+        parsed.emails_url = (parsed.emails_url or "").strip() or None
+        parsed.client_id = parsed.client_id.strip()
+        parsed.scopes = parsed.scopes.strip()
+        # Every endpoint, not just one: unlike OIDC — where discovery derives
+        # the rest from a single validated issuer — each of these is
+        # independently admin-supplied, so each is independently an egress
+        # target (ADR-0033). Checked again on every call, since DNS can change.
+        for url in (
+            parsed.authorize_url,
+            parsed.token_url,
+            parsed.userinfo_url,
+            parsed.emails_url,
+        ):
+            if not url:
+                continue
+            try:
+                await oauth2_utils.validate_endpoint_url(url)
+            except OAuth2Error as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+                ) from exc
+
     return parsed.model_dump()
 
 
 def _check_invariants(provider: IdentityProvider) -> None:
     """Cross-field rules on the resulting row (create and update alike)."""
-    if provider.kind != "oidc" and provider.posture != "closed":
+    if provider.kind in _CLOSED_ONLY_KINDS and provider.posture != "closed":
         # ADR-0022 §2: closed is "the default and only option for SAML/LDAP" —
         # an admin-configured directory/federation is a trusted, closed
         # provider by construction; an open SAML would apply the public-signup

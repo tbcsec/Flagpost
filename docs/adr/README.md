@@ -66,3 +66,4 @@ Status is one of:
 | [0030](0030-post-event-report-rendering-weasyprint.md) | Post-event report rendering — HTML + WeasyPrint, not Pillow or a headless browser | Accepted |
 | [0031](0031-multi-instance-deployment.md) | Multi-instance deployment behind a load balancer (Fargate/ALB) | Accepted |
 | [0032](0032-multi-tenant-entra-issuer-validation.md) | Multi-tenant Entra issuer validation via a tenant-substituted issuer template | Accepted |
+| [0033](0033-generic-oauth2-provider-kind.md) | A generic `oauth2` provider kind, with userinfo as the identity source | Accepted |

@@ -212,11 +212,31 @@ export interface PresetParam {
   help: string;
 }
 
+/** The endpoint set + claim map an `oauth2`-kind preset prefills (#193,
+ *  ADR-0033). Mirrors the non-secret half of the backend's OAuth2Config; the
+ *  client id and secret always come from the admin's own registered app. */
+export interface OAuth2PresetConfig {
+  authorize_url: string;
+  token_url: string;
+  userinfo_url: string;
+  scopes: string;
+  subject_field: string;
+  email_field: string | null;
+  name_field: string | null;
+  /** A userinfo boolean asserting the address is verified (Discord). */
+  email_verified_field: string | null;
+  /** A separate list endpoint holding verified addresses (GitHub). */
+  emails_url: string | null;
+  use_pkce: boolean;
+}
+
 /** A built-in one-click setup recipe for a well-known IdP (Google, Microsoft
- *  Entra), served by GET /api/admin/auth-providers/presets. Purely form-prefill
- *  data — creation still flows through the ordinary provider POST, so a preset
- *  is not a write path. Exactly one of `issuer` / `issuer_template` is set:
- *  a template carries `{key}` placeholders resolved from `params`. */
+ *  Entra, GitHub, Discord), served by GET /api/admin/auth-providers/presets.
+ *  Purely form-prefill data — creation still flows through the ordinary
+ *  provider POST, so a preset is not a write path. An OIDC preset sets exactly
+ *  one of `issuer` / `issuer_template` (a template carries `{key}` placeholders
+ *  resolved from `params`); an `oauth2` preset sets neither and carries
+ *  `oauth2` instead. */
 export interface ProviderPreset {
   id: string;
   name: string;
@@ -229,6 +249,10 @@ export interface ProviderPreset {
    *  `config.issuer`). null for every single-value preset. */
   config_issuer_template: string | null;
   params: PresetParam[];
+  /** `oauth2`-kind presets only (#193, ADR-0033): a plain-OAuth2 provider has
+   *  no issuer, so the preset carries the endpoint set and the claim map
+   *  instead. null on every OIDC preset. */
+  oauth2: OAuth2PresetConfig | null;
   scopes: string;
   default_slug: string;
   posture: string;

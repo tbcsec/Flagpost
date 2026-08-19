@@ -891,11 +891,17 @@ function ProviderForm({
   );
 }
 
-/** One quick-setup card (#preset). Google opens the prefilled form in one
+/** One quick-setup row (#preset). Google opens the prefilled form in one
  *  click; Microsoft first collects its tenant GUID inline (its issuer is a
  *  per-tenant template), then opens the form. Either way the admin still
- *  pastes client ID + secret into the ordinary form and can edit anything. */
-function PresetCard({
+ *  pastes client ID + secret into the ordinary form and can edit anything.
+ *
+ *  Laid out as a row rather than a card: the catalog grew to five entries and
+ *  keeps growing (a new OAuth2 IdP is just data), and a card grid gave every
+ *  entry a different height, left a hole in the last column, and pushed the
+ *  actual provider list below the fold. Rows stay uniform however many there
+ *  are. */
+function PresetRow({
   preset,
   onUse,
 }: {
@@ -921,60 +927,64 @@ function PresetCard({
   }
 
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-3 py-4">
-        <div className="flex items-center gap-2">
-          <SsoBrandIcon
-            brand={preset.id.startsWith("microsoft") ? "microsoft" : preset.id}
-            className="shrink-0"
-          />
-          <span className="font-medium">{preset.name}</span>
+    <div className="flex flex-col gap-3 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <SsoBrandIcon
+          brand={preset.id.startsWith("microsoft") ? "microsoft" : preset.id}
+          className="shrink-0"
+        />
+        {/* min-w-0 lets the note wrap instead of forcing the row wider than
+            the panel when a provider's guidance is long. */}
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium">{preset.name}</div>
+          <p className="text-xs text-muted-foreground">{preset.notes}</p>
         </div>
-        <p className="text-xs text-muted-foreground">{preset.notes}</p>
-
-        {collecting &&
-          preset.params.map((param) => {
-            const value = values[param.key] ?? "";
-            const error = validatePresetParam(param, value);
-            const id = `preset-${preset.id}-${param.key}`;
-            return (
-              <div key={param.key} className="grid gap-2">
-                <Label htmlFor={id}>{param.label}</Label>
-                <Input
-                  id={id}
-                  value={value}
-                  onChange={(e) =>
-                    setValues((v) => ({ ...v, [param.key]: e.target.value }))
-                  }
-                  placeholder={param.placeholder}
-                  autoComplete="off"
-                />
-                {attempted && error ? (
-                  <p role="alert" className="text-xs text-destructive">
-                    {error}
-                  </p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">{param.help}</p>
-                )}
-              </div>
-            );
-          })}
-
-        <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" variant="outline" size="sm" onClick={start}>
-            {collecting ? "Continue" : `Set up ${preset.name}`}
-          </Button>
+        <div className="flex shrink-0 items-center gap-3">
           <a
             href={preset.setup_url}
             target="_blank"
             rel="noreferrer"
             className="text-xs text-muted-foreground hover:text-primary hover:underline"
           >
-            {setupLinkLabel(preset)} ↗
+            {setupLinkLabel(preset)}
           </a>
+          {/* Just "Set up" — the provider is already named to the left, and
+              repeating it made the longest label ("Set up Microsoft
+              (multi-tenant)") set the width of every button. */}
+          <Button type="button" variant="outline" size="sm" onClick={start}>
+            {collecting ? "Continue" : "Set up"}
+          </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+
+      {collecting &&
+        preset.params.map((param) => {
+          const value = values[param.key] ?? "";
+          const error = validatePresetParam(param, value);
+          const id = `preset-${preset.id}-${param.key}`;
+          return (
+            <div key={param.key} className="grid max-w-md gap-2">
+              <Label htmlFor={id}>{param.label}</Label>
+              <Input
+                id={id}
+                value={value}
+                onChange={(e) =>
+                  setValues((v) => ({ ...v, [param.key]: e.target.value }))
+                }
+                placeholder={param.placeholder}
+                autoComplete="off"
+              />
+              {attempted && error ? (
+                <p role="alert" className="text-xs text-destructive">
+                  {error}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">{param.help}</p>
+              )}
+            </div>
+          );
+        })}
+    </div>
   );
 }
 
@@ -1036,18 +1046,27 @@ export function AuthProvidersPanel() {
       {!adding && !editing && presets && presets.length > 0 && (
         <div className="grid gap-2">
           <h3 className="text-sm font-semibold">Quick set up</h3>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {presets.map((preset) => (
-              <PresetCard
-                key={preset.id}
-                preset={preset}
-                onUse={(seed) => {
-                  setPrefill(seed);
-                  setAdding(true);
-                }}
-              />
-            ))}
-          </div>
+          {/* Said once here rather than repeated in all five notes: it's the
+              same for every provider, and forgetting it is the most common
+              reason a finished setup still fails at first sign-in. */}
+          <p className="text-xs text-muted-foreground">
+            Each of these needs an app registered on the provider&apos;s side.
+            After saving, register the callback URL Flagpost shows you.
+          </p>
+          <Card>
+            <CardContent className="divide-y divide-border p-0">
+              {presets.map((preset) => (
+                <PresetRow
+                  key={preset.id}
+                  preset={preset}
+                  onUse={(seed) => {
+                    setPrefill(seed);
+                    setAdding(true);
+                  }}
+                />
+              ))}
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -1161,7 +1180,7 @@ export function AuthProvidersPanel() {
         !adding && (
           <EmptyState
             title="No identity providers"
-            description="Add an OIDC, SAML or LDAP provider to let people sign in with your organisation's directory instead of a Flagpost password."
+            description="Add an OIDC, OAuth 2.0, SAML or LDAP provider to let people sign in with an existing account instead of a Flagpost password."
             action={<Button onClick={() => setAdding(true)}>Add provider</Button>}
           />
         )

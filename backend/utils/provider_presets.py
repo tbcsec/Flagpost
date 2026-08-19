@@ -64,9 +64,8 @@ PROVIDER_PRESETS: list[dict] = [
         "posture": "open",
         "setup_url": "https://console.cloud.google.com/apis/credentials",
         "notes": (
-            "Create an OAuth client of the Web application type in the Google "
-            "Cloud console, paste its client ID and secret here, then register "
-            "the redirect URI shown after saving."
+            "An OAuth client of the Web application type, from the Google "
+            "Cloud console."
         ),
     },
     {
@@ -110,11 +109,8 @@ PROVIDER_PRESETS: list[dict] = [
         "posture": "closed",
         "setup_url": "https://entra.microsoft.com",
         "notes": (
-            "Register a single-tenant app in Microsoft Entra, add a Web "
-            "redirect URI, and create a client secret. Defaults to a closed "
-            "posture: being in your tenant is the admission decision, and "
-            "email stays display-only unless you mark it authoritative "
-            "(ADR-0022 trust rules)."
+            "A single-tenant app in Microsoft Entra. Defaults to a closed "
+            "policy: being in your tenant is what grants access."
         ),
     },
     {
@@ -139,12 +135,9 @@ PROVIDER_PRESETS: list[dict] = [
         "posture": "open",
         "setup_url": "https://entra.microsoft.com",
         "notes": (
-            "Register a multi-tenant app in Microsoft Entra so anyone with a "
-            "work or school Microsoft account can sign in. This trusts every "
-            "Entra tenant for authentication - restrict who actually gets an "
-            "account with the registration email-domain allowlist, not the "
-            "tenant, since Flagpost never authorizes on IdP claims "
-            "(ADR-0021/0032)."
+            "A multi-tenant app in Microsoft Entra: any work or school "
+            "account can sign in, so use the email-domain allowlist to control "
+            "who actually gets an account."
         ),
     },
     {
@@ -185,10 +178,9 @@ PROVIDER_PRESETS: list[dict] = [
         "posture": "open",
         "setup_url": "https://github.com/settings/developers",
         "notes": (
-            "Register an OAuth App in GitHub's developer settings, then paste "
-            "its client ID and secret here and set the callback URL shown after "
-            "saving. Only a primary, verified GitHub address is trusted for "
-            "linking to an existing account."
+            "An OAuth App in GitHub's developer settings. Only a primary, "
+            "verified GitHub address is trusted for linking to an existing "
+            "account."
         ),
     },
     {
@@ -220,10 +212,9 @@ PROVIDER_PRESETS: list[dict] = [
         "posture": "open",
         "setup_url": "https://discord.com/developers/applications",
         "notes": (
-            "Create an application in the Discord developer portal, add a "
-            "redirect URI under OAuth2, and paste its client ID and secret "
-            "here. Discord's own verified-email flag decides whether an address "
-            "is trusted for linking to an existing account."
+            "An application in the Discord developer portal. Discord's own "
+            "verified-email flag decides whether an address is trusted for "
+            "linking to an existing account."
         ),
     },
 ]

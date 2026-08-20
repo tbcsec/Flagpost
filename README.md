@@ -8,7 +8,8 @@
 [![CI](https://github.com/tbcsec/flagpost/actions/workflows/ci.yml/badge.svg)](https://github.com/tbcsec/flagpost/actions/workflows/ci.yml)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-2bbd7e.svg)](CONTRIBUTING.md)
 ![Backend: FastAPI](https://img.shields.io/badge/backend-FastAPI-009688.svg)
-![Frontend: Next.js](https://img.shields.io/badge/frontend-Next.js%2015-black.svg)
+![Frontend: Next.js](https://img.shields.io/badge/frontend-Next.js%2016-black.svg)
+![i18n: EN · FR · ES · PL](https://img.shields.io/badge/i18n-EN·FR·ES·PL-2bbd7e.svg)
 
 [Highlights](#-highlights)&nbsp;·&nbsp;[Features](#-features)&nbsp;·&nbsp;[Quick start](#-quick-start)&nbsp;·&nbsp;[Deploy](#-deploying-to-production)&nbsp;·&nbsp;[Docs](#-documentation)
 
@@ -17,16 +18,18 @@
 ---
 
 Flagpost is a complete competition platform for CTF organisers: publish challenges,
-score solves the moment they land, support competitors, and automate the whole
-event — all from one self-hostable app. It's multi-tenant from the ground up (run
-many competitions from a single install), real-time throughout (WebSockets, not
-polling), and ships as a one-command production stack.
+score solves the moment they land, support competitors, automate the whole event,
+and — when it wraps — hand out certificates and generate a branded post-event
+report. It's multi-tenant from the ground up (run many competitions from a single
+install), real-time throughout (WebSockets, not polling), translatable (ships in
+English, French, Spanish & Polish), and deploys as a one-command production stack.
 
-Sign-in is local (username + optional email) or an external directory —
-**OIDC/OAuth2** (one-click Google & Microsoft presets, or Okta, Keycloak, Entra,
-or anything with a discovery document), **SAML 2.0**, or **LDAP / Active
-Directory**. Optional **AI assistants** (administrator + competitor) plug into an
-OpenAI-compatible provider you configure — off by default until you enable them.
+Sign-in is local (username + optional email) or an external identity provider —
+**OIDC & OAuth 2.0** (one-click **Google, Microsoft, GitHub & Discord** presets, or
+Okta, Keycloak, Entra, or anything with a discovery document), **SAML 2.0**, or
+**LDAP / Active Directory**. Optional **AI assistants** (administrator + competitor)
+plug into an OpenAI-compatible provider you configure — off by default until you
+enable them.
 
 ## ✨ Highlights
 
@@ -56,16 +59,25 @@ The things that set Flagpost apart — every one of them **built and working tod
 - **🏆 A scoreboard done right.** Live standings with first-blood, parallel
   **brackets/divisions**, a **freeze** for the final stretch, a public **spectator
   board**, and a **CTFtime feed** so rated events just work.
+- **🎓 Run the event end to end.** When the dust settles, hand competitors
+  **shareable participation & placement certificates** from a template you design,
+  and turn the finished competition into a **branded post-event report** (PDF or
+  HTML) — executive summary, participation, results, per-challenge analysis, and
+  support load — in a click.
 - **🔁 CTFd-compatible & fully portable.** Bulk challenge import/export in the
   **ctfcli YAML** format, plus a one-click, full-fidelity **platform backup**
   (export/import any section of your install).
-- **🔐 Bring your own identity provider.** **OIDC/OAuth2** (PKCE, sub-first
-  account linking, just-in-time provisioning, plus one-click **Google &
-  Microsoft** presets), **SAML 2.0** (signature-before-trust, SP-metadata
-  endpoint), and **LDAP / Active Directory** (a directory bind behind the
-  ordinary login form) — alongside local accounts, so an existing
-  Google/Okta/Keycloak/Entra/Shibboleth or on-prem directory just works, while
-  local login stays as break-glass.
+- **🔐 Bring your own identity provider.** **OIDC & OAuth 2.0** (PKCE, sub-first
+  account linking, just-in-time provisioning, with one-click presets for
+  **Google, Microsoft** — single- *and* multi-tenant — **GitHub & Discord**),
+  **SAML 2.0** (signature-before-trust, SP-metadata endpoint), and **LDAP /
+  Active Directory** (a directory bind behind the ordinary login form) —
+  alongside local accounts, so an existing Google/Okta/Keycloak/Entra/Shibboleth
+  or on-prem directory just works, while local login stays break-glass.
+- **🌍 Speaks your competitors' language.** The interface is internationalised
+  and ships in **English, French, Spanish & Polish**, translated by the
+  community through Crowdin — each person picks their language, and anything not
+  yet translated falls back to English rather than breaking.
 - **🔒 Secure by default.** argon2 hashing, a per-install auto-derived JWT secret
   (no shipped credentials — a first-run setup wizard creates your owner account),
   SSRF-hardened webhooks, ReDoS-contained regex flags, and timing-safe auth.
@@ -130,6 +142,15 @@ The things that set Flagpost apart — every one of them **built and working tod
   timeline) and a **CTFtime feed**
 - Manual judge awards & score adjustments
 
+**Certificates & wrap-up**
+- **Certificates** — design a per-competition template;
+  competitors download shareable **participation &
+  placement** images
+- **Post-event report** — one-click **branded PDF / HTML**:
+  executive summary, participation, results, per-challenge
+  analysis & support load
+- Both are optional modules, toggled per competition
+
 </td>
 <td width="50%" valign="top">
 
@@ -152,10 +173,13 @@ The things that set Flagpost apart — every one of them **built and working tod
 - Operational **dashboard** with drag-and-drop widgets
 
 **Administration**
-- **OIDC / SAML / LDAP** identity providers (incl. Google &
-  Microsoft presets) alongside local accounts
+- **OIDC / OAuth2 / SAML / LDAP** identity providers (Google,
+  Microsoft, GitHub & Discord presets) alongside local accounts
 - Optional **AI assistants** (admin + competitor, bring-your-own
   OpenAI-compatible provider)
+- **Custom pages** — admin-authored rich-text pages (About,
+  Sponsors…) in the sidebar & at `/p/…`, public or members-only
+- **Localised UI** — English, French, Spanish & Polish (Crowdin)
 - **Users** directory + soft-ban / lifecycle, **bulk CSV import**
 - Data-driven **roles & permissions** editor
 - Personal **API tokens** with platform-wide oversight
@@ -216,7 +240,9 @@ The backend runs as a **single process by default** (in-process WebSocket
 broadcast, no Redis required). For larger events it scales out to **multiple
 workers** — set `WEB_CONCURRENCY>1` and the real-time layer switches to a
 Redis-backed cross-worker relay (a startup guard refuses to boot multi-worker
-without Redis). To run **without Docker**: build & serve the frontend with
+without Redis) — and beyond one box to **multiple instances behind a load
+balancer** (the AWS ECS/Fargate + ALB + S3 + RDS + ElastiCache topology is a
+supported target). To run **without Docker**: build & serve the frontend with
 `npm run build && npm run start`, and run the backend with `alembic upgrade head`
 then `uvicorn main:app` (no `--reload`) behind your own TLS-terminating proxy.
 
@@ -281,10 +307,12 @@ once before shipping one.
 ## 🧱 Tech stack
 
 **Backend** — Python · FastAPI · SQLAlchemy 2 (async) · Alembic · PostgreSQL ·
-Redis · MinIO/S3 · JWT + argon2 + OIDC/SAML/LDAP · a first-class async event bus.
+Redis · MinIO/S3 · JWT + argon2 + OIDC/OAuth2/SAML/LDAP · WeasyPrint + Pillow
+(reports & certificates) · a first-class async event bus.
 **Frontend** — TypeScript · Next.js 16 (App Router) · React 19 · TanStack Query ·
-Zustand · Tailwind v4 · TipTap + Y.js (CRDT).
-**Realtime** — WebSockets throughout. **Deploy** — Docker Compose + Caddy.
+Zustand · Tailwind v4 · TipTap + Y.js (CRDT) · next-intl (i18n).
+**Realtime** — WebSockets throughout. **Deploy** — Docker Compose + Caddy, or
+multi-instance behind a load balancer (Fargate/ALB).
 
 ## 📚 Documentation
 

@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { Suspense, useState } from "react";
 
 import { LocaleSwitcher } from "@/components/app/locale-switcher";
+import { PageIcon } from "@/components/app/page-icons";
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
 import { SsoBrandIcon } from "@/components/brand/sso-brand-icons";
@@ -21,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import dynamic from "next/dynamic";
 
+import { usePageNav } from "@/lib/hooks/use-pages";
 import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
 import { useAuthProviders, useLogin } from "@/lib/hooks/use-users";
 
@@ -78,6 +80,10 @@ function LoginForm() {
       : "default"
     : null;
   const brand = settings ?? FALLBACK_SETTINGS;
+  // Public custom pages (#198): reachable logged-out, so the sign-in page is
+  // where a visitor can discover them. While signed out the hook fetches the
+  // anonymous slice, so members-only pages never appear here.
+  const publicPages = usePageNav().data ?? [];
   const hasSso = (providers?.length ?? 0) > 0;
   const platformName = brand.platform_name;
   const [identifier, setIdentifier] = useState("");
@@ -245,6 +251,27 @@ function LoginForm() {
           </CardContent>
         </Card>
       )}
+      {publicPages.length > 0 && (
+        // Footer-weight by design: About/Sponsors/Contact are secondary to
+        // signing in, so they read as quiet site links rather than another
+        // card competing with the form.
+        <nav
+          aria-label={t("pagesLabel")}
+          className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1"
+        >
+          {publicPages.map((page) => (
+            <Link
+              key={page.slug}
+              href={`/p/${page.slug}`}
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-primary hover:underline"
+            >
+              <PageIcon name={page.icon} size={14} className="shrink-0" />
+              {page.title}
+            </Link>
+          ))}
+        </nav>
+      )}
+
       <LocaleSwitcher className="mx-auto" />
       <PoweredByFooter />
     </main>

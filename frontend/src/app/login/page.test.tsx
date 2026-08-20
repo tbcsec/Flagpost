@@ -20,6 +20,13 @@ vi.mock("@/lib/hooks/use-users", () => ({
   useAuthProviders: () => mockUseAuthProviders(),
 }));
 
+// Default (no mockReturnValue set) resolves to "no public pages", so the
+// pre-existing cases render exactly as before this hook existed.
+const mockUsePageNav = vi.fn();
+vi.mock("@/lib/hooks/use-pages", () => ({
+  usePageNav: () => mockUsePageNav() ?? { data: [] },
+}));
+
 const mockUseSiteSettings = vi.fn();
 vi.mock("@/lib/hooks/use-site-settings", async () => {
   const actual = await vi.importActual<
@@ -115,5 +122,41 @@ describe("LoginPage", () => {
     mockUseSiteSettings.mockReturnValue({ data: settings({ demo_mode: false }) });
     renderWithIntl(<LoginPage />);
     expect(screen.queryByText("Try it instantly")).not.toBeInTheDocument();
+  });
+});
+
+describe("public page links (#198)", () => {
+  it("renders a quiet link row for public pages", () => {
+    mockUseSearchParams.mockReturnValue(params(null));
+    mockUseSiteSettings.mockReturnValue({ data: settings() });
+    mockUseAuthProviders.mockReturnValue({ data: [] });
+    mockUsePageNav.mockReturnValue({
+      data: [
+        { slug: "about", title: "About this event", icon: "info", nav_order: 0 },
+        { slug: "rules", title: "Rules", icon: "book", nav_order: 1 },
+      ],
+    });
+    renderWithIntl(<LoginPage />);
+
+    const nav = screen.getByRole("navigation", { name: "Site pages" });
+    const links = Array.from(nav.querySelectorAll("a")).map((a) => ({
+      href: a.getAttribute("href"),
+      text: a.textContent,
+    }));
+    expect(links).toEqual([
+      { href: "/p/about", text: "About this event" },
+      { href: "/p/rules", text: "Rules" },
+    ]);
+  });
+
+  it("renders no row when there are no public pages", () => {
+    mockUseSearchParams.mockReturnValue(params(null));
+    mockUseSiteSettings.mockReturnValue({ data: settings() });
+    mockUseAuthProviders.mockReturnValue({ data: [] });
+    mockUsePageNav.mockReturnValue({ data: [] });
+    renderWithIntl(<LoginPage />);
+    expect(
+      screen.queryByRole("navigation", { name: "Site pages" }),
+    ).toBeNull();
   });
 });

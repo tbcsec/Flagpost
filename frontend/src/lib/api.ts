@@ -936,11 +936,20 @@ export const rolesApi = {
 // published `public`, and the nav list drives the sidebar for signed-out
 // visitors too. Authoring lives behind `manage_pages` on /api/admin/pages.
 export const pagesApi = {
-  // `auth: false` so a logged-out visitor gets the public subset rather than a
-  // 401 — the backend widens the result when a token happens to be present.
-  nav: () => apiFetch<PageNavEntry[]>("/api/pages", {}, { auth: false }),
-  get: (slug: string) =>
-    apiFetch<PageContent>(`/api/pages/${encodeURIComponent(slug)}`, {}, { auth: false }),
+  // The two reads take an explicit `authed` flag because the same endpoints
+  // serve both audiences: anonymous gets the public subset, a signed-in caller
+  // gets public + members-only. `auth: false` in apiFetch means the token is
+  // NEVER attached — so the caller must say which slice it wants, and the
+  // hooks key their queries on it (a cached anonymous nav list must not
+  // survive into a signed-in session, which is exactly the bug this fixes).
+  nav: (authed: boolean) =>
+    apiFetch<PageNavEntry[]>("/api/pages", {}, { auth: authed }),
+  get: (slug: string, authed: boolean) =>
+    apiFetch<PageContent>(
+      `/api/pages/${encodeURIComponent(slug)}`,
+      {},
+      { auth: authed },
+    ),
   adminList: () => apiFetch<AdminPage[]>("/api/admin/pages"),
   create: (input: PageWrite) =>
     apiFetch<AdminPage>("/api/admin/pages", {

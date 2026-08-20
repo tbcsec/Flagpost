@@ -415,7 +415,8 @@
             "description": "rozwiązywanie wyzwań"
           }
         }
-      }
+      },
+      "pagesLabel": "Site pages"
     },
     "register": {
       "title": "Utwórz konto",
@@ -1241,7 +1242,7 @@
   },
   "pages": {
     "heading": "Custom pages",
-    "subtitle": "Author About, Sponsors or Contact pages. They appear in the sidebar and render at /p/<slug>.",
+    "subtitle": "Author About, Sponsors or Contact pages. They appear in the sidebar and render at their own /p/ link.",
     "empty": {
       "title": "No pages yet",
       "description": "Add a page to put your own content in the sidebar."

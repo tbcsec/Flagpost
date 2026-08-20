@@ -12,33 +12,43 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { pagesApi } from "@/lib/api";
 import type { AdminPage, PageWrite } from "@/lib/types";
+import { useAuthStore } from "@/stores/auth";
 
 const PAGES_NAV_KEY = ["pages", "nav"] as const;
 const PAGES_ADMIN_KEY = ["pages", "admin"] as const;
-const pageKey = (slug: string) => ["pages", "detail", slug] as const;
 
 /** Sidebar entries the current viewer may see.
  *
- * Deliberately *not* gated on being signed in: the same query serves an
- * anonymous visitor (public pages only) and a member (public + members-only),
- * because the backend widens the result when a token is present. Kept fresh for
- * a while since pages change rarely and this runs on every shell render.
+ * The same endpoint serves both audiences — anonymous gets public pages, a
+ * signed-in viewer gets public + members-only — so the request must actually
+ * carry the token when one exists, and the **query key must include which
+ * slice was fetched**. Without the key, the anonymous list cached on /login
+ * survives into the signed-in session and members-only pages silently never
+ * appear (the launch bug this fixes). `enabled` waits out session hydration so
+ * the wrong slice is never fetched-and-cached during the loading window.
  */
 export function usePageNav() {
+  const status = useAuthStore((s) => s.status);
+  const authed = status === "authenticated";
   return useQuery({
-    queryKey: PAGES_NAV_KEY,
-    queryFn: pagesApi.nav,
+    queryKey: [...PAGES_NAV_KEY, authed],
+    queryFn: () => pagesApi.nav(authed),
+    enabled: status !== "loading",
     staleTime: 5 * 60 * 1000,
   });
 }
 
-/** One page's content. `enabled` guards the empty-slug render Next does before
- *  route params resolve. */
+/** One page's content. `enabled` also guards the empty-slug render Next does
+ *  before route params resolve. Keyed by auth for the same reason as the nav:
+ *  a members-only page 404s anonymously, and that cached 404 must not outlive
+ *  signing in. */
 export function usePage(slug: string | undefined) {
+  const status = useAuthStore((s) => s.status);
+  const authed = status === "authenticated";
   return useQuery({
-    queryKey: pageKey(slug ?? ""),
-    queryFn: () => pagesApi.get(slug as string),
-    enabled: Boolean(slug),
+    queryKey: ["pages", "detail", slug ?? "", authed],
+    queryFn: () => pagesApi.get(slug as string, authed),
+    enabled: Boolean(slug) && status !== "loading",
     // A 404 here is a real answer (no such page, or not visible to this
     // viewer), not a transient failure — retrying just delays the empty state.
     retry: false,

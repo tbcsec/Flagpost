@@ -1518,3 +1518,44 @@ export interface CertificateManifest {
     font_size_max: number;
   };
 }
+
+/** Custom pages (#198, ADR-0034) — admin-authored, site-level content shown in
+ *  the sidebar and rendered at `/p/{slug}`.
+ *
+ *  Titles and bodies are **operator-authored data, not UI strings**: they sit
+ *  outside the next-intl catalog for the same reason challenge names do, so a
+ *  multilingual install shows the same page to every locale. */
+export interface PageNavEntry {
+  slug: string;
+  title: string;
+  /** A name from the curated icon set; unknown names fall back to a default
+   *  glyph rather than rendering nothing (see `components/app/page-icons.tsx`). */
+  icon: string;
+  nav_order: number;
+}
+
+/** One page's renderable content. */
+export interface PageContent extends PageNavEntry {
+  content: RichTextDoc | null;
+}
+
+/** Authoring view — adds the state only a `manage_pages` holder needs. */
+export interface AdminPage extends PageContent {
+  id: string;
+  visibility: PageVisibility;
+  draft: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export type PageVisibility = "public" | "authenticated";
+
+export interface PageWrite {
+  slug: string;
+  title: string;
+  content: RichTextDoc | null;
+  icon: string;
+  nav_order: number;
+  visibility: PageVisibility;
+  draft: boolean;
+}

@@ -1,0 +1,13 @@
+id: pages
+name: Custom Pages
+version: 1.0.0
+# Required-core (§11.3), deliberately with no per-competition toggle: pages are
+# site-level (ADR-0034), and `competition_modules` has no site-scoped equivalent
+# — the same reasoning that makes `sso` and `site_settings` required-core. The
+# real on/off switch is content: an install with no pages shows no sidebar
+# section and no routes that resolve, so the feature is invisible until an
+# administrator authors something.
+required_core: true
+provides:
+  routes: true
+  event_listeners: false

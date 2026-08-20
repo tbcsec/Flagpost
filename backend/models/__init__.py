@@ -40,6 +40,7 @@ from models.identity_provider import (
     IdentityProvider,
     UserExternalIdentity,
 )
+from models.page import Page
 from models.password_reset import PasswordResetToken
 from models.report import CompetitionReport
 from models.role import Role, RoleAssignment
@@ -83,6 +84,7 @@ __all__ = [
     "Notification",
     "AuthLoginState",
     "IdentityProvider",
+    "Page",
     "PasswordResetToken",
     "Role",
     "RoleAssignment",

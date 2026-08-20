@@ -76,6 +76,10 @@ import type {
   ApiTokenCreated,
   UserAccount,
   UserImportReport,
+  AdminPage,
+  PageContent,
+  PageNavEntry,
+  PageWrite,
   Permissions,
   PermissionEntry,
   Role,
@@ -926,6 +930,35 @@ export const rolesApi = {
     }),
   unassign: (assignmentId: string) =>
     apiFetch<void>(`/api/roles/assignments/${assignmentId}`, { method: "DELETE" }),
+};
+
+// Custom pages (#198, ADR-0034). The two reads are public: a page may be
+// published `public`, and the nav list drives the sidebar for signed-out
+// visitors too. Authoring lives behind `manage_pages` on /api/admin/pages.
+export const pagesApi = {
+  // `auth: false` so a logged-out visitor gets the public subset rather than a
+  // 401 — the backend widens the result when a token happens to be present.
+  nav: () => apiFetch<PageNavEntry[]>("/api/pages", {}, { auth: false }),
+  get: (slug: string) =>
+    apiFetch<PageContent>(`/api/pages/${encodeURIComponent(slug)}`, {}, { auth: false }),
+  adminList: () => apiFetch<AdminPage[]>("/api/admin/pages"),
+  create: (input: PageWrite) =>
+    apiFetch<AdminPage>("/api/admin/pages", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  update: (id: string, input: Partial<PageWrite>) =>
+    apiFetch<AdminPage>(`/api/admin/pages/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
+  remove: (id: string) =>
+    apiFetch<void>(`/api/admin/pages/${id}`, { method: "DELETE" }),
+  reorder: (pageIds: string[]) =>
+    apiFetch<AdminPage[]>("/api/admin/pages/reorder", {
+      method: "POST",
+      body: JSON.stringify({ page_ids: pageIds }),
+    }),
 };
 
 export const siteSettingsApi = {

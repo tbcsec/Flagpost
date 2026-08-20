@@ -19,7 +19,7 @@ pure logic that's cheap to get right early and awkward to bolt on later.
 
 Licensing: third-party modules loaded through this mechanism are covered by
 the Flagpost Module Exception, an additional permission under AGPL-3.0
-Section 7 — see ``MODULE-EXCEPTION.md`` in the repository root, alongside
+Section 7 — see ``MODULE-EXCEPTION`` in the repository root, alongside
 ``LICENSE``.
 """
 

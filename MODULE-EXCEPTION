@@ -1,0 +1,143 @@
+                         FLAGPOST MODULE EXCEPTION
+
+                        Version 1.0, 20 August 2026
+
+This exception is an additional permission under Section 7 of the GNU
+Affero General Public License, version 3 ("AGPL-3.0"), attached to
+Flagpost ("the Program") by its copyright holder(s).  Where this
+exception and the AGPL-3.0 conflict, this exception governs to the
+extent of the permission it grants.
+
+0. Definitions.
+
+"The Program" means Flagpost, the CTF competition management platform
+published at <https://github.com/tbcsec/flagpost> and licensed under
+AGPL-3.0.
+
+"Module Loader" means the Program's manifest-driven module loading
+mechanism: the loader implemented at backend/plugins/loader.py and
+invoked by the Program at startup (backend/main.py), which scans the
+Program's module directory (backend/plugins/) for packages containing a
+plugin.yaml manifest, resolves their declared dependencies, imports each
+package, and calls its setup() entry point.  The mechanism is documented
+in docs/ARCHITECTURE.md §11 ("Plugin System").  This exception uses the
+Program documentation's own term for works loaded this way — "Modules";
+where the mechanism's on-disk naming says "plugin" (the backend/plugins/
+directory, the plugin.yaml manifest filename, the §11 heading), it names
+the same mechanism, and the two terms are interchangeable here.
+
+"Module API" means the extension interface the Module Loader provides to
+a loaded package, namely:
+
+  a) the module contract: a Python package placed in the module
+     directory, containing a plugin.yaml manifest (declaring "id",
+     "name", "version", and optionally "description", "provides", and
+     "dependencies" on other Modules) and exposing a
+     setup(app, event_bus, db_factory) entry point;
+
+  b) the capabilities the Module Loader passes to setup(): the
+     application object (through which a Module mounts its own HTTP
+     routes), the Program's event bus (backend/utils/event_bus.py,
+     through which a Module subscribes to and emits events in the
+     Program's event vocabulary, backend/utils/event_catalog.py), and
+     the database session factory; and
+
+  c) run-time invocation of the Program: importing and calling the
+     Program's Python interfaces from Module code executing in the same
+     process, in the way the Module Loader makes possible for any loaded
+     Module — provided the Module does not modify the Program (see
+     Section 2).
+
+"Module" means a separate and independent work that:
+
+  a) extends or adds functionality to the Program solely through the
+     Module API — that is, it is loaded by the Module Loader through the
+     module contract, and interfaces with the Program by invoking it at
+     run time as defined above;
+
+  b) is developed and distributed separately from the Program — it is
+     not part of the Program's own source tree (the repository
+     identified above) and is not a derivative of the Modules that ship
+     with the Program; and
+
+  c) does not modify, patch, or replace the Program's own source code or
+     its run-time behaviour, as set out in Section 2.
+
+For clarity: installing a Module — copying the Module's own files into
+the module directory (backend/plugins/) of an installed copy of the
+Program, or including them at that path when building your own
+deployment image — is how the Module Loader is designed to pick a Module
+up, and does not by itself constitute modifying the Program or merging
+the Module into the Program's source tree for the purposes of this
+definition.
+
+1. Grant of Additional Permission.
+
+As an additional permission under AGPL-3.0 Section 7, the copyright
+holder(s) grant you permission to develop, use, distribute, and deploy
+Modules under licence terms of your own choosing — including proprietary
+or closed-source terms.
+
+A Module that interfaces with the Program solely through the Module API
+is not, for the purposes of the AGPL, treated as a "modified version"
+of, or a work "based on", the Program.  Accordingly, such a Module is
+not subject to the copyleft requirements of AGPL-3.0, and — importantly
+for network deployments — is not subject to the Corresponding Source
+obligation of AGPL-3.0 Section 13.  Deploying the Program with such
+Modules over a network does not, by virtue of this exception, oblige you
+to offer the source of those Modules to the Program's users.
+
+As part of the same permission, you may run, propagate, and convey the
+Program in combination with one or more Modules — including conveying
+the combination as a single deployment artifact, and making the
+combination available to users over a network — without the conditions
+of the AGPL-3.0 applying to those Modules.  The Program itself,
+including as part of any such combination, remains subject to the
+AGPL-3.0 in full.
+
+2. Scope and Limits.
+
+This permission is limited as follows:
+
+  a) The Program itself is unchanged.  The Program remains licensed
+     under AGPL-3.0 in full.  If you modify the Program's own source
+     code in any way — including the Module Loader itself — or
+     distribute or deploy a modified version, those modifications remain
+     fully subject to the AGPL, including the Section 13 network-source
+     obligation.
+
+  b) Solely through the API.  A work is a Module only if it confines
+     itself to the Module API.  A work that:
+
+       i) patches, rewrites, or replaces any of the Program's own
+          source files;
+
+      ii) alters the run-time behaviour of the Program's own code by
+          rebinding, wrapping, or replacing the Program's functions,
+          classes, attributes, or objects (monkey-patching), other than
+          through registration mechanisms the Program itself provides
+          for that purpose (such as mounting routes or subscribing
+          event listeners); or
+
+     iii) is loaded by any means other than the Module Loader;
+
+     is not a "Module" under this exception and does not receive this
+     permission.  Reading from and writing to the Program's database
+     through the session factory the Module Loader provides is use of
+     the Module API; altering the Program's own schema definitions in
+     source is not.
+
+  c) No embedding of the Program.  If a Module copies, embeds, or
+     statically incorporates portions of the Program's own source code
+     into itself beyond what is strictly necessary to interoperate (for
+     example, the plugin.yaml manifest fields and the setup()
+     entry-point signature), this exception does not extend to those
+     incorporated portions, which remain under AGPL-3.0.
+
+  d) No trademark grant.  This exception grants no permission to use
+     the name "Flagpost" or any trademarks of the copyright holder(s),
+     except as needed to describe the Module's compatibility with the
+     Program.
+
+If you do not wish to accept these terms for a given Module, you may
+instead rely on the AGPL-3.0 as it applies to the whole combined work.

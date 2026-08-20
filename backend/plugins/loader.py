@@ -16,6 +16,11 @@ required-core modules. Deferred until an *optional* module actually ships
 extension slots (§11.2). The manifest already carries the shape so those are
 additive, not a retrofit. The dependency machinery is built now because it's
 pure logic that's cheap to get right early and awkward to bolt on later.
+
+Licensing: third-party modules loaded through this mechanism are covered by
+the Flagpost Module Exception, an additional permission under AGPL-3.0
+Section 7 — see ``MODULE-EXCEPTION`` in the repository root, alongside
+``LICENSE``.
 """
 
 from __future__ import annotations

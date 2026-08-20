@@ -52,17 +52,17 @@ mechanism that already solves your problem. It names *where* things live; the
 authority on *how* they work is `docs/ARCHITECTURE.md` and the code.
 
 **Backend** is a small kernel (auth/RBAC, the Competition tenancy root, the
-event bus, the module loader) plus **22 modules** in `backend/plugins/`, each a
+event bus, the module loader) plus **23 modules** in `backend/plugins/`, each a
 `plugin.yaml` manifest + a `setup()` that mounts routers and subscribes
 listeners (§11.1). Exactly **six are optional** — per-competition toggleable
 via `competition_modules`: **`automations`**, **`feedback`**, **`analytics`**,
 **`certificates`**, **`reports`**, and **`ai`** (this last one additionally ships *inert*
-behind a site master switch — see the AI bullet below). The other sixteen are
+behind a site master switch — see the AI bullet below). The other seventeen are
 required-core and always on:
 `announcements`, `audit_log`,
 `challenges`, `collab`, `competitions`, `dashboard`, `hints`, `notifications`,
-`roles`, `scoring`, `setup`, `site_settings`, `sso`, `teams`, `tickets`,
-`users`.
+`pages`, `roles`, `scoring`, `setup`, `site_settings`, `sso`, `teams`,
+`tickets`, `users`.
 
 Subsystem by subsystem, with the non-obvious bits called out:
 
@@ -82,12 +82,12 @@ Subsystem by subsystem, with the non-obvious bits called out:
   reset, email verification (admin-toggleable), self-service email change, a
   registration domain allowlist, and personal **API tokens** (`flp_`-prefixed,
   minting is self-only by route shape).
-- **RBAC** — permissions as data (ADR-0004), 43 of them in
+- **RBAC** — permissions as data (ADR-0004), 44 of them in
   `auth/permissions.py`, each with a category and a `global`/`competition`
   scope. System roles **re-sync from the catalog on every startup**
   (`seed_system_roles`), so a new permission reaches an already-migrated
   Administrator without a migration.
-- **Events** — `utils/event_bus`, 76 event types in `utils/event_catalog.py`.
+- **Events** — `utils/event_bus`, 79 event types in `utils/event_catalog.py`.
   `emit()` awaits foreground handlers (audit + WS broadcasts) and schedules
   `background=True` ones fire-and-forget (ADR-0012) — that's the lane
   webhooks/email use.
@@ -228,7 +228,7 @@ home — keep it that way.
 
 ## Read the ADR before touching
 
-`docs/adr/` — 33 records, indexed in `docs/adr/README.md`. The ones most likely
+`docs/adr/` — 34 records, indexed in `docs/adr/README.md`. The ones most likely
 to matter:
 
 | Area | ADR |

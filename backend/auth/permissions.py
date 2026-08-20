@@ -112,6 +112,14 @@ PERMISSIONS: tuple[Permission, ...] = (
     # calls to an operator-chosen endpoint (a data-processing relationship), so
     # it's a higher-stakes control than a palette or SMTP host.
     Permission("manage_ai", "Site Settings", Scope.GLOBAL),
+    # Authoring custom pages (#198, ADR-0034) — the About/Sponsors/Contact
+    # content in the sidebar. Its own grant, and deliberately the *lowest*-stakes
+    # one in this category: it's the grant an organiser hands a comms volunteer,
+    # so it must not ride on manage_site_settings (which reaches SMTP and
+    # branding). That separation only holds because page content can't execute —
+    # rendering is React-tree-only, so this is a content grant and not a path to
+    # an administrator's session (ADR-0034).
+    Permission("manage_pages", "Site Settings", Scope.GLOBAL),
     # Reading competitor-assistant conversation transcripts (#98, ADR-0023 Phase
     # 3) — the oversight lens on a hint channel. Competition-scoped and its own
     # grant: transcripts are competitor content of a different sensitivity than

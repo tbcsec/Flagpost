@@ -11,6 +11,7 @@ import { DemoBanner } from "@/components/app/demo-banner";
 import { CertificateReleaseWatcher } from "@/components/certificates/certificate-release-watcher";
 import { UpdateNotice } from "@/components/admin/update-notice";
 import { LanguageMenu } from "@/components/app/language-menu";
+import { PageIcon } from "@/components/app/page-icons";
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
 import { PaletteMenu } from "@/components/theme/palette-menu";
@@ -20,6 +21,7 @@ import { useCompetitions } from "@/lib/hooks/use-competitions";
 import { severityStyle } from "@/lib/announcement-severity";
 import { useActivityLive } from "@/lib/hooks/use-activity";
 import { useEnabledModules } from "@/lib/hooks/use-modules";
+import { usePageNav } from "@/lib/hooks/use-pages";
 import { useAccess } from "@/lib/hooks/use-permissions";
 import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
 import { useLogout } from "@/lib/hooks/use-users";
@@ -123,6 +125,7 @@ type AdminNavKey =
   | "roles"
   | "events"
   | "automations"
+  | "pages"
   | "siteSettings";
 
 const ADMIN_SUBNAV: { href: string; key: AdminNavKey }[] = [
@@ -132,6 +135,10 @@ const ADMIN_SUBNAV: { href: string; key: AdminNavKey }[] = [
   { href: "/admin/roles", key: "roles" },
   { href: "/admin/events", key: "events" },
   { href: "/admin/automations", key: "automations" },
+  // Custom pages (#198) get their own route rather than a Site-settings tab:
+  // `manage_pages` is a separate, delegable grant, and this is a content
+  // manager with an editor rather than a settings form.
+  { href: "/admin/pages", key: "pages" },
   // Appearance (#104) and Auth providers (#58) are tabs under Site settings,
   // not their own pages.
   { href: "/admin/settings", key: "siteSettings" },
@@ -148,6 +155,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const isActive = useActivePath();
   const t = useTranslations("app");
+  // Custom pages in the sidebar (#198). Failure is silent by design: an
+  // error or a still-loading query yields no entries, so the shell renders
+  // exactly as it did before the feature existed rather than breaking the
+  // whole nav over optional content.
+  const customPages = usePageNav().data ?? [];
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [adminOpen, setAdminOpen] = React.useState(pathname.startsWith("/admin"));
@@ -322,6 +334,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </Link>
               );
             })
+          )}
+
+          {/* Custom pages (#198). Not permission-gated: `manage_pages` governs
+              *authoring*, and the API already returns only what this viewer may
+              read. Titles are operator-authored data, so they render verbatim
+              rather than through t() — unlike every built-in item above, whose
+              label comes from the message catalog (ADR-0034). */}
+          {customPages.length > 0 && (
+            <>
+              <div className="my-2 border-t border-border" />
+              {customPages.map((page) => {
+                const href = `/p/${page.slug}`;
+                return (
+                  <Link
+                    key={page.slug}
+                    href={href}
+                    title={page.title}
+                    className={navItem(isActive(href))}
+                  >
+                    <span className="flex h-4 w-4 items-center justify-center">
+                      <PageIcon name={page.icon} />
+                    </span>
+                    {navExpanded && <span className="truncate">{page.title}</span>}
+                  </Link>
+                );
+              })}
+            </>
           )}
 
           {access.isAdmin && (

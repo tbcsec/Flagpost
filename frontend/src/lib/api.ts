@@ -76,6 +76,10 @@ import type {
   ApiTokenCreated,
   UserAccount,
   UserImportReport,
+  AdminPage,
+  PageContent,
+  PageNavEntry,
+  PageWrite,
   Permissions,
   PermissionEntry,
   Role,
@@ -926,6 +930,44 @@ export const rolesApi = {
     }),
   unassign: (assignmentId: string) =>
     apiFetch<void>(`/api/roles/assignments/${assignmentId}`, { method: "DELETE" }),
+};
+
+// Custom pages (#198, ADR-0034). The two reads are public: a page may be
+// published `public`, and the nav list drives the sidebar for signed-out
+// visitors too. Authoring lives behind `manage_pages` on /api/admin/pages.
+export const pagesApi = {
+  // The two reads take an explicit `authed` flag because the same endpoints
+  // serve both audiences: anonymous gets the public subset, a signed-in caller
+  // gets public + members-only. `auth: false` in apiFetch means the token is
+  // NEVER attached — so the caller must say which slice it wants, and the
+  // hooks key their queries on it (a cached anonymous nav list must not
+  // survive into a signed-in session, which is exactly the bug this fixes).
+  nav: (authed: boolean) =>
+    apiFetch<PageNavEntry[]>("/api/pages", {}, { auth: authed }),
+  get: (slug: string, authed: boolean) =>
+    apiFetch<PageContent>(
+      `/api/pages/${encodeURIComponent(slug)}`,
+      {},
+      { auth: authed },
+    ),
+  adminList: () => apiFetch<AdminPage[]>("/api/admin/pages"),
+  create: (input: PageWrite) =>
+    apiFetch<AdminPage>("/api/admin/pages", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  update: (id: string, input: Partial<PageWrite>) =>
+    apiFetch<AdminPage>(`/api/admin/pages/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
+  remove: (id: string) =>
+    apiFetch<void>(`/api/admin/pages/${id}`, { method: "DELETE" }),
+  reorder: (pageIds: string[]) =>
+    apiFetch<AdminPage[]>("/api/admin/pages/reorder", {
+      method: "POST",
+      body: JSON.stringify({ page_ids: pageIds }),
+    }),
 };
 
 export const siteSettingsApi = {

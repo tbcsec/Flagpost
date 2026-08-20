@@ -103,6 +103,11 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "auth_provider.created": ["provider_id", "slug", "kind", "actor_user_id"],
     "auth_provider.updated": ["provider_id", "slug", "kind", "changed_fields", "actor_user_id"],
     "auth_provider.deleted": ["provider_id", "slug", "kind", "actor_user_id"],
+    # Custom pages (#198). No document body — a rule can react to a page
+    # changing without the automation lane carrying its content.
+    "page.created": ["page_id", "slug", "actor_user_id"],
+    "page.updated": ["page_id", "slug", "fields", "actor_user_id"],
+    "page.deleted": ["page_id", "slug", "actor_user_id"],
     "identity.linked": ["user_id", "provider_id", "provider_slug"],
     "identity.unlinked": ["user_id", "provider_id", "provider_slug"],
 }
@@ -139,6 +144,13 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     "identity.linked": "manage_users",
     "identity.unlinked": "manage_users",
     "site.settings_updated": "manage_site_settings",
+    # Site-level content, so the *global* page grant governs it: a Judge
+    # automating on page.updated would otherwise learn that an unpublished
+    # page exists and when it changed — the same observation leak the
+    # role/user mappings above close.
+    "page.created": "manage_pages",
+    "page.updated": "manage_pages",
+    "page.deleted": "manage_pages",
     # AI provider config is admin-domain, like site settings and auth providers.
     "ai.settings_updated": "manage_ai",
     # Per-competition assistant usage/errors — staff operational data, like the

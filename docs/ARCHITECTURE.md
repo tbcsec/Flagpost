@@ -1196,13 +1196,17 @@ later. Modules split by **provenance and trust**, not by capability:
 - **Marketplace modules** are third-party, opt-in from the start, and need
   the stronger isolation story flagged in §15 before that ships.
 
-**What actually shipped**, against the prediction above. Twenty-two modules load
+**What actually shipped**, against the prediction above. Twenty-three modules load
 through §11.1; exactly **six are optional** (per-competition toggleable via
 `competition_modules`): `automations`, `feedback`, `analytics`, `certificates`,
-`reports`, and `ai`. The other sixteen are required-core: `announcements`,
+`reports`, and `ai`. The other seventeen are required-core: `announcements`,
 `audit_log`, `challenges`, `collab`, `competitions`, `dashboard`, `hints`,
-`notifications`, `roles`, `scoring`, `setup`, `site_settings`, `sso`, `teams`,
-`tickets`, `users`. The `ai` module (§12) is the odd one out among the optional
+`notifications`, `pages`, `roles`, `scoring`, `setup`, `site_settings`, `sso`,
+`teams`, `tickets`, `users`. `pages` (#198, ADR-0034) is required-core with
+**no** toggle for a reason worth naming: its content is site-level, and
+`competition_modules` has no site-scoped equivalent — an install with no pages
+renders no sidebar section and no route that resolves, so content *is* the
+on/off switch. The `ai` module (§12) is the odd one out among the optional
 six: even when enabled for a competition it ships **inert** behind a site master
 switch (`ai_settings.enabled`, default off), so nothing runs until an
 administrator configures a provider and turns it on (ADR-0023).

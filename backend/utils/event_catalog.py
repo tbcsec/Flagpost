@@ -75,6 +75,13 @@ EVENT_TYPES: tuple[str, ...] = (
     "auth_provider.created",
     "auth_provider.updated",
     "auth_provider.deleted",
+    # Custom pages (#198, ADR-0034) — site-level admin-authored content. Audited
+    # like any other mutation: `manage_pages` is delegable, so who changed the
+    # public-facing copy and when is exactly the trail an operator needs.
+    # Payloads carry the page id/slug, never the document body.
+    "page.created",
+    "page.updated",
+    "page.deleted",
     # AI module (#98, ADR-0023). Provider config change, per-exchange usage
     # (ai.query) and upstream failure (ai.error) — usage metadata only, never
     # message content (spec §4) — plus a competitor's one-time acceptance of the

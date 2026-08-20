@@ -82,6 +82,7 @@ from models.feedback import (
 )
 from models.hint import Hint, HintReveal
 from models.mc_guess_reset import MCGuessReset
+from models.page import Page
 from models.role import Role, RoleAssignment
 from models.score_adjustment import ScoreAdjustment
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
@@ -214,6 +215,10 @@ async def _nk_role(db: AsyncSession, row: dict) -> str | None:
     return await db.scalar(select(Role.id).where(Role.name == row["name"]))
 
 
+async def _nk_page(db: AsyncSession, row: dict) -> str | None:
+    return await db.scalar(select(Page.id).where(Page.slug == row["slug"]))
+
+
 async def _nk_competition(db: AsyncSession, row: dict) -> str | None:
     return await db.scalar(select(Competition.id).where(Competition.name == row["name"]))
 
@@ -253,6 +258,12 @@ _COMP = ("competition_id", "competition", True)
 SPECS: tuple[Spec, ...] = (
     Spec("site_settings", SiteSettings, "site_settings", singleton=True,
          secret_columns=("smtp_password",)),
+    # Custom pages (#198, ADR-0034). Site-level, no foreign keys and no secrets,
+    # so it needs nothing but a natural key: `slug` is unique and is the page's
+    # address, which makes it the right identity for the additive import — a
+    # restore onto an install that already has /p/about leaves that page alone
+    # rather than creating a second one that can't have the URL.
+    Spec("pages", Page, "site_settings", id_map="page", natural_key=_nk_page),
     Spec("users", User, "users", id_map="user", natural_key=_nk_user),
     Spec("roles", Role, "roles", id_map="role", natural_key=_nk_role),
     Spec("competitions", Competition, "competitions", id_map="competition",

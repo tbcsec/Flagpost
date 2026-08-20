@@ -132,7 +132,8 @@
       "roles": "Rôles",
       "events": "Journal des événements",
       "automations": "Automatisations",
-      "siteSettings": "Paramètres du site"
+      "siteSettings": "Paramètres du site",
+      "pages": "Pages"
     },
     "notifications": {
       "title": "Notifications",
@@ -414,7 +415,8 @@
             "description": "résoudre les défis"
           }
         }
-      }
+      },
+      "pagesLabel": "Site pages"
     },
     "register": {
       "title": "Créer un compte",
@@ -1236,6 +1238,49 @@
       "title": "Delete report v{version}?",
       "description": "The generated files are removed. You can regenerate a new version anytime.",
       "confirm": "Delete"
+    }
+  },
+  "pages": {
+    "heading": "Custom pages",
+    "subtitle": "Author About, Sponsors or Contact pages. They appear in the sidebar and render at their own /p/ link.",
+    "empty": {
+      "title": "No pages yet",
+      "description": "Add a page to put your own content in the sidebar."
+    },
+    "noAccess": {
+      "title": "No access",
+      "description": "You need the manage pages permission to author pages."
+    },
+    "form": {
+      "title": "Title",
+      "slug": "URL slug",
+      "slugHelp": "The page will be at {url}. Changing it breaks existing links.",
+      "icon": "Sidebar icon",
+      "content": "Content",
+      "visibility": "Who can see it",
+      "status": "Status"
+    },
+    "visibility": {
+      "public": "Anyone, including signed-out visitors",
+      "authenticated": "Signed-in users only"
+    },
+    "status": {
+      "draft": "Draft",
+      "published": "Published"
+    },
+    "actions": {
+      "add": "Add page",
+      "create": "Create page",
+      "save": "Save changes",
+      "cancel": "Cancel",
+      "edit": "Edit",
+      "delete": "Delete",
+      "moveUp": "Move up",
+      "moveDown": "Move down"
+    },
+    "delete": {
+      "title": "Delete this page?",
+      "description": "“{title}” will be removed and its link will stop working. This can't be undone."
     }
   }
 }

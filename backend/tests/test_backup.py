@@ -12,6 +12,7 @@ from db import SessionLocal, utcnow
 from models.api_token import ApiToken
 from models.challenge import Category, Challenge
 from models.competition import Competition
+from models.page import Page
 from models.role import Role, RoleAssignment
 from models.submission import Submission
 from models.user import User
@@ -336,3 +337,87 @@ async def test_admin_import_of_roles_is_unaffected_by_containment(client):
     )
     assert imp.status_code == 200, imp.text
     assert imp.json()["roles"]["created"] == 1
+
+
+async def test_custom_pages_round_trip(client):
+    """Pages survive export/import (#198, ADR-0034).
+
+    Site-level with no foreign keys, so the interesting parts are that the
+    ProseMirror body comes back byte-identical (a JSON column, not text) and
+    that `slug` acts as the natural key — a restore onto an install that already
+    serves /p/about must leave that page alone rather than mint a second row
+    that can never own the URL.
+    """
+    admin = await admin_token(client)
+    doc = {
+        "type": "doc",
+        "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": "Sponsored by ACME"}]}
+        ],
+    }
+    created = await client.post(
+        "/api/admin/pages",
+        json={
+            "slug": "about",
+            "title": "About",
+            "content": doc,
+            "icon": "info",
+            "visibility": "public",
+            "draft": False,
+            "nav_order": 3,
+        },
+        headers={"Authorization": f"Bearer {admin}"},
+    )
+    assert created.status_code == 201, created.text
+
+    storage = InMemoryStorage()
+    async with SessionLocal() as db:
+        exported = await backup.export_data(db, storage, ["site_settings"])
+
+    rows = exported["data"]["pages"]
+    assert len(rows) == 1
+    assert rows[0]["slug"] == "about"
+    assert rows[0]["content"] == doc  # the document survives verbatim
+    assert rows[0]["visibility"] == "public"
+    assert rows[0]["nav_order"] == 3
+
+    # Additive: re-importing finds the slug and skips rather than duplicating.
+    async with SessionLocal() as db:
+        result = await backup.import_data(db, storage, exported, ["site_settings"])
+    assert result["pages"]["created"] == 0
+    assert result["pages"]["skipped"] == 1
+
+    async with SessionLocal() as db:
+        count = await db.scalar(
+            select(func.count()).select_from(Page).where(Page.slug == "about")
+        )
+        assert count == 1
+
+
+async def test_pages_restore_after_deletion(client):
+    """The other half of a backup's purpose: a deleted page comes back."""
+    admin = await admin_token(client)
+    auth = {"Authorization": f"Bearer {admin}"}
+    created = (
+        await client.post(
+            "/api/admin/pages",
+            json={"slug": "sponsors", "title": "Sponsors", "draft": False},
+            headers=auth,
+        )
+    ).json()
+
+    storage = InMemoryStorage()
+    async with SessionLocal() as db:
+        exported = await backup.export_data(db, storage, ["site_settings"])
+
+    assert (
+        await client.delete(f"/api/admin/pages/{created['id']}", headers=auth)
+    ).status_code == 204
+
+    async with SessionLocal() as db:
+        result = await backup.import_data(db, storage, exported, ["site_settings"])
+    assert result["pages"]["created"] == 1
+
+    async with SessionLocal() as db:
+        row = await db.scalar(select(Page).where(Page.slug == "sponsors"))
+        assert row is not None and row.title == "Sponsors"

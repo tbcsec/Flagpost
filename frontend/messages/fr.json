@@ -216,7 +216,7 @@
       "ends": "· termine {date}",
       "venueMode": "Mode Lieu",
       "notPublic": "Ce tableau de bord n'est pas public, ou la compétition n'existe pas.",
-      "backToAll": "← Tous les tableaux de scores publics",
+      "backToAll": "<unk> Tous les tableaux de scores publics",
       "teamScoreboard": "Tableau de bord de l'équipe",
       "individualScoreboard": "Tableau de bord individuel",
       "frozenSuffix": "· frozen",

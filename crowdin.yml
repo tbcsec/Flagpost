@@ -1,5 +1,6 @@
 files:
   - source: /frontend/messages/en.json
     translation: /frontend/messages/%two_letters_code%.json
+pull_request_title: "Crowdin Translations"
 commit_message: "Fix: New translations %original_file_name% from Crowdin"
 append_commit_message: false

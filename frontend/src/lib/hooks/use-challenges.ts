@@ -5,7 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { challengesApi } from "@/lib/api";
-import type { ChallengeCreate, ChallengeUpdate } from "@/lib/types";
+import type { Challenge, ChallengeCreate, ChallengeUpdate } from "@/lib/types";
 import { useAuthStore } from "@/stores/auth";
 
 const challengeKeys = {
@@ -57,11 +57,26 @@ function useInvalidate(competitionId: string) {
 }
 
 export function useCreateChallenge(competitionId: string) {
+  const queryClient = useQueryClient();
   const invalidate = useInvalidate(competitionId);
   return useMutation({
     mutationFn: (input: ChallengeCreate) =>
       challengesApi.create(competitionId, input),
-    onSuccess: invalidate,
+    // Seed both caches so a master-detail caller (the manage surface) can select
+    // the new challenge the instant it's created — before the list refetch lands
+    // — without an empty-pane flicker. invalidate() still reconciles server order
+    // and any derived fields.
+    onSuccess: (created: Challenge) => {
+      queryClient.setQueryData<Challenge[]>(
+        challengeKeys.list(competitionId),
+        (old) => (old ? [...old, created] : old),
+      );
+      queryClient.setQueryData(
+        challengeKeys.detail(competitionId, created.id),
+        created,
+      );
+      invalidate();
+    },
   });
 }
 

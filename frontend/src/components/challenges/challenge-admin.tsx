@@ -1,7 +1,14 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useId, useState } from "react";
+import {
+  useId,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 
 import { AttachmentsSection } from "@/components/challenges/attachments-section";
 import { ChallengeGuessesSection } from "@/components/challenges/challenge-guesses-section";
@@ -15,18 +22,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { EmptyState, FlagEmptyIcon } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { Select } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   useCategories,
   useCreateCategory,
@@ -61,22 +61,49 @@ function toLocalInput(iso: string): string {
   )}:${pad(d.getMinutes())}`;
 }
 
-// Admin authoring surface (ROADMAP #8/#9). All server state via the domain
-// hooks; RBAC (view/create/edit/publish/delete) is enforced server-side and
-// any 403 surfaces inline. The flag is write-only — the form shows *that* one
-// is set, never its value (§13.2).
+type Selection = string | "new" | null;
+
+// Admin authoring surface (ROADMAP #8/#9), redesigned as a master-detail view:
+// a persistent, searchable challenge list on the left and the editor for the
+// selected challenge on the right — replacing the old stacked flow (list *below*
+// the competitor grid, editor *below* the list) that grew the page to ~4
+// viewports. All server state via the domain hooks; RBAC (view/create/edit/
+// publish/delete) is enforced server-side and any 403 surfaces inline. The flag
+// is write-only — the form shows *that* one is set, never its value (§13.2).
 export function ChallengeAdmin({ competitionId }: { competitionId: string }) {
   const t = useTranslations("challenges.admin");
   const challenges = useChallenges(competitionId);
   const categories = useCategories(competitionId);
-  const [editing, setEditing] = useState<Challenge | "new" | null>(null);
   const exportChallenges = useExportChallenges(competitionId);
   const importChallenges = useImportChallenges(competitionId);
 
-  const categoryName = (id: string | null) =>
-    categories.data?.find((c) => c.id === id)?.name ?? "—";
+  const [selected, setSelected] = useState<Selection>(null);
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
-  function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+  const list = useMemo(() => challenges.data ?? [], [challenges.data]);
+
+  const categoryName = (id: string | null) =>
+    categories.data?.find((c) => c.id === id)?.name ?? t("uncategorized");
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return list.filter(
+      (c) =>
+        (categoryFilter === "all" || c.category_id === categoryFilter) &&
+        (q === "" || c.title.toLowerCase().includes(q)),
+    );
+  }, [list, search, categoryFilter]);
+
+  // A selected id that no longer resolves (deleted, or a refetch dropped it)
+  // falls through to null, and the render below shows the select-prompt instead
+  // of a ghost editor — so no effect is needed to scrub stale selection state.
+  const selectedChallenge =
+    typeof selected === "string" && selected !== "new"
+      ? (list.find((c) => c.id === selected) ?? null)
+      : null;
+
+  function onImportFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
@@ -100,19 +127,53 @@ export function ChallengeAdmin({ competitionId }: { competitionId: string }) {
   }
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader className="flex-row items-center justify-between space-y-0">
-          <div>
-            <CardTitle>{t("listTitle")}</CardTitle>
-            <CardDescription>
-              {t("count", { count: challenges.data?.length ?? 0 })}
-            </CardDescription>
+    <div className="grid gap-6 md:grid-cols-[19rem_minmax(0,1fr)] md:items-start">
+      {/* LEFT — the challenge list. Sticky on desktop so it stays put while the
+          editor pane scrolls; its own inner scroll keeps a long list bounded. */}
+      <Card className="md:sticky md:top-8">
+        <CardHeader className="space-y-3 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <CardTitle className="text-base">{t("listTitle")}</CardTitle>
+              <CardDescription>{t("count", { count: list.length })}</CardDescription>
+            </div>
+            <Button size="sm" onClick={() => setSelected("new")}>
+              {t("newChallenge")}
+            </Button>
           </div>
+
+          <div className="relative">
+            <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t("searchPlaceholder")}
+              aria-label={t("searchPlaceholder")}
+              className="h-9 pl-8"
+            />
+          </div>
+
+          {(categories.data?.length ?? 0) > 0 && (
+            <Select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              aria-label={t("fieldCategory")}
+              className="h-9"
+            >
+              <option value="all">{t("filterAllCategories")}</option>
+              {categories.data!.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          )}
+
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
+              className="flex-1"
               onClick={() =>
                 exportChallenges.mutate(undefined, {
                   onError: (err) =>
@@ -122,14 +183,14 @@ export function ChallengeAdmin({ competitionId }: { competitionId: string }) {
                     }),
                 })
               }
-              disabled={exportChallenges.isPending || !challenges.data?.length}
+              disabled={exportChallenges.isPending || list.length === 0}
             >
               {t("export")}
             </Button>
-            <label>
+            <label className="flex-1">
               <span
                 className={cn(
-                  "inline-flex h-9 cursor-pointer items-center rounded-md border border-border px-3 text-sm font-medium hover:bg-accent/60",
+                  "inline-flex h-9 w-full cursor-pointer items-center justify-center rounded-md border border-input px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
                   importChallenges.isPending && "pointer-events-none opacity-60",
                 )}
               >
@@ -143,158 +204,128 @@ export function ChallengeAdmin({ competitionId }: { competitionId: string }) {
                 disabled={importChallenges.isPending}
               />
             </label>
-            <Button onClick={() => setEditing("new")}>{t("newChallenge")}</Button>
           </div>
         </CardHeader>
-        <CardContent>
+
+        <CardContent className="p-0">
           {challenges.isError && (
-            <p role="alert" className="text-sm text-destructive">
+            <p role="alert" className="px-4 pb-4 text-sm text-destructive">
               {(challenges.error as Error).message}
             </p>
           )}
-          {challenges.data && challenges.data.length > 0 && (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("colTitle")}</TableHead>
-                  <TableHead>{t("colCategory")}</TableHead>
-                  <TableHead>{t("colPoints")}</TableHead>
-                  <TableHead>{t("colState")}</TableHead>
-                  <TableHead className="text-right">{t("colActions")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {challenges.data.map((challenge) => (
-                  <ChallengeRow
-                    key={challenge.id}
-                    competitionId={competitionId}
-                    challenge={challenge}
-                    categoryName={categoryName(challenge.category_id)}
-                    onEdit={() => setEditing(challenge)}
-                  />
-                ))}
-              </TableBody>
-            </Table>
+          {challenges.data && list.length === 0 && (
+            <p className="px-4 pb-5 text-sm text-muted-foreground">{t("emptyBody")}</p>
+          )}
+          {list.length > 0 && (
+            <ul className="max-h-[60vh] divide-y divide-border overflow-y-auto border-t border-border">
+              {filtered.map((challenge) => (
+                <ChallengeListItem
+                  key={challenge.id}
+                  challenge={challenge}
+                  categoryName={categoryName(challenge.category_id)}
+                  selected={selected === challenge.id}
+                  onSelect={() => setSelected(challenge.id)}
+                />
+              ))}
+              {filtered.length === 0 && (
+                <li className="px-4 py-6 text-sm text-muted-foreground">
+                  {t("noResults")}
+                </li>
+              )}
+            </ul>
           )}
         </CardContent>
       </Card>
 
-      {editing && (
+      {/* RIGHT — the editor for the selected challenge, or a prompt when none is. */}
+      {selected === "new" || selectedChallenge ? (
         <ChallengeForm
           // Keyed so switching edit targets (or Edit → New) REMOUNTS the form:
           // every field is seeded from props by a useState initializer, which
-          // only runs on mount. Without this the table + New button stay mounted,
-          // React reconciles the same instance, and the previous challenge's
-          // values persist — then get saved onto the new target (same bug class
-          // as #258/#260 on the settings page).
-          key={editing === "new" ? "new" : editing.id}
+          // only runs on mount. Without this, React reconciles the same instance
+          // and the previous challenge's values persist — then get saved onto the
+          // new target (the bug class behind #258/#260/#262).
+          key={selected === "new" ? "new" : selectedChallenge!.id}
           competitionId={competitionId}
-          challenge={editing === "new" ? null : editing}
+          challenge={selected === "new" ? null : selectedChallenge}
           categories={categories.data ?? []}
-          allChallenges={challenges.data ?? []}
-          onDone={() => setEditing(null)}
+          allChallenges={list}
+          onCreated={(created) => setSelected(created.id)}
+          onDeleted={() => setSelected(null)}
+          onCancel={() => setSelected(null)}
+        />
+      ) : (
+        <EmptyState
+          icon={<FlagEmptyIcon />}
+          title={list.length === 0 ? t("emptyTitle") : t("selectTitle")}
+          description={list.length === 0 ? t("emptyBody") : t("selectBody")}
+          action={
+            <Button onClick={() => setSelected("new")}>{t("newChallenge")}</Button>
+          }
         />
       )}
     </div>
   );
 }
 
-function ChallengeRow({
-  competitionId,
+function ChallengeListItem({
   challenge,
   categoryName,
-  onEdit,
+  selected,
+  onSelect,
 }: {
-  competitionId: string;
   challenge: Challenge;
   categoryName: string;
-  onEdit: () => void;
+  selected: boolean;
+  onSelect: () => void;
 }) {
   const t = useTranslations("challenges.admin");
-  const stateMutation = useChallengeStateMutation(competitionId);
-  const confirm = useConfirm();
   const isPublished = challenge.state === "published";
-
-  async function onTogglePublish() {
-    if (
-      isPublished &&
-      !(await confirm({
-        title: t("unpublishConfirmTitle"),
-        description: t("unpublishConfirmDescription", { title: challenge.title }),
-        confirmLabel: t("unpublishConfirmLabel"),
-        destructive: false,
-      }))
-    ) {
-      return;
-    }
-    stateMutation.mutate({
-      challengeId: challenge.id,
-      action: isPublished ? "unpublish" : "publish",
-    });
-  }
-
-  async function onDelete() {
-    if (
-      await confirm({
-        title: t("deleteConfirmTitle"),
-        description: t("deleteConfirmDescription", { title: challenge.title }),
-        confirmLabel: t("deleteConfirmLabel"),
-      })
-    ) {
-      stateMutation.mutate({ challengeId: challenge.id, action: "delete" });
-    }
-  }
+  const scheduled =
+    isPublished &&
+    !!challenge.release_at &&
+    new Date(challenge.release_at) > new Date();
+  const worth =
+    challenge.scoring_type === "dynamic"
+      ? `${challenge.value} ${t("dyn")}`
+      : String(challenge.points);
 
   return (
-    <TableRow>
-      <TableCell className="font-medium">{challenge.title}</TableCell>
-      <TableCell className="text-muted-foreground">{categoryName}</TableCell>
-      <TableCell>
-        {challenge.scoring_type === "dynamic" ? (
-          <span title={t("dynamicTooltip", { points: challenge.points, min: challenge.min_points ?? 0, decay: challenge.decay ?? 0 })}>
-            {challenge.value}{" "}
-            <span className="text-xs text-muted-foreground">{t("dyn")}</span>
-          </span>
-        ) : (
-          challenge.points
+    <li>
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-current={selected ? "true" : undefined}
+        className={cn(
+          "flex w-full flex-col gap-0.5 px-4 py-2.5 text-left transition-colors",
+          selected ? "bg-primary/10" : "hover:bg-accent/50",
         )}
-      </TableCell>
-      <TableCell className="capitalize">
-        {t(challenge.state === "published" ? "statePublished" : "stateDraft")}
-        {challenge.state === "published" &&
-          challenge.release_at &&
-          new Date(challenge.release_at) > new Date() && (
-            <span
-              className="ml-1.5 text-xs normal-case text-muted-foreground"
-              title={t("releasesTooltip", { date: new Date(challenge.release_at).toLocaleString() })}
-            >
-              {t("scheduled")}
-            </span>
-          )}
-      </TableCell>
-      <TableCell className="space-x-2 text-right">
-        <Button variant="ghost" size="sm" onClick={onEdit}>
-          {t("edit")}
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={stateMutation.isPending || (!isPublished && !challenge.has_flag)}
-          onClick={onTogglePublish}
-        >
-          {isPublished ? t("unpublish") : t("publish")}
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-destructive"
-          disabled={stateMutation.isPending}
-          onClick={onDelete}
-        >
-          {t("delete")}
-        </Button>
-      </TableCell>
-    </TableRow>
+      >
+        <span className="flex items-center gap-2">
+          <span
+            className={cn(
+              "truncate text-sm",
+              selected ? "font-semibold text-primary" : "font-medium",
+            )}
+          >
+            {challenge.title}
+          </span>
+          {!isPublished && <RowTag label={t("stateDraft")} />}
+          {scheduled && <RowTag label={t("scheduledShort")} />}
+        </span>
+        <span className="truncate text-xs text-muted-foreground">
+          {categoryName} · {worth}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+function RowTag({ label }: { label: string }) {
+  return (
+    <span className="shrink-0 rounded-full border border-border px-1.5 py-px text-[10px] uppercase tracking-wide text-muted-foreground">
+      {label}
+    </span>
   );
 }
 
@@ -303,25 +334,32 @@ function ChallengeForm({
   challenge,
   categories,
   allChallenges,
-  onDone,
+  onCreated,
+  onDeleted,
+  onCancel,
 }: {
   competitionId: string;
   challenge: Challenge | null;
   categories: Category[];
   allChallenges: Challenge[];
-  onDone: () => void;
+  onCreated: (created: Challenge) => void;
+  onDeleted: () => void;
+  onCancel: () => void;
 }) {
   const t = useTranslations("challenges.admin");
   const isEdit = challenge !== null;
+  const isPublished = challenge?.state === "published";
   const { data: activeCompetition } = useActiveCompetition();
   const tagVocab = activeCompetition?.challenge_tags ?? [];
   const tiers = activeCompetition?.difficulty_tiers ?? [];
-  // Own id so the submit button can live *outside* the <form> (below the
-  // attachments/hints sub-forms) and still submit it — a <form> can't nest
-  // another <form>, so those sections must be siblings, not children.
+  const confirm = useConfirm();
+  // Own id so the submit button can live in the sticky header, *outside* the
+  // <form> — a <form> can't nest the attachments/hints sub-forms, so those and
+  // the action buttons must be siblings, wired back by `form={formId}`.
   const formId = useId();
   const create = useCreateChallenge(competitionId);
   const update = useUpdateChallenge(competitionId, challenge?.id ?? "");
+  const stateMutation = useChallengeStateMutation(competitionId);
   const mutation = isEdit ? update : create;
 
   const [title, setTitle] = useState(challenge?.title ?? "");
@@ -369,7 +407,47 @@ function ChallengeForm({
     setCorrectIndex((ci) => (ci === null ? null : ci === i ? null : ci > i ? ci - 1 : ci));
   }
 
-  function onSubmit(e: React.FormEvent) {
+  async function onTogglePublish() {
+    if (!challenge) return;
+    if (
+      isPublished &&
+      !(await confirm({
+        title: t("unpublishConfirmTitle"),
+        description: t("unpublishConfirmDescription", { title: challenge.title }),
+        confirmLabel: t("unpublishConfirmLabel"),
+        destructive: false,
+      }))
+    ) {
+      return;
+    }
+    stateMutation.mutate({
+      challengeId: challenge.id,
+      action: isPublished ? "unpublish" : "publish",
+    });
+  }
+
+  async function onDelete() {
+    if (!challenge) return;
+    if (
+      await confirm({
+        title: t("deleteConfirmTitle"),
+        description: t("deleteConfirmDescription", { title: challenge.title }),
+        confirmLabel: t("deleteConfirmLabel"),
+      })
+    ) {
+      stateMutation.mutate(
+        { challengeId: challenge.id, action: "delete" },
+        {
+          onSuccess: () => {
+            toast(t("deletedToast"), { variant: "success" });
+            onDeleted();
+          },
+        },
+      );
+    }
+  }
+
+  function onSubmit(e: FormEvent) {
     e.preventDefault();
     const base: ChallengeCreate = {
       title,
@@ -407,21 +485,88 @@ function ChallengeForm({
       // Only send the flag when the author typed one (empty = keep existing).
       if (flag) base.flag = flag;
     }
-    mutation.mutate(base, { onSuccess: onDone });
+    mutation.mutate(base, {
+      onSuccess: (saved) => {
+        if (isEdit) {
+          toast(t("savedToast"), { variant: "success" });
+        } else {
+          toast(t("createdToast"), { variant: "success" });
+          onCreated(saved as Challenge);
+        }
+      },
+    });
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{isEdit ? t("editTitle") : t("newChallenge")}</CardTitle>
-        {isEdit && (
-          <CardDescription>
-            {challenge.has_flag ? t("flagSetHint") : t("noFlagHint")}
-          </CardDescription>
+    <Card className="min-w-0">
+      {/* Action bar at the top of the editor: identifies the challenge and keeps
+          Save/Publish/Delete together above the fields, rather than buried at the
+          bottom of a long form. Not sticky — a sub-header pinned inside this
+          padded scroll container lets fields peek through its top edge; the list
+          pane (a whole sticky card) is what stays put for navigation. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-t-lg border-b border-border bg-card px-6 py-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <h2 className="truncate text-lg font-semibold tracking-tight">
+            {isEdit ? challenge.title : t("newChallenge")}
+          </h2>
+          {isEdit && (
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                isPublished ? "bg-success/15 text-success" : "bg-muted text-muted-foreground",
+              )}
+            >
+              {t(isPublished ? "statePublished" : "stateDraft")}
+            </span>
+          )}
+        </div>
+        <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
+          {isEdit ? (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={onDelete}
+                disabled={stateMutation.isPending}
+              >
+                {t("delete")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onTogglePublish}
+                disabled={stateMutation.isPending || (!isPublished && !challenge.has_flag)}
+              >
+                {isPublished ? t("unpublish") : t("publish")}
+              </Button>
+              <Button type="submit" form={formId} size="sm" disabled={mutation.isPending}>
+                {mutation.isPending ? t("saving") : t("saveChanges")}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+                {t("cancel")}
+              </Button>
+              <Button type="submit" form={formId} size="sm" disabled={mutation.isPending}>
+                {mutation.isPending ? t("saving") : t("createChallenge")}
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <CardContent className="space-y-5 pt-5">
+        {mutation.isError && (
+          <p role="alert" className="text-sm text-destructive">
+            {(mutation.error as Error).message}
+          </p>
         )}
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <form id={formId} onSubmit={onSubmit} className="space-y-4">
+
+        <form id={formId} onSubmit={onSubmit} className="space-y-5">
           <div className="space-y-2">
             <Label htmlFor="title">{t("fieldTitle")}</Label>
             <Input
@@ -434,19 +579,6 @@ function ChallengeForm({
           <div className="space-y-2">
             <Label>{t("fieldDescription")}</Label>
             <RichTextEditor value={description} onChange={setDescription} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="connection-info">{t("fieldConnectionInfo")}</Label>
-            <Input
-              id="connection-info"
-              className="font-mono"
-              value={connectionInfo}
-              onChange={(e) => setConnectionInfo(e.target.value)}
-              placeholder="nc host 1337"
-            />
-            <p className="text-xs text-muted-foreground">
-              {t("fieldConnectionInfoHint")}
-            </p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
@@ -519,104 +651,7 @@ function ChallengeForm({
               </div>
             )}
           </div>
-          {(tiers.length > 0 || tagVocab.length > 0) && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              {tiers.length > 0 && (
-                <div className="space-y-2">
-                  <Label htmlFor="difficulty">{t("difficulty")}</Label>
-                  <Select
-                    id="difficulty"
-                    value={difficulty}
-                    onChange={(e) => setDifficulty(e.target.value)}
-                  >
-                    <option value="">—</option>
-                    {tiers.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-              )}
-              {tagVocab.length > 0 && (
-                <div className="space-y-2">
-                  <Label>{t("tags")}</Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {tagVocab.map((t) => {
-                      const on = tags.includes(t);
-                      return (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() =>
-                            setTags((prev) =>
-                              on ? prev.filter((x) => x !== t) : [...prev, t],
-                            )
-                          }
-                          className={cn(
-                            "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
-                            on
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-border text-muted-foreground hover:border-primary/40",
-                          )}
-                        >
-                          {t}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-          <div className="space-y-2">
-            <Label htmlFor="release-at">{t("releaseAt")}</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                id="release-at"
-                type="datetime-local"
-                value={releaseAt}
-                onChange={(e) => setReleaseAt(e.target.value)}
-                className="max-w-xs"
-              />
-              {releaseAt && (
-                <Button type="button" variant="ghost" size="sm" onClick={() => setReleaseAt("")}>
-                  {t("clear")}
-                </Button>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">{t("releaseHint")}</p>
-          </div>
-          <div className="space-y-2">
-            <Label>{t("prerequisites")}</Label>
-            <p className="text-xs text-muted-foreground">{t("prerequisitesHint")}</p>
-            {allChallenges.filter((c) => c.id !== challenge?.id).length === 0 ? (
-              <p className="text-xs text-muted-foreground">{t("noOtherChallenges")}</p>
-            ) : (
-              <div className="grid max-h-40 gap-1 overflow-y-auto rounded-md border border-border p-2">
-                {allChallenges
-                  .filter((c) => c.id !== challenge?.id)
-                  .map((c) => (
-                    <label key={c.id} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-border"
-                        style={{ accentColor: "hsl(var(--primary))" }}
-                        checked={prerequisites.includes(c.id)}
-                        onChange={(e) =>
-                          setPrerequisites((prev) =>
-                            e.target.checked
-                              ? [...prev, c.id]
-                              : prev.filter((id) => id !== c.id),
-                          )
-                        }
-                      />
-                      <span>{c.title}</span>
-                    </label>
-                  ))}
-              </div>
-            )}
-          </div>
+
           <div className="space-y-2">
             <Label htmlFor="flag-type">{t("flagType")}</Label>
             <Select
@@ -692,6 +727,11 @@ function ChallengeForm({
                   required={!isEdit}
                   className="max-w-md"
                 />
+                {isEdit && (
+                  <p className="text-xs text-muted-foreground">
+                    {challenge.has_flag ? t("flagSetHint") : t("noFlagHint")}
+                  </p>
+                )}
               </div>
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -703,51 +743,229 @@ function ChallengeForm({
               </label>
             </>
           )}
+
+          {/* Secondary fields fold away by default so the essentials aren't buried.
+              These are all stored in React state and submitted from onSubmit, so
+              collapsing them never drops a value; only *required* inputs must stay
+              visible (constraint validation can't focus a hidden field). */}
+          <CollapsibleSection title={t("sectionMore")} hint={t("sectionMoreHint")}>
+            <div className="space-y-2">
+              <Label htmlFor="connection-info">{t("fieldConnectionInfo")}</Label>
+              <Input
+                id="connection-info"
+                className="font-mono"
+                value={connectionInfo}
+                onChange={(e) => setConnectionInfo(e.target.value)}
+                placeholder="nc host 1337"
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("fieldConnectionInfoHint")}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="release-at">{t("releaseAt")}</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="release-at"
+                  type="datetime-local"
+                  value={releaseAt}
+                  onChange={(e) => setReleaseAt(e.target.value)}
+                  className="max-w-xs"
+                />
+                {releaseAt && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setReleaseAt("")}
+                  >
+                    {t("clear")}
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">{t("releaseHint")}</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>{t("prerequisites")}</Label>
+              <p className="text-xs text-muted-foreground">{t("prerequisitesHint")}</p>
+              {allChallenges.filter((c) => c.id !== challenge?.id).length === 0 ? (
+                <p className="text-xs text-muted-foreground">{t("noOtherChallenges")}</p>
+              ) : (
+                <div className="grid max-h-40 gap-1 overflow-y-auto rounded-md border border-border p-2">
+                  {allChallenges
+                    .filter((c) => c.id !== challenge?.id)
+                    .map((c) => (
+                      <label key={c.id} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border"
+                          style={{ accentColor: "hsl(var(--primary))" }}
+                          checked={prerequisites.includes(c.id)}
+                          onChange={(e) =>
+                            setPrerequisites((prev) =>
+                              e.target.checked
+                                ? [...prev, c.id]
+                                : prev.filter((id) => id !== c.id),
+                            )
+                          }
+                        />
+                        <span>{c.title}</span>
+                      </label>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            {(tiers.length > 0 || tagVocab.length > 0) && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {tiers.length > 0 && (
+                  <div className="space-y-2">
+                    <Label htmlFor="difficulty">{t("difficulty")}</Label>
+                    <Select
+                      id="difficulty"
+                      value={difficulty}
+                      onChange={(e) => setDifficulty(e.target.value)}
+                    >
+                      <option value="">—</option>
+                      {tiers.map((tier) => (
+                        <option key={tier} value={tier}>
+                          {tier}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
+                {tagVocab.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>{t("tags")}</Label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {tagVocab.map((tag) => {
+                        const on = tags.includes(tag);
+                        return (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() =>
+                              setTags((prev) =>
+                                on ? prev.filter((x) => x !== tag) : [...prev, tag],
+                              )
+                            }
+                            className={cn(
+                              "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
+                              on
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border text-muted-foreground hover:border-primary/40",
+                            )}
+                          >
+                            {tag}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </CollapsibleSection>
         </form>
 
-        {/* Attachments and hints have their own sub-forms, so they sit *outside*
-            the challenge <form> (no nested forms). They need a persisted
+        {/* Attachments, hints, and guesses have their own sub-forms, so they sit
+            *outside* the challenge <form> (no nested forms). They need a persisted
             challenge id, so they're edit-mode only. */}
         {isEdit && (
-          <>
-            <AttachmentsSection
-              competitionId={competitionId}
-              challengeId={challenge.id}
-            />
-            <HintsSection
-              competitionId={competitionId}
-              challengeId={challenge.id}
-            />
+          <div className="space-y-4 border-t border-border pt-5">
+            <AttachmentsSection competitionId={competitionId} challengeId={challenge.id} />
+            <HintsSection competitionId={competitionId} challengeId={challenge.id} />
             {challenge.flag_type === "multiple_choice" && (
               <ChallengeGuessesSection
                 competitionId={competitionId}
                 challengeId={challenge.id}
               />
             )}
-          </>
+          </div>
         )}
-
-        {mutation.isError && (
-          <p role="alert" className="text-sm text-destructive">
-            {(mutation.error as Error).message}
-          </p>
-        )}
-        {/* `form={formId}` submits the challenge form even though this button is
-            outside it, so the layout (fields → sub-sections → actions) holds. */}
-        <div className="flex gap-2">
-          <Button type="submit" form={formId} disabled={mutation.isPending}>
-            {mutation.isPending
-              ? t("saving")
-              : isEdit
-                ? t("saveChanges")
-                : t("createChallenge")}
-          </Button>
-          <Button type="button" variant="ghost" onClick={onDone}>
-            {t("cancel")}
-          </Button>
-        </div>
       </CardContent>
     </Card>
+  );
+}
+
+// A titled disclosure whose children stay mounted while collapsed (via `hidden`,
+// not conditional render) so form field state — and its submission — survives a
+// collapse. `type="button"` keeps the toggle from submitting the form.
+function CollapsibleSection({
+  title,
+  hint,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="rounded-md border border-border">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-4 py-3 text-left"
+      >
+        <Chevron open={open} />
+        <span className="text-sm font-medium">{title}</span>
+        {hint && !open && (
+          <span className="ml-1 hidden truncate text-xs text-muted-foreground sm:inline">
+            {hint}
+          </span>
+        )}
+      </button>
+      <div hidden={!open} className="space-y-4 border-t border-border px-4 py-4">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={cn(
+        "shrink-0 text-muted-foreground transition-transform",
+        open && "rotate-90",
+      )}
+      aria-hidden="true"
+    >
+      <path d="m9 6 6 6-6 6" />
+    </svg>
+  );
+}
+
+function SearchIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
   );
 }
 

@@ -10,6 +10,8 @@ import type { Challenge } from "@/lib/types";
 // which only run on mount — so the form must be keyed per edit target. Without
 // that key the previous challenge's values persist into the next one and are
 // SAVED onto it (#262 review; same bug class as #258/#260 on the settings page).
+// The master-detail redesign keeps that guarantee: selecting a different list
+// item, or switching to "New", remounts the editor.
 
 function mk(partial: Partial<Challenge> & { id: string; title: string }): Challenge {
   return {
@@ -63,7 +65,6 @@ vi.mock("@/lib/hooks/use-challenges", () => ({
   useChallengeStateMutation: () => ({ mutate: vi.fn(), isPending: false }),
   useExportChallenges: () => ({ mutate: vi.fn(), isPending: false }),
   useImportChallenges: () => ({ mutate: vi.fn(), isPending: false }),
-  useDeleteChallenge: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock("@/lib/hooks/use-categories", () => ({
   useCategories: () => ({ data: [] }),
@@ -88,38 +89,45 @@ afterEach(() => {
   updateIds.length = 0;
 });
 
-function editRowFor(title: string) {
-  // Scoped to the table: once the form is open the title also appears there.
+// Click the list row for `title`. Rows are buttons inside the list <ul>; the
+// editor header renders the same title as an <h2>, so scope to the list to avoid
+// selecting that instead.
+function selectItem(title: string) {
   const row = screen
-    .getAllByText(title)
-    .map((el) => el.closest("tr"))
-    .find((tr): tr is HTMLTableRowElement => tr !== null);
-  if (!row) throw new Error(`no table row for ${title}`);
-  const edit = [...row.querySelectorAll("button")].find(
-    (b) => b.textContent === "Edit",
-  );
-  if (!edit) throw new Error(`no Edit button for ${title}`);
-  return edit;
+    .getAllByRole("button")
+    .find((b) => b.closest("ul") !== null && b.textContent?.includes(title));
+  if (!row) throw new Error(`no list row for ${title}`);
+  fireEvent.click(row);
 }
 
-describe("ChallengeAdmin form remounts per edit target", () => {
-  it("does not carry a challenge's connection info into a new challenge", () => {
+describe("ChallengeAdmin master-detail editor", () => {
+  it("shows the select prompt until a challenge is chosen", () => {
     renderWithIntl(<ChallengeAdmin competitionId="c-1" />);
-    fireEvent.click(editRowFor("Alpha"));
+    // No editor yet — the right pane prompts you to pick something.
+    expect(screen.queryByLabelText("Title")).toBeNull();
+
+    selectItem("Alpha");
+    expect(screen.getByLabelText("Title")).toHaveValue("Alpha");
+  });
+
+  it("does not carry a challenge's values into a new challenge", () => {
+    renderWithIntl(<ChallengeAdmin competitionId="c-1" />);
+    selectItem("Alpha");
+    expect(screen.getByLabelText("Title")).toHaveValue("Alpha");
     expect(screen.getByLabelText("Connection info")).toHaveValue(
       "nc secret.example.com 1337",
     );
 
     // Switch to creating a new challenge: the form must be blank, not Alpha's.
     fireEvent.click(screen.getByRole("button", { name: "New challenge" }));
-    expect(screen.getByLabelText("Connection info")).toHaveValue("");
     expect(screen.getByLabelText("Title")).toHaveValue("");
+    expect(screen.getByLabelText("Connection info")).toHaveValue("");
   });
 
   it("does not save one challenge's values onto another when switching targets", () => {
     renderWithIntl(<ChallengeAdmin competitionId="c-1" />);
-    fireEvent.click(editRowFor("Alpha"));
-    fireEvent.click(editRowFor("Bravo"));
+    selectItem("Alpha");
+    selectItem("Bravo");
 
     // Bravo's own values, not Alpha's — otherwise saving would overwrite them.
     expect(screen.getByLabelText("Title")).toHaveValue("Bravo");

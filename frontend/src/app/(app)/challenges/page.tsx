@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useTranslations } from "next-intl";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 
 import { NoCompetition } from "@/components/app/no-competition";
 import { ChallengeConnection } from "@/components/challenges/challenge-connection";
@@ -12,14 +13,10 @@ import { ChallengeList } from "@/components/challenges/challenge-list";
 import { ChallengeValue } from "@/components/challenges/challenge-value";
 import { Skeleton } from "@/components/ui/skeleton";
 
-// Heavy editors load on demand, not in the page bundle: ChallengeAdmin pulls
-// the TipTap rich-text editor (staff-only surface) and CollabNote pulls
-// TipTap + Y.js (team scratchpad). A competitor browsing challenges downloads
-// neither until they actually open one.
-const ChallengeAdmin = dynamic(
-  () => import("@/components/challenges/challenge-admin").then((m) => m.ChallengeAdmin),
-  { ssr: false, loading: () => <Skeleton className="h-40 w-full" /> },
-);
+// CollabNote pulls TipTap + Y.js (the team scratchpad) and loads on demand, so a
+// competitor browsing challenges doesn't download the editor until they open a
+// challenge. Challenge *authoring* moved to its own /challenges/manage route, so
+// the staff editor bundle no longer rides along on this page at all.
 const CollabNote = dynamic(
   () => import("@/components/collab/collab-note").then((m) => m.CollabNote),
   { ssr: false, loading: () => <Skeleton className="h-32 w-full" /> },
@@ -71,7 +68,6 @@ export default function ChallengesPage() {
   const [filter, setFilter] = useState<string>("all");
   const [availability, setAvailability] = useState<"all" | "available" | "locked">("all");
   const [open, setOpen] = useState<Challenge | null>(null);
-  const [managing, setManaging] = useState(false);
 
   // Card grid (default) vs. the grouped list (#55) — a per-device preference.
   // Restore the saved choice once on mount, like the palette override; the
@@ -153,8 +149,8 @@ export default function ChallengesPage() {
         subtitle={`${competition?.name ?? ""} · ${t("solvedOfTotal", { solved: solvedCount, total: challenges.data?.length ?? 0 })}`}
         actions={
           access.canManageActiveCompetition ? (
-            <Button variant={managing ? "secondary" : "default"} onClick={() => setManaging((m) => !m)}>
-              {managing ? t("doneManaging") : t("manage")}
+            <Button asChild>
+              <Link href="/challenges/manage">{t("manage")}</Link>
             </Button>
           ) : undefined
         }
@@ -262,8 +258,10 @@ export default function ChallengesPage() {
               : t("empty.competitorDescription")
           }
           action={
-            access.canManageActiveCompetition && !managing ? (
-              <Button onClick={() => setManaging(true)}>{t("empty.create")}</Button>
+            access.canManageActiveCompetition ? (
+              <Button asChild>
+                <Link href="/challenges/manage">{t("empty.create")}</Link>
+              </Button>
             ) : undefined
           }
         />
@@ -340,12 +338,6 @@ export default function ChallengesPage() {
         </div>
         <TablePagination table={grid} noun={tn("challenges")} />
         </>
-      )}
-
-      {managing && (
-        <div className="mt-2 border-t border-border pt-6">
-          <ChallengeAdmin competitionId={competitionId} />
-        </div>
       )}
 
       <Dialog open={!!open} onOpenChange={(o) => !o && setOpen(null)}>

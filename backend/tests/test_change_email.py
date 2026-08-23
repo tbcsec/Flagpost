@@ -68,7 +68,14 @@ async def test_sets_an_address_on_an_email_less_account(client):
     assert body["id"] == user_id
     # Returns the shared UserOut shape, so the client can drop it into the
     # auth store unmapped.
-    assert set(body) == {"id", "email", "display_name", "created_at", "email_verified_at"}
+    assert set(body) == {
+        "id",
+        "email",
+        "display_name",
+        "created_at",
+        "email_verified_at",
+        "avatar_updated_at",
+    }
 
 
 async def test_wrong_password_refused(client):

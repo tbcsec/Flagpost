@@ -67,6 +67,10 @@ EVENT_TYPES: tuple[str, ...] = (
     # admin moderation in the audit log.
     "user.avatar_updated",
     "user.avatar_removed",
+    # Username (display-name) change. Carries old_name/new_name because every
+    # other surface renames retroactively (id-keyed), so the audit log is the
+    # only record that "X was previously Y" — actor_user_id tells self from admin.
+    "user.renamed",
     # Mass CSV import's single summary (#171) — bulk ops deliberately don't
     # flood `user.created` per row, though each role grant in the file still
     # emits its own `role.assigned`. Stays automation-triggerable (unlike

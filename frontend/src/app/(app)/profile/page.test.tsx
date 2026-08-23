@@ -34,6 +34,9 @@ vi.mock("@/lib/hooks/use-users", () => ({
 vi.mock("@/components/profile/avatar-card", () => ({
   AvatarCard: () => <div data-testid="avatar-card" />,
 }));
+vi.mock("@/components/profile/username-card", () => ({
+  UsernameCard: () => <div data-testid="username-card" />,
+}));
 vi.mock("@/components/profile/email-card", () => ({
   EmailCard: () => <div data-testid="email-card" />,
 }));

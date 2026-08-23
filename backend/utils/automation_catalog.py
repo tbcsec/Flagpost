@@ -98,6 +98,7 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "user.deleted": ["user_id", "actor_user_id"],
     "user.avatar_updated": ["user_id", "actor_user_id"],
     "user.avatar_removed": ["user_id", "actor_user_id"],
+    "user.renamed": ["user_id", "old_name", "new_name", "actor_user_id"],
     # Mass CSV import summary (#171): user_id is the importing admin.
     "users.imported": ["user_id", "created", "skipped", "roles_assigned"],
     "api_token.created": ["api_token_id", "user_id", "created_by_user_id"],
@@ -138,6 +139,7 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     "user.deleted": "manage_users",
     "user.avatar_updated": "manage_users",
     "user.avatar_removed": "manage_users",
+    "user.renamed": "manage_users",
     "users.imported": "manage_users",
     "api_token.created": "manage_api_tokens",
     "api_token.revoked": "manage_api_tokens",

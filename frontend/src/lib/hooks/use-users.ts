@@ -87,6 +87,17 @@ export function useRemoveUserAvatar() {
   });
 }
 
+/** Change your own username. The endpoint returns the updated user; push it to
+ *  the store so the sidebar, the cooldown notice, and everything else refresh.
+ *  The session is unaffected (it keys on the immutable user id), so no re-auth. */
+export function useChangeUsername() {
+  const setUser = useAuthStore((s) => s.setUser);
+  return useMutation({
+    mutationFn: authApi.changeUsername,
+    onSuccess: (user) => setUser(user),
+  });
+}
+
 export function useLogout() {
   const clearSession = useAuthStore((s) => s.clearSession);
   const queryClient = useQueryClient();

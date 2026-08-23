@@ -10,6 +10,7 @@ const user: User = {
   created_at: new Date().toISOString(),
   email_verified_at: null,
   avatar_updated_at: null,
+  username_change_allowed_at: null,
 };
 
 beforeEach(() => {

@@ -135,7 +135,7 @@ user.registered              user.password_changed
 user.email_verified
 user.created                 user.updated               user.banned
 user.unbanned                user.deleted               users.imported
-user.avatar_updated          user.avatar_removed
+user.avatar_updated          user.avatar_removed        user.renamed
 role.created                 role.updated               role.deleted
 role.assigned                role.unassigned
 api_token.created            api_token.revoked

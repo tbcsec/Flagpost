@@ -75,6 +75,7 @@ async def test_sets_an_address_on_an_email_less_account(client):
         "created_at",
         "email_verified_at",
         "avatar_updated_at",
+        "username_change_allowed_at",
     }
 
 

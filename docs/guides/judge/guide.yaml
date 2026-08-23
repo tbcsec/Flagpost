@@ -1,0 +1,13 @@
+# Judge guide — competition-scoped staff: authoring, running, and supporting
+# an event. Global administration lives in the Admin guide.
+slug: flagpost-judge-guide
+kind: User guide
+title: Judge Guide
+subtitle: Authoring and running a competition on Flagpost
+audience: Judges & organisers
+chapters:
+  - { file: 01-role.md, title: The judge role }
+  - { file: 02-authoring.md, title: Authoring challenges }
+  - { file: 03-running.md, title: "Configuring & running the event" }
+  - { file: 04-supporting.md, title: Supporting competitors }
+  - { file: 05-watching.md, title: Watching the event }

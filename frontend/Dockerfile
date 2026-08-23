@@ -28,9 +28,13 @@ ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
 # `output: "standalone"` (next.config.mjs) bundles a minimal server + only the
-# node_modules it needs — no dev dependencies in the runtime image.
+# node_modules it needs — no dev dependencies in the runtime image. Standalone
+# output does NOT include `public/` — Next's docs require copying it manually,
+# and without it every static asset (the bundled user-guide PDFs) 404s in
+# production while working in dev, where the source tree is bind-mounted.
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
 
 # Run as the built-in unprivileged node user.
 USER node

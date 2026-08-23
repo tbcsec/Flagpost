@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -26,12 +27,6 @@ import { toast } from "@/stores/toast";
 // the assistant *behaves* (best-effort), while challenge-metadata access decides
 // what it can *see* (hard, code-enforced) — never conflated (spec §5).
 
-const GUIDANCE_LABELS: Record<AiGuidanceLevel, string> = {
-  platform_only: "Platform only — no challenge-solving help",
-  conceptual: "Conceptual — general background topics, nothing specific",
-  guided: "Guided — approaches and nudges, never full solutions",
-};
-
 export function AiCompetitionPanel({ competitionId }: { competitionId: string }) {
   const { data, isLoading } = useCompetitionAiSettings(competitionId);
   if (isLoading || !data) return <Skeleton className="h-48 w-full" />;
@@ -52,7 +47,13 @@ function AiCompetitionForm({
   competitionId: string;
   data: AiCompetitionSettings;
 }) {
+  const t = useTranslations("ai.competitionPanel");
   const update = useUpdateCompetitionAiSettings(competitionId);
+  const GUIDANCE_LABELS: Record<AiGuidanceLevel, string> = {
+    platform_only: t("guidancePlatformOnly"),
+    conceptual: t("guidanceConceptual"),
+    guided: t("guidanceGuided"),
+  };
   const [enabled, setEnabled] = useState(data.competitor_enabled);
   // "" in the select means "inherit the site default".
   const [guidance, setGuidance] = useState<string>(data.guidance_level ?? "");
@@ -67,9 +68,9 @@ function AiCompetitionForm({
         challenge_metadata_access: metadata,
       },
       {
-        onSuccess: () => toast("Assistant settings saved", { variant: "success" }),
+        onSuccess: () => toast(t("savedToast"), { variant: "success" }),
         onError: (err) =>
-          toast("Couldn't save", {
+          toast(t("saveFailed"), {
             description: (err as Error).message,
             variant: "destructive",
           }),
@@ -81,31 +82,25 @@ function AiCompetitionForm({
     <form onSubmit={onSubmit} className="grid gap-5">
       <Card>
         <CardHeader>
-          <CardTitle>Competitor assistant</CardTitle>
-          <CardDescription>
-            An AI chat competitors can open while the competition is running. It
-            is read-only, structurally unable to see flags or unpublished
-            challenges, and every conversation is reviewable by staff who hold
-            the transcript permission. Requires the site-wide AI module to be
-            configured and enabled.
-          </CardDescription>
+          <CardTitle>{t("title")}</CardTitle>
+          <CardDescription>{t("description")}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="ai-comp-enabled">Availability</Label>
+            <Label htmlFor="ai-comp-enabled">{t("availability")}</Label>
             <Select
               id="ai-comp-enabled"
               value={enabled ? "on" : "off"}
               onChange={(e) => setEnabled(e.target.value === "on")}
               className="max-w-md"
             >
-              <option value="off">Off — competitors get no assistant</option>
-              <option value="on">On — available while the competition runs</option>
+              <option value="off">{t("availOff")}</option>
+              <option value="on">{t("availOn")}</option>
             </Select>
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="ai-comp-guidance">Guidance level</Label>
+            <Label htmlFor="ai-comp-guidance">{t("guidanceLevel")}</Label>
             <Select
               id="ai-comp-guidance"
               value={guidance}
@@ -113,8 +108,11 @@ function AiCompetitionForm({
               className="max-w-md"
             >
               <option value="">
-                Inherit site default ({GUIDANCE_LABELS[data.effective_guidance_level] ??
-                  data.effective_guidance_level})
+                {t("inheritDefault", {
+                  label:
+                    GUIDANCE_LABELS[data.effective_guidance_level] ??
+                    data.effective_guidance_level,
+                })}
               </option>
               {(Object.keys(GUIDANCE_LABELS) as AiGuidanceLevel[]).map((level) => (
                 <option key={level} value={level}>
@@ -122,32 +120,22 @@ function AiCompetitionForm({
                 </option>
               ))}
             </Select>
-            <p className="text-xs text-muted-foreground">
-              Controls how the assistant behaves. It shapes the model&apos;s
-              instructions and is best-effort — it is not a data guarantee, and
-              transcripts are how you verify it&apos;s being followed.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("guidanceHint")}</p>
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="ai-comp-meta">Challenge details</Label>
+            <Label htmlFor="ai-comp-meta">{t("challengeDetails")}</Label>
             <Select
               id="ai-comp-meta"
               value={metadata ? "on" : "off"}
               onChange={(e) => setMetadata(e.target.value === "on")}
               className="max-w-md"
             >
-              <option value="off">
-                Hidden — the assistant can&apos;t read any challenge
-              </option>
-              <option value="on">
-                Visible — public challenge info only (never flags)
-              </option>
+              <option value="off">{t("metaHidden")}</option>
+              <option value="on">{t("metaVisible")}</option>
             </Select>
             <p className="text-xs text-muted-foreground">
-              A hard switch on what the assistant can <em>see</em>, separate from
-              the guidance level: when hidden, the challenge-reading tools
-              don&apos;t exist for the model at all.
+              {t.rich("metaHint", { em: (chunks) => <em>{chunks}</em> })}
             </p>
           </div>
         </CardContent>
@@ -155,11 +143,11 @@ function AiCompetitionForm({
 
       <div className="flex items-center gap-3">
         <Button type="submit" className="w-fit" disabled={update.isPending}>
-          {update.isPending ? "Saving…" : "Save changes"}
+          {update.isPending ? t("saving") : t("save")}
         </Button>
         {data.updated_at && (
           <span className="text-xs text-muted-foreground">
-            Last saved {new Date(data.updated_at).toLocaleString()}
+            {t("lastSaved", { date: new Date(data.updated_at).toLocaleString() })}
           </span>
         )}
       </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { NoCompetition } from "@/components/app/no-competition";
@@ -22,6 +23,7 @@ import { cn } from "@/lib/utils";
 // an organiser can read exactly what the assistant told competitors. Gated on
 // ai_view_transcripts (its own grant — competitor content, not analytics).
 export default function AiTranscriptsPage() {
+  const t = useTranslations("ai.transcripts");
   const { competitionId, data: competition } = useActiveCompetition();
   const access = useAccess();
   const canView = access.has("ai_view_transcripts");
@@ -35,10 +37,10 @@ export default function AiTranscriptsPage() {
   if (!canView) {
     return (
       <>
-        <SectionHeader title="AI transcripts" subtitle={competition?.name} />
+        <SectionHeader title={t("title")} subtitle={competition?.name} />
         <EmptyState
-          title="No access"
-          description="You need the AI-transcripts permission to review assistant conversations."
+          title={t("noAccessTitle")}
+          description={t("noAccessDescription")}
         />
       </>
     );
@@ -49,22 +51,22 @@ export default function AiTranscriptsPage() {
   // author's display name, so search stays instant with no request per keystroke.
   const q = query.trim().toLowerCase();
   const filtered = q
-    ? rows.filter((t) => t.user_display_name.toLowerCase().includes(q))
+    ? rows.filter((r) => r.user_display_name.toLowerCase().includes(q))
     : rows;
 
   return (
     <>
       <SectionHeader
-        title="AI transcripts"
-        subtitle="Competitor conversations with the assistant — read-only oversight"
+        title={t("title")}
+        subtitle={t("subtitle")}
       />
 
       {transcripts.isLoading ? (
         <Skeleton className="h-64 w-full" />
       ) : rows.length === 0 ? (
         <EmptyState
-          title="No conversations yet"
-          description="Competitor chats with the assistant will appear here as they happen."
+          title={t("emptyTitle")}
+          description={t("emptyDescription")}
         />
       ) : (
         <div className="grid gap-6 lg:grid-cols-[minmax(16rem,1fr)_2fr]">
@@ -75,37 +77,37 @@ export default function AiTranscriptsPage() {
                   type="search"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search participants…"
-                  aria-label="Search participants by name"
+                  placeholder={t("searchPlaceholder")}
+                  aria-label={t("searchAria")}
                 />
               </div>
               {filtered.length === 0 ? (
                 <p className="px-4 py-6 text-center text-sm text-muted-foreground">
-                  No participants match “{query.trim()}”.
+                  {t("noMatch", { query: query.trim() })}
                 </p>
               ) : (
                 <ul className="divide-y divide-border">
-                  {filtered.map((t) => (
-                    <li key={t.id}>
+                  {filtered.map((row) => (
+                    <li key={row.id}>
                       <button
                         type="button"
-                        onClick={() => setSelectedId(t.id)}
+                        onClick={() => setSelectedId(row.id)}
                         className={cn(
                           "flex w-full flex-col gap-0.5 px-4 py-3 text-left transition-colors hover:bg-accent/60",
-                          selectedId === t.id && "bg-accent",
+                          selectedId === row.id && "bg-accent",
                         )}
                       >
                         <span className="flex items-baseline justify-between gap-2">
                           <span className="truncate text-sm font-medium">
-                            {t.user_display_name}
+                            {row.user_display_name}
                           </span>
                           <span className="whitespace-nowrap text-[11px] text-muted-foreground">
-                            {relativeTime(t.last_activity_at)}
+                            {relativeTime(row.last_activity_at)}
                           </span>
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {t.message_count} message{t.message_count === 1 ? "" : "s"}
-                          {t.closed_at ? " · closed" : ""}
+                          {t("messages", { count: row.message_count })}
+                          {row.closed_at ? t("closedSuffix") : ""}
                         </span>
                       </button>
                     </li>
@@ -119,7 +121,7 @@ export default function AiTranscriptsPage() {
             <CardContent className="pt-6">
               {!selectedId ? (
                 <p className="text-sm text-muted-foreground">
-                  Select a conversation to read it.
+                  {t("selectPrompt")}
                 </p>
               ) : detail.isLoading || !detail.data ? (
                 <Skeleton className="h-48 w-full" />
@@ -129,8 +131,8 @@ export default function AiTranscriptsPage() {
                     <span className="text-sm font-semibold">
                       {detail.data.user_display_name}
                     </span>
-                    <Badge variant="muted">competitor assistant</Badge>
-                    {detail.data.closed_at && <Badge variant="outline">closed</Badge>}
+                    <Badge variant="muted">{t("assistantBadge")}</Badge>
+                    {detail.data.closed_at && <Badge variant="outline">{t("closedBadge")}</Badge>}
                   </div>
                   <div className="grid gap-3">
                     {detail.data.messages.map((m) => (
@@ -151,7 +153,7 @@ export default function AiTranscriptsPage() {
                         >
                           {m.role === "user" ? m.content : <Markdown content={m.content} />}
                           <div className="mt-1 text-[10px] text-muted-foreground">
-                            {m.role === "user" ? "competitor" : "assistant"} ·{" "}
+                            {m.role === "user" ? t("roleCompetitor") : t("roleAssistant")} ·{" "}
                             {relativeTime(m.created_at)}
                           </div>
                         </div>

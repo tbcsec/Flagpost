@@ -28,6 +28,14 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(min_length=8, max_length=256)
 
 
+class ChangeUsernameRequest(BaseModel):
+    # Current password re-authenticates the change: the username is the primary
+    # login identifier (ADR-0015), so a stolen session alone must not be enough
+    # to take it over. Same posture as change-email.
+    current_password: str = Field(min_length=1, max_length=256)
+    new_display_name: str = Field(min_length=1, max_length=120)
+
+
 class ChangeEmailRequest(BaseModel):
     # The current password re-authenticates the change (#106): the address
     # governs where password-reset links go, so a stolen session alone must not
@@ -64,6 +72,9 @@ class UserOut(BaseModel):
     # Profile picture: null = none set. Doubles as the cache-buster the client
     # appends to GET /api/users/{id}/avatar.
     avatar_updated_at: datetime | None = None
+    # When the caller may next change their own username (null = now). Lets the
+    # profile UI show the cooldown date proactively. Read from the model property.
+    username_change_allowed_at: datetime | None = None
 
 
 class PermissionsOut(BaseModel):

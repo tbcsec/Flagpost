@@ -331,13 +331,19 @@ async def update_user(
                 status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
             )
         user.email = body.email
+    renamed_from: str | None = None
     if body.display_name is not None and body.display_name != user.display_name:
         if await display_name_taken(db, body.display_name, exclude_id=user.id):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="That display name is already taken",
             )
+        renamed_from = user.display_name
         user.display_name = body.display_name
+        # Stamp the cooldown even on an admin rename: fixing an offensive name
+        # must stop the user renaming straight back (the admin bypasses the
+        # *check*, not the clock — models.user.username_change_allowed_at).
+        user.username_changed_at = utcnow()
     revoked_tokens: list[str] = []
     if body.password is not None:
         user.password_hash = hash_password(body.password)
@@ -351,6 +357,18 @@ async def update_user(
     await event_bus.emit(
         "user.updated", {"user_id": user.id, "actor_user_id": current_user.id}
     )
+    if renamed_from is not None:
+        # A rename is its own audited fact (who was previously what) on top of
+        # the generic user.updated — same event the self-service path emits.
+        await event_bus.emit(
+            "user.renamed",
+            {
+                "user_id": user.id,
+                "old_name": renamed_from,
+                "new_name": user.display_name,
+                "actor_user_id": current_user.id,
+            },
+        )
     await emit_revoked(revoked_tokens, user_id=user.id, actor_id=current_user.id)
     return await _out(db, user)
 

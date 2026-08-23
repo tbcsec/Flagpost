@@ -11,7 +11,7 @@ httpOnly refresh cookie but is silent on revocation; a session row is what
 hash is stored — the raw token lives solely in the client's httpOnly cookie.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -27,6 +27,12 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base, TimestampMixin
+
+# How long a user must wait between self-service username changes. Identity
+# stability matters mid-event (the scoreboard, tickets and audit trail all show
+# the name), so this is deliberately long. The admin rename bypasses the *check*
+# but still stamps the clock (moderation, above).
+USERNAME_CHANGE_COOLDOWN = timedelta(days=30)
 
 
 class User(Base, TimestampMixin):
@@ -73,6 +79,22 @@ class User(Base, TimestampMixin):
     avatar_updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Self-service username (display name) change: when the name was last changed,
+    # for the cooldown (null = never changed ⇒ no cooldown). Both the self and
+    # admin paths stamp it — an admin rename that fixes an offensive name must
+    # also start the clock, or the user could immediately rename back.
+    username_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    @property
+    def username_change_allowed_at(self) -> datetime | None:
+        """When the caller may next change their own username, or None if now.
+        Read straight onto UserOut (from_attributes) so the profile UI can show
+        the date before the user tries and is refused."""
+        if self.username_changed_at is None:
+            return None
+        return self.username_changed_at + USERNAME_CHANGE_COOLDOWN
 
 
 # Case-insensitive uniqueness for the login identifier: "Alice" and "alice" can't

@@ -1036,6 +1036,18 @@
       "updatedToast": "Profile picture updated",
       "removedToast": "Profile picture removed",
       "uploadFailed": "Couldn't update your picture"
+    },
+    "username": {
+      "title": "Username",
+      "description": "Your username is how you sign in and how you appear on the scoreboard.",
+      "username": "Username",
+      "currentPassword": "Current password",
+      "save": "Change username",
+      "saving": "Saving…",
+      "cooldownHint": "You can change your username once every 30 days.",
+      "cooldown": "You've changed your username recently — you can change it again on {date}.",
+      "updatedToast": "You're now {name}",
+      "failed": "Couldn't change your username"
     }
   },
   "teams": {

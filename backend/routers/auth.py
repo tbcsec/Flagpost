@@ -45,6 +45,7 @@ from utils import mailer
 from schemas.auth import (
     ChangeEmailRequest,
     ChangePasswordRequest,
+    ChangeUsernameRequest,
     ForgotPasswordRequest,
     LoginRequest,
     PermissionsOut,
@@ -502,6 +503,85 @@ async def change_password(
         "user.password_changed", {"user_id": current_user.id}
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/change-username", response_model=UserOut)
+async def change_username(
+    body: ChangeUsernameRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
+) -> User:
+    """Change the caller's own username (display name), the primary login handle.
+
+    Own-user, so no catalog permission — the same posture as change-email. The
+    **current password is required** (a stolen session must not be able to seize
+    the login identifier), and a **cooldown** (models.user.USERNAME_CHANGE_COOLDOWN,
+    stamped in ``username_changed_at``) rate-limits changes over days — spam
+    prevention that has to survive restarts, so it lives in the DB, not Redis.
+    The per-request Redis limit below is only the brute-force guard on the
+    password field.
+
+    Sessions are **not** revoked: identity keys on the immutable user id (the JWT
+    ``sub``), so a rename doesn't invalidate anything. The rename emits
+    ``user.renamed`` carrying old/new — the audit log is the only place the prior
+    name survives, since every other surface renames retroactively.
+    """
+    # Throttle before the password check — an unthrottled password-taking
+    # endpoint is a brute-force oracle for a stolen session (as change-email).
+    if not await rate_limiter.hit(
+        f"change-username:{current_user.id}", limit=5, window_seconds=300
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many attempts — please wait a few minutes and try again",
+        )
+    if not verify_password(body.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+
+    new_name = body.new_display_name.strip()
+    if not new_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Enter a username"
+        )
+    if new_name == current_user.display_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="That's already your username",
+        )
+
+    allowed_at = current_user.username_change_allowed_at
+    if allowed_at is not None and utcnow() < ensure_aware_utc(allowed_at):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You've changed your username recently — try again later",
+        )
+
+    # exclude_id lets a pure case fix ("alice" → "Alice") through, since the
+    # case-insensitive index would otherwise flag the name as taken by *self*.
+    if await display_name_taken(db, new_name, exclude_id=current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="That username is already taken",
+        )
+
+    old_name = current_user.display_name
+    current_user.display_name = new_name
+    current_user.username_changed_at = utcnow()
+    await db.commit()
+    await event_bus.emit(
+        "user.renamed",
+        {
+            "user_id": current_user.id,
+            "old_name": old_name,
+            "new_name": new_name,
+            "actor_user_id": current_user.id,
+        },
+    )
+    return current_user
 
 
 # --- self-service password reset (Phase 9, ADR-0003) -------------------------

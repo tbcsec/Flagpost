@@ -373,6 +373,13 @@ export const authApi = {
     return apiFetch<User>("/api/profile/avatar", { method: "POST", body: form });
   },
   removeAvatar: () => apiFetch<void>("/api/profile/avatar", { method: "DELETE" }),
+  // Change your own username (the primary login handle). Returns the updated
+  // user; a cooldown (username_change_allowed_at) rate-limits repeats.
+  changeUsername: (input: { current_password: string; new_display_name: string }) =>
+    apiFetch<User>("/api/auth/change-username", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   changeEmail: (input: { current_password: string; new_email: string | null }) =>
     apiFetch<User>("/api/auth/change-email", {
       method: "POST",

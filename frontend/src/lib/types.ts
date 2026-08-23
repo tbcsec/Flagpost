@@ -16,6 +16,9 @@ export interface User {
   email_verified_at: string | null;
   // Profile picture: null = none. Doubles as the avatar URL cache-buster.
   avatar_updated_at: string | null;
+  // When you may next change your username (ISO), or null if now. Drives the
+  // profile cooldown notice.
+  username_change_allowed_at: string | null;
 }
 
 export interface TokenResponse {

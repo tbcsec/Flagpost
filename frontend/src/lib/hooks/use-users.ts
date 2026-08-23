@@ -55,6 +55,38 @@ export function useChangeEmail() {
   });
 }
 
+/** Upload (replace) your own profile picture. The endpoint returns the updated
+ *  user; pushing it into the store re-renders every avatar of yourself with the
+ *  fresh cache-buster. */
+export function useUploadAvatar() {
+  const setUser = useAuthStore((s) => s.setUser);
+  return useMutation({
+    mutationFn: authApi.uploadAvatar,
+    onSuccess: (user) => setUser(user),
+  });
+}
+
+/** Remove your own profile picture (falls back to initials everywhere). */
+export function useRemoveAvatar() {
+  const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
+  return useMutation({
+    mutationFn: authApi.removeAvatar,
+    onSuccess: () => {
+      if (user) setUser({ ...user, avatar_updated_at: null });
+    },
+  });
+}
+
+/** Admin moderation: strip any user's picture; refreshes the directory. */
+export function useRemoveUserAvatar() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: usersApi.removeAvatar,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["users"] }),
+  });
+}
+
 export function useLogout() {
   const clearSession = useAuthStore((s) => s.clearSession);
   const queryClient = useQueryClient();

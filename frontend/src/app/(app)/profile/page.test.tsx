@@ -31,6 +31,9 @@ vi.mock("@/lib/hooks/use-users", () => ({
 }));
 
 // Stub the three domain cards — each just marks its presence.
+vi.mock("@/components/profile/avatar-card", () => ({
+  AvatarCard: () => <div data-testid="avatar-card" />,
+}));
 vi.mock("@/components/profile/email-card", () => ({
   EmailCard: () => <div data-testid="email-card" />,
 }));

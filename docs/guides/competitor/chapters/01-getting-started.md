@@ -31,9 +31,10 @@ email on file).
 
 ## Your profile
 
-From the avatar menu you can change your **password** or **email**, pick a
-personal **theme palette**, and manage **API tokens** if you use tooling that
-talks to Flagpost directly.
+From the avatar menu you can set a **profile picture** (PNG, JPEG, or WebP —
+resized to a square for you, shown beside your name across the platform),
+change your **password** or **email**, pick a personal **theme palette**, and
+manage **API tokens** if you use tooling that talks to Flagpost directly.
 
 If you sign in before joining any competition you'll land in the **lobby** —
 the list of competitions you can join. That's chapter 2.

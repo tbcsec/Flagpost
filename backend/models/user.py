@@ -14,7 +14,16 @@ hash is stored — the raw token lives solely in the client's httpOnly cookie.
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, String, func
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    LargeBinary,
+    String,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base, TimestampMixin
@@ -49,6 +58,19 @@ class User(Base, TimestampMixin):
     # /auth/verify-email token flow, or stamped at creation time for
     # admin-created accounts (Admin -> Users), which are exempt from the gate.
     email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Profile picture: stored in the DB like the site logo (not object storage)
+    # so the additive backup (ADR-0016) carries it and the zero-infra dev stack
+    # needs no MinIO. Always a server-re-encoded square WebP (utils/avatars) —
+    # never the uploaded bytes. The blob is deferred so directory/auth queries
+    # never drag image bytes; ``avatar_updated_at`` doubles as the "has an
+    # avatar" flag and the client-side cache-buster.
+    avatar_data: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True, deferred=True
+    )
+    avatar_content_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    avatar_updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 

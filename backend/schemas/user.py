@@ -23,6 +23,9 @@ class UserAccountOut(BaseModel):
     # (per-competition Judge/Participant roles vary and live on Admin → Roles).
     is_administrator: bool
     created_at: datetime
+    # Profile picture flag/cache-buster (see UserOut) — the directory needs it
+    # for the admin "remove picture" moderation action.
+    avatar_updated_at: datetime | None = None
 
 
 class UserCreate(BaseModel):

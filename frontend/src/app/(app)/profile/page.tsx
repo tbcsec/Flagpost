@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 
 import { SectionHeader } from "@/components/app/section-header";
+import { AvatarCard } from "@/components/profile/avatar-card";
 import { MyCertificatesCard } from "@/components/profile/certificates-card";
 import { MyApiTokensCard } from "@/components/profile/api-tokens-card";
 import { EmailCard } from "@/components/profile/email-card";
@@ -200,6 +201,7 @@ function ProfileInner() {
 
       <div className={tab === "account" ? "grid gap-6" : "hidden"}>
         {needsVerification && <VerifyEmailBanner user={user!} />}
+        <AvatarCard />
         <PasswordCard />
         <EmailCard />
       </div>

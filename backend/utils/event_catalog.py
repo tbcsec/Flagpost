@@ -63,6 +63,10 @@ EVENT_TYPES: tuple[str, ...] = (
     "user.banned",
     "user.unbanned",
     "user.deleted",
+    # Profile pictures: actor_user_id distinguishes a self-service change from
+    # admin moderation in the audit log.
+    "user.avatar_updated",
+    "user.avatar_removed",
     # Mass CSV import's single summary (#171) — bulk ops deliberately don't
     # flood `user.created` per row, though each role grant in the file still
     # emits its own `role.assigned`. Stays automation-triggerable (unlike

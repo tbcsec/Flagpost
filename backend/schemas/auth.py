@@ -61,6 +61,9 @@ class UserOut(BaseModel):
     # Email verification (#74): null = unverified (or the feature has never
     # applied to this account, e.g. it was admin-created or predates the gate).
     email_verified_at: datetime | None = None
+    # Profile picture: null = none set. Doubles as the cache-buster the client
+    # appends to GET /api/users/{id}/avatar.
+    avatar_updated_at: datetime | None = None
 
 
 class PermissionsOut(BaseModel):

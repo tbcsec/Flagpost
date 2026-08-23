@@ -12,7 +12,9 @@ from __future__ import annotations
 
 def setup(app, event_bus, db_factory) -> None:
     from routers.api_tokens import router as api_tokens_router
+    from routers.avatars import router as avatars_router
     from routers.users import router as users_router
 
     app.include_router(users_router)
     app.include_router(api_tokens_router)
+    app.include_router(avatars_router)

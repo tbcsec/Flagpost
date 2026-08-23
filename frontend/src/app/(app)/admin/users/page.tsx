@@ -28,7 +28,7 @@ import {
 import { relativeTime } from "@/lib/datetime";
 import { useDataTable } from "@/lib/hooks/use-data-table";
 import { useAccess } from "@/lib/hooks/use-permissions";
-import { useBanUser, useDeleteUser, useUsers } from "@/lib/hooks/use-users";
+import { useBanUser, useDeleteUser, useRemoveUserAvatar, useUsers } from "@/lib/hooks/use-users";
 import type { UserAccount } from "@/lib/types";
 import { useAuthStore } from "@/stores/auth";
 import { toast } from "@/stores/toast";
@@ -52,6 +52,7 @@ export default function AdminUsersPage() {
 
   const users = useUsers(canView ? q : "");
   const ban = useBanUser();
+  const removeAvatar = useRemoveUserAvatar();
   const del = useDeleteUser();
 
   const [dialog, setDialog] = useState<{ mode: "create" } | { mode: "edit"; user: UserAccount } | null>(null);
@@ -82,6 +83,18 @@ export default function AdminUsersPage() {
         <EmptyState title="No access" description="You need the view-all-users permission to see the directory." />
       </>
     );
+  }
+
+  async function onRemoveAvatar(u: UserAccount) {
+    if (
+      await confirm({
+        title: `Remove ${u.display_name}'s picture?`,
+        description: "Their profile goes back to initials. They can upload a new one.",
+        confirmLabel: "Remove picture",
+      })
+    ) {
+      removeAvatar.mutate(u.id);
+    }
   }
 
   async function onBan(u: UserAccount) {
@@ -214,6 +227,16 @@ export default function AdminUsersPage() {
                             >
                               {u.is_active ? "Ban" : "Unban"}
                             </Button>
+                            {u.avatar_updated_at && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={removeAvatar.isPending}
+                                onClick={() => onRemoveAvatar(u)}
+                              >
+                                Remove picture
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"

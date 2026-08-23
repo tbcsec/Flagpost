@@ -11,6 +11,7 @@ import { DemoBanner } from "@/components/app/demo-banner";
 import { CertificateReleaseWatcher } from "@/components/certificates/certificate-release-watcher";
 import { UpdateNotice } from "@/components/admin/update-notice";
 import { HelpMenu } from "@/components/app/help-menu";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { LanguageMenu } from "@/components/app/language-menu";
 import { PageIcon } from "@/components/app/page-icons";
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
@@ -402,9 +403,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               out of the rail — the `truncate` below can't engage without it (#48). */}
           <div className="flex min-w-0 items-center gap-2">
             <Link href="/profile" title={t("profileSettings")} className="flex min-w-0 flex-1 items-center gap-2">
-              <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-secondary text-[13px] font-semibold text-secondary-foreground">
-                {initials}
-              </span>
+              {user ? (
+                <UserAvatar
+                  userId={user.id}
+                  name={user.display_name}
+                  avatarUpdatedAt={user.avatar_updated_at}
+                  size={32}
+                />
+              ) : (
+                <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-secondary text-[13px] font-semibold text-secondary-foreground">
+                  {initials}
+                </span>
+              )}
               {navExpanded && (
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] font-medium leading-tight">

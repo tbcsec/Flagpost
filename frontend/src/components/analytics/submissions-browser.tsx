@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +62,7 @@ export function SubmissionsBrowser({
   competitionId: string;
   mode: string;
 }) {
+  const t = useTranslations("analytics.submissions");
   const [draft, setDraft] = React.useState({ ...EMPTY_DRAFT });
   const [applied, setApplied] = React.useState<SubmissionQuery>({
     limit: PAGE_SIZE,
@@ -126,19 +128,19 @@ export function SubmissionsBrowser({
         <CardContent className="pt-5">
           <form onSubmit={applyFilters} className="grid gap-3">
             <Input
-              placeholder="Search submitted payload…"
+              placeholder={t("searchPayload")}
               value={draft.q}
               onChange={(e) => set("q", e.target.value)}
             />
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
               <div className="grid gap-1.5">
-                <Label htmlFor="f-challenge">Challenge</Label>
+                <Label htmlFor="f-challenge">{t("challenge")}</Label>
                 <Select
                   id="f-challenge"
                   value={draft.challenge_id}
                   onChange={(e) => set("challenge_id", e.target.value)}
                 >
-                  <option value="">All challenges</option>
+                  <option value="">{t("allChallenges")}</option>
                   {challenges.data?.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.title}
@@ -147,7 +149,7 @@ export function SubmissionsBrowser({
                 </Select>
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="f-correctness">Correctness</Label>
+                <Label htmlFor="f-correctness">{t("correctness")}</Label>
                 <Select
                   id="f-correctness"
                   value={draft.correctness}
@@ -155,38 +157,38 @@ export function SubmissionsBrowser({
                     set("correctness", e.target.value as SubmissionCorrectness | "")
                   }
                 >
-                  <option value="">All</option>
-                  <option value="correct">Correct</option>
-                  <option value="incorrect">Incorrect</option>
-                  <option value="duplicate">Duplicate</option>
+                  <option value="">{t("all")}</option>
+                  <option value="correct">{t("correct")}</option>
+                  <option value="incorrect">{t("incorrect")}</option>
+                  <option value="duplicate">{t("duplicate")}</option>
                 </Select>
               </div>
               {mode === "team" && (
                 <div className="grid gap-1.5">
-                  <Label htmlFor="f-team">Team</Label>
+                  <Label htmlFor="f-team">{t("team")}</Label>
                   <EntityCombobox
                     id="f-team"
                     options={teamOptions}
                     value={draft.team_id}
                     onChange={(v) => set("team_id", v)}
-                    placeholder="Any team"
-                    emptyText="No teams in this competition"
+                    placeholder={t("anyTeam")}
+                    emptyText={t("noTeams")}
                   />
                 </div>
               )}
               <div className="grid gap-1.5">
-                <Label htmlFor="f-user">{mode === "team" ? "Submitted by" : "Competitor"}</Label>
+                <Label htmlFor="f-user">{mode === "team" ? t("submittedBy") : t("competitor")}</Label>
                 <EntityCombobox
                   id="f-user"
                   options={userOptions}
                   value={draft.user_id}
                   onChange={(v) => set("user_id", v)}
-                  placeholder="Any user"
-                  emptyText="No participants in this competition"
+                  placeholder={t("anyUser")}
+                  emptyText={t("noParticipants")}
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="f-since">From</Label>
+                <Label htmlFor="f-since">{t("from")}</Label>
                 <Input
                   id="f-since"
                   type="datetime-local"
@@ -195,7 +197,7 @@ export function SubmissionsBrowser({
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="f-until">To</Label>
+                <Label htmlFor="f-until">{t("to")}</Label>
                 <Input
                   id="f-until"
                   type="datetime-local"
@@ -205,9 +207,9 @@ export function SubmissionsBrowser({
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button type="submit">Apply filters</Button>
+              <Button type="submit">{t("apply")}</Button>
               <Button type="button" variant="ghost" onClick={reset}>
-                Reset
+                {t("reset")}
               </Button>
               <Button
                 type="button"
@@ -216,7 +218,7 @@ export function SubmissionsBrowser({
                 disabled={exportCsv.isPending}
                 onClick={() => exportCsv.mutate(applied)}
               >
-                {exportCsv.isPending ? "Exporting…" : "Export CSV"}
+                {exportCsv.isPending ? t("exporting") : t("exportCsv")}
               </Button>
             </div>
           </form>
@@ -226,12 +228,12 @@ export function SubmissionsBrowser({
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
           {submissions.isLoading
-            ? "Loading…"
-            : `${showingFrom}–${showingTo} of ${total} submission(s)`}
+            ? t("loading")
+            : t("range", { from: showingFrom, to: showingTo, total })}
         </span>
         <span className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => page(-1)} disabled={offset === 0}>
-            Previous
+            {t("previous")}
           </Button>
           <Button
             variant="outline"
@@ -239,7 +241,7 @@ export function SubmissionsBrowser({
             onClick={() => page(1)}
             disabled={showingTo >= total}
           >
-            Next
+            {t("next")}
           </Button>
         </span>
       </div>
@@ -255,13 +257,13 @@ export function SubmissionsBrowser({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Time (UTC)</TableHead>
-                <TableHead>Challenge</TableHead>
-                {mode === "team" && <TableHead>Team</TableHead>}
-                <TableHead>Submitted by</TableHead>
-                <TableHead>Payload</TableHead>
-                <TableHead>Result</TableHead>
-                <TableHead className="text-right">Points</TableHead>
+                <TableHead>{t("colTime")}</TableHead>
+                <TableHead>{t("challenge")}</TableHead>
+                {mode === "team" && <TableHead>{t("team")}</TableHead>}
+                <TableHead>{t("submittedBy")}</TableHead>
+                <TableHead>{t("colPayload")}</TableHead>
+                <TableHead>{t("colResult")}</TableHead>
+                <TableHead className="text-right">{t("colPoints")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -298,7 +300,7 @@ export function SubmissionsBrowser({
                     colSpan={mode === "team" ? 7 : 6}
                     className="py-8 text-center text-sm text-muted-foreground"
                   >
-                    No submissions match these filters.
+                    {t("empty")}
                   </TableCell>
                 </TableRow>
               )}

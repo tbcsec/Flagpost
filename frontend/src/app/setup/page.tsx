@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
 import { Lockup } from "@/components/brand/flagpost-mark";
@@ -30,6 +31,7 @@ import { toast } from "@/stores/toast";
 // server-side (POST /api/setup 409s once an admin exists), so setup can't be run
 // twice even if the request is crafted by hand.
 export default function SetupPage() {
+  const t = useTranslations("setup");
   const router = useRouter();
   const authStatus = useAuthStore((s) => s.status);
   const { data, isLoading } = useSetupStatus();
@@ -46,14 +48,14 @@ export default function SetupPage() {
       router.replace("/");
       return;
     }
-    const t = setTimeout(() => router.replace("/login"), 3000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => router.replace("/login"), 3000);
+    return () => clearTimeout(timer);
   }, [configured, authStatus, router]);
 
   if (isLoading || !data || quietRedirect) {
     return (
       <main className="flex min-h-screen items-center justify-center">
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-sm text-muted-foreground">{t("loading")}</p>
       </main>
     );
   }
@@ -66,15 +68,12 @@ export default function SetupPage() {
         </div>
         <Card>
           <CardHeader>
-            <CardTitle>Setup already completed</CardTitle>
-            <CardDescription>
-              This instance has already been configured — setup can only run once.
-              Redirecting you to sign in…
-            </CardDescription>
+            <CardTitle>{t("alreadyDone.title")}</CardTitle>
+            <CardDescription>{t("alreadyDone.description")}</CardDescription>
           </CardHeader>
           <CardContent>
             <Button asChild className="w-full">
-              <Link href="/login">Go to sign in</Link>
+              <Link href="/login">{t("alreadyDone.goToSignIn")}</Link>
             </Button>
           </CardContent>
         </Card>
@@ -86,6 +85,7 @@ export default function SetupPage() {
 }
 
 function SetupWizard() {
+  const t = useTranslations("setup");
   const router = useRouter();
   const complete = useCompleteSetup();
 
@@ -131,20 +131,22 @@ function SetupWizard() {
       {
         onSuccess: () => router.replace("/"),
         onError: (e) =>
-          toast("Setup failed", { description: (e as Error).message, variant: "destructive" }),
+          toast(t("failedToast"), { description: (e as Error).message, variant: "destructive" }),
       },
     );
   }
+
+  const steps = [t("steps.account"), t("steps.branding"), t("steps.options")];
 
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-6 p-8">
       <div className="flex flex-col items-center gap-2">
         <Lockup size={40} theme="dark" label={platformName || "Flagpost"} />
-        <p className="text-sm text-muted-foreground">Welcome — let&apos;s set up your instance.</p>
+        <p className="text-sm text-muted-foreground">{t("welcome")}</p>
       </div>
 
       <div className="flex items-center justify-center gap-2" aria-hidden>
-        {["Account", "Branding", "Options"].map((name, i) => (
+        {steps.map((name, i) => (
           <div key={name} className="flex items-center gap-2">
             <span
               className={cn(
@@ -166,27 +168,27 @@ function SetupWizard() {
         {step === 0 && (
           <>
             <CardHeader>
-              <CardTitle>Administrator account</CardTitle>
-              <CardDescription>The owner account. Your username is how you sign in.</CardDescription>
+              <CardTitle>{t("account.title")}</CardTitle>
+              <CardDescription>{t("account.description")}</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="dn">Username</Label>
+                <Label htmlFor="dn">{t("account.username")}</Label>
                 <Input id="dn" autoComplete="username" value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="em">Email (optional)</Label>
+                <Label htmlFor="em">{t("account.email")}</Label>
                 <Input id="em" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="pw">Password</Label>
+                <Label htmlFor="pw">{t("account.password")}</Label>
                 <Input id="pw" type="password" autoComplete="new-password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="cf">Confirm password</Label>
+                <Label htmlFor="cf">{t("account.confirmPassword")}</Label>
                 <Input id="cf" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
                 {confirm.length > 0 && password !== confirm && (
-                  <p role="alert" className="text-xs text-destructive">Passwords don&apos;t match.</p>
+                  <p role="alert" className="text-xs text-destructive">{t("account.mismatch")}</p>
                 )}
               </div>
             </CardContent>
@@ -196,16 +198,16 @@ function SetupWizard() {
         {step === 1 && (
           <>
             <CardHeader>
-              <CardTitle>Branding</CardTitle>
-              <CardDescription>Name and colours for your platform. You can add a logo later on Admin → Site settings → Appearance.</CardDescription>
+              <CardTitle>{t("branding.title")}</CardTitle>
+              <CardDescription>{t("branding.description")}</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-5">
               <div className="grid gap-2">
-                <Label htmlFor="pn">Platform name</Label>
+                <Label htmlFor="pn">{t("branding.platformName")}</Label>
                 <Input id="pn" value={platformName} maxLength={64} onChange={(e) => setPlatformName(e.target.value)} />
               </div>
               <div className="grid gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Palette</span>
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("branding.palette")}</span>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {PALETTES.map((p) => (
                     <button
@@ -224,7 +226,7 @@ function SetupWizard() {
                 </div>
               </div>
               <div className="grid gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Accent</span>
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("branding.accent")}</span>
                 <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
                   {ACCENTS.map((a) => (
                     <button
@@ -249,48 +251,51 @@ function SetupWizard() {
         {step === 2 && (
           <>
             <CardHeader>
-              <CardTitle>Site options</CardTitle>
-              <CardDescription>One last thing. These are all editable later in Admin.</CardDescription>
+              <CardTitle>{t("options.title")}</CardTitle>
+              <CardDescription>{t("options.description")}</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="reg">Public registration</Label>
+                <Label htmlFor="reg">{t("options.registration")}</Label>
                 <Select id="reg" value={registrationOpen ? "open" : "closed"} onChange={(e) => setRegistrationOpen(e.target.value === "open")}>
-                  <option value="open">Open — anyone can create an account</option>
-                  <option value="closed">Closed — you create accounts (Admin → Users)</option>
+                  <option value="open">{t("options.registrationOpen")}</option>
+                  <option value="closed">{t("options.registrationClosed")}</option>
                 </Select>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="upd">Update checks</Label>
+                <Label htmlFor="upd">{t("options.updateChecks")}</Label>
                 <Select id="upd" value={updateChecks ? "on" : "off"} onChange={(e) => setUpdateChecks(e.target.value === "on")}>
-                  <option value="on">On — check daily for new releases</option>
-                  <option value="off">Off — never contact the update service</option>
+                  <option value="on">{t("options.updatesOn")}</option>
+                  <option value="off">{t("options.updatesOff")}</option>
                 </Select>
                 {/* Disclosed here, before the first check can fire, so declining
                     is a choice rather than a correction after the fact. */}
                 <p className="text-xs text-muted-foreground">
-                  Once a day Flagpost asks{" "}
-                  <span className="font-mono">updates.flagpost.io</span> whether a newer
-                  release exists. It sends <strong>only the version you&apos;re running</strong> —
-                  no identifier, no hostname, no competition or user data — and counting those
-                  requests is how the project gauges how many deployments are live.{" "}
-                  <a
-                    href="https://github.com/tbcsec/Flagpost/blob/main/PRIVACY.md"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline"
-                  >
-                    Details
-                  </a>
-                  .
+                  {t.rich("options.updateNote", {
+                    mono: (chunks) => <span className="font-mono">{chunks}</span>,
+                    strong: (chunks) => <strong>{chunks}</strong>,
+                    link: (chunks) => (
+                      <a
+                        href="https://github.com/tbcsec/Flagpost/blob/main/PRIVACY.md"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        {chunks}
+                      </a>
+                    ),
+                  })}
                 </p>
               </div>
               <div className="rounded-md border border-border bg-muted/40 p-3 text-sm">
-                <p className="mb-1 font-medium">Ready to go</p>
+                <p className="mb-1 font-medium">{t("options.readyTitle")}</p>
                 <p className="text-xs text-muted-foreground">
-                  Owner <span className="font-medium text-foreground">{displayName || "—"}</span> ·
-                  Platform <span className="font-medium text-foreground">{platformName || "Flagpost"}</span> ·
-                  Registration {registrationOpen ? "open" : "closed"}
+                  {t.rich("options.summary", {
+                    name: displayName || "—",
+                    platform: platformName || "Flagpost",
+                    state: registrationOpen ? t("options.stateOpen") : t("options.stateClosed"),
+                    em: (chunks) => <span className="font-medium text-foreground">{chunks}</span>,
+                  })}
                 </p>
               </div>
             </CardContent>
@@ -299,15 +304,15 @@ function SetupWizard() {
 
         <CardContent className="flex items-center justify-between border-t border-border pt-4">
           <Button type="button" variant="ghost" onClick={() => setStep((s) => s - 1)} disabled={step === 0}>
-            Back
+            {t("back")}
           </Button>
           {step < 2 ? (
             <Button type="button" onClick={() => setStep((s) => s + 1)} disabled={step === 0 && !accountValid}>
-              Next
+              {t("next")}
             </Button>
           ) : (
             <Button type="button" onClick={onFinish} disabled={!accountValid || complete.isPending}>
-              {complete.isPending ? "Setting up…" : "Finish setup"}
+              {complete.isPending ? t("finishing") : t("finish")}
             </Button>
           )}
         </CardContent>
@@ -316,16 +321,18 @@ function SetupWizard() {
             moment to hand them the bundled Admin guide. */}
         {step === 2 && (
           <CardContent className="pt-0 text-center text-xs text-muted-foreground">
-            Once you&apos;re in:{" "}
-            <a
-              href={GUIDE_PDFS.admin}
-              target="_blank"
-              rel="noreferrer"
-              className="text-primary hover:underline"
-            >
-              the Admin guide (PDF)
-            </a>{" "}
-            walks every surface you just unlocked.
+            {t.rich("guideNote", {
+              link: (chunks) => (
+                <a
+                  href={GUIDE_PDFS.admin}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  {chunks}
+                </a>
+              ),
+            })}
           </CardContent>
         )}
       </Card>

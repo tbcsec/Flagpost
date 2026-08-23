@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ meta.title }} — Flagpost</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <section class="cover">
+    <div class="lockup">
+      <img src="assets/mark-dark.svg" alt="">
+      <span class="wordmark">Flagpost</span>
+    </div>
+
+    <div class="doc-kind">{{ meta.kind }}</div>
+    <h1>{{ meta.title }}</h1>
+    <p class="subtitle">{{ meta.subtitle }}</p>
+    <div class="rule"></div>
+    <p class="meta">
+      For <strong>{{ meta.audience }}</strong> ·
+      Flagpost <strong>{{ version }}</strong> ·
+      {{ date }}
+    </p>
+
+    <div class="cover-foot">
+      Flagpost — open-source CTF competition management ·
+      <span class="site">docs.flagpost.io</span>
+    </div>
+  </section>
+
+  <section class="toc">
+    <h2>Contents</h2>
+    <table>
+      {% for ch in chapters %}
+      <tr>
+        <td class="toc-n">{{ ch.n }}</td>
+        <td class="toc-title"><a href="#{{ ch.id }}">{{ ch.title }}</a></td>
+        <td class="toc-page"><a href="#{{ ch.id }}"></a></td>
+      </tr>
+      {% endfor %}
+    </table>
+  </section>
+
+  {% for ch in chapters %}
+  <section class="chapter" id="{{ ch.id }}">
+    <header>
+      <div class="kicker">Chapter {{ ch.n }}</div>
+      <h1>{{ ch.title }}</h1>
+    </header>
+    {{ ch.html | safe }}
+  </section>
+  {% endfor %}
+
+</body>
+</html>

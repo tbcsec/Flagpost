@@ -1,0 +1,332 @@
+/* Flagpost user-guide print theme.
+ *
+ * Colour values mirror the app's Harbor palette + brand source tokens
+ * (frontend/src/app/globals.css, LOGO-SPEC §2): harbor ink surfaces, the
+ * dark-corrected signal green as the only accent, sheet for the mark. Keep
+ * hue changes in step with the app — this file is the print half of §9.
+ *
+ * Face: Space Grotesk (the brand/display face, vendored in ./fonts — the same
+ * @fontsource files the frontend ships, so the PDF needs no network or system
+ * font). WeasyPrint subsets + embeds it, so the PDFs are self-contained.
+ */
+
+@font-face {
+  font-family: "Space Grotesk";
+  font-weight: 400;
+  src: url("fonts/space-grotesk-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Space Grotesk";
+  font-weight: 500;
+  src: url("fonts/space-grotesk-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Space Grotesk";
+  font-weight: 600;
+  src: url("fonts/space-grotesk-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Space Grotesk";
+  font-weight: 700;
+  src: url("fonts/space-grotesk-latin-700-normal.woff2") format("woff2");
+}
+
+/* ── Page geometry ─────────────────────────────────────────────────────── */
+
+@page {
+  size: A4;
+  margin: 20mm 17mm 20mm;
+
+  @bottom-left {
+    content: string(guide-title);
+    font-family: "Space Grotesk";
+    font-weight: 500;
+    font-size: 7.5pt;
+    color: hsl(213, 20%, 66%);
+  }
+  @bottom-right {
+    content: "Page " counter(page);
+    font-family: "Space Grotesk";
+    font-size: 7.5pt;
+    color: hsl(213, 20%, 66%);
+  }
+}
+
+/* Cover and TOC carry no running footer. */
+@page cover {
+  margin: 0;
+  @bottom-left { content: none; }
+  @bottom-right { content: none; }
+}
+@page toc {
+  @bottom-left { content: none; }
+}
+
+/* ── Base ──────────────────────────────────────────────────────────────── */
+
+html {
+  /* Harbor --background; propagates to the page canvas (full bleed). */
+  background: hsl(213, 41%, 11%);
+}
+
+body {
+  font-family: "Space Grotesk";
+  font-weight: 400;
+  font-size: 9.8pt;
+  line-height: 1.6;
+  color: hsl(210, 34%, 96%);
+}
+
+p { margin: 0 0 7pt; }
+
+a {
+  color: hsl(155, 61%, 52%);
+  text-decoration: none;
+}
+
+strong { font-weight: 600; }
+
+hr {
+  border: none;
+  border-top: 0.5pt solid hsl(213, 30%, 23%);
+  margin: 12pt 0;
+}
+
+ul, ol { margin: 0 0 8pt; padding-left: 16pt; }
+li { margin-bottom: 3pt; }
+li > ul, li > ol { margin-top: 3pt; margin-bottom: 0; }
+
+/* ── Cover ─────────────────────────────────────────────────────────────── */
+
+.cover {
+  page: cover;
+  height: 297mm;
+  padding: 30mm 24mm 26mm;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.cover .lockup {
+  margin-bottom: 58mm;
+}
+.cover .lockup img {
+  height: 34pt;
+  vertical-align: middle;
+}
+.cover .lockup .wordmark {
+  font-size: 27pt;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  margin-left: 9pt;
+  vertical-align: middle;
+}
+
+.cover .doc-kind {
+  color: hsl(155, 61%, 44%);
+  font-weight: 600;
+  font-size: 12pt;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 6pt;
+}
+
+.cover h1 {
+  /* Sets the running-footer string for the rest of the document. */
+  string-set: guide-title content();
+  font-size: 40pt;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  margin: 0 0 10pt;
+}
+
+.cover .subtitle {
+  font-size: 13.5pt;
+  color: hsl(213, 20%, 66%);
+  margin: 0 0 18pt;
+}
+
+.cover .rule {
+  width: 34mm;
+  height: 2.2pt;
+  background: hsl(155, 61%, 44%);
+  margin-bottom: 18pt;
+}
+
+.cover .meta {
+  font-size: 9.5pt;
+  color: hsl(213, 20%, 66%);
+}
+.cover .meta strong { color: hsl(210, 34%, 96%); font-weight: 500; }
+
+.cover .cover-foot {
+  position: absolute;
+  left: 24mm;
+  right: 24mm;
+  bottom: 20mm;
+  border-top: 0.5pt solid hsl(213, 30%, 23%);
+  padding-top: 6pt;
+  font-size: 8.5pt;
+  color: hsl(213, 20%, 66%);
+}
+.cover .cover-foot .site { color: hsl(155, 61%, 52%); }
+
+/* ── Table of contents ─────────────────────────────────────────────────── */
+
+.toc {
+  page: toc;
+  page-break-before: always;
+}
+
+.toc h2 {
+  font-size: 19pt;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0 0 14pt;
+}
+
+.toc table { width: 100%; border-collapse: collapse; }
+
+.toc td {
+  padding: 5.5pt 0;
+  border-bottom: 0.5pt solid hsl(213, 30%, 20%);
+  vertical-align: baseline;
+}
+
+.toc .toc-n {
+  width: 9mm;
+  color: hsl(155, 61%, 44%);
+  font-weight: 600;
+  font-size: 10pt;
+}
+
+.toc .toc-title a { color: hsl(210, 34%, 96%); font-weight: 500; }
+
+.toc .toc-page {
+  width: 12mm;
+  text-align: right;
+  color: hsl(213, 20%, 66%);
+}
+.toc .toc-page a::after {
+  content: target-counter(attr(href), page);
+}
+
+/* ── Chapters ──────────────────────────────────────────────────────────── */
+
+.chapter { page-break-before: always; }
+
+.chapter > header { margin-bottom: 14pt; }
+
+.chapter .kicker {
+  color: hsl(155, 61%, 44%);
+  font-weight: 600;
+  font-size: 8.5pt;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  margin-bottom: 4pt;
+}
+
+.chapter h1 {
+  font-size: 23pt;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  margin: 0 0 6pt;
+}
+
+.chapter > header::after {
+  content: "";
+  display: block;
+  width: 22mm;
+  height: 1.8pt;
+  background: hsl(155, 61%, 44%);
+  margin-top: 8pt;
+}
+
+.chapter h2 {
+  font-size: 13.5pt;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  margin: 14pt 0 6pt;
+  page-break-after: avoid;
+}
+
+.chapter h3 {
+  font-size: 10.8pt;
+  font-weight: 600;
+  color: hsl(155, 61%, 52%);
+  margin: 10pt 0 4pt;
+  page-break-after: avoid;
+}
+
+/* ── Callouts (markdown admonitions) ───────────────────────────────────── */
+
+.admonition {
+  background: hsl(213, 38%, 14%);
+  border-left: 2.5pt solid hsl(155, 61%, 44%);
+  border-radius: 3pt;
+  padding: 7pt 10pt 5pt;
+  margin: 9pt 0;
+  page-break-inside: avoid;
+}
+
+.admonition-title {
+  font-weight: 600;
+  font-size: 9pt;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(155, 61%, 52%);
+  margin-bottom: 3pt;
+}
+
+.admonition.note { border-left-color: hsl(38, 92%, 55%); }
+.admonition.note .admonition-title { color: hsl(38, 92%, 60%); }
+
+/* ── Code & keys ───────────────────────────────────────────────────────── */
+
+code {
+  font-family: "DejaVu Sans Mono", monospace;
+  font-size: 8.6pt;
+  background: hsl(213, 38%, 15%);
+  border: 0.5pt solid hsl(213, 30%, 21%);
+  border-radius: 2.5pt;
+  padding: 0.5pt 3.5pt;
+  color: hsl(155, 45%, 68%);
+}
+
+pre {
+  background: hsl(213, 38%, 14%);
+  border: 0.5pt solid hsl(213, 30%, 21%);
+  border-radius: 4pt;
+  padding: 8pt 10pt;
+  margin: 8pt 0;
+  page-break-inside: avoid;
+}
+pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: hsl(210, 30%, 88%);
+}
+
+/* ── Tables ────────────────────────────────────────────────────────────── */
+
+table { width: 100%; border-collapse: collapse; margin: 8pt 0 10pt; }
+
+th {
+  text-align: left;
+  font-size: 8.3pt;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: hsl(155, 61%, 52%);
+  padding: 4pt 8pt 4pt 0;
+  border-bottom: 1pt solid hsl(155, 61%, 44%);
+}
+
+td {
+  font-size: 9.2pt;
+  padding: 4.5pt 8pt 4.5pt 0;
+  border-bottom: 0.5pt solid hsl(213, 30%, 20%);
+  vertical-align: top;
+}

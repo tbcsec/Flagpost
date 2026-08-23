@@ -37,3 +37,7 @@ minio-data/
 # --- OS cruft ---
 .DS_Store
 Thumbs.db
+
+# --- built user guides ---
+docs/guides/dist/
+

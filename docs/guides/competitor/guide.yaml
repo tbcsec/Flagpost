@@ -1,0 +1,14 @@
+# Competitor guide — the participant-facing manual. Audience: anyone playing
+# a CTF on a Flagpost instance. Staff features live in the Judge/Admin guides.
+slug: flagpost-competitor-guide
+kind: User guide
+title: Competitor Guide
+subtitle: Everything you need to play a CTF on Flagpost
+audience: Participants
+chapters:
+  - { file: 01-getting-started.md, title: Getting started }
+  - { file: 02-joining.md, title: Joining a competition }
+  - { file: 03-challenges.md, title: Solving challenges }
+  - { file: 04-scoring.md, title: "Hints, scoring & the scoreboard" }
+  - { file: 05-team-play.md, title: Playing as a team }
+  - { file: 06-help.md, title: Staying informed & getting help }

@@ -12,3 +12,4 @@ chapters:
   - { file: 04-scoring.md, title: "Hints, scoring & the scoreboard" }
   - { file: 05-team-play.md, title: Playing as a team }
   - { file: 06-help.md, title: Staying informed & getting help }
+  - { file: 07-faq.md, title: FAQ }

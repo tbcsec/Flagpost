@@ -11,3 +11,4 @@ chapters:
   - { file: 03-running.md, title: "Configuring & running the event" }
   - { file: 04-supporting.md, title: Supporting competitors }
   - { file: 05-watching.md, title: Watching the event }
+  - { file: 06-faq.md, title: FAQ }

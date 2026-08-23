@@ -12,3 +12,4 @@ chapters:
   - { file: 04-sign-in.md, title: Sign-in options }
   - { file: 05-competitions.md, title: Competitions }
   - { file: 06-oversight.md, title: "Pages, oversight & backups" }
+  - { file: 07-faq.md, title: FAQ }

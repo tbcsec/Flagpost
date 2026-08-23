@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { Select } from "@/components/ui/select";
+import { GUIDE_PDFS } from "@/lib/guides";
 import {
   useCategories,
   useCreateCategory,
@@ -260,7 +261,15 @@ export function ChallengeAdmin({ competitionId }: { competitionId: string }) {
           title={list.length === 0 ? t("emptyTitle") : t("selectTitle")}
           description={list.length === 0 ? t("emptyBody") : t("selectBody")}
           action={
-            <Button onClick={() => setSelected("new")}>{t("newChallenge")}</Button>
+            <>
+              <Button onClick={() => setSelected("new")}>{t("newChallenge")}</Button>
+              {/* First-authoring orientation: the bundled Judge guide. */}
+              <Button variant="ghost" asChild>
+                <a href={GUIDE_PDFS.judge} target="_blank" rel="noreferrer">
+                  {t("readGuide")}
+                </a>
+              </Button>
+            </>
           }
         />
       )}

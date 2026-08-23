@@ -14,6 +14,7 @@ import {
   useJoinByCode,
   useJoinCompetition,
 } from "@/lib/hooks/use-competitions";
+import { GUIDE_PDFS } from "@/lib/guides";
 import { useAcceptRules, useFetchRules } from "@/lib/hooks/use-rules";
 import { rulesGateRejection, rulesPromptMode } from "@/lib/rules-prompt";
 import type { RichTextDoc } from "@/lib/types";
@@ -168,7 +169,18 @@ export default function LobbyPage() {
 
   return (
     <>
-      <SectionHeader title={t("title")} subtitle={t("subtitle")} />
+      <SectionHeader
+        title={t("title")}
+        subtitle={t("subtitle")}
+        actions={
+          // First-visit orientation: the bundled Competitor guide.
+          <Button variant="ghost" asChild>
+            <a href={GUIDE_PDFS.competitor} target="_blank" rel="noreferrer">
+              {t("readGuide")}
+            </a>
+          </Button>
+        }
+      />
 
       {prompt && (
         <RulesAcceptModal

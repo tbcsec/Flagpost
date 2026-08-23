@@ -10,6 +10,7 @@ import { AnnouncementBanner } from "@/components/announcements/announcement-bann
 import { DemoBanner } from "@/components/app/demo-banner";
 import { CertificateReleaseWatcher } from "@/components/certificates/certificate-release-watcher";
 import { UpdateNotice } from "@/components/admin/update-notice";
+import { HelpMenu } from "@/components/app/help-menu";
 import { LanguageMenu } from "@/components/app/language-menu";
 import { PageIcon } from "@/components/app/page-icons";
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
@@ -702,6 +703,7 @@ function Topbar({
         )}
       </div>
 
+      <HelpMenu />
       <LanguageMenu />
       <PaletteMenu />
     </div>

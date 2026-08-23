@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { GUIDE_PDFS } from "@/lib/guides";
 import { useCompleteSetup, useSetupStatus } from "@/lib/hooks/use-setup";
 import { ACCENTS, PALETTES, applyTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -310,6 +311,23 @@ function SetupWizard() {
             </Button>
           )}
         </CardContent>
+
+        {/* Finishing drops the owner straight into the app, so this is the one
+            moment to hand them the bundled Admin guide. */}
+        {step === 2 && (
+          <CardContent className="pt-0 text-center text-xs text-muted-foreground">
+            Once you&apos;re in:{" "}
+            <a
+              href={GUIDE_PDFS.admin}
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary hover:underline"
+            >
+              the Admin guide (PDF)
+            </a>{" "}
+            walks every surface you just unlocked.
+          </CardContent>
+        )}
       </Card>
     </main>
   );

@@ -14,6 +14,8 @@ export interface User {
   // Email verification (#74): null = unverified (or the account is exempt /
   // predates the gate). Drives the profile "verify your email" banner.
   email_verified_at: string | null;
+  // Profile picture: null = none. Doubles as the avatar URL cache-buster.
+  avatar_updated_at: string | null;
 }
 
 export interface TokenResponse {
@@ -705,6 +707,8 @@ export interface UserAccount {
   is_active: boolean;
   is_administrator: boolean;
   created_at: string;
+  // Profile picture flag/cache-buster — drives the admin "remove picture" action.
+  avatar_updated_at: string | null;
 }
 
 /** One CSV row's outcome in the mass user import report (#171). `row` is the

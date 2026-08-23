@@ -74,6 +74,7 @@ async def _out(db: AsyncSession, user: User, admin_ids: set[str] | None = None) 
         is_active=user.is_active,
         is_administrator=user.id in admin_ids,
         created_at=user.created_at,
+        avatar_updated_at=user.avatar_updated_at,
     )
 
 

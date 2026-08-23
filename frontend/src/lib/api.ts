@@ -365,6 +365,14 @@ export const authApi = {
   // Self-service add / change / clear of your own address (#106). Returns the
   // updated UserOut — the same shape the auth store already holds, so the
   // caller can drop it straight in.
+  // Profile picture (self-service). The server re-encodes; response is the
+  // updated user (fresh avatar_updated_at for the cache-buster).
+  uploadAvatar: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiFetch<User>("/api/profile/avatar", { method: "POST", body: form });
+  },
+  removeAvatar: () => apiFetch<void>("/api/profile/avatar", { method: "DELETE" }),
   changeEmail: (input: { current_password: string; new_email: string | null }) =>
     apiFetch<User>("/api/auth/change-email", {
       method: "POST",
@@ -555,6 +563,9 @@ export const usersApi = {
       body: JSON.stringify(input),
     }),
   ban: (id: string) => apiFetch<UserAccount>(`/api/users/${id}/ban`, { method: "POST" }),
+  // Moderation: strip a user's profile picture (manage_users).
+  removeAvatar: (id: string) =>
+    apiFetch<void>(`/api/users/${id}/avatar`, { method: "DELETE" }),
   unban: (id: string) =>
     apiFetch<UserAccount>(`/api/users/${id}/unban`, { method: "POST" }),
   remove: (id: string) => apiFetch<void>(`/api/users/${id}`, { method: "DELETE" }),

@@ -1025,6 +1025,17 @@
       "released": "Liberado {date}",
       "preparing": "Preparando…",
       "download": "Descargar"
+    },
+    "avatar": {
+      "title": "Profile picture",
+      "description": "Shown beside your name across the platform. PNG, JPEG, or WebP — it's resized to a square for you.",
+      "upload": "Upload picture",
+      "replace": "Replace picture",
+      "remove": "Remove",
+      "uploading": "Uploading…",
+      "updatedToast": "Profile picture updated",
+      "removedToast": "Profile picture removed",
+      "uploadFailed": "Couldn't update your picture"
     }
   },
   "teams": {

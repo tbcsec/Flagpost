@@ -9,6 +9,7 @@ const user: User = {
   display_name: "Ada",
   created_at: new Date().toISOString(),
   email_verified_at: null,
+  avatar_updated_at: null,
 };
 
 beforeEach(() => {

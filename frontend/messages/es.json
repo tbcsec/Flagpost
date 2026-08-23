@@ -1324,5 +1324,56 @@
       "title": "Delete this page?",
       "description": "“{title}” will be removed and its link will stop working. This can't be undone."
     }
+  },
+  "setup": {
+    "loading": "Loading…",
+    "alreadyDone": {
+      "title": "Setup already completed",
+      "description": "This instance has already been configured — setup can only run once. Redirecting you to sign in…",
+      "goToSignIn": "Go to sign in"
+    },
+    "welcome": "Welcome — let's set up your instance.",
+    "steps": {
+      "account": "Account",
+      "branding": "Branding",
+      "options": "Options"
+    },
+    "account": {
+      "title": "Administrator account",
+      "description": "The owner account. Your username is how you sign in.",
+      "username": "Username",
+      "email": "Email (optional)",
+      "password": "Password",
+      "confirmPassword": "Confirm password",
+      "mismatch": "Passwords don't match."
+    },
+    "branding": {
+      "title": "Branding",
+      "description": "Name and colours for your platform. You can add a logo later on Admin → Site settings → Appearance.",
+      "platformName": "Platform name",
+      "palette": "Palette",
+      "accent": "Accent"
+    },
+    "options": {
+      "title": "Site options",
+      "description": "One last thing. These are all editable later in Admin.",
+      "registration": "Public registration",
+      "registrationOpen": "Open — anyone can create an account",
+      "registrationClosed": "Closed — you create accounts (Admin → Users)",
+      "updateChecks": "Update checks",
+      "updatesOn": "On — check daily for new releases",
+      "updatesOff": "Off — never contact the update service",
+      "updateNote": "Once a day Flagpost asks <mono>updates.flagpost.io</mono> whether a newer release exists. It sends <strong>only the version you're running</strong> — no identifier, no hostname, no competition or user data — and counting those requests is how the project gauges how many deployments are live. <link>Details</link>.",
+      "readyTitle": "Ready to go",
+      "summary": "Owner <em>{name}</em> · Platform <em>{platform}</em> · Registration {state}",
+      "stateOpen": "open",
+      "stateClosed": "closed"
+    },
+    "back": "Back",
+    "next": "Next",
+    "finishing": "Setting up…",
+    "finish": "Finish setup",
+    "failedToast": "Setup failed",
+    "guideNote": "Once you're in: <link>the Admin guide (PDF)</link> walks every surface you just unlocked."
   }
 }

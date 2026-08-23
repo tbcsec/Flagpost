@@ -22,10 +22,14 @@ describe("NoCompetition", () => {
     ).toHaveAttribute("href", "/admin/competitions");
   });
 
-  it("shows a reassuring message with no CTA to a competitor", () => {
+  it("shows a reassuring message with only the guide link to a competitor", () => {
     mockHas.mockReturnValue(false);
     renderWithIntl(<NoCompetition />);
     expect(screen.getByText(/Check back soon/)).toBeInTheDocument();
-    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    // No manage CTA — but the bundled Competitor guide is always offered.
+    expect(screen.queryByRole("link", { name: "Manage competitions" })).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "Read the Competitor guide" }),
+    ).toHaveAttribute("href", "/guides/flagpost-competitor-guide.pdf");
   });
 });

@@ -146,7 +146,14 @@
       "title": "Pas de compétition chargée",
       "descriptionCanCreate": "Il n'y a pas encore de compétition. Créez-en une pour ouvrir ses défis, ses équipes, son tableau de bord, et plus encore.",
       "description": "Il n'y a pas encore de compétitions disponibles pour vous. Revenez bientôt.",
-      "manage": "Gérer les compétitions"
+      "manage": "Gérer les compétitions",
+      "readGuide": "Read the Competitor guide"
+    },
+    "help": {
+      "title": "User guides",
+      "competitor": "Competitor guide",
+      "judge": "Judge guide",
+      "admin": "Admin guide"
     }
   },
   "scoreboard": {
@@ -370,7 +377,8 @@
     "join": "Rejoindre",
     "publicTitle": "Compétitions publiques",
     "publicDescription": "Ouvrir pour rejoindre dès maintenant",
-    "empty": "Aucune compétition publique pour le moment."
+    "empty": "Aucune compétition publique pour le moment.",
+    "readGuide": "Competitor guide"
   },
   "auth": {
     "login": {
@@ -703,7 +711,8 @@
       "savedToast": "Changes saved",
       "createdToast": "Challenge created",
       "deletedToast": "Challenge deleted",
-      "scheduledShort": "scheduled"
+      "scheduledShort": "scheduled",
+      "readGuide": "Read the Judge guide"
     },
     "backToChallenges": "Back to challenges"
   },

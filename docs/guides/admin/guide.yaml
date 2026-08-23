@@ -1,0 +1,15 @@
+# Admin guide — global, site-wide administration. Competition-scoped staff
+# work lives in the Judge guide; deployment/ops lives on docs.flagpost.io.
+slug: flagpost-admin-guide
+kind: User guide
+title: Admin Guide
+subtitle: Operating a Flagpost site
+audience: Administrators
+chapters:
+  - { file: 01-owner.md, title: Becoming the administrator }
+  - { file: 02-site-settings.md, title: "Site settings & branding" }
+  - { file: 03-users-roles.md, title: "Users & roles" }
+  - { file: 04-sign-in.md, title: Sign-in options }
+  - { file: 05-competitions.md, title: Competitions }
+  - { file: 06-oversight.md, title: "Pages, oversight & backups" }
+  - { file: 07-faq.md, title: FAQ }

@@ -146,7 +146,14 @@
       "title": "No competition loaded",
       "descriptionCanCreate": "There aren't any competitions yet. Create one to open its challenges, teams, scoreboard, and more.",
       "description": "There aren't any competitions available to you yet. Check back soon.",
-      "manage": "Manage competitions"
+      "manage": "Manage competitions",
+      "readGuide": "Read the Competitor guide"
+    },
+    "help": {
+      "title": "User guides",
+      "competitor": "Competitor guide",
+      "judge": "Judge guide",
+      "admin": "Admin guide"
     }
   },
   "scoreboard": {
@@ -370,7 +377,8 @@
     "join": "Join",
     "publicTitle": "Public competitions",
     "publicDescription": "Open to join right now",
-    "empty": "No public competitions right now."
+    "empty": "No public competitions right now.",
+    "readGuide": "Competitor guide"
   },
   "auth": {
     "login": {
@@ -704,7 +712,8 @@
         "resetEveryoneConfirmTitle": "Reset guesses for everyone?",
         "resetEveryoneConfirmDescription": "Every competitor gets a fresh set of guesses on this challenge. Their submission history is kept.",
         "resetEveryoneConfirmLabel": "Reset for everyone"
-      }
+      },
+      "readGuide": "Read the Judge guide"
     }
   },
   "support": {

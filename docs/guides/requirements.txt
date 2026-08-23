@@ -1,0 +1,7 @@
+# Tooling for building the branded user-guide PDFs (docs/guides/build.py).
+# weasyprint needs system Pango/cairo/gdk-pixbuf — same requirement as the
+# reports module (see backend Dockerfile's report ops stage).
+weasyprint>=69,<70
+Markdown>=3.10,<4.0
+Jinja2>=3.1.6,<4.0
+PyYAML>=6.0.3,<7.0

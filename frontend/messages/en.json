@@ -1415,5 +1415,98 @@
     "finish": "Finish setup",
     "failedToast": "Setup failed",
     "guideNote": "Once you're in: <link>the Admin guide (PDF)</link> walks every surface you just unlocked."
+  },
+  "analytics": {
+    "title": "Analytics",
+    "subtitle": "{name} · read-only reporting",
+    "noAccess": "You don't have access to this competition's analytics.",
+    "moduleDisabled": "The analytics module is disabled for this competition.",
+    "tabs": {
+      "overview": "Overview",
+      "submissions": "Submissions"
+    },
+    "perChallenge": "Per-challenge",
+    "searchChallenges": "Search challenges…",
+    "teams": "Teams",
+    "competitors": "Competitors",
+    "searchTeams": "Search teams…",
+    "searchCompetitors": "Search competitors…",
+    "failed": "({count} failed)",
+    "noChallengeMatch": "No challenges match your search.",
+    "noChallenges": "No challenges yet.",
+    "noTeamMatch": "Nobody matches your search.",
+    "noParticipants": "No participants yet.",
+    "col": {
+      "challenge": "Challenge",
+      "category": "Category",
+      "points": "Points",
+      "solves": "Solves",
+      "completion": "Completion",
+      "avgTime": "Avg. time",
+      "attempts": "Attempts",
+      "hints": "Hints",
+      "tickets": "Tickets",
+      "rating": "Rating",
+      "rankSymbol": "#",
+      "team": "Team",
+      "competitor": "Competitor",
+      "firstBloods": "First bloods",
+      "lastSolve": "Last solve"
+    },
+    "stats": {
+      "challenges": "Challenges",
+      "totalSolves": "Total solves",
+      "totalAttempts": "Total attempts"
+    },
+    "insights": {
+      "least_solved": {
+        "label": "Least solved",
+        "detail": "{solves} solves · {attempts} attempts"
+      },
+      "most_attempted": {
+        "label": "Most attempted",
+        "detail": "{attempts} attempts · {solves} solves"
+      },
+      "most_tickets": {
+        "label": "Most tickets",
+        "detail": "{count, plural, one {# ticket} other {# tickets}}"
+      },
+      "most_first_bloods": {
+        "label": "Most first bloods",
+        "detail": "{count, plural, one {# first blood} other {# first bloods}} · rank #{rank}"
+      }
+    },
+    "submissions": {
+      "searchPayload": "Search submitted payload…",
+      "challenge": "Challenge",
+      "allChallenges": "All challenges",
+      "correctness": "Correctness",
+      "all": "All",
+      "correct": "Correct",
+      "incorrect": "Incorrect",
+      "duplicate": "Duplicate",
+      "team": "Team",
+      "anyTeam": "Any team",
+      "noTeams": "No teams in this competition",
+      "submittedBy": "Submitted by",
+      "competitor": "Competitor",
+      "anyUser": "Any user",
+      "noParticipants": "No participants in this competition",
+      "from": "From",
+      "to": "To",
+      "apply": "Apply filters",
+      "reset": "Reset",
+      "exporting": "Exporting…",
+      "exportCsv": "Export CSV",
+      "loading": "Loading…",
+      "range": "{from}–{to} of {total, plural, one {# submission} other {# submissions}}",
+      "previous": "Previous",
+      "next": "Next",
+      "colTime": "Time (UTC)",
+      "colPayload": "Payload",
+      "colResult": "Result",
+      "colPoints": "Points",
+      "empty": "No submissions match these filters."
+    }
   }
 }

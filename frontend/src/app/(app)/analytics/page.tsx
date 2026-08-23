@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
@@ -34,17 +35,14 @@ import type {
 
 type Tab = "overview" | "submissions";
 
-const TABS: { value: Tab; label: string }[] = [
-  { value: "overview", label: "Overview" },
-  { value: "submissions", label: "Submissions" },
-];
-
 // Challenge & team analytics (ROADMAP #23) — read-only reporting off the
 // submissions / hints / tickets data scoring already records. Staff-gated
 // (view_competition_analytics); the `analytics` optional module can be disabled.
 // The Submissions tab (ROADMAP #76) is a separate, narrower-gated
 // (view_submissions) raw-payload browser for dispute resolution.
 export default function AnalyticsPage() {
+  const t = useTranslations("analytics");
+  const tn = useTranslations("common.nouns");
   const { data: competition } = useActiveCompetition();
   const access = useAccess();
   const canView = access.has("view_competition_analytics");
@@ -54,6 +52,11 @@ export default function AnalyticsPage() {
 
   const challenges = useChallengeAnalytics(competition?.id ?? "", enabled);
   const teams = useTeamAnalytics(competition?.id ?? "", enabled);
+
+  const TABS: { value: Tab; label: string }[] = [
+    { value: "overview", label: t("tabs.overview") },
+    { value: "submissions", label: t("tabs.submissions") },
+  ];
 
   // Sort / search / pagination (#16 #17 #20) — two independent instances, one
   // per table, derived off the fetched reports.
@@ -88,16 +91,16 @@ export default function AnalyticsPage() {
   return (
     <>
       <SectionHeader
-        title="Analytics"
-        subtitle={`${competition?.name ?? ""} · read-only reporting`}
+        title={t("title")}
+        subtitle={t("subtitle", { name: competition?.name ?? "" })}
       />
 
       {!access.ready ? (
         <Skeleton className="h-24" />
       ) : !canView ? (
-        <EmptyCard>You don&apos;t have access to this competition&apos;s analytics.</EmptyCard>
+        <EmptyCard>{t("noAccess")}</EmptyCard>
       ) : challenges.isError ? (
-        <EmptyCard>The analytics module is disabled for this competition.</EmptyCard>
+        <EmptyCard>{t("moduleDisabled")}</EmptyCard>
       ) : challenges.isLoading || !challenges.data ? (
         <div className="grid gap-4">
           <Skeleton className="h-24" />
@@ -118,28 +121,28 @@ export default function AnalyticsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Per-challenge</CardTitle>
+                <CardTitle>{t("perChallenge")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <TableSearchInput
                   value={challengeTable.query}
                   onChange={challengeTable.setQuery}
-                  placeholder="Search challenges…"
+                  placeholder={t("searchChallenges")}
                   className="mb-4"
                 />
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <Sortable table={challengeTable} k="title">Challenge</Sortable>
-                      <Sortable table={challengeTable} k="category">Category</Sortable>
-                      <Sortable table={challengeTable} k="points" right>Points</Sortable>
-                      <Sortable table={challengeTable} k="solves" right>Solves</Sortable>
-                      <Sortable table={challengeTable} k="completion" right>Completion</Sortable>
-                      <Sortable table={challengeTable} k="avg_time" right>Avg. time</Sortable>
-                      <Sortable table={challengeTable} k="attempts" right>Attempts</Sortable>
-                      <Sortable table={challengeTable} k="hints" right>Hints</Sortable>
-                      <Sortable table={challengeTable} k="tickets" right>Tickets</Sortable>
-                      <Sortable table={challengeTable} k="rating" right>Rating</Sortable>
+                      <Sortable table={challengeTable} k="title">{t("col.challenge")}</Sortable>
+                      <Sortable table={challengeTable} k="category">{t("col.category")}</Sortable>
+                      <Sortable table={challengeTable} k="points" right>{t("col.points")}</Sortable>
+                      <Sortable table={challengeTable} k="solves" right>{t("col.solves")}</Sortable>
+                      <Sortable table={challengeTable} k="completion" right>{t("col.completion")}</Sortable>
+                      <Sortable table={challengeTable} k="avg_time" right>{t("col.avgTime")}</Sortable>
+                      <Sortable table={challengeTable} k="attempts" right>{t("col.attempts")}</Sortable>
+                      <Sortable table={challengeTable} k="hints" right>{t("col.hints")}</Sortable>
+                      <Sortable table={challengeTable} k="tickets" right>{t("col.tickets")}</Sortable>
+                      <Sortable table={challengeTable} k="rating" right>{t("col.rating")}</Sortable>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -167,7 +170,7 @@ export default function AnalyticsPage() {
                         <TableCell className="text-right font-mono">
                           {c.attempt_count}
                           {c.fail_count > 0 && (
-                            <span className="text-muted-foreground"> ({c.fail_count} failed)</span>
+                            <span className="text-muted-foreground"> {t("failed", { count: c.fail_count })}</span>
                           )}
                         </TableCell>
                         <TableCell className="text-right font-mono">{c.hints_used}</TableCell>
@@ -188,42 +191,42 @@ export default function AnalyticsPage() {
                       <TableRow>
                         <TableCell colSpan={10} className="text-center text-muted-foreground">
                           {challengeTable.query
-                            ? "No challenges match your search."
-                            : "No challenges yet."}
+                            ? t("noChallengeMatch")
+                            : t("noChallenges")}
                         </TableCell>
                       </TableRow>
                     )}
                   </TableBody>
                 </Table>
-                <TablePagination table={challengeTable} noun="challenges" className="mt-4" />
+                <TablePagination table={challengeTable} noun={tn("challenges")} className="mt-4" />
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle>{challenges.data.mode === "team" ? "Teams" : "Competitors"}</CardTitle>
+                <CardTitle>{challenges.data.mode === "team" ? t("teams") : t("competitors")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <TableSearchInput
                   value={teamTable.query}
                   onChange={teamTable.setQuery}
                   placeholder={
-                    challenges.data.mode === "team" ? "Search teams…" : "Search competitors…"
+                    challenges.data.mode === "team" ? t("searchTeams") : t("searchCompetitors")
                   }
                   className="mb-4"
                 />
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <Sortable table={teamTable} k="rank" right>#</Sortable>
+                      <Sortable table={teamTable} k="rank" right>{t("col.rankSymbol")}</Sortable>
                       <Sortable table={teamTable} k="name">
-                        {challenges.data.mode === "team" ? "Team" : "Competitor"}
+                        {challenges.data.mode === "team" ? t("col.team") : t("col.competitor")}
                       </Sortable>
-                      <Sortable table={teamTable} k="points" right>Points</Sortable>
-                      <Sortable table={teamTable} k="solves" right>Solves</Sortable>
-                      <Sortable table={teamTable} k="first_bloods" right>First bloods</Sortable>
-                      <Sortable table={teamTable} k="tickets" right>Tickets</Sortable>
-                      <Sortable table={teamTable} k="last_solve" right>Last solve</Sortable>
+                      <Sortable table={teamTable} k="points" right>{t("col.points")}</Sortable>
+                      <Sortable table={teamTable} k="solves" right>{t("col.solves")}</Sortable>
+                      <Sortable table={teamTable} k="first_bloods" right>{t("col.firstBloods")}</Sortable>
+                      <Sortable table={teamTable} k="tickets" right>{t("col.tickets")}</Sortable>
+                      <Sortable table={teamTable} k="last_solve" right>{t("col.lastSolve")}</Sortable>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -252,8 +255,8 @@ export default function AnalyticsPage() {
                       <TableRow>
                         <TableCell colSpan={7} className="text-center text-muted-foreground">
                           {teamTable.query
-                            ? "Nobody matches your search."
-                            : "No participants yet."}
+                            ? t("noTeamMatch")
+                            : t("noParticipants")}
                         </TableCell>
                       </TableRow>
                     )}
@@ -261,7 +264,7 @@ export default function AnalyticsPage() {
                 </Table>
                 <TablePagination
                   table={teamTable}
-                  noun={challenges.data.mode === "team" ? "teams" : "competitors"}
+                  noun={challenges.data.mode === "team" ? tn("teams") : tn("competitors")}
                   className="mt-4"
                 />
               </CardContent>
@@ -304,13 +307,14 @@ function Sortable<T>({
 }
 
 function Overview({ report }: { report: ChallengeAnalyticsReport }) {
+  const t = useTranslations("analytics");
   const totalSolves = report.challenges.reduce((n, c) => n + c.solve_count, 0);
   const totalAttempts = report.challenges.reduce((n, c) => n + c.attempt_count, 0);
   const stats = [
-    { label: report.mode === "team" ? "Teams" : "Competitors", value: report.subject_count },
-    { label: "Challenges", value: report.challenges.length },
-    { label: "Total solves", value: totalSolves },
-    { label: "Total attempts", value: totalAttempts },
+    { label: report.mode === "team" ? t("teams") : t("competitors"), value: report.subject_count },
+    { label: t("stats.challenges"), value: report.challenges.length },
+    { label: t("stats.totalSolves"), value: totalSolves },
+    { label: t("stats.totalAttempts"), value: totalAttempts },
   ];
   return (
     <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -337,6 +341,7 @@ function Insights({
   challenges: ChallengeAnalytics[];
   teams: TeamAnalytics[];
 }) {
+  const t = useTranslations("analytics.insights");
   const cards = analyticsInsights(challenges, teams);
   if (cards.length === 0) return null;
   return (
@@ -344,11 +349,13 @@ function Insights({
       {cards.map((c) => (
         <Card key={c.key} className="self-start">
           <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground">{c.label}</div>
+            <div className="text-xs text-muted-foreground">{t(`${c.key}.label`)}</div>
             <div className="mt-1 truncate text-sm font-medium" title={c.value}>
               {c.value}
             </div>
-            <div className="mt-0.5 text-xs text-muted-foreground">{c.detail}</div>
+            <div className="mt-0.5 text-xs text-muted-foreground">
+              {t(`${c.key}.detail`, c.detailParams)}
+            </div>
           </CardContent>
         </Card>
       ))}

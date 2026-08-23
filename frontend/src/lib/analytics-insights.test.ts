@@ -54,7 +54,7 @@ describe("analyticsInsights", () => {
       ),
     );
     expect(cards.least_solved.value).toBe("Wall");
-    expect(cards.least_solved.detail).toBe("1 solves · 40 attempts");
+    expect(cards.least_solved.detailParams).toEqual({ solves: 1, attempts: 40 });
   });
 
   it("ignores drafts — a zero-solve draft must not win least-solved", () => {
@@ -82,7 +82,7 @@ describe("analyticsInsights", () => {
     );
     expect(cards.most_attempted.value).toBe("B");
     expect(cards.most_tickets.value).toBe("B");
-    expect(cards.most_tickets.detail).toBe("4 tickets");
+    expect(cards.most_tickets.detailParams).toEqual({ count: 4 });
   });
 
   it("picks the first-blood leader from the subjects table", () => {
@@ -96,18 +96,18 @@ describe("analyticsInsights", () => {
       ),
     );
     expect(cards.most_first_bloods.value).toBe("Bravo");
-    expect(cards.most_first_bloods.detail).toBe("3 first bloods · rank #5");
+    expect(cards.most_first_bloods.detailParams).toEqual({ count: 3, rank: 5 });
   });
 
-  it("singularizes correctly", () => {
+  it("carries the raw counts for the detail message (pluralised in the view)", () => {
     const cards = byKey(
       analyticsInsights(
         [challenge({ ticket_count: 1 })],
         [team({ first_bloods: 1 })],
       ),
     );
-    expect(cards.most_tickets.detail).toBe("1 ticket");
-    expect(cards.most_first_bloods.detail).toBe("1 first blood · rank #1");
+    expect(cards.most_tickets.detailParams).toEqual({ count: 1 });
+    expect(cards.most_first_bloods.detailParams).toEqual({ count: 1, rank: 1 });
   });
 
   it("omits cards whose question has no meaningful answer", () => {

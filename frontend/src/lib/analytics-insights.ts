@@ -2,15 +2,27 @@
 // over the two reports the page already fetches, so no new endpoint and no
 // extra requests (and, via the #18 activity room, they update live for free).
 // Mirrors the lib/data-table.ts split: logic here, rendering in the page.
+//
+// This layer stays i18n-free: it returns the *winner* and the raw metric
+// numbers, and the page renders the label/detail via next-intl (#248). That
+// keeps the plural/format concerns in the message catalog, not baked into logic.
 
 import type { ChallengeAnalytics, TeamAnalytics } from "@/lib/types";
 
+/** Which of the four judge-question cards this is — the page maps it to a
+ *  translated label and detail message. */
+export type AnalyticsInsightKey =
+  | "least_solved"
+  | "most_attempted"
+  | "most_tickets"
+  | "most_first_bloods";
+
 export interface AnalyticsInsight {
-  key: string;
-  label: string;
-  /** The headline — a challenge title or competitor/team name. */
+  key: AnalyticsInsightKey;
+  /** The headline — a challenge title or competitor/team name (data, verbatim). */
   value: string;
-  detail: string;
+  /** Numbers for the detail line's ICU message, keyed to match its placeholders. */
+  detailParams: Record<string, number>;
 }
 
 /** Highest `metric` wins; ties break toward the earlier row (tables arrive
@@ -51,9 +63,11 @@ export function analyticsInsights(
   if (leastSolved) {
     insights.push({
       key: "least_solved",
-      label: "Least solved",
       value: leastSolved.title,
-      detail: `${leastSolved.solve_count} solves · ${leastSolved.attempt_count} attempts`,
+      detailParams: {
+        solves: leastSolved.solve_count,
+        attempts: leastSolved.attempt_count,
+      },
     });
   }
 
@@ -61,9 +75,11 @@ export function analyticsInsights(
   if (mostAttempted && mostAttempted.attempt_count > 0) {
     insights.push({
       key: "most_attempted",
-      label: "Most attempted",
       value: mostAttempted.title,
-      detail: `${mostAttempted.attempt_count} attempts · ${mostAttempted.solve_count} solves`,
+      detailParams: {
+        attempts: mostAttempted.attempt_count,
+        solves: mostAttempted.solve_count,
+      },
     });
   }
 
@@ -73,9 +89,8 @@ export function analyticsInsights(
   if (mostTickets && mostTickets.ticket_count > 0) {
     insights.push({
       key: "most_tickets",
-      label: "Most tickets",
       value: mostTickets.title,
-      detail: `${mostTickets.ticket_count} ticket${mostTickets.ticket_count === 1 ? "" : "s"}`,
+      detailParams: { count: mostTickets.ticket_count },
     });
   }
 
@@ -83,11 +98,11 @@ export function analyticsInsights(
   if (mostFirstBloods && mostFirstBloods.first_bloods > 0) {
     insights.push({
       key: "most_first_bloods",
-      label: "Most first bloods",
       value: mostFirstBloods.name,
-      detail: `${mostFirstBloods.first_bloods} first blood${
-        mostFirstBloods.first_bloods === 1 ? "" : "s"
-      } · rank #${mostFirstBloods.rank}`,
+      detailParams: {
+        count: mostFirstBloods.first_bloods,
+        rank: mostFirstBloods.rank,
+      },
     });
   }
 

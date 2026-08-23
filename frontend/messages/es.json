@@ -1212,6 +1212,46 @@
         "saving": "Guardando…",
         "decline": "No ahora"
       }
+    },
+    "transcripts": {
+      "title": "AI transcripts",
+      "subtitle": "Competitor conversations with the assistant — read-only oversight",
+      "noAccessTitle": "No access",
+      "noAccessDescription": "You need the AI-transcripts permission to review assistant conversations.",
+      "emptyTitle": "No conversations yet",
+      "emptyDescription": "Competitor chats with the assistant will appear here as they happen.",
+      "searchPlaceholder": "Search participants…",
+      "searchAria": "Search participants by name",
+      "noMatch": "No participants match “{query}”.",
+      "messages": "{count, plural, one {# message} other {# messages}}",
+      "closedSuffix": " · closed",
+      "selectPrompt": "Select a conversation to read it.",
+      "assistantBadge": "competitor assistant",
+      "closedBadge": "closed",
+      "roleCompetitor": "competitor",
+      "roleAssistant": "assistant"
+    },
+    "competitionPanel": {
+      "title": "Competitor assistant",
+      "description": "An AI chat competitors can open while the competition is running. It is read-only, structurally unable to see flags or unpublished challenges, and every conversation is reviewable by staff who hold the transcript permission. Requires the site-wide AI module to be configured and enabled.",
+      "availability": "Availability",
+      "availOff": "Off — competitors get no assistant",
+      "availOn": "On — available while the competition runs",
+      "guidanceLevel": "Guidance level",
+      "inheritDefault": "Inherit site default ({label})",
+      "guidancePlatformOnly": "Platform only — no challenge-solving help",
+      "guidanceConceptual": "Conceptual — general background topics, nothing specific",
+      "guidanceGuided": "Guided — approaches and nudges, never full solutions",
+      "guidanceHint": "Controls how the assistant behaves. It shapes the model's instructions and is best-effort — it is not a data guarantee, and transcripts are how you verify it's being followed.",
+      "challengeDetails": "Challenge details",
+      "metaHidden": "Hidden — the assistant can't read any challenge",
+      "metaVisible": "Visible — public challenge info only (never flags)",
+      "metaHint": "A hard switch on what the assistant can <em>see</em>, separate from the guidance level: when hidden, the challenge-reading tools don't exist for the model at all.",
+      "savedToast": "Assistant settings saved",
+      "saveFailed": "Couldn't save",
+      "saving": "Saving…",
+      "save": "Save changes",
+      "lastSaved": "Last saved {date}"
     }
   },
   "competitions": {

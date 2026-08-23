@@ -47,3 +47,19 @@ WeasyPrint needs system Pango/cairo/gdk-pixbuf (the same libraries the
 reports module documents; present in the backend image). The cover's version
 stamp is read from `SOURCE_BUILD_VERSION` in `backend/config.py` — rebuild the
 guides when cutting a release (CONTRIBUTING → "Cutting a release").
+
+## Refreshing screenshots
+
+Chapter screenshots live in `<slug>/assets/` and are captured from a running
+**demo-mode** dev stack (`admin`/`participant` well-known accounts) by
+`capture.py` — headless Chromium driven over CDP, signed in as the
+*participant* so every shot is authentically competitor-view:
+
+```bash
+docker compose -f docker-compose.dev.yml up -d   # demo stack on :3000/:8000
+python capture.py                                # needs httpx + websockets
+```
+
+If the demo competition's status gate shows "ended" (its hourly-reset window
+has lapsed), start it again as `admin` first. Re-capture whenever a pictured
+surface changes materially — stale screenshots read as neglect.

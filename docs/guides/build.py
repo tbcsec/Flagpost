@@ -89,7 +89,9 @@ def build_guide(guide_dir: Path, version: str, date: str) -> Path:
 
     DIST.mkdir(exist_ok=True)
     out = DIST / f"{meta['slug']}.pdf"
-    HTML(string=document, base_url=str(ROOT / "theme")).write_pdf(out)
+    # base_url is the guide directory: chapter images resolve as `assets/…`,
+    # and the template reaches the shared theme via `../theme/…`.
+    HTML(string=document, base_url=str(guide_dir)).write_pdf(out)
     return out
 
 

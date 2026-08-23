@@ -36,6 +36,9 @@
 @page {
   size: A4;
   margin: 20mm 17mm 20mm;
+  /* The page canvas itself — html's background does not reach the margin
+     area on margined pages, so paint the ink here for true full-bleed. */
+  background: hsl(213, 41%, 11%);
 
   @bottom-left {
     content: string(guide-title);
@@ -307,6 +310,36 @@ pre code {
   border: none;
   padding: 0;
   color: hsl(210, 30%, 88%);
+}
+
+/* ── Screenshots ───────────────────────────────────────────────────────── */
+
+.chapter img {
+  width: 100%;
+  border: 0.75pt solid hsl(213, 30%, 26%);
+  border-radius: 4pt;
+  margin: 4pt 0 2pt;
+  page-break-inside: avoid;
+}
+
+/* Portrait shots (dialogs, cards): full width would be a page-consuming
+   tower — run them narrower, centered. Applied per-image via attr_list:
+   ![alt](assets/x.png){: .narrow }                                        */
+.chapter img.narrow {
+  display: block;
+  width: 58%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* A screenshot's caption: the em-line immediately following the image. */
+.chapter img + em,
+.chapter p > img + em {
+  display: block;
+  font-style: normal;
+  font-size: 8.3pt;
+  color: hsl(213, 20%, 66%);
+  margin: 0 0 8pt;
 }
 
 /* ── Tables ────────────────────────────────────────────────────────────── */

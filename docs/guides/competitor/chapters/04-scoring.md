@@ -1,46 +1,40 @@
 ## Hints
 
-Challenges may carry hints — some free, some **costing points**. A costed
-hint shows its price up front; revealing it deducts that amount from your
-(or your team's) score, so agree with your teammates before spending.
-Revealed hints stay visible for the rest of the event, and organisers can
-also release extra hints on a schedule as the competition unfolds.
+Hints may be free or **cost points** — the price shows up front, and
+revealing deducts it from your (or your team's) score, so agree before
+spending. Revealed hints stay visible all event, and organisers can release
+extra ones on a schedule as the competition unfolds.
 
 ## How points work
 
-Every challenge is worth points, set by its authors in one of two schemes:
-
 | Scheme | What it means for you |
 |---|---|
-| **Static** | The value is fixed — solve it any time for the same points. |
-| **Dynamic** | The value **decays as more people solve it** — starting high and falling toward a floor. Everyone who solved it holds its *current* value, whether they solved first or last. |
+| **Static** | Fixed value — solve any time for the same points. |
+| **Dynamic** | The value **decays as more people solve it**, from a starting value toward a floor. Every solver holds the *current* value, first or last. |
 
-Dynamic scoring rewards hard challenges naturally: the fewer solvers, the
-more it stays worth. The card always shows what a challenge is worth right
-now.
-
-**First blood** — the first solver of each challenge — is marked on the
-challenge's solver list. Some events attach prizes or bonuses to it; check
-your event's rules.
+Dynamic scoring rewards hard challenges naturally: fewer solvers, higher
+worth — the card always shows the current value. **First blood** — the first
+solver — is marked on the challenge's solver list; some events attach prizes
+to it.
 
 ## The scoreboard
 
-The scoreboard ranks players (or teams) by points, with ties broken in favour
-of whoever reached the score first. It updates **live** — no refreshing.
-Click an entry to see its solve history and points over time. If your event
-uses brackets, filter the board to your division.
+![The scoreboard](assets/scoreboard.png)
+*Live standings — your own row is highlighted. Click any entry for its solve
+history and points over time.*
+
+Ranking is by points, ties broken in favour of whoever got there first. If
+your event uses brackets, the board filters by division; some events also
+publish a **public spectator scoreboard** friends can watch without an
+account.
 
 !!! note "Scoreboard freezes"
-    Many events **freeze** the public scoreboard near the end to keep the
-    finale suspenseful. Solves still count normally during the freeze — the
-    standings just stop updating publicly until the organisers reveal the
-    final board. Don't panic when a late solve doesn't appear to move you.
-
-Some events also publish a **public spectator scoreboard** at a share-able
-link, so friends and colleagues can watch standings without an account.
+    Many events **freeze** the public board near the end to keep the finale
+    suspenseful. Solves still count during the freeze — standings just stop
+    updating publicly until the final reveal. Don't panic when a late solve
+    doesn't appear to move you.
 
 ## Rating challenges
 
-If the organisers enabled feedback, a small rating prompt appears after each
-solve. It takes one click and genuinely shapes future events — authors see
-aggregate ratings per challenge.
+If feedback is enabled, a one-click rating prompt appears after each solve.
+Authors see aggregate ratings — it genuinely shapes future events.

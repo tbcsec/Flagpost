@@ -1,54 +1,42 @@
-The **Challenges** page is where you'll spend the competition. Challenges are
-shown as cards grouped by category chips (Web, Crypto, Pwn, …), each chip
-carrying your solved-count for that category. Prefer a compact view? Switch
-the layout toggle from **Cards** to **List** — Flagpost remembers your choice
-on that device.
+The **Challenges** page is where you'll spend the event.
 
-## Reading a challenge card
+![The challenges page](assets/challenges.png)
+*Cards grouped by category chips (each with your progress), showing points,
+difficulty and topic tags, live solve counts, and Solved/Open state. Prefer
+rows? Switch Cards → List — the choice sticks per device.*
 
-Each card shows the challenge's category, title, point value, solve count,
-and any difficulty or topic tags the organisers assigned. Two states matter:
-
-- **Locked** — the challenge has **prerequisites**: solve the listed
-  challenges first and it unlocks. Locked challenges show which solves they
-  need when opened.
-- **Open** — ready to attempt. Click the card for the full challenge.
-
-New challenges can appear mid-event: organisers release waves on a schedule
-or by hand. Watch the announcements (chapter 6).
+Two card states matter: **Locked** means the challenge has prerequisites —
+solve those first and it unlocks (opening it shows which). **Open** means
+it's ready. New challenges can appear mid-event in scheduled or manual
+waves — watch the announcements.
 
 ## Inside a challenge
 
-Opening a challenge shows its description, current value, and solve count,
-plus — depending on the challenge:
+![A challenge](assets/challenge-dialog.png)
+*The challenge view: description, flag entry, solves so far, and your private
+notes pad.*
 
-- **Connection info** — where the live target runs, e.g.
-  `nc chal.example.org 1337` or a URL, with a copy button.
-- **Attachments** — downloadable files (binaries, captures, source).
-- **Hints** — see chapter 4.
-- **Who's here** — a presence indicator when teammates or other competitors
-  have the same challenge open.
+Depending on the challenge you'll also see **connection info** (where the
+live target runs, e.g. `nc chal.example.org 1337`, with a copy button),
+**attachments** to download, **hints** (chapter 4), and a presence line when
+others have the same challenge open.
 
 ## Submitting flags
 
-Most challenges want a flag — usually in a `flag{...}` format — pasted into
-the submission field. Submit it **exactly as you found it**: flags are graded
-precisely, including case, unless the authors chose otherwise for that
-challenge.
+Most challenges want a flag — usually `flag{...}` — pasted exactly as found:
+grading is precise, including case, unless the authors chose otherwise.
+A correct flag scores instantly, updates the scoreboard live, and marks the
+card solved; resubmitting a solved challenge never scores twice.
 
 Some challenges are **multiple choice** instead. Two things to know:
 
-- Your **guesses may be capped** — the challenge shows how many attempts you
-  have left. Out of guesses? Open a support ticket; organisers can reset them.
+- Your **guesses may be capped** — the challenge shows attempts remaining.
+  Out of guesses? Open a support ticket; organisers can reset them.
 - Events can enable a **wrong-guess penalty** that permanently reduces what
-  *that question* is worth to you (or your team) with each wrong answer. The
-  reduced value is shown struck through next to the original.
-
-A correct flag locks in your points immediately, updates the scoreboard live,
-and marks the card solved. Repeat submissions of a solved challenge don't
-score twice.
+  that question is worth to you (or your team) with each wrong answer — the
+  reduced value shows struck through next to the original.
 
 !!! note "Paused competitions"
-    Organisers can pause gameplay (for example, during an infrastructure
-    issue). A banner appears and flag submissions are closed until play
-    resumes — you keep access to everything else.
+    Organisers can pause gameplay (say, during an infrastructure issue). A
+    banner appears and submissions close until play resumes — everything
+    else stays available.

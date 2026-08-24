@@ -6,6 +6,8 @@
 // (required-core locked, optional toggleable) off GET/PUT
 // /api/competitions/{id}/modules, gated on manage_modules (#168).
 
+import { useTranslations } from "next-intl";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +18,7 @@ import type { ModuleState } from "@/lib/types";
 import { toast } from "@/stores/toast";
 
 export function ModulesPanel({ competitionId }: { competitionId: string }) {
+  const t = useTranslations("settings.modules");
   const access = useAccess();
   const canManage = access.has("manage_modules");
   const modules = useModules(competitionId, canManage);
@@ -31,9 +34,11 @@ export function ModulesPanel({ competitionId }: { competitionId: string }) {
       { moduleId: m.id, enabled: next },
       {
         onSuccess: () =>
-          toast(`${m.name} ${next ? "enabled" : "disabled"}`, { variant: "success" }),
+          toast(t(next ? "toggledOn" : "toggledOff", { name: m.name }), {
+            variant: "success",
+          }),
         onError: (e) =>
-          toast("Couldn't update module", {
+          toast(t("toggleFailed"), {
             description: (e as Error).message,
             variant: "destructive",
           }),
@@ -50,15 +55,15 @@ export function ModulesPanel({ competitionId }: { competitionId: string }) {
   return (
     <div className="grid gap-6">
       <ModuleSection
-        title="Optional modules"
-        description="Disable a module to switch its features off for this competition — its routes stop responding, its nav entry disappears, and nothing fires for its events."
+        title={t("optionalTitle")}
+        description={t("optionalDescription")}
         modules={optional}
         onToggle={onToggle}
         pending={toggle.isPending}
       />
       <ModuleSection
-        title="Core modules"
-        description="Part of the platform floor — always on and can't be disabled."
+        title={t("coreTitle")}
+        description={t("coreDescription")}
         modules={core}
         onToggle={onToggle}
         pending={toggle.isPending}
@@ -80,6 +85,7 @@ function ModuleSection({
   onToggle: (m: ModuleState) => void;
   pending: boolean;
 }) {
+  const t = useTranslations("settings.modules");
   if (modules.length === 0) return null;
   return (
     <Card>
@@ -98,11 +104,11 @@ function ModuleSection({
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">{m.name}</span>
                   {m.required_core ? (
-                    <Badge variant="muted">Core</Badge>
+                    <Badge variant="muted">{t("badgeCore")}</Badge>
                   ) : m.enabled ? (
-                    <Badge variant="success">Enabled</Badge>
+                    <Badge variant="success">{t("badgeEnabled")}</Badge>
                   ) : (
-                    <Badge variant="outline">Disabled</Badge>
+                    <Badge variant="outline">{t("badgeDisabled")}</Badge>
                   )}
                 </div>
                 <div className="font-mono text-xs text-muted-foreground">
@@ -110,7 +116,7 @@ function ModuleSection({
                 </div>
               </div>
               {m.required_core ? (
-                <span className="text-xs text-muted-foreground">Always on</span>
+                <span className="text-xs text-muted-foreground">{t("alwaysOn")}</span>
               ) : (
                 <Button
                   variant={m.enabled ? "outline" : "default"}
@@ -118,7 +124,7 @@ function ModuleSection({
                   onClick={() => onToggle(m)}
                   disabled={pending}
                 >
-                  {m.enabled ? "Disable" : "Enable"}
+                  {t(m.enabled ? "disable" : "enable")}
                 </Button>
               )}
             </li>

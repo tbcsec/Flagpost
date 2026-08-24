@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -31,10 +32,14 @@ const fromInput = (v: string) => (v ? new Date(`${v}Z`).toISOString() : null);
 
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-const STATUS_LABEL: Record<CompetitionStatus, string> = {
-  not_started: "Not started",
-  running: "Running",
-  ended: "Ended",
+// Status → message key; the label resolves through the settings namespace.
+const STATUS_KEY: Record<
+  CompetitionStatus,
+  "statusNotStarted" | "statusRunning" | "statusEnded"
+> = {
+  not_started: "statusNotStarted",
+  running: "statusRunning",
+  ended: "statusEnded",
 };
 
 // State pills for the Controls panel (design tokens, not raw colours).
@@ -56,6 +61,7 @@ export function CompetitionSettingsForm({
   competition: Competition;
   section: SettingsSection;
 }) {
+  const t = useTranslations("settings.form");
   const update = useUpdateCompetition(competition.id);
   const setStatus = useSetCompetitionStatus(competition.id);
   const freeze = useFreezeScoreboard(competition.id);
@@ -73,36 +79,40 @@ export function CompetitionSettingsForm({
   async function onStart() {
     if (
       !(await confirm({
-        title: competition.status === "ended" ? "Re-open the competition?" : "Start the competition?",
-        description:
-          "Competitors will immediately be able to view challenges, submit flags, and see the scoreboard.",
-        confirmLabel: competition.status === "ended" ? "Re-open" : "Start",
+        title:
+          competition.status === "ended"
+            ? t("reopenConfirmTitle")
+            : t("startConfirmTitle"),
+        description: t("startConfirmDescription"),
+        confirmLabel:
+          competition.status === "ended"
+            ? t("reopenConfirmLabel")
+            : t("startConfirmLabel"),
         destructive: false,
       }))
     )
       return;
     setStatus.mutate("start", {
-      onSuccess: () => toast("Competition started", { variant: "success" }),
+      onSuccess: () => toast(t("startedToast"), { variant: "success" }),
       onError: (e) =>
-        toast("Couldn't start", { description: (e as Error).message, variant: "destructive" }),
+        toast(t("startFailed"), { description: (e as Error).message, variant: "destructive" }),
     });
   }
 
   async function onStop() {
     if (
       !(await confirm({
-        title: "Stop the competition?",
-        description:
-          "Challenge viewing and submissions close for competitors right away; the scoreboard stays visible as final standings. You can start it again later. Want a temporary stop instead? Pause the competition rather than stopping it.",
-        confirmLabel: "Stop",
+        title: t("stopConfirmTitle"),
+        description: t("stopConfirmDescription"),
+        confirmLabel: t("stopConfirmLabel"),
         destructive: true,
       }))
     )
       return;
     setStatus.mutate("stop", {
-      onSuccess: () => toast("Competition stopped", { variant: "success" }),
+      onSuccess: () => toast(t("stoppedToast"), { variant: "success" }),
       onError: (e) =>
-        toast("Couldn't stop", { description: (e as Error).message, variant: "destructive" }),
+        toast(t("stopFailed"), { description: (e as Error).message, variant: "destructive" }),
     });
   }
 
@@ -113,11 +123,11 @@ export function CompetitionSettingsForm({
       { paused: !competition.paused },
       {
         onSuccess: () =>
-          toast(competition.paused ? "Competition resumed" : "Competition paused", {
+          toast(competition.paused ? t("resumedToast") : t("pausedToast"), {
             variant: "success",
           }),
         onError: (e) =>
-          toast("Couldn't update", { description: (e as Error).message, variant: "destructive" }),
+          toast(t("pauseFailed"), { description: (e as Error).message, variant: "destructive" }),
       },
     );
   }
@@ -126,19 +136,18 @@ export function CompetitionSettingsForm({
     if (
       !frozen &&
       !(await confirm({
-        title: "Freeze the scoreboard?",
-        description:
-          "Competitors keep solving and their points still count — the public board just stops showing movement until you unfreeze it. Staff can still view live standings.",
-        confirmLabel: "Freeze",
+        title: t("freezeConfirmTitle"),
+        description: t("freezeConfirmDescription"),
+        confirmLabel: t("freezeConfirmLabel"),
         destructive: false,
       }))
     )
       return;
     freeze.mutate(!frozen, {
       onSuccess: () =>
-        toast(frozen ? "Scoreboard unfrozen" : "Scoreboard frozen", { variant: "success" }),
+        toast(frozen ? t("unfrozenToast") : t("frozenToast"), { variant: "success" }),
       onError: (e) =>
-        toast("Couldn't update the board", {
+        toast(t("freezeFailed"), {
           description: (e as Error).message,
           variant: "destructive",
         }),
@@ -187,10 +196,9 @@ export function CompetitionSettingsForm({
       overrideChanged &&
       rulesDoc &&
       !(await confirm({
-        title: "Update the competition rules?",
-        description:
-          "Saving a new or changed rules override clears all existing acceptances — every participant will be prompted to accept the rules again before they can continue.",
-        confirmLabel: "Save and re-prompt",
+        title: t("rulesConfirmTitle"),
+        description: t("rulesConfirmDescription"),
+        confirmLabel: t("rulesConfirmLabel"),
       }))
     ) {
       return;
@@ -219,7 +227,7 @@ export function CompetitionSettingsForm({
         rules_override: rulesDoc,
         rules_display_only: form.rules_display_only,
       },
-      { onSuccess: () => toast("Changes saved", { variant: "success" }) },
+      { onSuccess: () => toast(t("savedChanges"), { variant: "success" }) },
     );
   }
 
@@ -228,7 +236,7 @@ export function CompetitionSettingsForm({
       {section === "general" && (
         <>
           <div className="space-y-2">
-            <Label htmlFor="name">Name</Label>
+            <Label htmlFor="name">{t("name")}</Label>
             <Input
               id="name"
               value={form.name}
@@ -237,7 +245,7 @@ export function CompetitionSettingsForm({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="description">{t("description")}</Label>
             <Input
               id="description"
               value={form.description}
@@ -246,7 +254,7 @@ export function CompetitionSettingsForm({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="participation_mode">Participation mode</Label>
+              <Label htmlFor="participation_mode">{t("participationMode")}</Label>
               <Select
                 id="participation_mode"
                 value={form.participation_mode}
@@ -254,26 +262,26 @@ export function CompetitionSettingsForm({
                   set("participation_mode", e.target.value as ParticipationMode)
                 }
               >
-                <option value="team">Team</option>
-                <option value="individual">Individual</option>
+                <option value="team">{t("modeTeam")}</option>
+                <option value="individual">{t("modeIndividual")}</option>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="visibility">Visibility</Label>
+              <Label htmlFor="visibility">{t("visibility")}</Label>
               <Select
                 id="visibility"
                 value={form.visibility}
                 onChange={(e) => set("visibility", e.target.value as Visibility)}
               >
-                <option value="private">Private</option>
-                <option value="public">Public</option>
+                <option value="private">{t("visibilityPrivate")}</option>
+                <option value="public">{t("visibilityPublic")}</option>
               </Select>
             </div>
           </div>
 
           <div className="space-y-3 border-t border-border pt-4">
             <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Public standings
+              {t("publicStandings")}
             </h3>
             <label className="flex items-start gap-2.5 text-sm">
               <input
@@ -284,13 +292,20 @@ export function CompetitionSettingsForm({
                 onChange={(e) => set("public_scoreboard", e.target.checked)}
               />
               <span>
-                Public scoreboard
+                {t("publicScoreboard")}
                 <span className="ml-1 text-xs text-muted-foreground">
-                  (lists this competition on{" "}
-                  <a className="underline" href="/public" target="_blank" rel="noreferrer">
-                    /public
-                  </a>{" "}
-                  and lets anyone view the board without an account)
+                  {t.rich("publicScoreboardHint", {
+                    link: (chunks) => (
+                      <a
+                        className="underline"
+                        href="/public"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {chunks}
+                      </a>
+                    ),
+                  })}
                 </span>
               </span>
             </label>
@@ -303,15 +318,15 @@ export function CompetitionSettingsForm({
                 onChange={(e) => set("ctftime_enabled", e.target.checked)}
               />
               <span>
-                CTFtime scoreboard feed
+                {t("ctftimeFeed")}
                 <span className="ml-1 text-xs text-muted-foreground">
-                  (exposes a CTFtime-format feed so the event can be rated on ctftime.org)
+                  {t("ctftimeHint")}
                 </span>
               </span>
             </label>
             {form.ctftime_enabled && (
               <p className="text-xs text-muted-foreground">
-                Feed URL:{" "}
+                {t("feedUrl")}{" "}
                 <a
                   className="font-mono text-primary underline"
                   href={`${API_ORIGIN}/api/public/competitions/${competition.id}/ctftime`}
@@ -326,27 +341,27 @@ export function CompetitionSettingsForm({
 
           <div className="border-t border-border pt-4">
             <VocabEditor
-              label="Brackets / divisions"
-              hint="Parallel rankings competitors self-select (e.g. Students, Open). Leave empty for a single ranking."
+              label={t("brackets")}
+              hint={t("bracketsHint")}
               values={form.brackets}
               onChange={(v) => set("brackets", v)}
-              placeholder="Add a bracket…"
+              placeholder={t("bracketPlaceholder")}
             />
           </div>
 
           {form.participation_mode === "team" && (
             <div className="max-w-xs space-y-2">
-              <Label htmlFor="max_team_size">Max team size</Label>
+              <Label htmlFor="max_team_size">{t("maxTeamSize")}</Label>
               <Input
                 id="max_team_size"
                 type="number"
                 min={1}
-                placeholder="Unlimited"
+                placeholder={t("maxTeamSizePlaceholder")}
                 value={form.max_team_size}
                 onChange={(e) => set("max_team_size", e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                Members allowed per team. Blank = unlimited.
+                {t("maxTeamSizeHint")}
               </p>
             </div>
           )}
@@ -355,22 +370,17 @@ export function CompetitionSettingsForm({
 
       {section === "schedule" && (
         <div className="space-y-5">
-          <p className="text-xs text-muted-foreground">
-            Run-day controls plus the schedule. The three controls apply
-            immediately; the schedule at the bottom saves with the form.
-          </p>
+          <p className="text-xs text-muted-foreground">{t("controlsIntro")}</p>
 
           {/* Status — start / stop (#221) */}
           <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <Label>Competition status</Label>
+                <Label>{t("status")}</Label>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Competitors can play only while{" "}
-                  <span className="font-medium">running</span> — otherwise
-                  challenges show a closed message (the final scoreboard stays
-                  visible after it ends). The schedule below moves this
-                  automatically; Start / Stop override it now.
+                  {t.rich("statusHint", {
+                    b: (chunks) => <span className="font-medium">{chunks}</span>,
+                  })}
                 </p>
               </div>
               <span
@@ -378,14 +388,16 @@ export function CompetitionSettingsForm({
                   PILL + (competition.status === "running" ? PILL_RUNNING : PILL_NEUTRAL)
                 }
               >
-                {STATUS_LABEL[competition.status]}
+                {t(STATUS_KEY[competition.status])}
               </span>
             </div>
             {canControlStatus && (
               <div className="flex flex-wrap gap-2">
                 {competition.status !== "running" ? (
                   <Button type="button" size="sm" onClick={onStart} disabled={setStatus.isPending}>
-                    {competition.status === "ended" ? "Re-open competition" : "Start competition"}
+                    {competition.status === "ended"
+                      ? t("reopenCompetition")
+                      : t("startCompetition")}
                   </Button>
                 ) : (
                   <Button
@@ -395,7 +407,7 @@ export function CompetitionSettingsForm({
                     onClick={onStop}
                     disabled={setStatus.isPending}
                   >
-                    Stop competition
+                    {t("stopCompetition")}
                   </Button>
                 )}
               </div>
@@ -406,14 +418,10 @@ export function CompetitionSettingsForm({
           <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <Label>Gameplay pause</Label>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Temporarily halt gameplay — competitors can&apos;t submit flags
-                  (staff still can, to test). Instantly reversible, and separate
-                  from stopping (which ends the competition) or freezing the board.
-                </p>
+                <Label>{t("pause")}</Label>
+                <p className="mt-1 text-xs text-muted-foreground">{t("pauseHint")}</p>
               </div>
-              {competition.paused && <span className={PILL + PILL_WARN}>Paused</span>}
+              {competition.paused && <span className={PILL + PILL_WARN}>{t("paused")}</span>}
             </div>
             {canPause && (
               <Button
@@ -423,7 +431,7 @@ export function CompetitionSettingsForm({
                 onClick={onTogglePause}
                 disabled={update.isPending}
               >
-                {competition.paused ? "Resume competition" : "Pause competition"}
+                {competition.paused ? t("resumeCompetition") : t("pauseCompetition")}
               </Button>
             )}
           </div>
@@ -432,15 +440,10 @@ export function CompetitionSettingsForm({
           <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <Label>Scoreboard freeze</Label>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Freeze the public board at its current standings — competitors
-                  keep solving and their points still count, but the board stops
-                  showing movement until you unfreeze it. Staff still see live
-                  standings.
-                </p>
+                <Label>{t("freeze")}</Label>
+                <p className="mt-1 text-xs text-muted-foreground">{t("freezeHint")}</p>
               </div>
-              {frozen && <span className={PILL + PILL_NEUTRAL}>Frozen</span>}
+              {frozen && <span className={PILL + PILL_NEUTRAL}>{t("frozen")}</span>}
             </div>
             {canFreeze && (
               <Button
@@ -451,24 +454,21 @@ export function CompetitionSettingsForm({
                 disabled={freeze.isPending}
               >
                 {freeze.isPending
-                  ? "Saving…"
+                  ? t("saving")
                   : frozen
-                    ? "Unfreeze scoreboard"
-                    : "Freeze scoreboard"}
+                    ? t("unfreezeScoreboard")
+                    : t("freezeScoreboard")}
               </Button>
             )}
           </div>
 
           {/* Schedule (saved with the form) */}
           <div className="space-y-2 border-t border-border pt-4">
-            <Label>Schedule</Label>
-            <p className="text-xs text-muted-foreground">
-              When play auto-starts / ends and when registration is open. Saved
-              with the form; a manual Start / Stop above overrides these.
-            </p>
+            <Label>{t("schedule")}</Label>
+            <p className="text-xs text-muted-foreground">{t("scheduleHint")}</p>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="start_at">Starts</Label>
+                <Label htmlFor="start_at">{t("starts")}</Label>
                 <Input
                   id="start_at"
                   type="datetime-local"
@@ -477,7 +477,7 @@ export function CompetitionSettingsForm({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="end_at">Ends</Label>
+                <Label htmlFor="end_at">{t("ends")}</Label>
                 <Input
                   id="end_at"
                   type="datetime-local"
@@ -486,7 +486,7 @@ export function CompetitionSettingsForm({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="registration_opens_at">Registration opens</Label>
+                <Label htmlFor="registration_opens_at">{t("registrationOpens")}</Label>
                 <Input
                   id="registration_opens_at"
                   type="datetime-local"
@@ -495,7 +495,7 @@ export function CompetitionSettingsForm({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="registration_closes_at">Registration closes</Label>
+                <Label htmlFor="registration_closes_at">{t("registrationCloses")}</Label>
                 <Input
                   id="registration_closes_at"
                   type="datetime-local"
@@ -511,12 +511,11 @@ export function CompetitionSettingsForm({
       {section === "rules" && (
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>Rules / code of conduct override</Label>
+            <Label>{t("rulesOverride")}</Label>
             <p className="text-xs text-muted-foreground">
-              Supersedes the site-wide rules for this competition. Leave empty
-              to use the site-wide document (Admin → Site settings). Unless
-              display-only is on, users must accept the effective rules before
-              they can join{competition.participation_mode === "team" ? " or create/join a team" : ""}.
+              {competition.participation_mode === "team"
+                ? t("rulesOverrideHintTeam")
+                : t("rulesOverrideHintIndividual")}
             </p>
             <RichTextEditor
               value={form.rules_override}
@@ -532,68 +531,56 @@ export function CompetitionSettingsForm({
               onChange={(e) => set("rules_display_only", e.target.checked)}
             />
             <span>
-              Display only
+              {t("displayOnly")}
               <span className="ml-1 text-xs text-muted-foreground">
-                — show the rules at join without requiring an explicit
-                &ldquo;I accept&rdquo; (nothing blocks the join).
+                {t("displayOnlyHint")}
               </span>
             </span>
           </label>
-          <p className="text-xs text-muted-foreground">
-            Saving a new or changed override prompts every participant to
-            accept the rules again. Staff with competition-edit access never
-            see the prompt.
-          </p>
+          <p className="text-xs text-muted-foreground">{t("rulesFootnote")}</p>
         </div>
       )}
 
       {section === "challenges" && (
         <div className="space-y-6">
         <VocabEditor
-          label="Difficulty tiers"
-          hint="Ordered labels (e.g. Easy, Medium, Hard) authors pick from on a challenge."
+          label={t("difficultyTiers")}
+          hint={t("difficultyTiersHint")}
           values={form.difficulty_tiers}
           onChange={(v) => set("difficulty_tiers", v)}
-          placeholder="Add a tier…"
+          placeholder={t("tierPlaceholder")}
         />
         <VocabEditor
-          label="Tags"
-          hint="The tag vocabulary authors may apply to challenges."
+          label={t("tags")}
+          hint={t("tagsHint")}
           values={form.challenge_tags}
           onChange={(v) => set("challenge_tags", v)}
-          placeholder="Add a tag…"
+          placeholder={t("tagPlaceholder")}
         />
         <div className="max-w-xs space-y-2">
-          <Label htmlFor="mc_guess_limit">Multiple-choice guess limit</Label>
+          <Label htmlFor="mc_guess_limit">{t("mcGuessLimit")}</Label>
           <Input
             id="mc_guess_limit"
             type="number"
             min={1}
             max={1000}
-            placeholder="Unlimited"
+            placeholder={t("mcGuessLimitPlaceholder")}
             value={form.mc_guess_limit}
             onChange={(e) => set("mc_guess_limit", e.target.value)}
           />
-          <p className="text-xs text-muted-foreground">
-            Guesses each competitor (or team) gets per multiple-choice question, to
-            curb brute-forcing. Blank = unlimited. Applies competition-wide.
-          </p>
+          <p className="text-xs text-muted-foreground">{t("mcGuessLimitHint")}</p>
           <div className="mt-3 space-y-2">
-            <Label htmlFor="mc_penalty_pct">Wrong-guess penalty (%)</Label>
+            <Label htmlFor="mc_penalty_pct">{t("mcPenalty")}</Label>
             <Input
               id="mc_penalty_pct"
               type="number"
               min={1}
               max={100}
-              placeholder="Off"
+              placeholder={t("mcPenaltyPlaceholder")}
               value={form.mc_penalty_pct}
               onChange={(e) => set("mc_penalty_pct", e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">
-              Each wrong guess on a multiple-choice question lowers its value for
-              that team/competitor by this percent, so a later correct answer
-              awards less (floored at 0). Blank = off. Pairs with the guess limit.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("mcPenaltyHint")}</p>
           </div>
           <label className="mt-2 flex items-center gap-2.5 text-sm">
             <input
@@ -604,9 +591,9 @@ export function CompetitionSettingsForm({
               onChange={(e) => set("challenge_ratings_enabled", e.target.checked)}
             />
             <span>
-              Ask competitors to rate a challenge (1–5) after solving it
+              {t("ratingsEnabled")}
               <span className="ml-1 text-xs text-muted-foreground">
-                (needs the Feedback module; results on the Feedback page)
+                {t("ratingsEnabledHint")}
               </span>
             </span>
           </label>
@@ -616,10 +603,10 @@ export function CompetitionSettingsForm({
 
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={update.isPending}>
-          {update.isPending ? "Saving…" : "Save changes"}
+          {update.isPending ? t("saving") : t("save")}
         </Button>
         {update.isSuccess && (
-          <span className="text-sm text-muted-foreground">Saved.</span>
+          <span className="text-sm text-muted-foreground">{t("savedInline")}</span>
         )}
         {update.isError && (
           <span className="text-sm text-destructive">
@@ -646,6 +633,7 @@ function VocabEditor({
   onChange: (values: string[]) => void;
   placeholder: string;
 }) {
+  const t = useTranslations("settings.form");
   const [draft, setDraft] = useState("");
 
   function add() {
@@ -670,7 +658,7 @@ function VocabEditor({
                 type="button"
                 onClick={() => onChange(values.filter((x) => x !== v))}
                 className="text-muted-foreground hover:text-destructive"
-                aria-label={`Remove ${v}`}
+                aria-label={t("vocabRemove", { value: v })}
               >
                 ×
               </button>
@@ -692,7 +680,7 @@ function VocabEditor({
           }}
         />
         <Button type="button" variant="outline" onClick={add} disabled={!draft.trim()}>
-          Add
+          {t("vocabAdd")}
         </Button>
       </div>
     </div>

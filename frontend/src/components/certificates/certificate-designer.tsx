@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 
 import { CertificateCanvas } from "@/components/certificates/certificate-canvas";
@@ -65,6 +66,7 @@ function toInput(t: CertificateTemplate): CertificateTemplateInput {
 }
 
 export function CertificateDesigner({ competitionId }: { competitionId: string }) {
+  const t = useTranslations("certificates.designer");
   const manifest = useCertificateManifest();
   const template = useCertificateTemplate(competitionId);
   const save = useSaveCertificateTemplate(competitionId);
@@ -216,9 +218,9 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
 
   function onSave() {
     save.mutate(draft, {
-      onSuccess: () => toast("Certificate design saved", { variant: "success" }),
+      onSuccess: () => toast(t("savedToast"), { variant: "success" }),
       onError: (e) =>
-        toast("Couldn't save", { description: (e as Error).message, variant: "destructive" }),
+        toast(t("saveFailed"), { description: (e as Error).message, variant: "destructive" }),
     });
   }
 
@@ -231,25 +233,24 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
         });
       },
       onError: (e) =>
-        toast("Preview failed", { description: (e as Error).message, variant: "destructive" }),
+        toast(t("previewFailed"), { description: (e as Error).message, variant: "destructive" }),
     });
   }
 
   async function onRelease() {
     if (
       !(await confirm({
-        title: "Release certificates?",
-        description:
-          "Every eligible participant will be able to download their certificate (from the saved design) and will be notified. Save your design first if you have unsaved changes.",
-        confirmLabel: "Release now",
+        title: t("release.confirmTitle"),
+        description: t("release.confirmDescription"),
+        confirmLabel: t("release.confirmLabel"),
         destructive: false,
       }))
     )
       return;
     release.mutate(undefined, {
-      onSuccess: () => toast("Certificates released", { variant: "success" }),
+      onSuccess: () => toast(t("releasedToast"), { variant: "success" }),
       onError: (e) =>
-        toast("Couldn't release", { description: (e as Error).message, variant: "destructive" }),
+        toast(t("releaseFailed"), { description: (e as Error).message, variant: "destructive" }),
     });
   }
 
@@ -257,31 +258,31 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
     createExport.mutate(undefined, {
       onSuccess: (j) => setJobId(j.id),
       onError: (e) =>
-        toast("Export failed to start", { description: (e as Error).message, variant: "destructive" }),
+        toast(t("exportStartFailed"), { description: (e as Error).message, variant: "destructive" }),
     });
   }
 
   async function onDeleteFont(id: string) {
     if (
       !(await confirm({
-        title: "Remove this font?",
-        description: "Any element still using it will fall back to a default font.",
-        confirmLabel: "Remove",
+        title: t("font.removeConfirmTitle"),
+        description: t("font.removeConfirmDescription"),
+        confirmLabel: t("remove"),
         destructive: true,
       }))
     )
       return;
     deleteFont.mutate(id, {
-      onSuccess: () => toast("Font removed", { variant: "success" }),
+      onSuccess: () => toast(t("font.removedToast"), { variant: "success" }),
       onError: (e) =>
-        toast("Couldn't remove font", { description: (e as Error).message, variant: "destructive" }),
+        toast(t("font.removeFailed"), { description: (e as Error).message, variant: "destructive" }),
     });
   }
 
   function onExportTemplate() {
     exportTpl.mutate("certificate-template.json", {
       onError: (e) =>
-        toast("Export failed", { description: (e as Error).message, variant: "destructive" }),
+        toast(t("template.exportFailed"), { description: (e as Error).message, variant: "destructive" }),
     });
   }
 
@@ -291,11 +292,11 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
     if (!file) return;
     if (
       !(await confirm({
-        title: "Import this template?",
+        title: t("template.importConfirmTitle"),
         description: template.data?.released
-          ? "This certificate has already been released — importing will immediately change what participants download. Background, elements, colours and fonts are all replaced."
-          : "This replaces the current design — background, elements, colours and fonts. Release status is left unchanged.",
-        confirmLabel: "Import",
+          ? t("template.importConfirmReleased")
+          : t("template.importConfirmUnreleased"),
+        confirmLabel: t("template.import"),
         destructive: true,
       }))
     )
@@ -304,17 +305,17 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
     try {
       doc = JSON.parse(await file.text());
     } catch {
-      toast("Import failed", { description: "That file isn't valid JSON.", variant: "destructive" });
+      toast(t("template.importFailed"), { description: t("template.invalidJson"), variant: "destructive" });
       return;
     }
     importTpl.mutate(doc, {
       onSuccess: () => {
         setEdited(null);
         setSelected(null);
-        toast("Template imported", { variant: "success" });
+        toast(t("template.importedToast"), { variant: "success" });
       },
       onError: (err) =>
-        toast("Import failed", { description: (err as Error).message, variant: "destructive" }),
+        toast(t("template.importFailed"), { description: (err as Error).message, variant: "destructive" }),
     });
   }
 
@@ -343,17 +344,13 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
           onMove={(i, x, y) => patchElement(i, { x, y })}
           editable
         />
-        <p className="text-xs text-muted-foreground">
-          Drag elements to position them — they snap to the canvas centre, edges,
-          and other elements (hold Alt to move freely). A subtle Flagpost mark is
-          added along the bottom of every certificate.
-        </p>
+        <p className="text-xs text-muted-foreground">{t("dragHint")}</p>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" onClick={onSave} disabled={save.isPending}>
-            {save.isPending ? "Saving…" : "Save design"}
+            {save.isPending ? t("saving") : t("saveDesign")}
           </Button>
           <Button size="sm" variant="outline" onClick={onPreview} disabled={preview.isPending}>
-            {preview.isPending ? "Rendering…" : "Preview"}
+            {preview.isPending ? t("rendering") : t("preview")}
           </Button>
         </div>
       </div>
@@ -362,17 +359,16 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
       <div className="space-y-6">
         {released && template.data?.released_at && (
           <div className="rounded-md border border-success/40 bg-success/10 p-3 text-sm">
-            <Badge variant="secondary" className="mb-1">Released</Badge>
+            <Badge variant="secondary" className="mb-1">{t("releasedBadge")}</Badge>
             <p className="text-muted-foreground">
-              Certificates were released on{" "}
-              {parseServerDate(template.data.released_at).toLocaleString()}.
+              {t("releasedOn", { date: parseServerDate(template.data.released_at).toLocaleString() })}
             </p>
           </div>
         )}
 
         {/* Add elements */}
         <section className="space-y-2">
-          <Label>Add element</Label>
+          <Label>{t("addElement")}</Label>
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
@@ -380,10 +376,10 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
               variant="outline"
               disabled={draft.elements.length >= bounds.max_elements}
               onClick={() =>
-                addElement(newCertElement("text", defaultFont, { text: "Text", font_size: 6 }))
+                addElement(newCertElement("text", defaultFont, { text: t("textDefault"), font_size: 6 }))
               }
             >
-              + Text
+              {t("addText")}
             </Button>
             <Button
               type="button"
@@ -399,12 +395,12 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
                 )
               }
             >
-              + Token
+              {t("addToken")}
             </Button>
             <label className="inline-flex">
-              <span className="sr-only">Add image element</span>
+              <span className="sr-only">{t("addImageAria")}</span>
               <Button asChild size="sm" variant="outline" disabled={uploadImg.isPending}>
-                <span className="cursor-pointer">{uploadImg.isPending ? "Uploading…" : "+ Image"}</span>
+                <span className="cursor-pointer">{uploadImg.isPending ? t("uploading") : t("addImage")}</span>
               </Button>
               <input
                 type="file"
@@ -418,7 +414,7 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
                     onSuccess: ({ image_key }) =>
                       addElement(newCertElement("image", defaultFont, { image_key, width: 25 })),
                     onError: (err) =>
-                      toast("Image upload failed", {
+                      toast(t("imageUploadFailed"), {
                         description: (err as Error).message,
                         variant: "destructive",
                       }),
@@ -433,9 +429,9 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
         {sel && selected !== null && (
           <section className="space-y-3 rounded-md border border-border p-3">
             <div className="flex items-center justify-between">
-              <Label>Selected {sel.type}</Label>
+              <Label>{t("selectedElement", { type: sel.type })}</Label>
               <Button size="sm" variant="ghost" onClick={() => removeElement(selected!)}>
-                Remove
+                {t("remove")}
               </Button>
             </div>
 
@@ -444,7 +440,7 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
                 value={sel.text ?? ""}
                 maxLength={bounds.max_text_len}
                 onChange={(e) => patchElement(selected!, { text: e.target.value })}
-                placeholder="Certificate text"
+                placeholder={t("certificateText")}
               />
             )}
             {sel.type === "token" && (
@@ -464,7 +460,7 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
               <>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <Label className="text-xs">Font</Label>
+                    <Label className="text-xs">{t("font.label")}</Label>
                     <Select
                       value={sel.font ?? defaultFont}
                       onChange={(e) => patchElement(selected!, { font: e.target.value })}
@@ -477,10 +473,10 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
                     </Select>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Colour</Label>
+                    <Label className="text-xs">{t("colour")}</Label>
                     <input
                       type="color"
-                      aria-label="Text colour"
+                      aria-label={t("textColour")}
                       className="h-10 w-full cursor-pointer rounded-md border border-input bg-background"
                       value={sel.color ?? CERT_DEFAULT_TEXT}
                       onChange={(e) => patchElement(selected!, { color: e.target.value })}
@@ -489,7 +485,7 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">
-                    Size ({sel.font_size?.toFixed(1)}% of height)
+                    {t("sizeOfHeight", { size: sel.font_size?.toFixed(1) ?? "" })}
                   </Label>
                   <input
                     type="range"
@@ -509,7 +505,7 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
                       variant={sel.align === a ? "default" : "outline"}
                       onClick={() => patchElement(selected!, { align: a })}
                     >
-                      {a}
+                      {t(`align.${a}`)}
                     </Button>
                   ))}
                   <Button
@@ -517,21 +513,21 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
                     variant={sel.bold ? "default" : "outline"}
                     onClick={() => patchElement(selected!, { bold: !sel.bold })}
                   >
-                    Bold
+                    {t("bold")}
                   </Button>
                   <Button
                     size="sm"
                     variant={sel.italic ? "default" : "outline"}
                     onClick={() => patchElement(selected!, { italic: !sel.italic })}
                   >
-                    Italic
+                    {t("italic")}
                   </Button>
                 </div>
               </>
             )}
 
             <div className="space-y-1">
-              <Label className="text-xs">Width ({sel.width.toFixed(0)}%)</Label>
+              <Label className="text-xs">{t("width", { width: sel.width.toFixed(0) })}</Label>
               <input
                 type="range"
                 className="w-full"
@@ -547,14 +543,14 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
 
         {/* Background */}
         <section className="space-y-2">
-          <Label>Background</Label>
+          <Label>{t("background")}</Label>
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
               variant={draft.background_kind === "color" ? "default" : "outline"}
               onClick={() => patch({ background_kind: "color" })}
             >
-              Colour
+              {t("colour")}
             </Button>
             <Button
               size="sm"
@@ -566,11 +562,11 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
                 })
               }
             >
-              Preset
+              {t("preset")}
             </Button>
             <label className="inline-flex">
               <Button asChild size="sm" variant={draft.background_kind === "upload" ? "default" : "outline"} disabled={uploadBg.isPending}>
-                <span className="cursor-pointer">{uploadBg.isPending ? "Uploading…" : "Upload"}</span>
+                <span className="cursor-pointer">{uploadBg.isPending ? t("uploading") : t("upload")}</span>
               </Button>
               <input
                 type="file"
@@ -583,10 +579,10 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
                   uploadBg.mutate(file, {
                     onSuccess: () => {
                       patch({ background_kind: "upload" });
-                      toast("Background uploaded", { variant: "success" });
+                      toast(t("backgroundUploaded"), { variant: "success" });
                     },
                     onError: (err) =>
-                      toast("Upload failed", {
+                      toast(t("uploadFailed"), {
                         description: (err as Error).message,
                         variant: "destructive",
                       }),
@@ -598,7 +594,7 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
           {draft.background_kind === "color" && (
             <input
               type="color"
-              aria-label="Background colour"
+              aria-label={t("backgroundColour")}
               className="h-10 w-full cursor-pointer rounded-md border border-input bg-background"
               value={draft.background_color}
               onChange={(e) => patch({ background_color: e.target.value })}
@@ -631,20 +627,20 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <Label className="text-xs">Accent colour</Label>
+                  <Label className="text-xs">{t("accentColour")}</Label>
                   <input
                     type="color"
-                    aria-label="Preset accent colour"
+                    aria-label={t("presetAccentColour")}
                     className="h-10 w-full cursor-pointer rounded-md border border-input bg-background"
                     value={draft.preset_accent ?? selectedPreset.accent}
                     onChange={(e) => patch({ preset_accent: e.target.value })}
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">Base colour</Label>
+                  <Label className="text-xs">{t("baseColour")}</Label>
                   <input
                     type="color"
-                    aria-label="Preset base colour"
+                    aria-label={t("presetBaseColour")}
                     className="h-10 w-full cursor-pointer rounded-md border border-input bg-background"
                     value={draft.preset_base ?? selectedPreset.base}
                     onChange={(e) => patch({ preset_base: e.target.value })}
@@ -657,44 +653,42 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
                   className="text-xs text-muted-foreground underline"
                   onClick={() => patch({ preset_accent: null, preset_base: null })}
                 >
-                  Reset to preset default colours
+                  {t("resetPresetColours")}
                 </button>
               )}
             </div>
           )}
           {draft.background_kind === "upload" && !hasBgImage && (
-            <p className="text-xs text-muted-foreground">
-              Upload a landscape, roughly A4-proportioned image (PNG/JPEG/WebP).
-            </p>
+            <p className="text-xs text-muted-foreground">{t("uploadBgHint")}</p>
           )}
         </section>
 
         {/* Recipients + release */}
         <section className="space-y-3">
           <div className="space-y-1">
-            <Label>Recipients</Label>
+            <Label>{t("recipients")}</Label>
             <Select
               value={draft.recipient_rule}
               onChange={(e) => patch({ recipient_rule: e.target.value as CertificateTemplateInput["recipient_rule"] })}
             >
-              <option value="all">All participants</option>
-              <option value="solvers">Only participants who scored</option>
+              <option value="all">{t("recipientsAll")}</option>
+              <option value="solvers">{t("recipientsSolvers")}</option>
             </Select>
           </div>
           <div className="space-y-1">
-            <Label>Release timing</Label>
+            <Label>{t("releaseTiming")}</Label>
             <Select
               value={draft.release_mode}
               onChange={(e) => patch({ release_mode: e.target.value as CertificateTemplateInput["release_mode"] })}
             >
-              <option value="manual">Manual — I&apos;ll release them</option>
-              <option value="on_end">Automatically when the competition ends</option>
-              <option value="end_delay">A set time after the competition ends</option>
+              <option value="manual">{t("releaseManual")}</option>
+              <option value="on_end">{t("releaseOnEnd")}</option>
+              <option value="end_delay">{t("releaseEndDelay")}</option>
             </Select>
           </div>
           {draft.release_mode === "end_delay" && (
             <div className="space-y-1">
-              <Label className="text-xs">Minutes after end</Label>
+              <Label className="text-xs">{t("minutesAfterEnd")}</Label>
               <Input
                 type="number"
                 min={0}
@@ -711,10 +705,10 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
                 onClick={onRelease}
                 disabled={release.isPending || isDirty}
               >
-                {release.isPending ? "Releasing…" : "Release certificates now"}
+                {release.isPending ? t("releasing") : t("releaseNow")}
               </Button>
               {isDirty && (
-                <p className="text-xs text-warning">Save your design before releasing.</p>
+                <p className="text-xs text-warning">{t("saveBeforeRelease")}</p>
               )}
             </div>
           )}
@@ -722,40 +716,34 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
 
         {/* Bulk export */}
         <section className="space-y-2 border-t border-border pt-4">
-          <Label>Bulk export</Label>
-          <p className="text-xs text-muted-foreground">
-            Render every recipient&apos;s certificate into a single ZIP.
-          </p>
+          <Label>{t("bulkExport")}</Label>
+          <p className="text-xs text-muted-foreground">{t("bulkExportHint")}</p>
           <Button size="sm" variant="outline" onClick={onExport} disabled={createExport.isPending || job.data?.status === "pending" || job.data?.status === "running"}>
             {job.data?.status === "pending" || job.data?.status === "running"
-              ? `Rendering… (${job.data?.rendered ?? 0}/${job.data?.total ?? 0})`
-              : "Export all as ZIP"}
+              ? t("bulkRendering", { rendered: job.data?.rendered ?? 0, total: job.data?.total ?? 0 })
+              : t("exportZip")}
           </Button>
           {job.data?.status === "done" && job.data.download_url && (
             <Button asChild size="sm">
               <a href={job.data.download_url} download>
-                Download ZIP ({job.data.rendered} certificates)
+                {t("downloadZip", { count: job.data.rendered })}
               </a>
             </Button>
           )}
           {job.data?.status === "failed" && (
-            <p className="text-xs text-destructive">Export failed: {job.data.error}</p>
+            <p className="text-xs text-destructive">{t("bulkExportError", { error: job.data.error ?? "" })}</p>
           )}
         </section>
 
         {/* Custom fonts */}
         <section className="space-y-2 border-t border-border pt-4">
-          <Label>Custom fonts</Label>
-          <p className="text-xs text-muted-foreground">
-            Upload a company or brand font (TTF or OTF) to use on text and token
-            elements. Only upload fonts you are licensed to use — they are stored
-            with this competition and used solely to render its certificates.
-          </p>
+          <Label>{t("customFonts")}</Label>
+          <p className="text-xs text-muted-foreground">{t("customFontsHint")}</p>
           <label className="inline-flex">
-            <span className="sr-only">Upload custom font</span>
+            <span className="sr-only">{t("uploadFontAria")}</span>
             <Button asChild size="sm" variant="outline" disabled={uploadFont.isPending}>
               <span className="cursor-pointer">
-                {uploadFont.isPending ? "Uploading…" : "Upload font"}
+                {uploadFont.isPending ? t("uploading") : t("uploadFont")}
               </span>
             </Button>
             <input
@@ -769,9 +757,9 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
                 uploadFont.mutate(
                   { file },
                   {
-                    onSuccess: () => toast("Font uploaded", { variant: "success" }),
+                    onSuccess: () => toast(t("font.uploadedToast"), { variant: "success" }),
                     onError: (err) =>
-                      toast("Font upload failed", {
+                      toast(t("font.uploadFailed"), {
                         description: (err as Error).message,
                         variant: "destructive",
                       }),
@@ -796,7 +784,7 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
                     onClick={() => onDeleteFont(f.id)}
                     disabled={deleteFont.isPending}
                   >
-                    Remove
+                    {t("remove")}
                   </Button>
                 </li>
               ))}
@@ -806,12 +794,8 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
 
         {/* Reusable template (export / import) */}
         <section className="space-y-2 border-t border-border pt-4">
-          <Label>Reusable template</Label>
-          <p className="text-xs text-muted-foreground">
-            Save this design — including uploaded images and fonts — as a single
-            file, then import it into another competition or a future event.
-            Exports the last saved design; importing replaces the current one.
-          </p>
+          <Label>{t("reusableTemplate")}</Label>
+          <p className="text-xs text-muted-foreground">{t("reusableTemplateHint")}</p>
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
@@ -819,13 +803,13 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
               onClick={onExportTemplate}
               disabled={exportTpl.isPending || !template.data?.id}
             >
-              {exportTpl.isPending ? "Exporting…" : "Export template"}
+              {exportTpl.isPending ? t("exporting") : t("template.export")}
             </Button>
             <label className="inline-flex">
-              <span className="sr-only">Import template file</span>
+              <span className="sr-only">{t("template.importAria")}</span>
               <Button asChild size="sm" variant="outline" disabled={importTpl.isPending}>
                 <span className="cursor-pointer">
-                  {importTpl.isPending ? "Importing…" : "Import template"}
+                  {importTpl.isPending ? t("importing") : t("template.import")}
                 </span>
               </Button>
               <input
@@ -853,11 +837,11 @@ export function CertificateDesigner({ competitionId }: { competitionId: string }
       >
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Certificate preview</DialogTitle>
+            <DialogTitle>{t("previewTitle")}</DialogTitle>
           </DialogHeader>
           {previewUrl && (
             /* eslint-disable-next-line @next/next/no-img-element */
-            <img src={previewUrl} alt="Certificate preview" className="w-full rounded-md border border-border" />
+            <img src={previewUrl} alt={t("previewTitle")} className="w-full rounded-md border border-border" />
           )}
         </DialogContent>
       </Dialog>

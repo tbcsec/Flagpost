@@ -15,6 +15,7 @@
 // form leaves its field blank and omitting it preserves what's saved. That
 // mirrors the SMTP password.
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { SsoBrandIcon } from "@/components/brand/sso-brand-icons";
@@ -190,6 +191,7 @@ function ProviderForm({
   prefill?: Partial<FormState> | null;
   onDone: () => void;
 }) {
+  const t = useTranslations("admin.authProviders");
   const create = useCreateAuthProvider();
   const update = useUpdateAuthProvider();
   const [form, setForm] = useState<FormState>(
@@ -275,7 +277,7 @@ function ProviderForm({
         },
         {
           onSuccess: () => {
-            toast("Provider updated", { variant: "success" });
+            toast(t("providerUpdated"), { variant: "success" });
             onDone();
           },
         },
@@ -294,7 +296,7 @@ function ProviderForm({
         },
         {
           onSuccess: () => {
-            toast("Provider added — enable it when you've tested it", {
+            toast(t("providerAdded"), {
               variant: "success",
             });
             onDone();
@@ -307,20 +309,16 @@ function ProviderForm({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{editing ? `Edit ${editing.name}` : "Add a provider"}</CardTitle>
+        <CardTitle>{editing ? t("editTitle", { name: editing.name }) : t("addTitle")}</CardTitle>
         <CardDescription>
-          {isLdap
-            ? "Point Flagpost at your directory. Directory users sign in with the ordinary username & password form — no separate button appears. New providers start disabled."
-            : isSaml
-              ? "Register Flagpost as a Service Provider at your IdP (its metadata is at the SP metadata URL below once saved), then paste the IdP's details here. New providers start disabled."
-              : "Register Flagpost as an OAuth client at your provider first, then paste its details here. New providers start disabled."}
+          {isLdap ? t("descLdap") : isSaml ? t("descSaml") : t("descOauth")}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={onSubmit} className="grid max-w-xl gap-4">
           {!editing && (
             <div className="grid gap-2">
-              <Label htmlFor="ap-kind">Protocol</Label>
+              <Label htmlFor="ap-kind">{t("protocol")}</Label>
               <Select
                 id="ap-kind"
                 value={form.kind}
@@ -336,23 +334,17 @@ function ProviderForm({
                   }));
                 }}
               >
-                <option value="oidc">OpenID Connect</option>
-                <option value="oauth2">OAuth 2.0 (no OpenID Connect)</option>
-                <option value="saml">SAML 2.0</option>
-                <option value="ldap">LDAP / Active Directory</option>
+                <option value="oidc">{t("protocolOidc")}</option>
+                <option value="oauth2">{t("protocolOauth2")}</option>
+                <option value="saml">{t("protocolSaml")}</option>
+                <option value="ldap">{t("protocolLdap")}</option>
               </Select>
-              <p className="text-xs text-muted-foreground">
-                Fixed after creation. OIDC suits most modern providers; plain
-                OAuth 2.0 is for providers without OpenID Connect, like GitHub
-                and Discord, where identity comes from a userinfo API call; SAML
-                suits campus/enterprise IdPs (Shibboleth, ADFS); LDAP binds
-                directly against a directory (AD, OpenLDAP, FreeIPA).
-              </p>
+              <p className="text-xs text-muted-foreground">{t("protocolHint")}</p>
             </div>
           )}
 
           <div className="grid gap-2">
-            <Label htmlFor="ap-name">Display name</Label>
+            <Label htmlFor="ap-name">{t("displayName")}</Label>
             <Input
               id="ap-name"
               value={form.name}
@@ -362,13 +354,13 @@ function ProviderForm({
             />
             <p className="text-xs text-muted-foreground">
               {isLdap
-                ? "Shown in the admin list — LDAP has no login button."
-                : `Shown on the login button: “Sign in with ${form.name || "…"}”.`}
+                ? t("displayNameHintLdap")
+                : t("displayNameHint", { name: form.name || "…" })}
             </p>
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="ap-slug">Slug</Label>
+            <Label htmlFor="ap-slug">{t("slug")}</Label>
             <Input
               id="ap-slug"
               value={form.slug}
@@ -379,16 +371,14 @@ function ProviderForm({
               disabled={!!editing}
             />
             <p className="text-xs text-muted-foreground">
-              {editing
-                ? "Fixed after creation — it's part of the URLs registered at your provider."
-                : "Lowercase letters, numbers and hyphens. Appears in the callback/ACS URL."}
+              {editing ? t("slugHintEditing") : t("slugHint")}
             </p>
           </div>
 
           {isLdap ? (
             <>
               <div className="grid gap-2">
-                <Label htmlFor="ap-ldap-url">Server URL</Label>
+                <Label htmlFor="ap-ldap-url">{t("serverUrl")}</Label>
                 <Input
                   id="ap-ldap-url"
                   value={form.server_url}
@@ -404,12 +394,11 @@ function ProviderForm({
                     onChange={(e) => set("use_starttls", e.target.checked)}
                     style={{ accentColor: "hsl(var(--primary))" }}
                   />
-                  Upgrade with StartTLS (required for ldap:// — a plaintext
-                  connection is never used)
+                  {t("startTls")}
                 </label>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="ap-ldap-bind">Service account (bind DN)</Label>
+                <Label htmlFor="ap-ldap-bind">{t("bindDn")}</Label>
                 <Input
                   id="ap-ldap-bind"
                   value={form.bind_dn}
@@ -417,14 +406,10 @@ function ProviderForm({
                   placeholder="cn=flagpost,ou=services,dc=example,dc=com"
                   required
                 />
-                <p className="text-xs text-muted-foreground">
-                  Used to look up the person&apos;s entry before their own
-                  credentials are checked. Its password goes in the bind
-                  password field below.
-                </p>
+                <p className="text-xs text-muted-foreground">{t("bindDnHint")}</p>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="ap-ldap-base">Search base DN</Label>
+                <Label htmlFor="ap-ldap-base">{t("baseDn")}</Label>
                 <Input
                   id="ap-ldap-base"
                   value={form.base_dn}
@@ -435,7 +420,7 @@ function ProviderForm({
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-2">
-                  <Label htmlFor="ap-ldap-search">Login attribute</Label>
+                  <Label htmlFor="ap-ldap-search">{t("loginAttribute")}</Label>
                   <Input
                     id="ap-ldap-search"
                     value={form.search_attribute}
@@ -445,7 +430,7 @@ function ProviderForm({
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="ap-ldap-subject">Stable ID attribute</Label>
+                  <Label htmlFor="ap-ldap-subject">{t("stableIdAttribute")}</Label>
                   <Input
                     id="ap-ldap-subject"
                     value={form.subject_attribute}
@@ -456,17 +441,13 @@ function ProviderForm({
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Login attribute: what people type as their username
-                (<span className="font-mono">sAMAccountName</span> on AD,{" "}
-                <span className="font-mono">uid</span> elsewhere). Stable ID:
-                the attribute that identifies the account forever —{" "}
-                <span className="font-mono">objectGUID</span> on AD,{" "}
-                <span className="font-mono">entryUUID</span> on
-                OpenLDAP/FreeIPA. Never a DN.
+                {t.rich("ldapAttrHint", {
+                  mono: (chunks) => <span className="font-mono">{chunks}</span>,
+                })}
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-2">
-                  <Label htmlFor="ap-attr-email">Email attribute</Label>
+                  <Label htmlFor="ap-attr-email">{t("emailAttribute")}</Label>
                   <Input
                     id="ap-attr-email"
                     value={form.email_attribute}
@@ -475,7 +456,7 @@ function ProviderForm({
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="ap-attr-name">Name attribute</Label>
+                  <Label htmlFor="ap-attr-name">{t("nameAttribute")}</Label>
                   <Input
                     id="ap-attr-name"
                     value={form.name_attribute}
@@ -488,7 +469,7 @@ function ProviderForm({
           ) : isSaml ? (
             <>
               <div className="grid gap-2">
-                <Label htmlFor="ap-idp-entity">IdP entity ID</Label>
+                <Label htmlFor="ap-idp-entity">{t("idpEntityId")}</Label>
                 <Input
                   id="ap-idp-entity"
                   value={form.idp_entity_id}
@@ -498,7 +479,7 @@ function ProviderForm({
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="ap-idp-sso">IdP SSO URL</Label>
+                <Label htmlFor="ap-idp-sso">{t("idpSsoUrl")}</Label>
                 <Input
                   id="ap-idp-sso"
                   type="url"
@@ -507,13 +488,10 @@ function ProviderForm({
                   placeholder="https://idp.example.edu/idp/profile/SAML2/Redirect/SSO"
                   required
                 />
-                <p className="text-xs text-muted-foreground">
-                  The HTTP-Redirect single-sign-on endpoint we send the login
-                  request to.
-                </p>
+                <p className="text-xs text-muted-foreground">{t("idpSsoUrlHint")}</p>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="ap-idp-cert">IdP signing certificate (X.509)</Label>
+                <Label htmlFor="ap-idp-cert">{t("idpCert")}</Label>
                 <textarea
                   id="ap-idp-cert"
                   className={TEXTAREA_CLASS}
@@ -522,13 +500,10 @@ function ProviderForm({
                   placeholder="-----BEGIN CERTIFICATE-----&#10;…&#10;-----END CERTIFICATE-----"
                   required
                 />
-                <p className="text-xs text-muted-foreground">
-                  Every assertion is verified against this before it&apos;s
-                  trusted — the load-bearing setting.
-                </p>
+                <p className="text-xs text-muted-foreground">{t("idpCertHint")}</p>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="ap-sp-entity">SP entity ID</Label>
+                <Label htmlFor="ap-sp-entity">{t("spEntityId")}</Label>
                 <Input
                   id="ap-sp-entity"
                   value={form.sp_entity_id}
@@ -536,13 +511,11 @@ function ProviderForm({
                   placeholder="https://ctf.example.edu/saml/metadata"
                   required
                 />
-                <p className="text-xs text-muted-foreground">
-                  Our identifier at the IdP. Must match what you register there.
-                </p>
+                <p className="text-xs text-muted-foreground">{t("spEntityIdHint")}</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-2">
-                  <Label htmlFor="ap-attr-email">Email attribute</Label>
+                  <Label htmlFor="ap-attr-email">{t("emailAttribute")}</Label>
                   <Input
                     id="ap-attr-email"
                     value={form.email_attribute}
@@ -551,7 +524,7 @@ function ProviderForm({
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="ap-attr-name">Name attribute</Label>
+                  <Label htmlFor="ap-attr-name">{t("nameAttribute")}</Label>
                   <Input
                     id="ap-attr-name"
                     value={form.name_attribute}
@@ -560,15 +533,12 @@ function ProviderForm({
                   />
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground">
-                The exact SAML attribute names your IdP sends. The stable NameID
-                (must be persistent) becomes the account&apos;s identity.
-              </p>
+              <p className="text-xs text-muted-foreground">{t("samlAttrHint")}</p>
             </>
           ) : isOauth2 ? (
             <>
               <div className="grid gap-2">
-                <Label htmlFor="ap-authorize-url">Authorization URL</Label>
+                <Label htmlFor="ap-authorize-url">{t("authorizeUrl")}</Label>
                 <Input
                   id="ap-authorize-url"
                   type="url"
@@ -579,7 +549,7 @@ function ProviderForm({
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="ap-token-url">Token URL</Label>
+                <Label htmlFor="ap-token-url">{t("tokenUrl")}</Label>
                 <Input
                   id="ap-token-url"
                   type="url"
@@ -590,7 +560,7 @@ function ProviderForm({
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="ap-userinfo-url">Userinfo URL</Label>
+                <Label htmlFor="ap-userinfo-url">{t("userinfoUrl")}</Label>
                 <Input
                   id="ap-userinfo-url"
                   type="url"
@@ -599,13 +569,10 @@ function ProviderForm({
                   placeholder="https://api.github.com/user"
                   required
                 />
-                <p className="text-xs text-muted-foreground">
-                  There is no ID token in plain OAuth 2.0 — the account&apos;s
-                  identity is read from this endpoint&apos;s JSON response.
-                </p>
+                <p className="text-xs text-muted-foreground">{t("userinfoUrlHint")}</p>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="ap-client">Client ID</Label>
+                <Label htmlFor="ap-client">{t("clientId")}</Label>
                 <Input
                   id="ap-client"
                   value={form.client_id}
@@ -614,7 +581,7 @@ function ProviderForm({
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="ap-scopes">Scopes</Label>
+                <Label htmlFor="ap-scopes">{t("scopes")}</Label>
                 <Input
                   id="ap-scopes"
                   value={form.scopes}
@@ -624,10 +591,10 @@ function ProviderForm({
               </div>
 
               <div className="grid gap-3 rounded-md border border-border p-3">
-                <p className="text-xs font-medium">Claim map</p>
+                <p className="text-xs font-medium">{t("claimMap")}</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="grid gap-2">
-                    <Label htmlFor="ap-subject-field">Subject field</Label>
+                    <Label htmlFor="ap-subject-field">{t("subjectField")}</Label>
                     <Input
                       id="ap-subject-field"
                       value={form.subject_field}
@@ -637,7 +604,7 @@ function ProviderForm({
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="ap-email-field">Email field</Label>
+                    <Label htmlFor="ap-email-field">{t("emailField")}</Label>
                     <Input
                       id="ap-email-field"
                       value={form.email_field}
@@ -646,7 +613,7 @@ function ProviderForm({
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="ap-name-field">Name field</Label>
+                    <Label htmlFor="ap-name-field">{t("nameField")}</Label>
                     <Input
                       id="ap-name-field"
                       value={form.name_field}
@@ -656,7 +623,7 @@ function ProviderForm({
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="ap-email-verified-field">
-                      Email-verified field
+                      {t("emailVerifiedField")}
                     </Label>
                     <Input
                       id="ap-email-verified-field"
@@ -668,18 +635,13 @@ function ProviderForm({
                     />
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Which fields of the userinfo response carry identity. The
-                  subject must be the provider&apos;s stable user ID, never the
-                  email address — it&apos;s what keeps an account attached when
-                  the user renames or changes address upstream.
-                </p>
+                <p className="text-xs text-muted-foreground">{t("claimMapHint")}</p>
               </div>
 
               <div className="grid gap-2">
                 <Label htmlFor="ap-emails-url">
-                  Verified-emails URL{" "}
-                  <span className="text-muted-foreground">(optional)</span>
+                  {t("verifiedEmailsUrl")}{" "}
+                  <span className="text-muted-foreground">{t("optional")}</span>
                 </Label>
                 <Input
                   id="ap-emails-url"
@@ -688,12 +650,7 @@ function ProviderForm({
                   onChange={(e) => set("emails_url", e.target.value)}
                   placeholder="https://api.github.com/user/emails"
                 />
-                <p className="text-xs text-muted-foreground">
-                  For providers that keep verified addresses on a separate
-                  endpoint (GitHub). Only the primary, verified address is
-                  trusted. Leave blank if the userinfo response already carries
-                  a verified flag.
-                </p>
+                <p className="text-xs text-muted-foreground">{t("verifiedEmailsUrlHint")}</p>
               </div>
 
               <label className="flex items-start gap-2 text-sm">
@@ -704,11 +661,9 @@ function ProviderForm({
                   onChange={(e) => set("use_pkce", e.target.checked)}
                 />
                 <span>
-                  Use PKCE
+                  {t("usePkce")}
                   <span className="block text-xs text-muted-foreground">
-                    Extra protection where the provider supports it (Discord
-                    does; GitHub&apos;s OAuth Apps ignore it). Leave off if
-                    sign-in fails with an unexpected-parameter error.
+                    {t("usePkceHint")}
                   </span>
                 </span>
               </label>
@@ -716,7 +671,7 @@ function ProviderForm({
           ) : (
             <>
               <div className="grid gap-2">
-                <Label htmlFor="ap-issuer">Issuer URL</Label>
+                <Label htmlFor="ap-issuer">{t("issuerUrl")}</Label>
                 <Input
                   id="ap-issuer"
                   type="url"
@@ -726,16 +681,14 @@ function ProviderForm({
                   required
                 />
                 <p className="text-xs text-muted-foreground">
-                  Must be HTTPS and publicly resolvable. Discovery reads{" "}
-                  <span className="font-mono">
-                    {(form.issuer || "…").replace(/\/$/, "")}
-                    /.well-known/openid-configuration
-                  </span>
-                  .
+                  {t.rich("issuerUrlHint", {
+                    mono: (chunks) => <span className="font-mono">{chunks}</span>,
+                    url: `${(form.issuer || "…").replace(/\/$/, "")}/.well-known/openid-configuration`,
+                  })}
                 </p>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="ap-client">Client ID</Label>
+                <Label htmlFor="ap-client">{t("clientId")}</Label>
                 <Input
                   id="ap-client"
                   value={form.client_id}
@@ -744,7 +697,7 @@ function ProviderForm({
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="ap-scopes">Scopes</Label>
+                <Label htmlFor="ap-scopes">{t("scopes")}</Label>
                 <Input
                   id="ap-scopes"
                   value={form.scopes}
@@ -754,8 +707,8 @@ function ProviderForm({
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="ap-issuer-template">
-                  Tenant issuer template{" "}
-                  <span className="text-muted-foreground">(optional)</span>
+                  {t("tenantTemplate")}{" "}
+                  <span className="text-muted-foreground">{t("optional")}</span>
                 </Label>
                 <Input
                   id="ap-issuer-template"
@@ -764,12 +717,9 @@ function ProviderForm({
                   placeholder="https://login.microsoftonline.com/{tenantid}/v2.0"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Multi-tenant Microsoft Entra only — leave blank for a normal
-                  provider. When set, the token&apos;s issuer is validated against
-                  this template with the signing-in tenant&apos;s GUID substituted
-                  for <span className="font-mono">{"{tenantid}"}</span>. Trusts
-                  every Entra tenant, so restrict access with the registration
-                  email-domain allowlist.
+                  {t.rich("tenantTemplateHint", {
+                    mono: (chunks) => <span className="font-mono">{chunks}</span>,
+                  })}
                 </p>
               </div>
             </>
@@ -777,11 +727,7 @@ function ProviderForm({
 
           <div className="grid gap-2">
             <Label htmlFor="ap-secret">
-              {isLdap
-                ? "Bind password"
-                : isSaml
-                  ? "SP private key (optional)"
-                  : "Client secret"}
+              {isLdap ? t("secretLdap") : isSaml ? t("secretSaml") : t("secretOidc")}
             </Label>
             {isSaml ? (
               <textarea
@@ -792,8 +738,8 @@ function ProviderForm({
                 onChange={(e) => set("secret", e.target.value)}
                 placeholder={
                   editing?.secret_set
-                    ? "•••••• (leave blank to keep)"
-                    : "-----BEGIN PRIVATE KEY-----…"
+                    ? t("secretPlaceholderKeep")
+                    : t("secretPlaceholderSaml")
                 }
               />
             ) : (
@@ -803,18 +749,11 @@ function ProviderForm({
                 autoComplete="new-password"
                 value={form.secret}
                 onChange={(e) => set("secret", e.target.value)}
-                placeholder={
-                  editing?.secret_set ? "•••••• (leave blank to keep)" : ""
-                }
+                placeholder={editing?.secret_set ? t("secretPlaceholderKeep") : ""}
               />
             )}
             <p className="text-xs text-muted-foreground">
-              Stored encrypted.{" "}
-              {isLdap
-                ? "The service account's password — required before the provider can be enabled."
-                : isSaml
-                  ? "Only needed to sign our requests — leave blank otherwise."
-                  : "Leave blank for a public client using PKCE only."}
+              {isLdap ? t("secretHintLdap") : isSaml ? t("secretHintSaml") : t("secretHintOidc")}
             </p>
           </div>
 
@@ -823,7 +762,7 @@ function ProviderForm({
               OIDC and plain OAuth2. */}
           {(form.kind === "oidc" || form.kind === "oauth2") && (
             <div className="grid gap-2">
-              <Label htmlFor="ap-posture">Sign-in policy</Label>
+              <Label htmlFor="ap-posture">{t("signInPolicy")}</Label>
               <Select
                 id="ap-posture"
                 value={form.posture}
@@ -831,17 +770,11 @@ function ProviderForm({
                   set("posture", e.target.value as "open" | "closed")
                 }
               >
-                <option value="open">
-                  Open — public provider, registration rules apply
-                </option>
-                <option value="closed">
-                  Closed — being in this directory is the admission
-                </option>
+                <option value="open">{t("postureOpen")}</option>
+                <option value="closed">{t("postureClosed")}</option>
               </Select>
               <p className="text-xs text-muted-foreground">
-                {form.posture === "open"
-                  ? "For public IdPs (Google, GitHub): new accounts pass the same registration-open and email-domain checks as the sign-up form."
-                  : "For your own directory (corporate or campus IdP): anyone who can sign in there may enter, even while public registration is closed."}
+                {form.posture === "open" ? t("postureHintOpen") : t("postureHintClosed")}
               </p>
             </div>
           )}
@@ -859,12 +792,9 @@ function ProviderForm({
                   style={{ accentColor: "hsl(var(--primary))" }}
                 />
                 <span>
-                  Trust this provider&apos;s email addresses
+                  {t("trustEmail")}
                   <span className="block text-xs font-normal text-muted-foreground">
-                    Lets a first sign-in attach to an existing account with the
-                    same address. Only enable this if the directory verifies
-                    mailbox ownership — an unverified address here can claim
-                    someone else&apos;s account.
+                    {t("trustEmailHint")}
                   </span>
                 </span>
               </label>
@@ -879,10 +809,10 @@ function ProviderForm({
 
           <div className="flex items-center gap-2">
             <Button type="submit" disabled={pending}>
-              {pending ? "Saving…" : editing ? "Save changes" : "Add provider"}
+              {pending ? t("saving") : editing ? t("saveChanges") : t("addProvider")}
             </Button>
             <Button type="button" variant="ghost" onClick={onDone}>
-              Cancel
+              {t("cancel")}
             </Button>
           </div>
         </form>
@@ -908,6 +838,7 @@ function PresetRow({
   preset: ProviderPreset;
   onUse: (prefill: Partial<FormState>) => void;
 }) {
+  const t = useTranslations("admin.authProviders");
   const [values, setValues] = useState<Record<string, string>>({});
   // Param errors only show after a submit attempt — not while typing a GUID.
   const [attempted, setAttempted] = useState(false);
@@ -952,7 +883,7 @@ function PresetRow({
               repeating it made the longest label ("Set up Microsoft
               (multi-tenant)") set the width of every button. */}
           <Button type="button" variant="outline" size="sm" onClick={start}>
-            {collecting ? "Continue" : "Set up"}
+            {collecting ? t("continue") : t("setUp")}
           </Button>
         </div>
       </div>
@@ -989,6 +920,7 @@ function PresetRow({
 }
 
 export function AuthProvidersPanel() {
+  const t = useTranslations("admin.authProviders");
   const { data: providers, isLoading, isError, error } = useAdminAuthProviders();
   // Degrades gracefully: on error/loading `presets` is undefined and the
   // quick-setup cards simply don't render — the panel works exactly as before.
@@ -1003,17 +935,16 @@ export function AuthProvidersPanel() {
   async function onDelete(provider: AuthProvider) {
     if (
       !(await confirm({
-        title: `Delete ${provider.name}?`,
-        description:
-          "Anyone who signs in only through this provider will lose their way in — a single-sign-on account has no password to fall back on. Disabling it instead is reversible.",
-        confirmLabel: "Delete",
+        title: t("deleteTitle", { name: provider.name }),
+        description: t("deleteDescription"),
+        confirmLabel: t("deleteConfirm"),
         destructive: true,
       }))
     ) {
       return;
     }
     remove.mutate(provider.id, {
-      onSuccess: () => toast("Provider deleted", { variant: "success" }),
+      onSuccess: () => toast(t("providerDeleted"), { variant: "success" }),
     });
   }
 
@@ -1029,15 +960,13 @@ export function AuthProvidersPanel() {
     <div className="grid gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Auth providers</h2>
+          <h2 className="text-lg font-semibold">{t("heading")}</h2>
           <p className="mb-4 mt-1 text-sm text-muted-foreground">
-            Let people sign in with an external identity provider. Local
-            passwords keep working, so an administrator can still get in if a
-            provider goes down.
+            {t("headingDescription")}
           </p>
         </div>
         {!adding && !editing && (
-          <Button onClick={() => setAdding(true)}>Add provider</Button>
+          <Button onClick={() => setAdding(true)}>{t("addProvider")}</Button>
         )}
       </div>
 
@@ -1045,14 +974,11 @@ export function AuthProvidersPanel() {
           provider button. Presets only prefill that same form. */}
       {!adding && !editing && presets && presets.length > 0 && (
         <div className="grid gap-2">
-          <h3 className="text-sm font-semibold">Quick set up</h3>
+          <h3 className="text-sm font-semibold">{t("quickSetup")}</h3>
           {/* Said once here rather than repeated in all five notes: it's the
               same for every provider, and forgetting it is the most common
               reason a finished setup still fails at first sign-in. */}
-          <p className="text-xs text-muted-foreground">
-            Each of these needs an app registered on the provider&apos;s side.
-            After saving, register the callback URL Flagpost shows you.
-          </p>
+          <p className="text-xs text-muted-foreground">{t("quickSetupHint")}</p>
           <Card>
             <CardContent className="divide-y divide-border p-0">
               {presets.map((preset) => (
@@ -1088,7 +1014,7 @@ export function AuthProvidersPanel() {
       )}
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-sm text-muted-foreground">{t("loading")}</p>
       ) : providers && providers.length > 0 ? (
         <div className="grid gap-3">
           {providers.map((p) => (
@@ -1101,10 +1027,10 @@ export function AuthProvidersPanel() {
                       {p.kind}
                     </Badge>
                     <Badge variant={p.enabled ? "success" : "muted"}>
-                      {p.enabled ? "Enabled" : "Disabled"}
+                      {p.enabled ? t("badgeEnabled") : t("badgeDisabled")}
                     </Badge>
                     {p.posture === "closed" && (
-                      <Badge variant="secondary">Closed</Badge>
+                      <Badge variant="secondary">{t("badgeClosed")}</Badge>
                     )}
                   </div>
                   <span className="text-xs text-muted-foreground">
@@ -1118,15 +1044,15 @@ export function AuthProvidersPanel() {
                   </span>
                   {p.kind === "oidc" || p.kind === "oauth2" ? (
                     <span className="font-mono text-[11px] text-muted-foreground">
-                      Redirect URI: {p.redirect_uri}
+                      {t("redirectUri", { uri: p.redirect_uri })}
                     </span>
                   ) : p.kind === "saml" ? (
                     <span className="font-mono text-[11px] text-muted-foreground">
-                      SP metadata: /api/auth/saml/{p.slug}/metadata
+                      {t("spMetadata", { slug: p.slug })}
                     </span>
                   ) : (
                     <span className="text-[11px] text-muted-foreground">
-                      Signs in through the standard username &amp; password form
+                      {t("ldapSignInNote")}
                     </span>
                   )}
                 </div>
@@ -1140,14 +1066,14 @@ export function AuthProvidersPanel() {
                         { id: p.id, enabled: !p.enabled },
                         {
                           onSuccess: () =>
-                            toast(p.enabled ? "Provider disabled" : "Provider enabled", {
+                            toast(p.enabled ? t("providerDisabled") : t("providerEnabled"), {
                               variant: "success",
                             }),
                         },
                       )
                     }
                   >
-                    {p.enabled ? "Disable" : "Enable"}
+                    {p.enabled ? t("disable") : t("enable")}
                   </Button>
                   <Button
                     variant="ghost"
@@ -1160,7 +1086,7 @@ export function AuthProvidersPanel() {
                       setEditing(p);
                     }}
                   >
-                    Edit
+                    {t("edit")}
                   </Button>
                   <Button
                     variant="ghost"
@@ -1169,7 +1095,7 @@ export function AuthProvidersPanel() {
                     disabled={remove.isPending}
                     onClick={() => onDelete(p)}
                   >
-                    Delete
+                    {t("delete")}
                   </Button>
                 </div>
               </CardContent>
@@ -1179,9 +1105,9 @@ export function AuthProvidersPanel() {
       ) : (
         !adding && (
           <EmptyState
-            title="No identity providers"
-            description="Add an OIDC, OAuth 2.0, SAML or LDAP provider to let people sign in with an existing account instead of a Flagpost password."
-            action={<Button onClick={() => setAdding(true)}>Add provider</Button>}
+            title={t("emptyTitle")}
+            description={t("emptyDescription")}
+            action={<Button onClick={() => setAdding(true)}>{t("addProvider")}</Button>}
           />
         )
       )}

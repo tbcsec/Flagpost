@@ -26,10 +26,19 @@ vi.mock("@/stores/auth", () => ({
 vi.mock("@/lib/hooks/use-users", () => ({
   useChangeUsername: () => ({ mutate: vi.fn(), isPending: false }),
 }));
+// Site policy (#298): the card reads only `username_changes_enabled` off the
+// public settings; default it on so the pre-existing tests are unaffected.
+let usernameChangesEnabled = true;
+vi.mock("@/lib/hooks/use-site-settings", () => ({
+  useSiteSettings: () => ({
+    data: { username_changes_enabled: usernameChangesEnabled },
+  }),
+}));
 vi.mock("@/stores/toast", () => ({ toast: vi.fn() }));
 
 describe("UsernameCard", () => {
   it("shows the change form when no cooldown is active", () => {
+    usernameChangesEnabled = true;
     current = { ...base, username_change_allowed_at: null };
     renderWithIntl(<UsernameCard />);
     expect(screen.getByLabelText("Username")).toHaveValue("ada");
@@ -37,10 +46,18 @@ describe("UsernameCard", () => {
   });
 
   it("hides the form and shows the dated notice during the cooldown", () => {
+    usernameChangesEnabled = true;
     const future = new Date(Date.now() + 20 * 864e5).toISOString();
     current = { ...base, username_change_allowed_at: future };
     renderWithIntl(<UsernameCard />);
     expect(screen.queryByLabelText("Username")).toBeNull();
     expect(screen.getByText(/change it again on/i)).toBeInTheDocument();
+  });
+
+  it("renders nothing at all when the site has renames disabled (#298)", () => {
+    usernameChangesEnabled = false;
+    current = { ...base, username_change_allowed_at: null };
+    const { container } = renderWithIntl(<UsernameCard />);
+    expect(container).toBeEmptyDOMElement();
   });
 });

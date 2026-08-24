@@ -536,6 +536,16 @@ async def change_username(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many attempts — please wait a few minutes and try again",
         )
+    # Site policy gate (#298), before the password check so a disabled endpoint
+    # never verifies passwords. Only this self-service path is governed — an
+    # admin rename (manage_users, routers/users.py) is how a provisioned name
+    # gets fixed while renames are off.
+    site = await db.get(SiteSettings, SITE_SETTINGS_ID)
+    if site is not None and not site.username_changes_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Username changes are disabled on this platform",
+        )
     if not verify_password(body.current_password, current_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

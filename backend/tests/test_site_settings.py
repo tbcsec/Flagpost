@@ -38,6 +38,7 @@ async def test_public_read_returns_defaults_without_auth(client):
         "archive_retention_days": 30,
         "email_required": False,
         "email_verification_enabled": False,
+        "username_changes_enabled": True,
     }
     # Public shape only — no internal fields leak.
     assert "updated_at" not in body
@@ -73,6 +74,7 @@ async def test_admin_update_round_trips(client):
         "archive_retention_days": 30,
         "email_required": False,
         "email_verification_enabled": False,
+        "username_changes_enabled": True,
     }
 
 

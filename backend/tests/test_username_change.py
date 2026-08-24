@@ -12,6 +12,7 @@ from sqlalchemy import select
 
 from db import SessionLocal, utcnow
 from models.audit_log import AuditLogEntry
+from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 from models.user import USERNAME_CHANGE_COOLDOWN, User
 from tests.conftest import admin_token
 
@@ -167,3 +168,89 @@ async def test_admin_rename_bypasses_cooldown_and_audits_actor(client):
     admin_entry = next(e for e in entries if e.payload["actor_user_id"] == admin_id)
     assert admin_entry.payload["old_name"] == "rowdy2"
     assert admin_entry.payload["new_name"] == "clean-name"
+
+
+# --- site toggle: username_changes_enabled (#298) ----------------------------
+
+
+async def _set_username_changes(enabled: bool) -> None:
+    """Flip the site policy directly — the API round-trip has its own test."""
+    async with SessionLocal() as session:
+        settings = await session.get(SiteSettings, SITE_SETTINGS_ID)
+        if settings is None:
+            settings = SiteSettings(id=SITE_SETTINGS_ID)
+            session.add(settings)
+        settings.username_changes_enabled = enabled
+        await session.commit()
+
+
+async def test_disabled_blocks_self_service_before_the_password_check(client):
+    token, _ = await _register(client, "pinned")
+    await _set_username_changes(False)
+
+    resp = await _change(client, token, "renamed")
+    assert resp.status_code == 403
+    assert "disabled" in resp.json()["detail"].lower()
+
+    # The gate sits before password verification: a wrong password while
+    # disabled is still a 403, not a 400 — the endpoint never checks it.
+    wrong_pw = await _change(client, token, "renamed", pw="not-my-password")
+    assert wrong_pw.status_code == 403
+
+    me = await client.get("/api/auth/me", headers=_auth(token))
+    assert me.json()["display_name"] == "pinned"  # unchanged
+
+
+async def test_disabled_still_allows_admin_rename(client):
+    _, user_id = await _register(client, "issued-name")
+    await _set_username_changes(False)
+
+    admin = await admin_token(client)
+    resp = await client.patch(
+        f"/api/users/{user_id}",
+        json={"display_name": "corrected-name"},
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["display_name"] == "corrected-name"
+
+
+async def test_reenabling_restores_self_service(client):
+    token, _ = await _register(client, "flippy")
+    await _set_username_changes(False)
+    assert (await _change(client, token, "flippy2")).status_code == 403
+
+    await _set_username_changes(True)
+    resp = await _change(client, token, "flippy2")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["display_name"] == "flippy2"
+
+
+async def test_flag_is_public_and_operational_put_roundtrips(client):
+    # Default: on, and visible on the public payload (the profile page hides
+    # its card off this, pre-fetching no admin-only endpoint).
+    public = await client.get("/api/site-settings")
+    assert public.json()["username_changes_enabled"] is True
+
+    admin = await admin_token(client)
+    # Turn it off through the admin surface.
+    off = await client.put(
+        "/api/site-settings/operational",
+        json={"registration_open": True, "username_changes_enabled": False},
+        headers=_auth(admin),
+    )
+    assert off.status_code == 200, off.text
+    assert off.json()["username_changes_enabled"] is False
+    assert (await client.get("/api/site-settings")).json()[
+        "username_changes_enabled"
+    ] is False
+
+    # Omitting the field leaves it unchanged (the update_checks_enabled
+    # omission contract) — a scripted PUT must not silently re-enable it.
+    omitted = await client.put(
+        "/api/site-settings/operational",
+        json={"registration_open": True},
+        headers=_auth(admin),
+    )
+    assert omitted.status_code == 200, omitted.text
+    assert omitted.json()["username_changes_enabled"] is False

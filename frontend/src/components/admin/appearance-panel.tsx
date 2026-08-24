@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ import { toast } from "@/stores/toast";
 // keeps every panel mounted so unsaved edits survive tab switches, so this panel
 // can't use unmount to end its live preview — see the two effects below.
 export function AppearancePanel({ active }: { active: boolean }) {
+  const t = useTranslations("admin.appearance");
   const { data, isLoading } = useSiteSettings();
   const update = useUpdateSiteSettings();
   const uploadLogo = useUploadLogo();
@@ -128,8 +130,8 @@ export function AppearancePanel({ active }: { active: boolean }) {
         show_wordmark: showWordmark,
       },
       {
-        onSuccess: () => toast("Appearance saved", { variant: "success" }),
-        onError: (e) => toast("Couldn't save", { description: (e as Error).message, variant: "destructive" }),
+        onSuccess: () => toast(t("appearanceSaved"), { variant: "success" }),
+        onError: (e) => toast(t("couldntSave"), { description: (e as Error).message, variant: "destructive" }),
       },
     );
   }
@@ -139,9 +141,9 @@ export function AppearancePanel({ active }: { active: boolean }) {
     e.target.value = ""; // allow re-selecting the same file after a failure
     if (!file) return;
     uploadLogo.mutate(file, {
-      onSuccess: () => toast("Logo updated", { variant: "success" }),
+      onSuccess: () => toast(t("logoUpdated"), { variant: "success" }),
       onError: (err) =>
-        toast("Couldn't upload logo", {
+        toast(t("couldntUploadLogo"), {
           description: (err as Error).message,
           variant: "destructive",
         }),
@@ -151,17 +153,17 @@ export function AppearancePanel({ active }: { active: boolean }) {
   async function onRemoveLogo() {
     if (
       !(await confirm({
-        title: "Remove the custom logo?",
-        description: "The built-in Flagpost mark will be shown instead.",
-        confirmLabel: "Remove logo",
+        title: t("removeLogoTitle"),
+        description: t("removeLogoDescription"),
+        confirmLabel: t("removeLogoConfirm"),
       }))
     ) {
       return;
     }
     deleteLogo.mutate(undefined, {
-      onSuccess: () => toast("Logo removed", { variant: "success" }),
+      onSuccess: () => toast(t("logoRemoved"), { variant: "success" }),
       onError: (err) =>
-        toast("Couldn't remove logo", {
+        toast(t("couldntRemoveLogo"), {
           description: (err as Error).message,
           variant: "destructive",
         }),
@@ -176,27 +178,23 @@ export function AppearancePanel({ active }: { active: boolean }) {
     <div className="grid gap-5">
       <Card>
         <CardHeader>
-          <CardTitle>Appearance</CardTitle>
-          <CardDescription>
-            Palette controls surface colours; accent controls action colours. Mix freely.
-          </CardDescription>
+          <CardTitle>{t("title")}</CardTitle>
+          <CardDescription>{t("description")}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-8">
           <div className="grid max-w-md gap-2">
-            <Label htmlFor="platform-name">Platform name</Label>
+            <Label htmlFor="platform-name">{t("platformName")}</Label>
             <Input
               id="platform-name"
               value={platformName}
               maxLength={64}
               onChange={(e) => setPlatformName(e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">
-              Shown in the sidebar, on the sign-in screen, and in the browser tab.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("platformNameHint")}</p>
           </div>
 
           <section className="grid gap-3">
-            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Palette</h3>
+            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("paletteHeading")}</h3>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {PALETTES.map((p) => (
                 <button
@@ -225,7 +223,7 @@ export function AppearancePanel({ active }: { active: boolean }) {
           </section>
 
           <section className="grid gap-3">
-            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Accent</h3>
+            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("accentHeading")}</h3>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
               {ACCENTS.map((a) => (
                 <button
@@ -261,18 +259,18 @@ export function AppearancePanel({ active }: { active: boolean }) {
                     value={customActive ? accent : accentSwatchHex(accent)}
                     onChange={(e) => setAccent(e.target.value.toUpperCase())}
                     className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                    aria-label="Custom accent colour"
+                    aria-label={t("customAccentAria")}
                   />
                   {!customActive && (
-                    <span className="flex h-full items-center justify-center text-xs text-muted-foreground">Pick…</span>
+                    <span className="flex h-full items-center justify-center text-xs text-muted-foreground">{t("pick")}</span>
                   )}
                 </span>
                 <div className="flex items-center justify-between gap-1">
-                  <span className="text-sm font-semibold">Custom</span>
+                  <span className="text-sm font-semibold">{t("custom")}</span>
                   {customActive && <CheckIcon />}
                 </div>
                 <span className="font-mono text-[11px] text-muted-foreground">
-                  {customActive ? accent : "any hex"}
+                  {customActive ? accent : t("anyHex")}
                 </span>
               </label>
             </div>
@@ -280,11 +278,10 @@ export function AppearancePanel({ active }: { active: boolean }) {
 
           <section className="grid gap-3">
             <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Sign-in background
+              {t("backgroundHeading")}
             </h3>
             <p className="max-w-prose text-xs text-muted-foreground">
-              An animated backdrop for the sign-in, registration and public
-              pages. It uses your accent colour, and only shows on dark palettes.
+              {t("backgroundDescription")}
             </p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {BACKGROUNDS.map((b) => (
@@ -307,45 +304,36 @@ export function AppearancePanel({ active }: { active: boolean }) {
                     {background === b.id && <CheckIcon />}
                   </div>
                   <span className="text-[11px] leading-snug text-muted-foreground">
-                    {b.interactive ? "Reacts to the cursor" : b.description}
+                    {b.interactive ? t("reactsToCursor") : b.description}
                   </span>
                 </button>
               ))}
             </div>
             {paletteMode(palette) === "light" && background !== "none" && (
-              <p className="text-xs text-warning">
-                The current palette is light, so this background won&apos;t show —
-                animated backgrounds are shown on dark palettes only.
-              </p>
+              <p className="text-xs text-warning">{t("lightPaletteWarning")}</p>
             )}
           </section>
 
           <section className="grid gap-3">
             <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Sign-in notice
+              {t("noticeHeading")}
             </h3>
             <p className="max-w-prose text-xs text-muted-foreground">
-              Shown above the sign-in card — event instructions, which account
-              to use, who to contact. Visible to anyone who can reach the
-              sign-in page, so keep it public information. Delete all the text
-              to remove the notice.
+              {t("noticeDescription")}
             </p>
             <RichTextEditor value={notice} onChange={setNotice} />
           </section>
 
           <section className="grid gap-3">
-            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Logo</h3>
+            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("logoHeading")}</h3>
             <p className="max-w-prose text-xs text-muted-foreground">
-              Replace the built-in mark with your organisation&apos;s logo. Shown in the
-              sidebar and on the sign-in screen. PNG, SVG, WebP or GIF, up to 1&nbsp;MB —
-              a transparent background that reads on a dark ground works best. Flagpost
-              stays credited via the &ldquo;Powered by Flagpost&rdquo; footer regardless.
+              {t("logoDescription")}
             </p>
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex h-16 min-w-[8rem] items-center justify-center rounded-lg border border-border bg-background px-4">
                 {saved.logo_url ? (
                   // eslint-disable-next-line @next/next/no-img-element -- dynamic brand asset from the API origin
-                  <img src={saved.logo_url} alt="Current logo" className="h-10 w-auto object-contain" />
+                  <img src={saved.logo_url} alt={t("currentLogoAlt")} className="h-10 w-auto object-contain" />
                 ) : (
                   <FlagpostMark size={40} theme="dark" />
                 )}
@@ -356,7 +344,7 @@ export function AppearancePanel({ active }: { active: boolean }) {
                     "inline-flex h-9 cursor-pointer items-center rounded-md border border-border px-3 text-sm font-medium hover:bg-accent/60",
                     uploadLogo.isPending && "pointer-events-none opacity-60",
                   )}>
-                    {uploadLogo.isPending ? "Uploading…" : saved.logo_url ? "Replace logo" : "Upload logo"}
+                    {uploadLogo.isPending ? t("uploading") : saved.logo_url ? t("replaceLogo") : t("uploadLogo")}
                   </span>
                   <input
                     type="file"
@@ -368,7 +356,7 @@ export function AppearancePanel({ active }: { active: boolean }) {
                 </label>
                 {saved.logo_url && (
                   <Button variant="ghost" size="sm" onClick={onRemoveLogo} disabled={deleteLogo.isPending}>
-                    {deleteLogo.isPending ? "Removing…" : "Remove"}
+                    {deleteLogo.isPending ? t("removing") : t("remove")}
                   </Button>
                 )}
               </div>
@@ -382,9 +370,9 @@ export function AppearancePanel({ active }: { active: boolean }) {
                 onChange={(e) => setShowWordmark(e.target.checked)}
               />
               <span className="text-sm">
-                Show the platform name beside the logo
+                {t("showWordmark")}
                 <span className="ml-1 text-xs text-muted-foreground">
-                  (turn off if your logo already includes your name)
+                  {t("showWordmarkHint")}
                 </span>
               </span>
             </label>
@@ -394,10 +382,10 @@ export function AppearancePanel({ active }: { active: boolean }) {
 
       <div className="flex items-center gap-3">
         <Button onClick={onSave} disabled={!dirty || update.isPending}>
-          {update.isPending ? "Saving…" : "Save changes"}
+          {update.isPending ? t("saving") : t("saveChanges")}
         </Button>
         {dirty && (
-          <span className="text-xs text-muted-foreground">Previewing — save to apply site-wide.</span>
+          <span className="text-xs text-muted-foreground">{t("previewing")}</span>
         )}
       </div>
     </div>

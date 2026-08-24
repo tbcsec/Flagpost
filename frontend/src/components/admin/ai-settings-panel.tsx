@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +44,7 @@ export function AiSettingsPanel() {
 }
 
 function AiSettingsForm({ data }: { data: AiSettings }) {
+  const t = useTranslations("admin.ai");
   const update = useUpdateAiSettings();
   const test = useTestAiConnection();
 
@@ -61,7 +63,7 @@ function AiSettingsForm({ data }: { data: AiSettings }) {
     // Mirror the server invariant for instant feedback: no "enabled but
     // unconfigured" state is reachable.
     if (enabled && (!baseUrl.trim() || !model.trim())) {
-      toast("Set a base URL and model before enabling the AI module", {
+      toast(t("setBeforeEnabling"), {
         variant: "destructive",
       });
       return;
@@ -77,9 +79,9 @@ function AiSettingsForm({ data }: { data: AiSettings }) {
       ...(clearKey ? { api_key: "" } : apiKey ? { api_key: apiKey } : {}),
     };
     update.mutate(payload, {
-      onSuccess: () => toast("AI settings saved", { variant: "success" }),
+      onSuccess: () => toast(t("aiSettingsSaved"), { variant: "success" }),
       onError: (err) =>
-        toast("Couldn't save", {
+        toast(t("couldntSave"), {
           description: (err as Error).message,
           variant: "destructive",
         }),
@@ -91,7 +93,7 @@ function AiSettingsForm({ data }: { data: AiSettings }) {
     test.mutate(undefined, {
       onSuccess: (r) => setResult(r),
       onError: (err) =>
-        toast("Couldn't test the connection", {
+        toast(t("couldntTest"), {
           description: (err as Error).message,
           variant: "destructive",
         }),
@@ -99,39 +101,33 @@ function AiSettingsForm({ data }: { data: AiSettings }) {
   }
 
   const keyPlaceholder = clearKey
-    ? "Will be cleared on save"
+    ? t("keyWillClear")
     : data.api_key_set
-      ? "•••••••• (unchanged)"
-      : "Not set — leave blank for a keyless endpoint";
+      ? t("keyUnchanged")
+      : t("keyNotSet");
 
   return (
     <form onSubmit={onSubmit} className="grid max-w-2xl gap-5">
       <Card>
         <CardHeader>
-          <CardTitle>Provider</CardTitle>
-          <CardDescription>
-            Point Flagpost at any OpenAI-compatible chat-completions endpoint —
-            a hosted API or a local model (Ollama, vLLM, LM Studio). The model
-            must support tool calling; the assistant answers entirely through
-            read-only tools. The base URL is a trusted operator setting, so it is
-            not subject to the outbound-request blocklist a local address needs.
-          </CardDescription>
+          <CardTitle>{t("provider")}</CardTitle>
+          <CardDescription>{t("providerDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="ai-enabled">Status</Label>
+            <Label htmlFor="ai-enabled">{t("status")}</Label>
             <Select
               id="ai-enabled"
               value={enabled ? "on" : "off"}
               onChange={(e) => setEnabled(e.target.value === "on")}
               className="max-w-xs"
             >
-              <option value="off">Off — the assistants are unavailable</option>
-              <option value="on">On — enable the assistants</option>
+              <option value="off">{t("statusOff")}</option>
+              <option value="on">{t("statusOn")}</option>
             </Select>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="ai-base-url">Base URL</Label>
+            <Label htmlFor="ai-base-url">{t("baseUrl")}</Label>
             <Input
               id="ai-base-url"
               value={baseUrl}
@@ -141,7 +137,7 @@ function AiSettingsForm({ data }: { data: AiSettings }) {
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="ai-model">Model</Label>
+            <Label htmlFor="ai-model">{t("model")}</Label>
             <Input
               id="ai-model"
               value={model}
@@ -151,7 +147,7 @@ function AiSettingsForm({ data }: { data: AiSettings }) {
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="ai-key">API key</Label>
+            <Label htmlFor="ai-key">{t("apiKey")}</Label>
             <Input
               id="ai-key"
               type="password"
@@ -174,7 +170,7 @@ function AiSettingsForm({ data }: { data: AiSettings }) {
                     if (e.target.checked) setApiKey("");
                   }}
                 />
-                Remove the stored key (use a keyless endpoint)
+                {t("removeStoredKey")}
               </label>
             )}
           </div>
@@ -183,16 +179,12 @@ function AiSettingsForm({ data }: { data: AiSettings }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Response limits</CardTitle>
-          <CardDescription>
-            Caps that bound each answer&apos;s length and how long Flagpost waits
-            on the provider — the guardrails against a slow endpoint or a runaway
-            token bill.
-          </CardDescription>
+          <CardTitle>{t("responseLimits")}</CardTitle>
+          <CardDescription>{t("responseLimitsDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3">
           <div className="grid gap-2">
-            <Label htmlFor="ai-max-tokens">Max output tokens</Label>
+            <Label htmlFor="ai-max-tokens">{t("maxOutputTokens")}</Label>
             <Input
               id="ai-max-tokens"
               type="number"
@@ -203,7 +195,7 @@ function AiSettingsForm({ data }: { data: AiSettings }) {
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="ai-timeout">Request timeout (seconds)</Label>
+            <Label htmlFor="ai-timeout">{t("requestTimeout")}</Label>
             <Input
               id="ai-timeout"
               type="number"
@@ -218,13 +210,8 @@ function AiSettingsForm({ data }: { data: AiSettings }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Administrator assistant prompt</CardTitle>
-          <CardDescription>
-            An optional override for the assistant&apos;s system prompt. It
-            governs tone and focus only — the assistant is read-only and every
-            tool re-checks your permissions, so no wording can widen what it can
-            see. Leave blank to use the built-in prompt.
-          </CardDescription>
+          <CardTitle>{t("adminPrompt")}</CardTitle>
+          <CardDescription>{t("adminPromptDescription")}</CardDescription>
         </CardHeader>
         <CardContent>
           <textarea
@@ -233,7 +220,7 @@ function AiSettingsForm({ data }: { data: AiSettings }) {
             onChange={(e) => setAdminPrompt(e.target.value)}
             rows={5}
             maxLength={20000}
-            placeholder="Use the built-in administrator-assistant prompt."
+            placeholder={t("adminPromptPlaceholder")}
             className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           />
         </CardContent>
@@ -241,7 +228,7 @@ function AiSettingsForm({ data }: { data: AiSettings }) {
 
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" className="w-fit" disabled={update.isPending}>
-          {update.isPending ? "Saving…" : "Save changes"}
+          {update.isPending ? t("saving") : t("saveChanges")}
         </Button>
         <Button
           type="button"
@@ -250,15 +237,15 @@ function AiSettingsForm({ data }: { data: AiSettings }) {
           disabled={test.isPending || !data.base_url || !data.model}
           title={
             !data.base_url || !data.model
-              ? "Save a base URL and model first"
-              : "Probe the saved configuration"
+              ? t("testSaveFirst")
+              : t("testProbe")
           }
         >
-          {test.isPending ? "Testing…" : "Test connection"}
+          {test.isPending ? t("testing") : t("testConnection")}
         </Button>
         {data.updated_at && (
           <span className="text-xs text-muted-foreground">
-            Last saved {new Date(data.updated_at).toLocaleString()}
+            {t("lastSaved", { time: new Date(data.updated_at).toLocaleString() })}
           </span>
         )}
       </div>
@@ -271,16 +258,20 @@ function AiSettingsForm({ data }: { data: AiSettings }) {
 /** The two-leg probe result: a completion and a forced tool call, reported
  *  apart so an operator sees the common "model can't tool-call" gap directly. */
 function TestResult({ result }: { result: AiConnectionResult }) {
+  const t = useTranslations("admin.ai");
   return (
     <Card className="max-w-2xl">
       <CardHeader>
         <CardTitle className="text-base">
-          Connection test — <span className="font-mono text-sm">{result.model}</span>
+          {t.rich("connectionTest", {
+            mono: (chunks) => <span className="font-mono text-sm">{chunks}</span>,
+            model: result.model,
+          })}
         </CardTitle>
       </CardHeader>
       <CardContent className="grid gap-3">
-        <TestLeg label="Completion" check={result.completion} />
-        <TestLeg label="Tool calling" check={result.tool_call} />
+        <TestLeg label={t("legCompletion")} check={result.completion} />
+        <TestLeg label={t("legToolCalling")} check={result.tool_call} />
       </CardContent>
     </Card>
   );
@@ -293,11 +284,12 @@ function TestLeg({
   label: string;
   check: { ok: boolean; detail: string };
 }) {
+  const t = useTranslations("admin.ai");
   return (
     <div className="grid gap-1">
       <div className="flex items-center gap-2">
         <Badge variant={check.ok ? "success" : "destructive"}>
-          {check.ok ? "OK" : "Failed"}
+          {check.ok ? t("legOk") : t("legFailed")}
         </Badge>
         <span className="text-sm font-medium">{label}</span>
       </div>

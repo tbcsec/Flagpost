@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { RuleBuilder } from "@/components/automations/rule-builder";
@@ -27,6 +28,7 @@ import { toast } from "@/stores/toast";
 // perms via a *global* assignment (Administrator); the engine is live from
 // Phase 1, and this is the §5.5 builder for the global scope.
 export default function AdminAutomationsPage() {
+  const t = useTranslations("admin.automations");
   const access = useAccess();
   const canCreate = access.has("automation_create");
   const { data: catalog } = useAutomationCatalog();
@@ -38,9 +40,9 @@ export default function AdminAutomationsPage() {
   async function onDelete(rule: { id: string; name: string }) {
     if (
       await confirm({
-        title: `Delete "${rule.name}"?`,
-        description: "This global automation rule will be removed and stop firing.",
-        confirmLabel: "Delete rule",
+        title: t("deleteTitle", { name: rule.name }),
+        description: t("deleteDescription"),
+        confirmLabel: t("deleteConfirm"),
       })
     ) {
       del.mutate(rule.id);
@@ -55,11 +57,11 @@ export default function AdminAutomationsPage() {
   function submitNew(input: AutomationRuleInput) {
     create.mutate(input, {
       onSuccess: () => {
-        toast("Global rule created", { variant: "success" });
+        toast(t("created"), { variant: "success" });
         setCreating(false);
       },
       onError: (e) =>
-        toast("Couldn't create", { description: (e as Error).message, variant: "destructive" }),
+        toast(t("couldntCreate"), { description: (e as Error).message, variant: "destructive" }),
     });
   }
   function submitEdit(input: AutomationRuleInput) {
@@ -68,11 +70,11 @@ export default function AdminAutomationsPage() {
       { ruleId: editing.id, input },
       {
         onSuccess: () => {
-          toast("Global rule saved", { variant: "success" });
+          toast(t("saved"), { variant: "success" });
           setEditing(null);
         },
         onError: (e) =>
-          toast("Couldn't save", { description: (e as Error).message, variant: "destructive" }),
+          toast(t("couldntSave"), { description: (e as Error).message, variant: "destructive" }),
       },
     );
   }
@@ -80,12 +82,12 @@ export default function AdminAutomationsPage() {
   return (
     <>
       <SectionHeader
-        title="Admin — Automations"
-        subtitle="Global — platform-wide, not scoped to a competition"
+        title={t("title")}
+        subtitle={t("subtitle")}
         actions={
           canCreate && catalog ? (
             <Button size="sm" onClick={() => setCreating(true)}>
-              New global rule
+              {t("newGlobalRule")}
             </Button>
           ) : undefined
         }
@@ -96,9 +98,7 @@ export default function AdminAutomationsPage() {
       ) : !rules || rules.length === 0 ? (
         <Card>
           <CardContent className="p-10 text-center">
-            <p className="text-sm text-muted-foreground">
-              No global automations yet. Rules created here apply across every competition.
-            </p>
+            <p className="text-sm text-muted-foreground">{t("emptyState")}</p>
           </CardContent>
         </Card>
       ) : (
@@ -109,24 +109,29 @@ export default function AdminAutomationsPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-medium">{rule.name}</span>
-                    <Badge variant="secondary">global</Badge>
-                    {!rule.is_enabled && <Badge variant="muted">disabled</Badge>}
+                    <Badge variant="secondary">{t("badgeGlobal")}</Badge>
+                    {!rule.is_enabled && <Badge variant="muted">{t("badgeDisabled")}</Badge>}
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">
-                    on <code className="text-foreground">{rule.trigger_type}</code> →{" "}
-                    {rule.actions.map((a) => a.type).join(", ")} · fired {rule.trigger_count}×
-                    {rule.last_triggered_at && `, last ${relativeTime(rule.last_triggered_at)}`}
+                    {t.rich("firedLine", {
+                      code: (chunks) => <code className="text-foreground">{chunks}</code>,
+                      trigger: rule.trigger_type,
+                      actions: rule.actions.map((a) => a.type).join(", "),
+                      count: rule.trigger_count,
+                    })}
+                    {rule.last_triggered_at &&
+                      t("lastFired", { time: relativeTime(rule.last_triggered_at) })}
                   </div>
                 </div>
                 <div className="flex flex-shrink-0 gap-2">
                   <Button size="sm" variant="outline" onClick={() => setEditing(rule)}>
-                    Edit
+                    {t("edit")}
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => toggle(rule)}>
-                    {rule.is_enabled ? "Disable" : "Enable"}
+                    {rule.is_enabled ? t("disable") : t("enable")}
                   </Button>
                   <Button size="sm" variant="destructive" onClick={() => onDelete(rule)}>
-                    Delete
+                    {t("delete")}
                   </Button>
                 </div>
               </CardContent>

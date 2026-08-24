@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
@@ -41,6 +42,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast";
 
 export default function AdminRolesPage() {
+  const t = useTranslations("admin.roles");
   const access = useAccess();
   const roles = useRoles();
   const catalog = useRoleCatalog();
@@ -58,8 +60,8 @@ export default function AdminRolesPage() {
   if (access.ready && !access.has("manage_roles")) {
     return (
       <>
-        <SectionHeader title="Admin — Roles" subtitle="Global — platform-wide, not scoped to a competition" />
-        <p className="text-sm text-muted-foreground">You don&apos;t have access to role management.</p>
+        <SectionHeader title={t("title")} subtitle={t("subtitle")} />
+        <p className="text-sm text-muted-foreground">{t("noAccess")}</p>
       </>
     );
   }
@@ -67,10 +69,10 @@ export default function AdminRolesPage() {
   return (
     <>
       <SectionHeader
-        title="Admin — Roles"
-        subtitle="Global — platform-wide, not scoped to a competition"
+        title={t("title")}
+        subtitle={t("subtitle")}
         actions={
-          <Button onClick={() => setDialog({ open: true, cloneFrom: null })}>New role</Button>
+          <Button onClick={() => setDialog({ open: true, cloneFrom: null })}>{t("newRole")}</Button>
         }
       />
 
@@ -91,14 +93,14 @@ export default function AdminRolesPage() {
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold">{role.name}</span>
                   <Badge variant={role.is_system ? "secondary" : "success"}>
-                    {role.is_system ? "System" : "Custom"}
+                    {role.is_system ? t("badgeSystem") : t("badgeCustom")}
                   </Badge>
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  {role.description || "No description"}
+                  {role.description || t("noDescription")}
                 </span>
                 <span className="text-[11px] text-muted-foreground">
-                  {role.scope} · {role.permissions.length} permission{role.permissions.length === 1 ? "" : "s"}
+                  {t("scopeLine", { scope: role.scope, count: role.permissions.length })}
                 </span>
               </button>
             ))}
@@ -139,6 +141,7 @@ function RoleEditor({
   onClone: () => void;
   onDeleted: () => void;
 }) {
+  const t = useTranslations("admin.roles");
   const catalog = useRoleCatalog();
   const update = useUpdateRole();
   const del = useDeleteRole();
@@ -171,8 +174,8 @@ function RoleEditor({
     update.mutate(
       { id: role.id, description, permissions: [...perms] },
       {
-        onSuccess: () => toast("Role saved", { variant: "success" }),
-        onError: (e) => toast("Couldn't save", { description: (e as Error).message, variant: "destructive" }),
+        onSuccess: () => toast(t("roleSaved"), { variant: "success" }),
+        onError: (e) => toast(t("couldntSave"), { description: (e as Error).message, variant: "destructive" }),
       },
     );
   }
@@ -180,19 +183,19 @@ function RoleEditor({
   async function onDelete() {
     if (
       !(await confirm({
-        title: `Delete the ${role.name} role?`,
-        description: "The role and its permission set are removed. Users currently holding it lose those permissions.",
-        confirmLabel: "Delete role",
+        title: t("deleteTitle", { name: role.name }),
+        description: t("deleteDescription"),
+        confirmLabel: t("deleteConfirm"),
       }))
     ) {
       return;
     }
     del.mutate(role.id, {
       onSuccess: () => {
-        toast("Role deleted");
+        toast(t("roleDeleted"));
         onDeleted();
       },
-      onError: (e) => toast("Couldn't delete", { description: (e as Error).message, variant: "destructive" }),
+      onError: (e) => toast(t("couldntDelete"), { description: (e as Error).message, variant: "destructive" }),
     });
   }
 
@@ -203,21 +206,21 @@ function RoleEditor({
           <CardTitle className="flex items-center gap-2">
             {role.name}
             <Badge variant={role.is_system ? "secondary" : "success"}>
-              {role.is_system ? "System" : "Custom"}
+              {role.is_system ? t("badgeSystem") : t("badgeCustom")}
             </Badge>
           </CardTitle>
           <CardDescription>
             {role.is_system
-              ? "System role — read-only. Clone it to make an editable variant."
-              : `Custom · ${role.scope}-scoped`}
+              ? t("systemRoleDescription")
+              : t("customScoped", { scope: role.scope })}
           </CardDescription>
         </div>
-        <Button variant="outline" size="sm" onClick={onClone}>Clone</Button>
+        <Button variant="outline" size="sm" onClick={onClone}>{t("clone")}</Button>
       </CardHeader>
       <CardContent className="grid gap-5">
         {editable && (
           <div className="grid max-w-md gap-2">
-            <Label htmlFor="role-desc">Description</Label>
+            <Label htmlFor="role-desc">{t("description")}</Label>
             <Input id="role-desc" value={description} maxLength={280} onChange={(e) => setDescription(e.target.value)} />
           </div>
         )}
@@ -241,7 +244,7 @@ function RoleEditor({
                       onChange={() => toggle(entry.key)}
                     />
                     <span className="font-mono text-xs">{entry.key}</span>
-                    {entry.reserved && <span className="text-[10px] text-warning">reserved</span>}
+                    {entry.reserved && <span className="text-[10px] text-warning">{t("reserved")}</span>}
                   </label>
                 ))}
               </div>
@@ -252,12 +255,12 @@ function RoleEditor({
         {editable && (
           <div className="flex items-center gap-3 border-t border-border pt-4">
             <Button onClick={onSave} disabled={!dirty || update.isPending}>
-              {update.isPending ? "Saving…" : "Save changes"}
+              {update.isPending ? t("saving") : t("saveChanges")}
             </Button>
             <Button variant="outline" size="sm" className="text-destructive" onClick={onDelete} disabled={del.isPending}>
-              Delete role
+              {t("deleteRole")}
             </Button>
-            {dirty && <span className="text-xs text-muted-foreground">Unsaved changes.</span>}
+            {dirty && <span className="text-xs text-muted-foreground">{t("unsavedChanges")}</span>}
           </div>
         )}
       </CardContent>
@@ -274,6 +277,7 @@ function RoleDialog({
   onClose: () => void;
   onCreated: (id: string) => void;
 }) {
+  const t = useTranslations("admin.roles");
   const create = useCreateRole();
   const cloning = state.cloneFrom;
   // Seeded on mount — the call site keys this dialog by open-state + clone
@@ -289,7 +293,7 @@ function RoleDialog({
       cloning ? { name, clone_from: cloning.id } : { name, scope, permissions: [] },
       {
         onSuccess: (role) => onCreated(role.id),
-        onError: (err) => toast("Couldn't create role", { description: (err as Error).message, variant: "destructive" }),
+        onError: (err) => toast(t("couldntCreate"), { description: (err as Error).message, variant: "destructive" }),
       },
     );
   }
@@ -298,30 +302,28 @@ function RoleDialog({
     <Dialog open={state.open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{cloning ? `Clone ${cloning.name}` : "New custom role"}</DialogTitle>
+          <DialogTitle>{cloning ? t("cloneTitle", { name: cloning.name }) : t("newTitle")}</DialogTitle>
           <DialogDescription>
-            {cloning
-              ? "Creates an editable copy with the same permissions and scope."
-              : "Starts empty — pick its permissions after creating."}
+            {cloning ? t("cloneDialogDescription") : t("newDialogDescription")}
           </DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={onSubmit}>
           <div className="grid gap-2">
-            <Label htmlFor="new-role-name">Name</Label>
+            <Label htmlFor="new-role-name">{t("name")}</Label>
             <Input id="new-role-name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
           </div>
           {!cloning && (
             <div className="grid gap-2">
-              <Label htmlFor="new-role-scope">Scope</Label>
+              <Label htmlFor="new-role-scope">{t("scope")}</Label>
               <Select id="new-role-scope" value={scope} onChange={(e) => setScope(e.target.value as "global" | "competition")}>
-                <option value="competition">Competition — assigned per competition</option>
-                <option value="global">Global — assigned site-wide</option>
+                <option value="competition">{t("scopeCompetition")}</option>
+                <option value="global">{t("scopeGlobal")}</option>
               </Select>
             </div>
           )}
           <DialogFooter>
             <Button type="submit" disabled={create.isPending}>
-              {create.isPending ? "Creating…" : cloning ? "Clone role" : "Create role"}
+              {create.isPending ? t("creating") : cloning ? t("cloneRole") : t("createRole")}
             </Button>
           </DialogFooter>
         </form>
@@ -331,6 +333,8 @@ function RoleDialog({
 }
 
 function AssignmentsCard({ roles }: { roles: Role[] }) {
+  const t = useTranslations("admin.roles");
+  const tn = useTranslations("common.nouns");
   const assignments = useRoleAssignments();
   const competitions = useCompetitions();
   const users = useUsers("");
@@ -384,16 +388,18 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
   async function onUnassign(a: RoleAssignment, userName: string) {
     if (
       !(await confirm({
-        title: "Remove this role assignment?",
-        description: `${userName} will lose the ${a.role_name} role${a.competition_name ? ` on ${a.competition_name}` : " (site-wide)"}.`,
-        confirmLabel: "Unassign",
+        title: t("unassignTitle"),
+        description: a.competition_name
+          ? t("unassignDescriptionOnComp", { user: userName, role: a.role_name, competition: a.competition_name })
+          : t("unassignDescriptionSiteWide", { user: userName, role: a.role_name }),
+        confirmLabel: t("unassignConfirm"),
       }))
     ) {
       return;
     }
     unassign.mutate(a.id, {
-      onSuccess: () => toast("Unassigned"),
-      onError: (err) => toast("Couldn't unassign", { description: (err as Error).message, variant: "destructive" }),
+      onSuccess: () => toast(t("unassigned")),
+      onError: (err) => toast(t("couldntUnassign"), { description: (err as Error).message, variant: "destructive" }),
     });
   }
 
@@ -408,10 +414,10 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
       },
       {
         onSuccess: () => {
-          toast("Role assigned", { variant: "success" });
+          toast(t("roleAssigned"), { variant: "success" });
           setUserId("");
         },
-        onError: (err) => toast("Couldn't assign", { description: (err as Error).message, variant: "destructive" }),
+        onError: (err) => toast(t("couldntAssign"), { description: (err as Error).message, variant: "destructive" }),
       },
     );
   }
@@ -419,36 +425,36 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Assignments</CardTitle>
-        <CardDescription>Grant a role to a user — per competition, or site-wide for a global role.</CardDescription>
+        <CardTitle>{t("assignments")}</CardTitle>
+        <CardDescription>{t("assignmentsDescription")}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-5">
         <form className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end" onSubmit={onAssign}>
           <div className="grid gap-1.5">
-            <Label htmlFor="assign-user">User</Label>
+            <Label htmlFor="assign-user">{t("user")}</Label>
             <EntityCombobox
               id="assign-user"
               options={userOptions}
               value={userId}
               onChange={setUserId}
-              placeholder="Search by name or email…"
-              emptyText={users.isLoading ? "Loading users…" : "No matching users"}
+              placeholder={t("userSearchPlaceholder")}
+              emptyText={users.isLoading ? t("loadingUsers") : t("noMatchingUsers")}
             />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="assign-role">Role</Label>
+            <Label htmlFor="assign-role">{t("role")}</Label>
             <Select id="assign-role" value={roleId} onChange={(e) => setRoleId(e.target.value)} required>
-              <option value="" disabled>Select a role…</option>
+              <option value="" disabled>{t("selectRole")}</option>
               {roles.map((r) => (
-                <option key={r.id} value={r.id}>{r.name} ({r.scope})</option>
+                <option key={r.id} value={r.id}>{t("roleOption", { name: r.name, scope: r.scope })}</option>
               ))}
             </Select>
           </div>
           {needsCompetition ? (
             <div className="grid gap-1.5">
-              <Label htmlFor="assign-comp">Competition</Label>
+              <Label htmlFor="assign-comp">{t("competition")}</Label>
               <Select id="assign-comp" value={competitionId} onChange={(e) => setCompetitionId(e.target.value)} required>
-                <option value="" disabled>Select…</option>
+                <option value="" disabled>{t("selectEllipsis")}</option>
                 {competitions.data?.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
@@ -456,16 +462,16 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
             </div>
           ) : (
             <div className="grid gap-1.5">
-              <Label>Scope</Label>
-              <div className="flex h-9 items-center text-sm text-muted-foreground">Site-wide</div>
+              <Label>{t("scope")}</Label>
+              <div className="flex h-9 items-center text-sm text-muted-foreground">{t("siteWide")}</div>
             </div>
           )}
-          <Button type="submit" disabled={assign.isPending || !roleId || !userId}>Assign</Button>
+          <Button type="submit" disabled={assign.isPending || !roleId || !userId}>{t("assign")}</Button>
         </form>
 
         <div className="grid gap-2">
           {assignments.data?.length === 0 && (
-            <p className="text-sm text-muted-foreground">No role assignments yet.</p>
+            <p className="text-sm text-muted-foreground">{t("noAssignments")}</p>
           )}
           {table.rows.map((u) => (
             <div key={u.userId} className="grid gap-1.5 rounded-md border border-border px-3 py-2 text-sm">
@@ -480,11 +486,15 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
                     className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/50 py-0.5 pl-2.5 pr-1 text-xs"
                   >
                     <span className="font-medium text-foreground">{a.role_name}</span>
-                    <span className="text-muted-foreground">· {a.competition_name ?? "site-wide"}</span>
+                    <span className="text-muted-foreground">· {a.competition_name ?? t("siteWideTag")}</span>
                     <button
                       type="button"
-                      aria-label={`Remove ${a.role_name}${a.competition_name ? ` on ${a.competition_name}` : " (site-wide)"} from ${u.name}`}
-                      title="Remove"
+                      aria-label={
+                        a.competition_name
+                          ? t("removeAriaOnComp", { role: a.role_name, competition: a.competition_name, user: u.name })
+                          : t("removeAriaSiteWide", { role: a.role_name, user: u.name })
+                      }
+                      title={t("removeTitle")}
                       className="flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                       onClick={() => onUnassign(a, u.name)}
                     >
@@ -495,7 +505,7 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
               </div>
             </div>
           ))}
-          <TablePagination table={table} noun="users" />
+          <TablePagination table={table} noun={tn("users")} />
         </div>
       </CardContent>
     </Card>

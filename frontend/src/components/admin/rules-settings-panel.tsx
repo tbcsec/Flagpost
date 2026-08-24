@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ export function RulesSettingsPanel() {
 }
 
 function PanelForm({ initial }: { initial: RulesSettings }) {
+  const t = useTranslations("admin.rules");
   const update = useUpdateRulesSettings();
   const [doc, setDoc] = useState<RichTextDoc>(initial.rules_text ?? {});
   const [displayOnly, setDisplayOnly] = useState(initial.rules_display_only);
@@ -46,9 +48,9 @@ function PanelForm({ initial }: { initial: RulesSettings }) {
         rules_display_only: displayOnly,
       },
       {
-        onSuccess: () => toast("Rules saved", { variant: "success" }),
+        onSuccess: () => toast(t("rulesSaved"), { variant: "success" }),
         onError: (err) =>
-          toast("Couldn't save", {
+          toast(t("couldntSave"), {
             description: (err as Error).message,
             variant: "destructive",
           }),
@@ -59,13 +61,8 @@ function PanelForm({ initial }: { initial: RulesSettings }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Rules / code of conduct</CardTitle>
-        <CardDescription>
-          Shown to users before they join any competition. Unless display-only
-          is on, joining requires an explicit &ldquo;I accept&rdquo;. A
-          competition can supersede this with its own override (Competition
-          Settings → Rules). Leave empty for no rules and no prompt.
-        </CardDescription>
+        <CardTitle>{t("title")}</CardTitle>
+        <CardDescription>{t("description")}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <RichTextEditor value={doc} onChange={setDoc} />
@@ -78,9 +75,9 @@ function PanelForm({ initial }: { initial: RulesSettings }) {
             onChange={(e) => setDisplayOnly(e.target.checked)}
           />
           <span>
-            Display only
+            {t("displayOnly")}
             <span className="ml-1 text-xs text-muted-foreground">
-              — show the rules at join without requiring acceptance.
+              {t("displayOnlyHint")}
             </span>
           </span>
         </label>
@@ -90,7 +87,7 @@ function PanelForm({ initial }: { initial: RulesSettings }) {
           onClick={onSave}
           disabled={update.isPending}
         >
-          {update.isPending ? "Saving…" : "Save rules"}
+          {update.isPending ? t("saving") : t("saveRules")}
         </Button>
       </CardContent>
     </Card>

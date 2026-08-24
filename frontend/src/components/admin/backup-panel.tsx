@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -13,19 +14,19 @@ import {
 import type { BackupDocument, BackupImportResult } from "@/lib/types";
 import { toast } from "@/stores/toast";
 
-// Human labels for the backend's section ids (utils/backup.SECTIONS).
-const SECTION_LABELS: Record<string, string> = {
-  site_settings: "Site settings & branding",
-  users: "User accounts",
-  roles: "Roles & assignments",
-  competitions: "Competitions (challenges, teams, scores, tickets…)",
-  automations: "Automation rules",
-  audit_log: "Audit log",
+// Message keys for the backend's section ids (utils/backup.SECTIONS); the label
+// resolves through the admin.backup namespace, falling back to the raw id.
+const SECTION_KEY: Record<
+  string,
+  "sectionSiteSettings" | "sectionUsers" | "sectionRoles" | "sectionCompetitions" | "sectionAutomations" | "sectionAuditLog"
+> = {
+  site_settings: "sectionSiteSettings",
+  users: "sectionUsers",
+  roles: "sectionRoles",
+  competitions: "sectionCompetitions",
+  automations: "sectionAutomations",
+  audit_log: "sectionAuditLog",
 };
-
-function label(id: string) {
-  return SECTION_LABELS[id] ?? id;
-}
 
 function SectionChecklist({
   sections,
@@ -36,6 +37,11 @@ function SectionChecklist({
   selected: Set<string>;
   onToggle: (id: string, on: boolean) => void;
 }) {
+  const t = useTranslations("admin.backup");
+  const label = (id: string) => {
+    const key = SECTION_KEY[id];
+    return key ? t(key) : id;
+  };
   return (
     <div className="grid gap-2 sm:grid-cols-2">
       {sections.map((id) => (
@@ -58,6 +64,7 @@ function SectionChecklist({
  *  section-selectable; import is additive (adds missing records, never
  *  overwrites or deletes). */
 export function BackupPanel() {
+  const t = useTranslations("admin.backup");
   const sections = useBackupSections();
   const exportBackup = useExportBackup();
   const importBackup = useImportBackup();
@@ -88,10 +95,10 @@ export function BackupPanel() {
         a.download = `flagpost-export-${stamp}.json`;
         a.click();
         URL.revokeObjectURL(url);
-        toast("Export downloaded", { variant: "success" });
+        toast(t("exportDownloaded"), { variant: "success" });
       },
       onError: (e) =>
-        toast("Export failed", { description: (e as Error).message, variant: "destructive" }),
+        toast(t("exportFailed"), { description: (e as Error).message, variant: "destructive" }),
     });
   }
 
@@ -109,7 +116,7 @@ export function BackupPanel() {
     try {
       const parsed = JSON.parse(await picked.text()) as BackupDocument;
       if (!parsed?.flagpost_export || !Array.isArray(parsed.sections)) {
-        throw new Error("Not a Flagpost export file");
+        throw new Error(t("notExportFile"));
       }
       setFile(parsed);
       setFileName(picked.name);
@@ -117,7 +124,7 @@ export function BackupPanel() {
     } catch (err) {
       setFile(null);
       setFileName("");
-      toast("Couldn't read file", { description: (err as Error).message, variant: "destructive" });
+      toast(t("couldntReadFile"), { description: (err as Error).message, variant: "destructive" });
     }
   }
 
@@ -132,9 +139,9 @@ export function BackupPanel() {
     if (!file) return;
     if (
       !(await confirm({
-        title: "Import this backup?",
-        description: "New records from the selected sections are added to this platform. Existing data is never overwritten or deleted, but this can't be undone selectively.",
-        confirmLabel: "Import",
+        title: t("importConfirmTitle"),
+        description: t("importConfirmDescription"),
+        confirmLabel: t("importConfirmLabel"),
         destructive: false,
       }))
     ) {
@@ -146,10 +153,10 @@ export function BackupPanel() {
         onSuccess: (res) => {
           setResult(res);
           const created = Object.values(res).reduce((n, c) => n + c.created, 0);
-          toast(`Imported ${created} record${created === 1 ? "" : "s"}`, { variant: "success" });
+          toast(t("importedToast", { count: created }), { variant: "success" });
         },
         onError: (e) =>
-          toast("Import failed", { description: (e as Error).message, variant: "destructive" }),
+          toast(t("importFailed"), { description: (e as Error).message, variant: "destructive" }),
       },
     );
   }
@@ -158,11 +165,8 @@ export function BackupPanel() {
     <div className="grid max-w-2xl gap-5">
       <Card>
         <CardHeader>
-          <CardTitle>Export</CardTitle>
-          <CardDescription>
-            Download a backup of the selected data as a JSON file. Includes secrets
-            (password &amp; flag hashes, SMTP credentials) — store it securely.
-          </CardDescription>
+          <CardTitle>{t("exportTitle")}</CardTitle>
+          <CardDescription>{t("exportDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           <SectionChecklist sections={allSections} selected={exportChosen} onToggle={toggleExport} />
@@ -172,25 +176,24 @@ export function BackupPanel() {
             onClick={onExport}
             disabled={exportBackup.isPending || exportChosen.size === 0}
           >
-            {exportBackup.isPending ? "Exporting…" : "Export selected"}
+            {exportBackup.isPending ? t("exporting") : t("exportSelected")}
           </Button>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Import</CardTitle>
+          <CardTitle>{t("importTitle")}</CardTitle>
           <CardDescription>
-            Restore from an export file. <span className="font-medium">Additive</span> — it
-            adds records that don&apos;t already exist and never overwrites or deletes
-            current data. Existing competitions (matched by name) and users (by
-            name/email) are skipped.
+            {t.rich("importDescription", {
+              strong: (chunks) => <span className="font-medium">{chunks}</span>,
+            })}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           <label className="w-fit">
             <span className="inline-flex h-9 cursor-pointer items-center rounded-md border border-border px-3 text-sm font-medium hover:bg-accent/60">
-              Choose export file…
+              {t("chooseFile")}
             </span>
             <input type="file" accept="application/json,.json" className="hidden" onChange={onFile} />
           </label>
@@ -198,8 +201,11 @@ export function BackupPanel() {
           {file && (
             <>
               <p className="text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">{fileName}</span> — exported{" "}
-                {file.exported_at ? new Date(file.exported_at).toLocaleString() : "unknown"}
+                {t.rich("fileLine", {
+                  strong: (chunks) => <span className="font-medium text-foreground">{chunks}</span>,
+                  fileName,
+                  date: file.exported_at ? new Date(file.exported_at).toLocaleString() : t("unknown"),
+                })}
               </p>
               <SectionChecklist sections={file.sections} selected={importSel} onToggle={toggleImport} />
               <Button
@@ -208,20 +214,25 @@ export function BackupPanel() {
                 onClick={onImport}
                 disabled={importBackup.isPending || importSel.size === 0}
               >
-                {importBackup.isPending ? "Importing…" : "Import selected"}
+                {importBackup.isPending ? t("importing") : t("importSelected")}
               </Button>
             </>
           )}
 
           {result && (
             <div className="rounded-md border border-border bg-muted/40 p-3 text-sm">
-              <p className="mb-1 font-medium">Import complete</p>
+              <p className="mb-1 font-medium">{t("importComplete")}</p>
               <ul className="grid gap-0.5 text-xs text-muted-foreground">
                 {Object.entries(result)
                   .filter(([, c]) => c.created > 0 || c.skipped > 0)
                   .map(([table, c]) => (
                     <li key={table}>
-                      <span className="font-mono">{table}</span>: {c.created} added, {c.skipped} skipped
+                      {t.rich("importResultRow", {
+                        mono: (chunks) => <span className="font-mono">{chunks}</span>,
+                        table,
+                        created: c.created,
+                        skipped: c.skipped,
+                      })}
                     </li>
                   ))}
               </ul>

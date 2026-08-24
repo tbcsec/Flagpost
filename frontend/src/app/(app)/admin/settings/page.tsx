@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Suspense, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -39,15 +40,18 @@ type Tab = "general" | "email" | "auth" | "rules" | "backup" | "appearance" | "a
 /** The two tabs that are views of the one settings form. */
 type FormSection = Extract<Tab, "general" | "email">;
 
-const TABS: { value: Tab; label: string }[] = [
-  { value: "general", label: "General" },
-  { value: "email", label: "Email" },
-  { value: "auth", label: "Auth" },
-  { value: "rules", label: "Rules" },
-  { value: "backup", label: "Backup" },
-  { value: "appearance", label: "Appearance" },
-  { value: "ai", label: "AI" },
-];
+const TAB_ORDER: Tab[] = ["general", "email", "auth", "rules", "backup", "appearance", "ai"];
+
+/** Tab → message key in the admin.settings namespace. */
+const TAB_KEY: Record<Tab, "tabGeneral" | "tabEmail" | "tabAuth" | "tabRules" | "tabBackup" | "tabAppearance" | "tabAi"> = {
+  general: "tabGeneral",
+  email: "tabEmail",
+  auth: "tabAuth",
+  rules: "tabRules",
+  backup: "tabBackup",
+  appearance: "tabAppearance",
+  ai: "tabAi",
+};
 
 function isFormSection(tab: Tab): tab is FormSection {
   return tab === "general" || tab === "email";
@@ -59,13 +63,14 @@ function isFormSection(tab: Tab): tab is FormSection {
  *  hand-typed or stale `?tab=auth` can't strand someone without
  *  `manage_auth_providers` on a tab that renders nothing. */
 function resolveTab(requested: string | null, visible: { value: Tab }[]): Tab {
-  const match = visible.find((t) => t.value === requested);
+  const match = visible.find((tab) => tab.value === requested);
   // `visible` is never empty here — the caller returns early when the viewer
   // holds neither permission — but fall back rather than index blindly.
   return match?.value ?? visible[0]?.value ?? "general";
 }
 
 function AdminSettingsInner() {
+  const t = useTranslations("admin.settings");
   const access = useAccess();
   const canManage = access.has("manage_site_settings");
   // Auth providers are a different, higher-stakes grant (§7.1) — so the tab is
@@ -85,17 +90,17 @@ function AdminSettingsInner() {
   if (!canManage && !canManageAuth && !canManageAi) {
     return (
       <>
-        <SectionHeader title="Admin — Site settings" subtitle="Global — platform-wide" />
-        <EmptyState title="No access" description="You need the manage-site-settings permission to change site settings." />
+        <SectionHeader title={t("title")} subtitle={t("subtitleShort")} />
+        <EmptyState title={t("noAccessTitle")} description={t("noAccessDescription")} />
       </>
     );
   }
 
-  const visibleTabs = TABS.filter((t) => {
-    if (t.value === "auth") return canManageAuth;
-    if (t.value === "ai") return canManageAi;
+  const visibleTabs = TAB_ORDER.filter((value) => {
+    if (value === "auth") return canManageAuth;
+    if (value === "ai") return canManageAi;
     return canManage;
-  });
+  }).map((value) => ({ value, label: t(TAB_KEY[value]) }));
 
   // Everything below is derived *after* the permission guards, which is the fix
   // for #126. The tab used to be `useState(canManage ? "general" : "auth")`, and
@@ -124,10 +129,7 @@ function AdminSettingsInner() {
 
   return (
     <>
-      <SectionHeader
-        title="Admin — Site settings"
-        subtitle="Global — platform-wide, not scoped to a competition"
-      />
+      <SectionHeader title={t("title")} subtitle={t("subtitle")} />
 
       <Tabs tabs={visibleTabs} value={tab} onValueChange={(v) => setTab(v as Tab)} />
 
@@ -156,17 +158,17 @@ function AdminSettingsInner() {
         )}
 
         <div className={tab === "rules" ? "max-w-2xl" : "hidden"}>
-          <h2 className="text-lg font-semibold">Rules / code of conduct</h2>
+          <h2 className="text-lg font-semibold">{t("rulesHeading")}</h2>
           <p className="mb-4 mt-1 text-sm text-muted-foreground">
-            The site-wide document users accept before joining a competition.
+            {t("rulesHeadingDescription")}
           </p>
           <RulesSettingsPanel />
         </div>
 
         <div className={tab === "backup" ? "" : "hidden"}>
-          <h2 className="text-lg font-semibold">Backup — export &amp; import</h2>
+          <h2 className="text-lg font-semibold">{t("backupHeading")}</h2>
           <p className="mb-4 mt-1 text-sm text-muted-foreground">
-            Move the platform&apos;s data between installs, or keep an off-site backup.
+            {t("backupHeadingDescription")}
           </p>
           <BackupPanel />
         </div>
@@ -180,10 +182,9 @@ function AdminSettingsInner() {
 
         {canManageAi && (
           <div className={tab === "ai" ? "" : "hidden"}>
-            <h2 className="text-lg font-semibold">AI assistants</h2>
+            <h2 className="text-lg font-semibold">{t("aiHeading")}</h2>
             <p className="mb-4 mt-1 text-sm text-muted-foreground">
-              Connect an OpenAI-compatible provider to power the read-only
-              organiser assistant.
+              {t("aiHeadingDescription")}
             </p>
             <AiSettingsPanel />
           </div>
@@ -191,41 +192,6 @@ function AdminSettingsInner() {
       </div>
     </>
   );
-}
-
-/** The "is this actually working?" line shown beside the toggle. Deliberately
- *  states the running version even when everything is fine — "last checked N ago"
- *  alone doesn't tell an admin what they're on. */
-function updateCheckStatus(data: OperationalSettings): string {
-  const version = data.current_version;
-  if (!data.update_checks_enabled) {
-    return `Checks are off. Running version ${version}.`;
-  }
-  if (!data.last_update_check_at) {
-    const failed = data.last_update_check_status;
-    if (failed === "unreachable") {
-      return `Running version ${version}. Couldn't reach the update service — that's expected on an air-gapped install.`;
-    }
-    if (failed === "error") {
-      return `Running version ${version}. The update service responded but the answer wasn't usable.`;
-    }
-    return `Running version ${version}. No check has run yet — the first one happens within a minute of startup.`;
-  }
-  const checked = relativeTime(data.last_update_check_at);
-  if (data.update_available && data.latest_known_version) {
-    // Reports the fact regardless of dismissal — this is the page an admin
-    // consults to find out whether they're current, so "up to date" here has to
-    // mean up to date, not "you clicked Dismiss".
-    const waved = data.update_notice_dismissed
-      ? " You've dismissed the notice for it."
-      : "";
-    return `Running version ${version}. Version ${data.latest_known_version} is available.${waved} Last checked ${checked}.`;
-  }
-  const stale =
-    data.last_update_check_status && data.last_update_check_status !== "ok"
-      ? " The most recent attempt failed."
-      : "";
-  return `Running version ${version} — up to date. Last checked ${checked}.${stale}`;
 }
 
 /** Call `reportValidity()` once `field` is on screen, or give up after ~20
@@ -272,6 +238,7 @@ function SettingsForm({
   section: FormSection;
   onShowSection: (section: FormSection) => void;
 }) {
+  const t = useTranslations("admin.settings");
   const update = useUpdateOperationalSettings();
   const [registrationOpen, setRegistrationOpen] = useState(data.registration_open);
   const [updateChecks, setUpdateChecks] = useState(data.update_checks_enabled);
@@ -290,6 +257,34 @@ function SettingsForm({
   const [verificationEnabled, setVerificationEnabled] = useState(
     data.email_verification_enabled,
   );
+
+  // The "is this actually working?" line beside the update-check toggle.
+  // Deliberately states the running version even when all is well — "last
+  // checked N ago" alone doesn't tell an admin what they're on.
+  function updateCheckStatus(): string {
+    const version = data.current_version;
+    if (!data.update_checks_enabled) return t("updateOff", { version });
+    if (!data.last_update_check_at) {
+      const failed = data.last_update_check_status;
+      if (failed === "unreachable") return t("updateUnreachable", { version });
+      if (failed === "error") return t("updateError", { version });
+      return t("updateNever", { version });
+    }
+    const checked = relativeTime(data.last_update_check_at);
+    if (data.update_available && data.latest_known_version) {
+      // Reports the fact regardless of dismissal — this is where an admin
+      // checks whether they're current, so it must mean up to date, not
+      // "you clicked Dismiss".
+      const params = { version, latest: data.latest_known_version, checked };
+      return data.update_notice_dismissed
+        ? t("updateAvailableDismissed", params)
+        : t("updateAvailable", params);
+    }
+    const stale = data.last_update_check_status && data.last_update_check_status !== "ok";
+    return stale
+      ? t("updateCurrentStale", { version, checked })
+      : t("updateCurrent", { version, checked });
+  }
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -337,9 +332,9 @@ function SettingsForm({
         update_checks_enabled: updateChecks,
       },
       {
-        onSuccess: () => toast("Settings saved", { variant: "success" }),
+        onSuccess: () => toast(t("settingsSaved"), { variant: "success" }),
         onError: (err) =>
-          toast("Couldn't save", { description: (err as Error).message, variant: "destructive" }),
+          toast(t("couldntSave"), { description: (err as Error).message, variant: "destructive" }),
       },
     );
   }
@@ -355,23 +350,20 @@ function SettingsForm({
       >
         <Card>
           <CardHeader>
-            <CardTitle>Registration</CardTitle>
-            <CardDescription>
-              Whether anyone can sign up. When closed, only an administrator can create accounts
-              (Admin → Users).
-            </CardDescription>
+            <CardTitle>{t("registration")}</CardTitle>
+            <CardDescription>{t("registrationDescription")}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid gap-2">
-              <Label htmlFor="reg">Public sign-up</Label>
+              <Label htmlFor="reg">{t("publicSignup")}</Label>
               <Select
                 id="reg"
                 value={registrationOpen ? "open" : "closed"}
                 onChange={(e) => setRegistrationOpen(e.target.value === "open")}
                 className="max-w-xs"
               >
-                <option value="open">Open — anyone can register</option>
-                <option value="closed">Closed — invite / admin-created only</option>
+                <option value="open">{t("signupOpen")}</option>
+                <option value="closed">{t("signupClosed")}</option>
               </Select>
             </div>
           </CardContent>
@@ -379,42 +371,41 @@ function SettingsForm({
 
         <Card>
           <CardHeader>
-            <CardTitle>Update checks</CardTitle>
+            <CardTitle>{t("updateChecks")}</CardTitle>
             <CardDescription>
-              Once a day Flagpost asks{" "}
-              <span className="font-mono text-xs">updates.flagpost.io</span> whether a newer
-              release exists. The request sends <strong>only the version you&apos;re
-              running</strong> — no identifier, no hostname, no competition or user data —
-              and the count of those requests is how the project gauges how many
-              deployments are live. See{" "}
-              <a
-                href="https://github.com/tbcsec/Flagpost/blob/main/PRIVACY.md"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                PRIVACY.md
-              </a>{" "}
-              for the full detail.
+              {t.rich("updateChecksDescription", {
+                mono: (chunks) => <span className="font-mono text-xs">{chunks}</span>,
+                strong: (chunks) => <strong>{chunks}</strong>,
+                link: (chunks) => (
+                  <a
+                    href="https://github.com/tbcsec/Flagpost/blob/main/PRIVACY.md"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    {chunks}
+                  </a>
+                ),
+              })}
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="updchk">Check for updates</Label>
+              <Label htmlFor="updchk">{t("checkForUpdates")}</Label>
               <Select
                 id="updchk"
                 value={updateChecks ? "on" : "off"}
                 onChange={(e) => setUpdateChecks(e.target.value === "on")}
                 className="max-w-xs"
               >
-                <option value="on">On — check daily</option>
-                <option value="off">Off — never contact the update service</option>
+                <option value="on">{t("updatesOn")}</option>
+                <option value="off">{t("updatesOff")}</option>
               </Select>
               {/* Inline with the toggle rather than in a banner: this is the
                   operational detail an admin comes looking for, and it tells
                   them the check is alive even when there's no update. */}
               <p className="text-xs text-muted-foreground">
-                {updateCheckStatus(data)}
+                {updateCheckStatus()}
               </p>
             </div>
           </CardContent>
@@ -422,30 +413,29 @@ function SettingsForm({
 
         <Card>
           <CardHeader>
-            <CardTitle>Data retention</CardTitle>
+            <CardTitle>{t("dataRetention")}</CardTitle>
             <CardDescription>
-              When on, an <em>archived</em> competition is permanently deleted — database
-              records and stored files — once it has stayed archived for the retention
-              period. The archive dialog shows the exact deletion date; unarchiving cancels
-              the clock. Competitions archived before enabling this are never auto-deleted.
+              {t.rich("dataRetentionDescription", {
+                em: (chunks) => <em>{chunks}</em>,
+              })}
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="autodel">Auto-delete archived competitions</Label>
+              <Label htmlFor="autodel">{t("autoDeleteLabel")}</Label>
               <Select
                 id="autodel"
                 value={autoDelete ? "on" : "off"}
                 onChange={(e) => setAutoDelete(e.target.value === "on")}
                 className="max-w-xs"
               >
-                <option value="on">On — delete after the retention period</option>
-                <option value="off">Off — keep archives forever</option>
+                <option value="on">{t("autoDeleteOn")}</option>
+                <option value="off">{t("autoDeleteOff")}</option>
               </Select>
             </div>
             {autoDelete && (
               <div className="grid gap-2">
-                <Label htmlFor="retention">Retention period (days)</Label>
+                <Label htmlFor="retention">{t("retentionPeriod")}</Label>
                 <Input
                   id="retention"
                   type="number"
@@ -467,25 +457,20 @@ function SettingsForm({
       >
         <Card>
           <CardHeader>
-            <CardTitle>Email domain allowlist</CardTitle>
-            <CardDescription>
-              Restrict public sign-up to specific email domains. A rejected sign-up sees a
-              generic error — it never learns which domains are allowed. Applies to public
-              registration only; admin-created accounts and existing users&apos; emails are
-              unaffected. Enabling this makes email mandatory at registration.
-            </CardDescription>
+            <CardTitle>{t("emailAllowlist")}</CardTitle>
+            <CardDescription>{t("emailAllowlistDescription")}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="allowlist">Restrict sign-up by email domain</Label>
+              <Label htmlFor="allowlist">{t("restrictSignup")}</Label>
               <Select
                 id="allowlist"
                 value={allowlistEnabled ? "on" : "off"}
                 onChange={(e) => setAllowlistEnabled(e.target.value === "on")}
                 className="max-w-xs"
               >
-                <option value="off">Off — any email may register</option>
-                <option value="on">On — only allowed domains may register</option>
+                <option value="off">{t("allowlistOff")}</option>
+                <option value="on">{t("allowlistOn")}</option>
               </Select>
             </div>
             {allowlistEnabled && (
@@ -496,25 +481,20 @@ function SettingsForm({
 
         <Card>
           <CardHeader>
-            <CardTitle>Email verification</CardTitle>
-            <CardDescription>
-              Require a self-registered account to confirm its email (a link sent via the SMTP
-              server below) before it can join a competition. Requires SMTP to be configured.
-              Admin-created accounts (Admin → Users) are exempt, and turning this on never
-              affects members who already joined.
-            </CardDescription>
+            <CardTitle>{t("emailVerification")}</CardTitle>
+            <CardDescription>{t("emailVerificationDescription")}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid gap-2">
-              <Label htmlFor="verify">Require email verification to join</Label>
+              <Label htmlFor="verify">{t("requireVerification")}</Label>
               <Select
                 id="verify"
                 value={verificationEnabled ? "on" : "off"}
                 onChange={(e) => setVerificationEnabled(e.target.value === "on")}
                 className="max-w-xs"
               >
-                <option value="off">Off — anyone who registers can join</option>
-                <option value="on">On — must verify email first</option>
+                <option value="off">{t("verificationOff")}</option>
+                <option value="on">{t("verificationOn")}</option>
               </Select>
             </div>
           </CardContent>
@@ -522,47 +502,48 @@ function SettingsForm({
 
         <Card>
           <CardHeader>
-            <CardTitle>SMTP (outbound email)</CardTitle>
+            <CardTitle>{t("smtp")}</CardTitle>
             <CardDescription>
-              Used by the automation <span className="font-mono text-xs">send_email</span> action.
-              Leave the host blank to disable email (the action becomes a no-op).
+              {t.rich("smtpDescription", {
+                mono: (chunks) => <span className="font-mono text-xs">{chunks}</span>,
+              })}
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2 grid gap-2">
-                <Label htmlFor="host">Host</Label>
+                <Label htmlFor="host">{t("host")}</Label>
                 <Input id="host" value={host} onChange={(e) => setHost(e.target.value)} placeholder="smtp.example.com" />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="port">Port</Label>
+                <Label htmlFor="port">{t("port")}</Label>
                 <Input id="port" type="number" min={1} max={65535} value={port} onChange={(e) => setPort(e.target.value)} />
               </div>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="from">From address</Label>
+              <Label htmlFor="from">{t("fromAddress")}</Label>
               <Input id="from" type="email" value={from} onChange={(e) => setFrom(e.target.value)} placeholder="ctf@example.com" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-2">
-                <Label htmlFor="user">Username</Label>
+                <Label htmlFor="user">{t("username")}</Label>
                 <Input id="user" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="pass">Password</Label>
+                <Label htmlFor="pass">{t("password")}</Label>
                 <Input
                   id="pass"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="new-password"
-                  placeholder={data.smtp_password_set ? "•••••••• (unchanged)" : "Not set"}
+                  placeholder={data.smtp_password_set ? t("passwordUnchanged") : t("passwordNotSet")}
                 />
               </div>
             </div>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={starttls} onChange={(e) => setStarttls(e.target.checked)} />
-              Use STARTTLS
+              {t("useStarttls")}
             </label>
           </CardContent>
         </Card>
@@ -571,11 +552,11 @@ function SettingsForm({
       {/* Save submits the whole payload, whichever section is on screen. */}
       <div className="flex items-center gap-3">
         <Button type="submit" className="w-fit" disabled={update.isPending}>
-          {update.isPending ? "Saving…" : "Save changes"}
+          {update.isPending ? t("saving") : t("saveChanges")}
         </Button>
         {data.updated_at && (
           <span className="text-xs text-muted-foreground">
-            Last saved {new Date(data.updated_at).toLocaleString()}
+            {t("lastSaved", { time: new Date(data.updated_at).toLocaleString() })}
           </span>
         )}
       </div>
@@ -593,6 +574,7 @@ function DomainListEditor({
   values: string[];
   onChange: (values: string[]) => void;
 }) {
+  const t = useTranslations("admin.settings");
   const [draft, setDraft] = useState("");
 
   function add() {
@@ -603,11 +585,11 @@ function DomainListEditor({
 
   return (
     <div className="space-y-2">
-      <Label>Allowed domains</Label>
+      <Label>{t("allowedDomains")}</Label>
       <p className="text-xs text-muted-foreground">
-        Subdomains are automatically allowed (e.g. an entry for{" "}
-        <span className="font-mono">example.com</span> also allows{" "}
-        <span className="font-mono">mail.example.com</span>).
+        {t.rich("subdomainsHint", {
+          mono: (chunks) => <span className="font-mono">{chunks}</span>,
+        })}
       </p>
       {values.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -621,7 +603,7 @@ function DomainListEditor({
                 type="button"
                 onClick={() => onChange(values.filter((x) => x !== v))}
                 className="text-muted-foreground hover:text-destructive"
-                aria-label={`Remove ${v}`}
+                aria-label={t("removeDomainAria", { domain: v })}
               >
                 ×
               </button>
@@ -633,7 +615,7 @@ function DomainListEditor({
         <Input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="example.com"
+          placeholder={t("domainPlaceholder")}
           maxLength={253}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -643,7 +625,7 @@ function DomainListEditor({
           }}
         />
         <Button type="button" variant="outline" onClick={add} disabled={!draft.trim()}>
-          Add
+          {t("addDomain")}
         </Button>
       </div>
     </div>

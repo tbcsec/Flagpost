@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { RuleBuilder } from "@/components/automations/rule-builder";
@@ -31,6 +32,7 @@ import { toast } from "@/stores/toast";
 // the §5.5 visual builder for staff), plus every user's own notify-self
 // "personal rules" (§5.1). The engine is live from Phase 1; this is its editor.
 export default function AutomationsPage() {
+  const t = useTranslations("automations");
   const { data: competition } = useActiveCompetition();
   const access = useAccess();
   const canView = access.has("automation_view");
@@ -48,8 +50,8 @@ export default function AutomationsPage() {
   return (
     <>
       <SectionHeader
-        title="Automations"
-        subtitle={`${competition?.name ?? ""} · trigger → conditions → actions`}
+        title={t("title")}
+        subtitle={t("subtitle", { name: competition?.name ?? "" })}
       />
 
       {/* Org rules — staff only */}
@@ -61,7 +63,7 @@ export default function AutomationsPage() {
               <Skeleton className="h-20" />
             </div>
           ) : isError ? (
-            <EmptyCard>The automations module is disabled for this competition.</EmptyCard>
+            <EmptyCard>{t("moduleDisabled")}</EmptyCard>
           ) : (
             <OrgRules
               rules={rules ?? []}
@@ -98,6 +100,7 @@ function OrgRules({
   onToggle: (r: AutomationRule) => void;
   onDelete: (r: AutomationRule) => void;
 }) {
+  const t = useTranslations("automations");
   const [editing, setEditing] = React.useState<AutomationRule | null>(null);
   const [creating, setCreating] = React.useState(false);
   const create = useCreateAutomation(competitionId);
@@ -106,11 +109,11 @@ function OrgRules({
   function submitNew(input: AutomationRuleInput) {
     create.mutate(input, {
       onSuccess: () => {
-        toast("Rule created", { variant: "success" });
+        toast(t("ruleCreated"), { variant: "success" });
         setCreating(false);
       },
       onError: (e) =>
-        toast("Couldn't create rule", { description: (e as Error).message, variant: "destructive" }),
+        toast(t("ruleCreateFailed"), { description: (e as Error).message, variant: "destructive" }),
     });
   }
   function submitEdit(input: AutomationRuleInput) {
@@ -119,11 +122,11 @@ function OrgRules({
       { ruleId: editing.id, input },
       {
         onSuccess: () => {
-          toast("Rule saved", { variant: "success" });
+          toast(t("ruleSaved"), { variant: "success" });
           setEditing(null);
         },
         onError: (e) =>
-          toast("Couldn't save rule", { description: (e as Error).message, variant: "destructive" }),
+          toast(t("ruleSaveFailed"), { description: (e as Error).message, variant: "destructive" }),
       },
     );
   }
@@ -131,16 +134,16 @@ function OrgRules({
   return (
     <>
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold">Competition rules</h2>
+        <h2 className="text-sm font-semibold">{t("competitionRules")}</h2>
         {canCreate && catalog && (
           <Button size="sm" onClick={() => setCreating(true)}>
-            New rule
+            {t("newRule")}
           </Button>
         )}
       </div>
 
       {rules.length === 0 ? (
-        <EmptyCard>No rules yet. Create one to react to events automatically.</EmptyCard>
+        <EmptyCard>{t("noRules")}</EmptyCard>
       ) : (
         <div className="grid gap-3">
           {rules.map((rule) => (
@@ -190,6 +193,7 @@ function PersonalRules({
   catalog: ReturnType<typeof useAutomationCatalog>["data"];
   competitionId?: string;
 }) {
+  const t = useTranslations("automations");
   const { data: rules, isLoading } = usePersonalAutomations();
   const create = useCreatePersonalAutomation();
   const update = useUpdatePersonalAutomation();
@@ -202,11 +206,11 @@ function PersonalRules({
       { ...input, competition_id: competitionId ?? null },
       {
         onSuccess: () => {
-          toast("Personal rule created", { variant: "success" });
+          toast(t("personalCreated"), { variant: "success" });
           setCreating(false);
         },
         onError: (e) =>
-          toast("Couldn't create", { description: (e as Error).message, variant: "destructive" }),
+          toast(t("personalCreateFailed"), { description: (e as Error).message, variant: "destructive" }),
       },
     );
   }
@@ -216,11 +220,11 @@ function PersonalRules({
       { ruleId: editing.id, input: { ...input, competition_id: editing.competition_id } },
       {
         onSuccess: () => {
-          toast("Personal rule saved", { variant: "success" });
+          toast(t("personalSaved"), { variant: "success" });
           setEditing(null);
         },
         onError: (e) =>
-          toast("Couldn't save", { description: (e as Error).message, variant: "destructive" }),
+          toast(t("personalSaveFailed"), { description: (e as Error).message, variant: "destructive" }),
       },
     );
   }
@@ -229,14 +233,12 @@ function PersonalRules({
     <section className="mt-8 space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold">My rules</h2>
-          <p className="text-xs text-muted-foreground">
-            Personal notifications for events you cause — only you see these.
-          </p>
+          <h2 className="text-sm font-semibold">{t("myRules")}</h2>
+          <p className="text-xs text-muted-foreground">{t("myRulesHint")}</p>
         </div>
         {catalog && (
           <Button size="sm" variant="outline" onClick={() => setCreating(true)}>
-            New personal rule
+            {t("newPersonalRule")}
           </Button>
         )}
       </div>
@@ -244,7 +246,7 @@ function PersonalRules({
       {isLoading ? (
         <Skeleton className="h-16" />
       ) : !rules || rules.length === 0 ? (
-        <EmptyCard>No personal rules yet.</EmptyCard>
+        <EmptyCard>{t("noPersonalRules")}</EmptyCard>
       ) : (
         <div className="grid gap-3">
           {rules.map((rule) => (
@@ -299,13 +301,14 @@ function RuleCard({
   onToggle?: () => void;
   onDelete: () => void;
 }) {
+  const t = useTranslations("automations");
   const confirm = useConfirm();
   async function onDeleteClick() {
     if (
       await confirm({
-        title: `Delete "${rule.name}"?`,
-        description: "This automation rule will be removed and stop firing.",
-        confirmLabel: "Delete rule",
+        title: t("deleteConfirmTitle", { name: rule.name }),
+        description: t("deleteConfirmDescription"),
+        confirmLabel: t("deleteConfirmLabel"),
       })
     ) {
       onDelete();
@@ -318,38 +321,37 @@ function RuleCard({
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium">{rule.name}</span>
             {rule.competition_id === null && rule.owner_user_id === null && (
-              <Badge variant="secondary">global</Badge>
+              <Badge variant="secondary">{t("badgeGlobal")}</Badge>
             )}
-            {!rule.is_enabled && <Badge variant="muted">disabled</Badge>}
+            {!rule.is_enabled && <Badge variant="muted">{t("badgeDisabled")}</Badge>}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <span>
-              on <code className="text-foreground">{rule.trigger_type}</code>
+              {t("onLabel")} <code className="text-foreground">{rule.trigger_type}</code>
             </span>
             {rule.conditions.length > 0 && (
-              <span>
-                {rule.conditions.length} condition{rule.conditions.length === 1 ? "" : "s"}
-              </span>
+              <span>{t("conditionCount", { count: rule.conditions.length })}</span>
             )}
             <span>→ {rule.actions.map((a) => a.type).join(", ")}</span>
             <span>
-              fired {rule.trigger_count}×
-              {rule.last_triggered_at && `, last ${relativeTime(rule.last_triggered_at)}`}
+              {t("fired", { count: rule.trigger_count })}
+              {rule.last_triggered_at &&
+                t("lastFired", { time: relativeTime(rule.last_triggered_at) })}
             </span>
           </div>
         </div>
         {canEdit && (
           <div className="flex flex-shrink-0 gap-2">
             <Button size="sm" variant="outline" onClick={onEdit}>
-              Edit
+              {t("edit")}
             </Button>
             {onToggle && (
               <Button size="sm" variant="outline" onClick={onToggle}>
-                {rule.is_enabled ? "Disable" : "Enable"}
+                {rule.is_enabled ? t("disable") : t("enable")}
               </Button>
             )}
             <Button size="sm" variant="destructive" onClick={onDeleteClick}>
-              Delete
+              {t("delete")}
             </Button>
           </div>
         )}

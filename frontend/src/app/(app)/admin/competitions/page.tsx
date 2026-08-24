@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { CreateCompetitionDialog } from "@/components/competitions/create-competition-dialog";
@@ -42,39 +43,17 @@ import { toast } from "@/stores/toast";
 /** Fallback when site settings haven't loaded — matches the server default. */
 const DEFAULT_RETENTION_DAYS = 30;
 
-/** The archive confirm's copy. With retention on (#26) an archive is also a
- *  *scheduled deletion*, so the dialog states the exact date — consent happens
- *  there — and asks for an export first. The server stamps the authoritative
- *  `purge_after`; this is the same now + retention-days arithmetic, previewed.
- *
- *  Module-level on purpose: it reads the clock, and an impure call inside a
- *  component body is a React Compiler purity violation (react-hooks/purity). */
-function archiveWarning(
-  autoDelete: boolean,
-  retentionDays: number,
-): { description: string; destructive: boolean } {
-  if (!autoDelete) {
-    return {
-      description:
-        "It'll be hidden from the competition switcher and lobby. Its data is kept and you can unarchive it later.",
-      destructive: false,
-    };
-  }
-  const deletesOn = new Date(
-    Date.now() + retentionDays * 86_400_000,
-  ).toLocaleString();
-  return {
-    description:
-      `It'll be hidden from the competition switcher and lobby. ` +
-      `Auto-delete is on: it will be permanently deleted on ${deletesOn} ` +
-      `(after ${retentionDays} days archived) — database records and stored ` +
-      `files. Unarchiving cancels that. Export the competition first if you ` +
-      `need the data.`,
-    destructive: true,
-  };
+/** The scheduled-deletion date shown in the archive confirm when retention is
+ *  on (#26), or null when it isn't. Module-level on purpose: it reads the clock,
+ *  and the React Compiler's purity rule (react-hooks/purity) flags Date.now()
+ *  anywhere inside the component — even in an event handler. */
+function archiveDeletesOn(autoDelete: boolean, retentionDays: number): string | null {
+  if (!autoDelete) return null;
+  return new Date(Date.now() + retentionDays * 86_400_000).toLocaleString();
 }
 
 export default function AdminCompetitionsPage() {
+  const t = useTranslations("admin.competitions");
   const { data: competitions, isLoading, isError, error } = useCompetitions();
   const archive = useArchiveCompetition();
   const { data: site } = useSiteSettings();
@@ -85,18 +64,22 @@ export default function AdminCompetitionsPage() {
   async function onArchive(c: Competition) {
     const archived = !c.archived_at;
     // Archiving closes a competition out (hidden from the switcher/lobby);
-    // unarchiving is restorative, so only the archive needs a confirm.
-    const retention = archiveWarning(
-      site?.archive_auto_delete ?? false,
-      site?.archive_retention_days ?? DEFAULT_RETENTION_DAYS,
-    );
+    // unarchiving is restorative, so only the archive needs a confirm. With
+    // retention on (#26) an archive is also a scheduled deletion, so the dialog
+    // states the exact date (consent happens there) and asks for an export first.
+    const autoDelete = site?.archive_auto_delete ?? false;
+    const retentionDays = site?.archive_retention_days ?? DEFAULT_RETENTION_DAYS;
+    const deletesOn = archiveDeletesOn(autoDelete, retentionDays);
+    const description = deletesOn
+      ? t("archiveDeleteDescription", { deletesOn, days: retentionDays })
+      : t("archiveKeepDescription");
     if (
       archived &&
       !(await confirm({
-        title: `Archive ${c.name}?`,
-        description: retention.description,
-        confirmLabel: "Archive",
-        destructive: retention.destructive,
+        title: t("archiveTitle", { name: c.name }),
+        description,
+        confirmLabel: t("archiveConfirm"),
+        destructive: autoDelete,
       }))
     ) {
       return;
@@ -104,35 +87,36 @@ export default function AdminCompetitionsPage() {
     archive.mutate(
       { id: c.id, archived },
       {
-        onSuccess: () => toast(`${c.name} ${archived ? "archived" : "unarchived"}`),
-        onError: (e) => toast("Couldn't update", { description: (e as Error).message, variant: "destructive" }),
+        onSuccess: () =>
+          toast(t(archived ? "archivedToast" : "unarchivedToast", { name: c.name })),
+        onError: (e) => toast(t("couldntUpdate"), { description: (e as Error).message, variant: "destructive" }),
       },
     );
   }
 
   return (
     <>
-      <SectionHeader title="Admin — Competitions" subtitle="Global — platform-wide, not scoped to a competition" />
+      <SectionHeader title={t("title")} subtitle={t("subtitle")} />
 
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <div>
-            <CardTitle>All competitions</CardTitle>
-            <CardDescription>{competitions?.length ?? 0} total</CardDescription>
+            <CardTitle>{t("allCompetitions")}</CardTitle>
+            <CardDescription>{t("totalCount", { count: competitions?.length ?? 0 })}</CardDescription>
           </div>
           <CreateCompetitionDialog />
         </CardHeader>
         <CardContent className="space-y-4">
-          {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+          {isLoading && <p className="text-sm text-muted-foreground">{t("loading")}</p>}
           {isError && <p role="alert" className="text-sm text-destructive">{(error as Error).message}</p>}
           {competitions && competitions.length > 0 && (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Mode</TableHead>
-                  <TableHead>Visibility</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t("colName")}</TableHead>
+                  <TableHead>{t("colMode")}</TableHead>
+                  <TableHead>{t("colVisibility")}</TableHead>
+                  <TableHead className="text-right">{t("colActions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -140,10 +124,10 @@ export default function AdminCompetitionsPage() {
                   <TableRow key={c.id} className={c.archived_at ? "opacity-60" : undefined}>
                     <TableCell className="font-medium">
                       {c.name}
-                      {c.archived_at && <Badge variant="outline" className="ml-2">Archived</Badge>}
+                      {c.archived_at && <Badge variant="outline" className="ml-2">{t("archivedBadge")}</Badge>}
                       {c.purge_after && (
                         <span className="ml-2 text-xs text-destructive">
-                          deletes {new Date(c.purge_after).toLocaleDateString()}
+                          {t("deletesOn", { date: new Date(c.purge_after).toLocaleDateString() })}
                         </span>
                       )}
                     </TableCell>
@@ -155,7 +139,7 @@ export default function AdminCompetitionsPage() {
                     </TableCell>
                     <TableCell className="space-x-2 whitespace-nowrap text-right">
                       <Button variant="ghost" size="sm" onClick={() => setCloning(c)}>
-                        Clone
+                        {t("clone")}
                       </Button>
                       <Button
                         variant="ghost"
@@ -163,7 +147,7 @@ export default function AdminCompetitionsPage() {
                         disabled={archive.isPending}
                         onClick={() => onArchive(c)}
                       >
-                        {c.archived_at ? "Unarchive" : "Archive"}
+                        {c.archived_at ? t("unarchive") : t("archive")}
                       </Button>
                       <Button
                         variant="ghost"
@@ -171,7 +155,7 @@ export default function AdminCompetitionsPage() {
                         className="text-destructive"
                         onClick={() => setDeleting(c)}
                       >
-                        Delete
+                        {t("delete")}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -189,16 +173,17 @@ export default function AdminCompetitionsPage() {
 }
 
 function DeleteDialog({ target, onClose }: { target: Competition | null; onClose: () => void }) {
+  const t = useTranslations("admin.competitions");
   const del = useDeleteCompetition();
 
   function onConfirm() {
     if (!target) return;
     del.mutate(target.id, {
       onSuccess: () => {
-        toast(`Deleted ${target.name}`, { variant: "success" });
+        toast(t("deletedToast", { name: target.name }), { variant: "success" });
         onClose();
       },
-      onError: (e) => toast("Couldn't delete", { description: (e as Error).message, variant: "destructive" }),
+      onError: (e) => toast(t("couldntDelete"), { description: (e as Error).message, variant: "destructive" }),
     });
   }
 
@@ -206,19 +191,20 @@ function DeleteDialog({ target, onClose }: { target: Competition | null; onClose
     <Dialog open={Boolean(target)} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete competition?</DialogTitle>
+          <DialogTitle>{t("deleteTitle")}</DialogTitle>
           <DialogDescription>
-            This permanently removes <span className="font-medium">{target?.name}</span> and
-            everything under it — challenges, teams, submissions, scores, tickets, surveys. This
-            can&apos;t be undone. To just close it out, archive it instead.
+            {t.rich("deleteDescription", {
+              strong: (chunks) => <span className="font-medium">{chunks}</span>,
+              name: target?.name ?? "",
+            })}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </Button>
           <Button variant="destructive" onClick={onConfirm} disabled={del.isPending}>
-            {del.isPending ? "Deleting…" : "Delete competition"}
+            {del.isPending ? t("deleting") : t("deleteConfirm")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -227,6 +213,7 @@ function DeleteDialog({ target, onClose }: { target: Competition | null; onClose
 }
 
 function CloneDialog({ source, onClose }: { source: Competition | null; onClose: () => void }) {
+  const t = useTranslations("admin.competitions");
   const clone = useCloneCompetition();
   // Seeded on mount — the call site keys this dialog by the source competition,
   // so a new clone target remounts it and the suggested name reseeds. The
@@ -240,7 +227,7 @@ function CloneDialog({ source, onClose }: { source: Competition | null; onClose:
       { id: source.id, name },
       {
         onSuccess: (created) => {
-          toast(`Cloned to “${created.name}”`, { variant: "success" });
+          toast(t("clonedToast", { name: created.name }), { variant: "success" });
           onClose();
         },
       },
@@ -251,17 +238,17 @@ function CloneDialog({ source, onClose }: { source: Competition | null; onClose:
     <Dialog open={Boolean(source)} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Clone competition</DialogTitle>
+          <DialogTitle>{t("cloneTitle")}</DialogTitle>
           <DialogDescription>
-            Copies {source ? <span className="font-medium">{source.name}</span> : "this competition"}
-            &apos;s settings, categories, challenges (with flags), hints, files, surveys, and module
-            toggles into a fresh competition. Participants, scores, and tickets are not copied, and
-            the schedule is left blank for you to set.
+            {t.rich("cloneDescription", {
+              strong: (chunks) => <span className="font-medium">{chunks}</span>,
+              name: source?.name ?? "this competition",
+            })}
           </DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={onSubmit}>
           <div className="grid gap-2">
-            <Label htmlFor="clone-name">New competition name</Label>
+            <Label htmlFor="clone-name">{t("newName")}</Label>
             <Input
               id="clone-name"
               value={name}
@@ -275,10 +262,10 @@ function CloneDialog({ source, onClose }: { source: Competition | null; onClose:
           )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
+              {t("cancel")}
             </Button>
             <Button type="submit" disabled={clone.isPending}>
-              {clone.isPending ? "Cloning…" : "Clone competition"}
+              {clone.isPending ? t("cloning") : t("cloneConfirm")}
             </Button>
           </DialogFooter>
         </form>

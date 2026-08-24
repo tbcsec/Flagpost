@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Fragment, useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
@@ -46,6 +47,7 @@ const clean = (v: string) => (v ? v : undefined);
 // team (matched inside the payload), actor, a time window, and free text; page
 // through results; expand a row to read the full payload.
 export default function AdminEventLogPage() {
+  const t = useTranslations("admin.events");
   const [draft, setDraft] = useState({ ...EMPTY_DRAFT });
   const [applied, setApplied] = useState<AuditLogQuery>({
     limit: PAGE_SIZE,
@@ -108,24 +110,21 @@ export default function AdminEventLogPage() {
 
   return (
     <>
-      <SectionHeader
-        title="Admin — Event log"
-        subtitle="Every event the platform emits — global, across all competitions"
-      />
+      <SectionHeader title={t("title")} subtitle={t("subtitle")} />
 
       <Card>
         <CardContent className="pt-5">
           <form onSubmit={applyFilters} className="grid gap-3">
             <Input
-              placeholder="Search event name or payload…"
+              placeholder={t("searchPlaceholder")}
               value={draft.q}
               onChange={(e) => set("q", e.target.value)}
             />
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
               <div className="grid gap-1.5">
-                <Label htmlFor="f-event">Event type</Label>
+                <Label htmlFor="f-event">{t("eventType")}</Label>
                 <Select id="f-event" value={draft.event} onChange={(e) => set("event", e.target.value)}>
-                  <option value="">All events</option>
+                  <option value="">{t("allEvents")}</option>
                   {eventNames.data?.map((name) => (
                     <option key={name} value={name}>
                       {name}
@@ -134,13 +133,13 @@ export default function AdminEventLogPage() {
                 </Select>
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="f-comp">Competition</Label>
+                <Label htmlFor="f-comp">{t("competition")}</Label>
                 <Select
                   id="f-comp"
                   value={draft.competition_id}
                   onChange={(e) => set("competition_id", e.target.value)}
                 >
-                  <option value="">All competitions</option>
+                  <option value="">{t("allCompetitions")}</option>
                   {competitions.data?.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -149,40 +148,40 @@ export default function AdminEventLogPage() {
                 </Select>
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="f-team">Team</Label>
+                <Label htmlFor="f-team">{t("team")}</Label>
                 <EntityCombobox
                   id="f-team"
                   options={teamOptions}
                   value={draft.team_id}
                   onChange={(v) => set("team_id", v)}
                   disabled={!draft.competition_id}
-                  placeholder={draft.competition_id ? "Any team" : "Pick a competition first"}
-                  emptyText="No teams in this competition"
+                  placeholder={draft.competition_id ? t("anyTeam") : t("pickCompetitionFirst")}
+                  emptyText={t("noTeams")}
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="f-user">Actor</Label>
+                <Label htmlFor="f-user">{t("actor")}</Label>
                 <EntityCombobox
                   id="f-user"
                   options={userOptions}
                   value={draft.user_id}
                   onChange={(v) => set("user_id", v)}
-                  placeholder="Any user"
+                  placeholder={t("anyUser")}
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="f-since">From</Label>
+                <Label htmlFor="f-since">{t("from")}</Label>
                 <Input id="f-since" type="datetime-local" value={draft.since} onChange={(e) => set("since", e.target.value)} />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="f-until">To</Label>
+                <Label htmlFor="f-until">{t("to")}</Label>
                 <Input id="f-until" type="datetime-local" value={draft.until} onChange={(e) => set("until", e.target.value)} />
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button type="submit">Apply filters</Button>
+              <Button type="submit">{t("applyFilters")}</Button>
               <Button type="button" variant="ghost" onClick={reset}>
-                Reset
+                {t("reset")}
               </Button>
             </div>
           </form>
@@ -192,12 +191,12 @@ export default function AdminEventLogPage() {
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
           {log.isLoading
-            ? "Loading…"
-            : `${showingFrom}–${showingTo} of ${total} event(s)`}
+            ? t("loading")
+            : t("rangeCount", { from: showingFrom, to: showingTo, total })}
         </span>
         <span className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => page(-1)} disabled={offset === 0}>
-            Previous
+            {t("previous")}
           </Button>
           <Button
             variant="outline"
@@ -205,7 +204,7 @@ export default function AdminEventLogPage() {
             onClick={() => page(1)}
             disabled={showingTo >= total}
           >
-            Next
+            {t("next")}
           </Button>
         </span>
       </div>
@@ -223,10 +222,10 @@ export default function AdminEventLogPage() {
                     width so every spare pixel goes to the Payload preview;
                     Competition gets a fixed lane and truncates instead, since
                     a long name shouldn't steal the payload's space either. */}
-                <TableHead className="w-px">Time (UTC)</TableHead>
-                <TableHead className="w-px">Event</TableHead>
-                <TableHead className="w-44">Competition</TableHead>
-                <TableHead>Payload</TableHead>
+                <TableHead className="w-px">{t("colTime")}</TableHead>
+                <TableHead className="w-px">{t("colEvent")}</TableHead>
+                <TableHead className="w-44">{t("colCompetition")}</TableHead>
+                <TableHead>{t("colPayload")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -306,7 +305,7 @@ export default function AdminEventLogPage() {
               {log.data && log.data.items.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
-                    No events match these filters.
+                    {t("noEvents")}
                   </TableCell>
                 </TableRow>
               )}

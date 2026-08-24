@@ -27,18 +27,17 @@ type Tab =
   | "certificates"
   | "reports";
 
-// Labels stay literals until the settings-domain extraction (#248) — except
-// "reports", born extracted (ADR-0029): its label resolves via t("reports.tab")
-// where the tabs render below.
-const TABS: { value: Tab; label: string }[] = [
-  { value: "general", label: "General" },
-  { value: "schedule", label: "Controls" },
-  { value: "challenges", label: "Challenges" },
-  { value: "rules", label: "Rules" },
-  { value: "assistant", label: "Assistant" },
-  { value: "certificates", label: "Certificates" },
-  { value: "reports", label: "" },
-  { value: "modules", label: "Modules" },
+// Tab order; labels resolve at render via the settings namespace, except
+// "reports", which resolves via its own module namespace (t("reports.tab")).
+const TAB_ORDER: Tab[] = [
+  "general",
+  "schedule",
+  "challenges",
+  "rules",
+  "assistant",
+  "certificates",
+  "reports",
+  "modules",
 ];
 
 // Competition settings (ROADMAP #6), scoped to the active competition and split
@@ -54,6 +53,7 @@ const TABS: { value: Tab; label: string }[] = [
 // Save would write them across tenants. The tab selection lives above the key
 // and deliberately survives the switch.
 export default function CompetitionSettingsPage() {
+  const t = useTranslations("settings");
   const tReports = useTranslations("reports");
   const { competitionId, data, isLoading, isError, error } = useActiveCompetition();
   const [tab, setTab] = useState<Tab>("general");
@@ -76,15 +76,16 @@ export default function CompetitionSettingsPage() {
   const reportsEnabled =
     !enabledModules.data || enabledModules.data.includes("reports");
   const reportsTabOn = reportsEnabled && access.has("generate_report");
-  const visibleTabs = TABS.filter(
-    (t) =>
-      (t.value !== "assistant" || aiEnabled) &&
-      (t.value !== "certificates" || certTabOn) &&
-      (t.value !== "reports" || reportsTabOn) &&
-      (t.value !== "modules" || canManageModules),
-  ).map((tab) =>
-    tab.value === "reports" ? { ...tab, label: tReports("tab") } : tab,
-  );
+  const visibleTabs = TAB_ORDER.filter(
+    (value) =>
+      (value !== "assistant" || aiEnabled) &&
+      (value !== "certificates" || certTabOn) &&
+      (value !== "reports" || reportsTabOn) &&
+      (value !== "modules" || canManageModules),
+  ).map((value) => ({
+    value,
+    label: value === "reports" ? tReports("tab") : t(`tabs.${value}`),
+  }));
   const activeTab: Tab =
     (tab === "assistant" && !aiEnabled) ||
     (tab === "certificates" && !certTabOn) ||
@@ -107,8 +108,8 @@ export default function CompetitionSettingsPage() {
 
   return (
     <>
-      <SectionHeader title="Settings" subtitle={data?.name} />
-      {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+      <SectionHeader title={t("title")} subtitle={data?.name} />
+      {isLoading && <p className="text-sm text-muted-foreground">{t("loading")}</p>}
       {isError && <p role="alert" className="text-sm text-destructive">{(error as Error).message}</p>}
       {data && (
         // key: remount everything per competition — see the header comment (#258).
@@ -157,9 +158,7 @@ export default function CompetitionSettingsPage() {
           )}
 
           <div className={activeTab === "modules" ? "grid gap-3" : "hidden"}>
-            <p className="text-sm text-muted-foreground">
-              Turn optional features on or off for this competition.
-            </p>
+            <p className="text-sm text-muted-foreground">{t("modulesIntro")}</p>
             <ModulesPanel competitionId={competitionId} />
           </div>
         </div>

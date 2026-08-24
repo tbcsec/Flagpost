@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +40,7 @@ const CHECKBOX = "h-4 w-4 rounded border-border";
 const CHECKBOX_STYLE = { accentColor: "hsl(var(--primary))" } as const;
 
 export function CreateCompetitionDialog() {
+  const t = useTranslations("settings.create");
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -105,19 +107,17 @@ export function CreateCompetitionDialog() {
       }}
     >
       <DialogTrigger asChild>
-        <Button>New competition</Button>
+        <Button>{t("trigger")}</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New competition</DialogTitle>
-          <DialogDescription>
-            Create a competition to scope challenges, teams, and scoring under.
-          </DialogDescription>
+          <DialogTitle>{t("title")}</DialogTitle>
+          <DialogDescription>{t("description")}</DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="max-h-[60vh] space-y-4 overflow-y-auto pr-1">
             <div className="space-y-2">
-              <Label htmlFor="competition-name">Name</Label>
+              <Label htmlFor="competition-name">{t("name")}</Label>
               <Input
                 id="competition-name"
                 value={name}
@@ -126,7 +126,7 @@ export function CreateCompetitionDialog() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="competition-description">Description</Label>
+              <Label htmlFor="competition-description">{t("descriptionLabel")}</Label>
               <Input
                 id="competition-description"
                 value={description}
@@ -135,25 +135,25 @@ export function CreateCompetitionDialog() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="competition-mode">Participation mode</Label>
+                <Label htmlFor="competition-mode">{t("participationMode")}</Label>
                 <Select
                   id="competition-mode"
                   value={mode}
                   onChange={(e) => setMode(e.target.value as ParticipationMode)}
                 >
-                  <option value="team">Team</option>
-                  <option value="individual">Individual</option>
+                  <option value="team">{t("modeTeam")}</option>
+                  <option value="individual">{t("modeIndividual")}</option>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="competition-visibility">Visibility</Label>
+                <Label htmlFor="competition-visibility">{t("visibility")}</Label>
                 <Select
                   id="competition-visibility"
                   value={visibility}
                   onChange={(e) => setVisibility(e.target.value as Visibility)}
                 >
-                  <option value="private">Private</option>
-                  <option value="public">Public</option>
+                  <option value="private">{t("visibilityPrivate")}</option>
+                  <option value="public">{t("visibilityPublic")}</option>
                 </Select>
               </div>
             </div>
@@ -167,16 +167,16 @@ export function CreateCompetitionDialog() {
                   checked={publicScoreboard}
                   onChange={(e) => setPublicScoreboard(e.target.checked)}
                 />
-                Public scoreboard
+                {t("publicScoreboard")}
               </label>
               <p className="pl-6 text-xs text-muted-foreground">
-                Show a read-only spectator scoreboard at a public link — no account needed.
+                {t("publicScoreboardHint")}
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="competition-start">Starts (optional)</Label>
+                <Label htmlFor="competition-start">{t("startsOptional")}</Label>
                 <Input
                   id="competition-start"
                   type="datetime-local"
@@ -185,7 +185,7 @@ export function CreateCompetitionDialog() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="competition-end">Ends (optional)</Label>
+                <Label htmlFor="competition-end">{t("endsOptional")}</Label>
                 <Input
                   id="competition-end"
                   type="datetime-local"
@@ -196,14 +196,13 @@ export function CreateCompetitionDialog() {
             </div>
 
             <div className="space-y-2">
-              <Label>Modules</Label>
-              <p className="text-xs text-muted-foreground">
-                Optional modules are on by default. Turn off any this competition
-                won&apos;t use — you can change these later in settings.
-              </p>
+              <Label>{t("modules")}</Label>
+              <p className="text-xs text-muted-foreground">{t("modulesHint")}</p>
               <ul className="rounded-md border border-border px-3">
                 {catalog.isLoading && (
-                  <li className="py-3 text-sm text-muted-foreground">Loading modules…</li>
+                  <li className="py-3 text-sm text-muted-foreground">
+                    {t("loadingModules")}
+                  </li>
                 )}
                 {catalog.data?.map((m) => {
                   const enabled = !disabledModules.has(m.id);
@@ -216,9 +215,9 @@ export function CreateCompetitionDialog() {
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium">{m.name}</span>
                           {enabled ? (
-                            <Badge variant="success">Enabled</Badge>
+                            <Badge variant="success">{t("badgeEnabled")}</Badge>
                           ) : (
-                            <Badge variant="outline">Disabled</Badge>
+                            <Badge variant="outline">{t("badgeDisabled")}</Badge>
                           )}
                         </div>
                         <p className="mt-0.5 text-xs text-muted-foreground">
@@ -232,7 +231,7 @@ export function CreateCompetitionDialog() {
                         className="flex-shrink-0"
                         onClick={() => toggleModule(m.id)}
                       >
-                        {enabled ? "Disable" : "Enable"}
+                        {t(enabled ? "disable" : "enable")}
                       </Button>
                     </li>
                   );
@@ -248,7 +247,7 @@ export function CreateCompetitionDialog() {
           )}
           <DialogFooter>
             <Button type="submit" disabled={create.isPending}>
-              {create.isPending ? "Creating…" : "Create"}
+              {create.isPending ? t("creating") : t("create")}
             </Button>
           </DialogFooter>
         </form>

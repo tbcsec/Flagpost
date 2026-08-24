@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { UserImportDialog } from "@/components/admin/user-import-dialog";
+import { renderWithIntl } from "@/test/intl";
 import type { UserImportReport, UserImportRow } from "@/lib/types";
 
 // The dialog drives one mutation (both phases) plus the competitions list for
@@ -71,7 +72,7 @@ describe("UserImportDialog", () => {
         ],
       }),
     );
-    render(<UserImportDialog open onOpenChange={() => {}} />);
+    renderWithIntl(<UserImportDialog open onOpenChange={() => {}} />);
     pickFile();
 
     await waitFor(() => expect(screen.getByText("will create")).toBeInTheDocument());
@@ -90,7 +91,7 @@ describe("UserImportDialog", () => {
         rows: [row({ role: "Judge", role_action: "skip", role_reason: "you don't hold manage_roles" })],
       }),
     );
-    render(<UserImportDialog open onOpenChange={() => {}} />);
+    renderWithIntl(<UserImportDialog open onOpenChange={() => {}} />);
     pickFile();
 
     await waitFor(() =>
@@ -102,7 +103,7 @@ describe("UserImportDialog", () => {
     mockMutateAsync
       .mockResolvedValueOnce(report()) // the preview
       .mockResolvedValueOnce(report({ dry_run: false })); // the commit
-    render(<UserImportDialog open onOpenChange={() => {}} />);
+    renderWithIntl(<UserImportDialog open onOpenChange={() => {}} />);
     pickFile();
     await waitFor(() => expect(screen.getByText(/Confirm import/)).toBeEnabled());
 
@@ -122,7 +123,7 @@ describe("UserImportDialog", () => {
         rows: [row({ status: "skip", reason: "already exists" })],
       }),
     );
-    render(<UserImportDialog open onOpenChange={() => {}} />);
+    renderWithIntl(<UserImportDialog open onOpenChange={() => {}} />);
     pickFile();
 
     await waitFor(() => expect(screen.getByText(/skip: already exists/)).toBeInTheDocument());

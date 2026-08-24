@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { SectionHeader } from "@/components/app/section-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,18 +23,19 @@ import type { AdminOverview, CompetitionHealth } from "@/lib/types";
 // competition's status and health for a global Administrator. Reads the
 // cross-competition /api/admin/overview, gated on view_global_analytics.
 export default function AdminDashboardPage() {
+  const t = useTranslations("admin.dashboard");
   const access = useAccess();
   const canView = access.has("view_global_analytics");
   const overview = useAdminOverview(canView);
 
   return (
     <>
-      <SectionHeader title="Admin — Dashboard" subtitle="Global — status & health across every competition" />
+      <SectionHeader title={t("title")} subtitle={t("subtitle")} />
 
       {!access.ready ? (
         <Skeleton className="h-24 w-full" />
       ) : !canView ? (
-        <EmptyState title="No access" description="You need the view-global-analytics permission to see the platform overview." />
+        <EmptyState title={t("noAccessTitle")} description={t("noAccessDescription")} />
       ) : overview.isLoading || !overview.data ? (
         <div className="grid gap-4">
           <Skeleton className="h-24 w-full" />
@@ -44,20 +47,20 @@ export default function AdminDashboardPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Competitions</CardTitle>
+              <CardTitle>{t("competitions")}</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Mode</TableHead>
-                    <TableHead>Visibility</TableHead>
-                    <TableHead className="text-right">Participants</TableHead>
-                    <TableHead className="text-right">Challenges</TableHead>
-                    <TableHead className="text-right">Solves</TableHead>
-                    <TableHead className="text-right">Open tickets</TableHead>
+                    <TableHead>{t("colName")}</TableHead>
+                    <TableHead>{t("colStatus")}</TableHead>
+                    <TableHead>{t("colMode")}</TableHead>
+                    <TableHead>{t("colVisibility")}</TableHead>
+                    <TableHead className="text-right">{t("colParticipants")}</TableHead>
+                    <TableHead className="text-right">{t("colChallenges")}</TableHead>
+                    <TableHead className="text-right">{t("colSolves")}</TableHead>
+                    <TableHead className="text-right">{t("colOpenTickets")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -84,7 +87,7 @@ export default function AdminDashboardPage() {
                   {overview.data.competitions.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={8} className="text-center text-muted-foreground">
-                        No competitions yet.
+                        {t("noCompetitions")}
                       </TableCell>
                     </TableRow>
                   )}
@@ -99,22 +102,23 @@ export default function AdminDashboardPage() {
 }
 
 function Totals({ data }: { data: AdminOverview }) {
+  const t = useTranslations("admin.dashboard");
   const tiles = [
-    { label: "Competitions", value: data.active_competitions, sub: `${data.archived_competitions} archived` },
-    { label: "Accounts", value: data.active_users, sub: `${data.total_users - data.active_users} banned` },
-    { label: "Teams", value: data.total_teams },
-    { label: "Challenges", value: data.published_challenges, sub: `${data.total_challenges} total` },
-    { label: "Solves", value: data.total_solves },
-    { label: "Submissions", value: data.total_submissions },
+    { label: t("tileCompetitions"), value: data.active_competitions, sub: t("archivedSub", { count: data.archived_competitions }) },
+    { label: t("tileAccounts"), value: data.active_users, sub: t("bannedSub", { count: data.total_users - data.active_users }) },
+    { label: t("tileTeams"), value: data.total_teams },
+    { label: t("tileChallenges"), value: data.published_challenges, sub: t("totalChallengesSub", { count: data.total_challenges }) },
+    { label: t("tileSolves"), value: data.total_solves },
+    { label: t("tileSubmissions"), value: data.total_submissions },
   ];
   return (
     <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
-      {tiles.map((t) => (
-        <Card key={t.label}>
+      {tiles.map((tile) => (
+        <Card key={tile.label}>
           <CardContent className="p-4">
-            <div className="font-display text-2xl font-semibold tabular-nums">{t.value}</div>
-            <div className="text-xs text-muted-foreground">{t.label}</div>
-            {t.sub && <div className="mt-0.5 text-[11px] text-muted-foreground/70">{t.sub}</div>}
+            <div className="font-display text-2xl font-semibold tabular-nums">{tile.value}</div>
+            <div className="text-xs text-muted-foreground">{tile.label}</div>
+            {tile.sub && <div className="mt-0.5 text-[11px] text-muted-foreground/70">{tile.sub}</div>}
           </CardContent>
         </Card>
       ))}

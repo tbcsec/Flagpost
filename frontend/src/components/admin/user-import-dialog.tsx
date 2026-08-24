@@ -6,6 +6,7 @@
 // writes until the admin has seen the full per-row report. Passwords travel in
 // the file (the CTFd-compatible model), so the copy flags it as sensitive.
 
+import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +49,7 @@ export function UserImportDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useTranslations("admin.userImport");
   const importUsers = useImportUsers();
   const competitions = useCompetitions();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -95,7 +97,7 @@ export function UserImportDialog({
       if (seq === previewSeq.current) setPreview(report);
     } catch (e) {
       if (seq !== previewSeq.current) return;
-      toast("Couldn't read the file", {
+      toast(t("couldntRead"), {
         description: (e as Error).message,
         variant: "destructive",
       });
@@ -125,12 +127,12 @@ export function UserImportDialog({
       setResult(report);
       setPreview(null);
       toast(
-        `Imported ${report.created} account${report.created === 1 ? "" : "s"}` +
-          (report.roles_assigned ? `, ${report.roles_assigned} role(s) assigned` : ""),
+        t("importedToast", { count: report.created }) +
+          (report.roles_assigned ? t("importedRolesSuffix", { count: report.roles_assigned }) : ""),
         { variant: "success" },
       );
     } catch (e) {
-      toast("Import failed — nothing was created", {
+      toast(t("importFailed"), {
         description: (e as Error).message,
         variant: "destructive",
       });
@@ -143,19 +145,14 @@ export function UserImportDialog({
     <Dialog open={open} onOpenChange={close}>
       <DialogContent className="max-w-[52rem]">
         <DialogHeader>
-          <DialogTitle>Import users from CSV</DialogTitle>
-          <DialogDescription>
-            Upload a roster to create local accounts in bulk, optionally with a
-            role per row. Nothing is created until you confirm the preview.
-            The file carries plaintext passwords — treat it as sensitive and
-            delete it after importing.
-          </DialogDescription>
+          <DialogTitle>{t("title")}</DialogTitle>
+          <DialogDescription>{t("description")}</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4">
           <div className="flex flex-wrap items-end gap-3">
             <div className="grid flex-1 gap-1.5">
-              <Label htmlFor="user-import-file">CSV file</Label>
+              <Label htmlFor="user-import-file">{t("csvFile")}</Label>
               <input
                 ref={fileInput}
                 id="user-import-file"
@@ -167,21 +164,19 @@ export function UserImportDialog({
               />
             </div>
             <Button variant="outline" size="sm" onClick={downloadTemplate}>
-              Download template
+              {t("downloadTemplate")}
             </Button>
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="user-import-competition">
-              Default competition for role rows (optional)
-            </Label>
+            <Label htmlFor="user-import-competition">{t("defaultCompetition")}</Label>
             <Select
               id="user-import-competition"
               value={competitionId}
               disabled={importUsers.isPending}
               onChange={(e) => onCompetitionChange(e.target.value)}
             >
-              <option value="">No default — rows name their own</option>
+              <option value="">{t("noDefault")}</option>
               {(competitions.data ?? []).map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -192,7 +187,7 @@ export function UserImportDialog({
 
           {importUsers.isPending && (
             <p className="text-sm text-muted-foreground" role="status">
-              {result || preview ? "Working…" : "Checking the file…"}
+              {result || preview ? t("working") : t("checkingFile")}
             </p>
           )}
 
@@ -200,27 +195,36 @@ export function UserImportDialog({
             <div className="grid gap-2">
               <p className="text-sm font-medium">
                 {result
-                  ? `Done: ${result.created} created, ${result.skipped} skipped` +
-                    (result.roles_assigned ? `, ${result.roles_assigned} roles assigned` : "")
-                  : `Preview: ${report.created} to create, ${report.skipped} skipped, ` +
-                    `${report.errors} error${report.errors === 1 ? "" : "s"}` +
-                    (report.roles_assigned ? `, ${report.roles_assigned} roles to assign` : "")}
+                  ? t("doneSummary", { created: result.created, skipped: result.skipped }) +
+                    (result.roles_assigned
+                      ? t("doneRolesSuffix", { count: result.roles_assigned })
+                      : "")
+                  : t("previewSummary", {
+                      created: report.created,
+                      skipped: report.skipped,
+                      errors: report.errors,
+                    }) +
+                    (report.roles_assigned
+                      ? t("previewRolesSuffix", { count: report.roles_assigned })
+                      : "")}
               </p>
               {report.ignored_columns.length > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  Ignored column{report.ignored_columns.length === 1 ? "" : "s"}:{" "}
-                  {report.ignored_columns.join(", ")}
+                  {t("ignoredColumns", {
+                    count: report.ignored_columns.length,
+                    columns: report.ignored_columns.join(", "),
+                  })}
                 </p>
               )}
               <div className="max-h-72 overflow-y-auto rounded-md border border-border">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-12">Row</TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead className="w-12">{t("colRow")}</TableHead>
+                      <TableHead>{t("colName")}</TableHead>
+                      <TableHead>{t("colEmail")}</TableHead>
+                      <TableHead>{t("colRole")}</TableHead>
+                      <TableHead>{t("colStatus")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -235,7 +239,7 @@ export function UserImportDialog({
 
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => close(false)}>
-              {result ? "Close" : "Cancel"}
+              {result ? t("close") : t("cancel")}
             </Button>
             {!result && (
               <Button
@@ -243,8 +247,10 @@ export function UserImportDialog({
                 disabled={!preview || importUsers.isPending || preview.created + preview.roles_assigned === 0}
               >
                 {importUsers.isPending
-                  ? "Importing…"
-                  : `Confirm import${preview ? ` (${preview.created})` : ""}`}
+                  ? t("importing")
+                  : preview
+                    ? t("confirmImportCount", { count: preview.created })
+                    : t("confirmImport")}
               </Button>
             )}
           </div>
@@ -255,6 +261,7 @@ export function UserImportDialog({
 }
 
 function ImportRowLine({ row, committed }: { row: UserImportRow; committed: boolean }) {
+  const t = useTranslations("admin.userImport");
   return (
     <TableRow>
       <TableCell className="text-xs text-muted-foreground">{row.row}</TableCell>
@@ -268,7 +275,7 @@ function ImportRowLine({ row, committed }: { row: UserImportRow; committed: bool
               <span className="text-xs text-muted-foreground">@ {row.competition}</span>
             ) : null}
             {row.role_action === "skip" && (
-              <Badge variant="warning">skipped: {row.role_reason}</Badge>
+              <Badge variant="warning">{t("roleSkipped", { reason: row.role_reason ?? "" })}</Badge>
             )}
           </span>
         ) : (
@@ -277,11 +284,11 @@ function ImportRowLine({ row, committed }: { row: UserImportRow; committed: bool
       </TableCell>
       <TableCell>
         {row.status === "create" ? (
-          <Badge variant="success">{committed ? "created" : "will create"}</Badge>
+          <Badge variant="success">{committed ? t("createdBadge") : t("willCreate")}</Badge>
         ) : row.status === "skip" ? (
-          <Badge variant="muted">skip: {row.reason}</Badge>
+          <Badge variant="muted">{t("skipBadge", { reason: row.reason ?? "" })}</Badge>
         ) : (
-          <Badge variant="destructive">error: {row.reason}</Badge>
+          <Badge variant="destructive">{t("errorBadge", { reason: row.reason ?? "" })}</Badge>
         )}
       </TableCell>
     </TableRow>

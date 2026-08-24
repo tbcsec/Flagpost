@@ -8,6 +8,8 @@
 // components/profile/api-tokens-card.tsx), so no permission can issue a
 // credential that acts as another user.
 
+import { useTranslations } from "next-intl";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -29,26 +31,31 @@ import type { ApiToken } from "@/lib/types";
 import { toast } from "@/stores/toast";
 
 export function ApiTokensPanel() {
+  const t = useTranslations("admin.apiTokens");
+  const tStatus = useTranslations("profile.tokens");
   const tokens = useApiTokens();
   const revoke = useRevokeApiToken();
   const confirm = useConfirm();
 
   const rows = tokens.data ?? [];
 
-  async function onRevoke(t: ApiToken) {
+  async function onRevoke(token: ApiToken) {
     if (
       !(await confirm({
-        title: "Revoke this token?",
-        description: `${t.description} (held by ${t.user_display_name}) will stop authenticating immediately. This can't be undone.`,
-        confirmLabel: "Revoke",
+        title: t("revokeTitle"),
+        description: t("revokeDescription", {
+          description: token.description,
+          holder: token.user_display_name,
+        }),
+        confirmLabel: t("revokeConfirm"),
         destructive: true,
       }))
     ) {
       return;
     }
-    revoke.mutate(t.id, {
-      onSuccess: () => toast("Token revoked"),
-      onError: (e) => toast("Couldn't revoke", { description: (e as Error).message, variant: "destructive" }),
+    revoke.mutate(token.id, {
+      onSuccess: () => toast(t("tokenRevoked")),
+      onError: (e) => toast(t("couldntRevoke"), { description: (e as Error).message, variant: "destructive" }),
     });
   }
 
@@ -56,62 +63,59 @@ export function ApiTokensPanel() {
     <Card>
       <CardContent className="pt-5">
         <div className="mb-4">
-          <h3 className="text-sm font-semibold">API tokens</h3>
-          <p className="text-xs text-muted-foreground">
-            Every token on the platform. Users create their own from their
-            profile; you can revoke any of them here.
-          </p>
+          <h3 className="text-sm font-semibold">{t("heading")}</h3>
+          <p className="text-xs text-muted-foreground">{t("headingDescription")}</p>
         </div>
 
         {tokens.isLoading ? (
           <Skeleton className="h-32 w-full" />
         ) : tokens.isError ? (
           <p role="alert" className="text-sm text-destructive">
-            Couldn&apos;t load tokens: {(tokens.error as Error).message}
+            {t("loadError", { error: (tokens.error as Error).message })}
           </p>
         ) : rows.length === 0 ? (
           <EmptyState
-            title="No API tokens"
-            description="Nobody has created a personal API token yet."
+            title={t("noTokensTitle")}
+            description={t("noTokensDescription")}
           />
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Holder</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Expires</TableHead>
-                <TableHead>Last used</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>{t("colHolder")}</TableHead>
+                <TableHead>{t("colDescription")}</TableHead>
+                <TableHead>{t("colExpires")}</TableHead>
+                <TableHead>{t("colLastUsed")}</TableHead>
+                <TableHead>{t("colStatus")}</TableHead>
+                <TableHead className="text-right">{t("colActions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((t) => {
-                const status = apiTokenStatus(t);
+              {rows.map((token) => {
+                const status = apiTokenStatus(token);
                 return (
-                  <TableRow key={t.id}>
-                    <TableCell className="font-medium">{t.user_display_name}</TableCell>
-                    <TableCell className="text-muted-foreground">{t.description}</TableCell>
+                  <TableRow key={token.id}>
+                    <TableCell className="font-medium">{token.user_display_name}</TableCell>
+                    <TableCell className="text-muted-foreground">{token.description}</TableCell>
                     <TableCell className="text-muted-foreground">
-                      {new Date(t.expires_at).toLocaleString()}
+                      {new Date(token.expires_at).toLocaleString()}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {t.last_used_at ? relativeTime(t.last_used_at) : "Never"}
+                      {token.last_used_at ? relativeTime(token.last_used_at) : t("never")}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={status.variant}>{status.label}</Badge>
+                      <Badge variant={status.variant}>{tStatus(`status.${status.key}`)}</Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      {!t.revoked_at && (
+                      {!token.revoked_at && (
                         <Button
                           variant="ghost"
                           size="sm"
                           className="text-destructive"
                           disabled={revoke.isPending}
-                          onClick={() => onRevoke(t)}
+                          onClick={() => onRevoke(token)}
                         >
-                          Revoke
+                          {t("revoke")}
                         </Button>
                       )}
                     </TableCell>

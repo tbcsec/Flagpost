@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
@@ -37,6 +38,8 @@ import { toast } from "@/stores/toast";
 // ban/unban, delete — all off /api/users, gated on view_all_users (read) and
 // manage_users (write). Per-competition role assignment stays on Admin → Roles.
 export default function AdminUsersPage() {
+  const t = useTranslations("admin.users");
+  const tn = useTranslations("common.nouns");
   const access = useAccess();
   const selfId = useAuthStore((s) => s.user?.id);
   const canView = access.has("view_all_users");
@@ -79,8 +82,8 @@ export default function AdminUsersPage() {
   if (!canView) {
     return (
       <>
-        <SectionHeader title="Admin — Users" subtitle="Global — platform-wide" />
-        <EmptyState title="No access" description="You need the view-all-users permission to see the directory." />
+        <SectionHeader title={t("title")} subtitle={t("noAccessSubtitle")} />
+        <EmptyState title={t("noAccessTitle")} description={t("noAccessDescription")} />
       </>
     );
   }
@@ -88,9 +91,9 @@ export default function AdminUsersPage() {
   async function onRemoveAvatar(u: UserAccount) {
     if (
       await confirm({
-        title: `Remove ${u.display_name}'s picture?`,
-        description: "Their profile goes back to initials. They can upload a new one.",
-        confirmLabel: "Remove picture",
+        title: t("removeAvatarTitle", { name: u.display_name }),
+        description: t("removeAvatarDescription"),
+        confirmLabel: t("removeAvatarConfirm"),
       })
     ) {
       removeAvatar.mutate(u.id);
@@ -102,9 +105,9 @@ export default function AdminUsersPage() {
     if (
       u.is_active &&
       !(await confirm({
-        title: `Ban ${u.display_name}?`,
-        description: "They'll be signed out immediately and blocked from signing in until unbanned.",
-        confirmLabel: "Ban",
+        title: t("banTitle", { name: u.display_name }),
+        description: t("banDescription"),
+        confirmLabel: t("banConfirm"),
       }))
     ) {
       return;
@@ -112,8 +115,9 @@ export default function AdminUsersPage() {
     ban.mutate(
       { id: u.id, banned: u.is_active },
       {
-        onSuccess: () => toast(`${u.display_name} ${u.is_active ? "banned" : "unbanned"}`),
-        onError: (e) => toast("Couldn't update", { description: (e as Error).message, variant: "destructive" }),
+        onSuccess: () =>
+          toast(t(u.is_active ? "bannedToast" : "unbannedToast", { name: u.display_name })),
+        onError: (e) => toast(t("banFailed"), { description: (e as Error).message, variant: "destructive" }),
       },
     );
   }
@@ -121,32 +125,32 @@ export default function AdminUsersPage() {
   async function onDelete(u: UserAccount) {
     if (
       !(await confirm({
-        title: "Delete account?",
-        description: `This permanently removes ${u.display_name} and all of their data (submissions, tickets, team memberships…). This can't be undone — consider banning instead.`,
-        confirmLabel: "Delete account",
+        title: t("deleteTitle"),
+        description: t("deleteDescription", { name: u.display_name }),
+        confirmLabel: t("deleteConfirm"),
       }))
     ) {
       return;
     }
     del.mutate(u.id, {
-      onSuccess: () => toast(`Deleted ${u.display_name}`, { variant: "success" }),
-      onError: (e) => toast("Couldn't delete", { description: (e as Error).message, variant: "destructive" }),
+      onSuccess: () => toast(t("deletedToast", { name: u.display_name }), { variant: "success" }),
+      onError: (e) => toast(t("deleteFailed"), { description: (e as Error).message, variant: "destructive" }),
     });
   }
 
   return (
     <>
       <SectionHeader
-        title="Admin — Users"
-        subtitle="Global — every account on the platform"
+        title={t("title")}
+        subtitle={t("subtitle")}
         actions={
           canManage ? (
             <div className="flex gap-2">
               {/* Bulk CSV roster import (#171) — the mass counterpart. */}
               <Button variant="outline" onClick={() => setImportOpen(true)}>
-                Import CSV
+                {t("importCsv")}
               </Button>
-              <Button onClick={() => setDialog({ mode: "create" })}>Create account</Button>
+              <Button onClick={() => setDialog({ mode: "create" })}>{t("createAccount")}</Button>
             </div>
           ) : undefined
         }
@@ -155,7 +159,7 @@ export default function AdminUsersPage() {
       <Input
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        placeholder="Search by name or email…"
+        placeholder={t("searchPlaceholder")}
         className="max-w-sm"
       />
 
@@ -163,8 +167,8 @@ export default function AdminUsersPage() {
         <Skeleton className="h-64 w-full" />
       ) : rows.length === 0 ? (
         <EmptyState
-          title={q ? "No matches" : "No accounts"}
-          description={q ? "No accounts match your search." : "No accounts on the platform yet."}
+          title={q ? t("noMatchesTitle") : t("noAccountsTitle")}
+          description={q ? t("noMatchesDescription") : t("noAccountsDescription")}
         />
       ) : (
         <Card>
@@ -173,21 +177,21 @@ export default function AdminUsersPage() {
               <TableHeader>
                 <TableRow>
                   <SortableTableHead active={dir("name")} onSort={() => table.toggleSort("name")}>
-                    Name
+                    {t("colName")}
                   </SortableTableHead>
                   <SortableTableHead active={dir("email")} onSort={() => table.toggleSort("email")}>
-                    Email
+                    {t("colEmail")}
                   </SortableTableHead>
                   <SortableTableHead active={dir("role")} onSort={() => table.toggleSort("role")}>
-                    Role
+                    {t("colRole")}
                   </SortableTableHead>
                   <SortableTableHead active={dir("status")} onSort={() => table.toggleSort("status")}>
-                    Status
+                    {t("colStatus")}
                   </SortableTableHead>
                   <SortableTableHead active={dir("joined")} onSort={() => table.toggleSort("joined")}>
-                    Joined
+                    {t("colJoined")}
                   </SortableTableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="text-right">{t("colActions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -197,17 +201,17 @@ export default function AdminUsersPage() {
                     <TableRow key={u.id}>
                       <TableCell className="font-medium">
                         {u.display_name}
-                        {isSelf && <span className="ml-2 text-xs text-primary">You</span>}
+                        {isSelf && <span className="ml-2 text-xs text-primary">{t("you")}</span>}
                       </TableCell>
                       <TableCell className="text-muted-foreground">{u.email ?? "—"}</TableCell>
                       <TableCell>
                         <Badge variant={u.is_administrator ? "success" : "outline"}>
-                          {u.is_administrator ? "Administrator" : "User"}
+                          {u.is_administrator ? t("roleAdministrator") : t("roleUser")}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <Badge variant={u.is_active ? "muted" : "destructive"}>
-                          {u.is_active ? "Active" : "Banned"}
+                          {u.is_active ? t("statusActive") : t("statusBanned")}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
@@ -217,7 +221,7 @@ export default function AdminUsersPage() {
                         {canManage && (
                           <div className="flex justify-end gap-1">
                             <Button variant="ghost" size="sm" onClick={() => setDialog({ mode: "edit", user: u })}>
-                              Edit
+                              {t("edit")}
                             </Button>
                             <Button
                               variant="ghost"
@@ -225,7 +229,7 @@ export default function AdminUsersPage() {
                               disabled={isSelf || ban.isPending}
                               onClick={() => onBan(u)}
                             >
-                              {u.is_active ? "Ban" : "Unban"}
+                              {u.is_active ? t("ban") : t("unban")}
                             </Button>
                             {u.avatar_updated_at && (
                               <Button
@@ -234,7 +238,7 @@ export default function AdminUsersPage() {
                                 disabled={removeAvatar.isPending}
                                 onClick={() => onRemoveAvatar(u)}
                               >
-                                Remove picture
+                                {t("removePicture")}
                               </Button>
                             )}
                             <Button
@@ -244,7 +248,7 @@ export default function AdminUsersPage() {
                               disabled={isSelf || del.isPending}
                               onClick={() => onDelete(u)}
                             >
-                              Delete
+                              {t("delete")}
                             </Button>
                           </div>
                         )}
@@ -254,7 +258,7 @@ export default function AdminUsersPage() {
                 })}
               </TableBody>
             </Table>
-            <TablePagination table={table} noun="accounts" className="mt-4" />
+            <TablePagination table={table} noun={tn("accounts")} className="mt-4" />
           </CardContent>
         </Card>
       )}

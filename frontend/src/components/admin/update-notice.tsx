@@ -12,6 +12,8 @@
 // even working) lives beside the toggle in Site settings, not here — an admin
 // looking for that goes and looks, rather than having it pushed at them.
 
+import { useTranslations } from "next-intl";
+
 import { Button } from "@/components/ui/button";
 import {
   useDismissUpdateNotice,
@@ -20,6 +22,8 @@ import {
 import { useAccess } from "@/lib/hooks/use-permissions";
 
 export function UpdateNotice() {
+  const t = useTranslations("admin.updateNotice");
+  const tCommon = useTranslations("common");
   const access = useAccess();
   // Gated on the same permission as the settings page it links to: showing a
   // "you're out of date" prompt to someone who can't act on it is noise, and
@@ -47,8 +51,11 @@ export function UpdateNotice() {
       className="flex flex-wrap items-center justify-between gap-3 border-b border-primary/30 bg-primary/10 px-4 py-2 text-sm md:px-8"
     >
       <span>
-        <span className="font-medium">Flagpost {data.latest_known_version}</span>{" "}
-        is available — you&apos;re running {data.current_version}.
+        {t.rich("available", {
+          strong: (chunks) => <span className="font-medium">{chunks}</span>,
+          latest: data.latest_known_version,
+          current: data.current_version,
+        })}
       </span>
       <span className="flex items-center gap-2">
         <a
@@ -57,7 +64,7 @@ export function UpdateNotice() {
           rel="noopener noreferrer"
           className="text-primary hover:underline"
         >
-          How to update
+          {t("howToUpdate")}
         </a>
         <Button
           type="button"
@@ -66,7 +73,7 @@ export function UpdateNotice() {
           disabled={dismiss.isPending}
           onClick={() => dismiss.mutate()}
         >
-          Dismiss
+          {tCommon("dismiss")}
         </Button>
       </span>
     </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,7 @@ export function UserFormDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useTranslations("admin.userForm");
   const create = useCreateUser();
   const update = useUpdateUser();
   // Seeded on mount: the call site renders this dialog only while open and
@@ -50,7 +52,7 @@ export function UserFormDialog({
         { display_name: displayName, password, email: email.trim() || undefined },
         {
           onSuccess: () => {
-            toast(`Created ${displayName}`, { variant: "success" });
+            toast(t("created", { name: displayName }), { variant: "success" });
             onOpenChange(false);
           },
         },
@@ -66,7 +68,7 @@ export function UserFormDialog({
         },
         {
           onSuccess: () => {
-            toast("Account updated", { variant: "success" });
+            toast(t("updated"), { variant: "success" });
             onOpenChange(false);
           },
         },
@@ -78,41 +80,37 @@ export function UserFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{mode === "create" ? "Create account" : "Edit account"}</DialogTitle>
+          <DialogTitle>{mode === "create" ? t("createTitle") : t("editTitle")}</DialogTitle>
           <DialogDescription>
-            {mode === "create"
-              ? "The account can sign in immediately with the password you set. Grant an Administrator or per-competition role on Admin → Roles."
-              : "Change the name, email, or reset the password. A new password signs the user out everywhere."}
+            {mode === "create" ? t("createDescription") : t("editDescription")}
           </DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={onSubmit}>
           <div className="grid gap-2">
-            <Label htmlFor="user-name">Username</Label>
+            <Label htmlFor="user-name">{t("username")}</Label>
             <Input
               id="user-name"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               required
             />
-            <p className="text-xs text-muted-foreground">
-              The login identifier and display name — must be unique.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("usernameHint")}</p>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="user-email">Email (optional)</Label>
+            <Label htmlFor="user-email">{t("emailOptional")}</Label>
             <Input
               id="user-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder={mode === "edit" ? "Leave blank to keep unchanged" : ""}
+              placeholder={mode === "edit" ? t("emailPlaceholderEdit") : ""}
             />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="user-password">
-              {mode === "create" ? "Password" : "New password"}
+              {mode === "create" ? t("password") : t("newPassword")}
               {mode === "edit" && (
-                <span className="ml-1 text-xs text-muted-foreground">(leave blank to keep)</span>
+                <span className="ml-1 text-xs text-muted-foreground">{t("passwordKeepHint")}</span>
               )}
             </Label>
             <Input
@@ -129,7 +127,7 @@ export function UserFormDialog({
           {error && <p role="alert" className="text-sm text-destructive">{error.message}</p>}
           <DialogFooter>
             <Button type="submit" disabled={pending}>
-              {pending ? "Saving…" : mode === "create" ? "Create account" : "Save changes"}
+              {pending ? t("saving") : mode === "create" ? t("createSubmit") : t("saveChanges")}
             </Button>
           </DialogFooter>
         </form>

@@ -29,14 +29,14 @@ file, don't ignore it.
 ## Where the project is
 
 Tiers 0–3 are complete and the platform shipped **v1.0.0 on 2026-07-25**, then
-v1.1.0, v1.1.1, v1.2.0, v1.3.0 and **v1.4.0 (2026-08-13)**. **The latest tag is
-`v1.4.0`; `main` is now `1.4.0-src`**, accumulating the not-yet-tagged v1.5.0
-milestone (`SOURCE_BUILD_VERSION` in `backend/config.py`, bumped at tag time;
-see CONTRIBUTING → "Cutting a release").
+v1.1.0, v1.1.1, v1.2.0, v1.3.0, v1.4.0 and **v1.5.0 (2026-08-24)**. **The latest
+tag is `v1.5.0`; `main` is now `1.5.0-src`**, accumulating the not-yet-tagged
+v1.6.0 milestone (`SOURCE_BUILD_VERSION` in `backend/config.py`, bumped at tag
+time; see CONTRIBUTING → "Cutting a release").
 
 The tier/phase plans in `docs/claude_plans/` are **finished and historical** —
 don't work "the next phase". Work is tracked as **GitHub issues against version
-milestones** (`gh issue list --milestone v1.5.0`); `docs/ROADMAP.md` →
+milestones** (`gh issue list --milestone v1.6.0`); `docs/ROADMAP.md` →
 "Post-1.0 releases" summarises them.
 
 Two things follow from that. First, this is **released software with real

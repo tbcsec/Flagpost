@@ -1,7 +1,7 @@
 # Roadmap
 
-Flagpost shipped **v1.0.0 on 2026-07-25**; the latest tag is **v1.4.0**
-(2026-08-13). `main` is now `1.4.0-src`, accumulating the **v1.5.0** milestone.
+Flagpost shipped **v1.0.0 on 2026-07-25**; the latest tag is **v1.5.0**
+(2026-08-24). `main` is now `1.5.0-src`, accumulating the **v1.6.0** milestone.
 This document has two halves:
 
 - **[Tiers 0–3](#tier-0--foundation)** — the pre-1.0 build order, breaking
@@ -389,18 +389,68 @@ mode so one image works behind any single-origin proxy without a rebuild.
   bound to loopback, request-body cap, pool pre-ping, and announcement/freeze
   scoping fixes).
 
+**v1.5.0** — internationalization, and a breadth batch across auth, authoring
+and deployment ([milestone](https://github.com/tbcsec/flagpost/milestone/5)).
+**Shipped** (tagged `v1.5.0`, 2026-08-24) — every issue in the milestone is
+closed:
+
+- **Internationalization** (#78, ADR-0029) — the headline, split into
+  **#247 competitor** and **#248 admin** and delivered in full. next-intl with a
+  non-routed cookie locale, a Crowdin pipeline, and a CI integrity gate that
+  holds every catalog to the English source's keys and ICU placeholders/tags.
+  The competitor surface was extracted and **French, Spanish and Polish went
+  live** (#249); the entire admin/operator surface followed (#248). The language
+  picker moved into the topbar (#251). Backend/server strings stay English by
+  design. Data vocabularies (automation catalog, permission keys, enum echoes,
+  theme + SSO preset catalogs) deliberately stay literal — only human-authored
+  UI chrome is translated.
+- **Custom certificates** (#219, ADR-0027) — an optional module: an in-app
+  template editor over a server-rendered PNG (Pillow, not a headless browser),
+  issuing a shareable per-participant certificate.
+- **Competition status lifecycle** (#222) — an explicit
+  not-started / running / ended gate with manual Start / Stop controls, the
+  schedule auto-driving it, so competitor challenge and scoreboard access opens
+  only while running.
+- **External-auth breadth** — a **generic OAuth 2.0 provider kind** with
+  built-in **GitHub and Discord** sign-in (#193, ADR-0033), where identity comes
+  from a userinfo call plus a claim map rather than an ID token; and
+  **multi-tenant Microsoft Entra** issuer-validation hardening (#194, ADR-0032).
+- **Admin-authored custom pages** (#198, ADR-0034) — rich-text pages with their
+  own sidebar entries, stored as a validated node tree and carried in the backup.
+- **Post-event report generation** (#134) — a generated end-of-event report,
+  streamed through the API rather than a presigned URL (#256), with the MinIO
+  client region pinned so URLs sign offline (#255).
+- **Authoring & onboarding** — a **master-detail challenge editor** on a
+  dedicated manage route (#274), **connection info** (URL / host:port) for
+  live-service challenges with a ctfcli round-trip (#262), and an
+  **onboarding-style competition creation** flow that captures scoreboard,
+  schedule and modules up front (#252).
+- **User self-service** — **profile pictures** (upload + admin removal, audited)
+  and a **self-service username change** (rate-limited, admin rename, audited).
+- **Multi-instance deployment** (ADR-0031) — deployment flags and a WebSocket
+  keepalive for running behind a load balancer (#259).
+- **Next.js 16 migration** (#159) — Turbopack builds with the Y.js singleton
+  now enforced by a build-time check rather than a webpack alias.
+- **Docs & licensing** — branded, role-split **user guides** (competitor / judge
+  / admin) rendered to PDF and surfaced in-app (#281), and the **Flagpost Module
+  Exception** to the licence (v1.0).
+- Plus fixes and hardening: per-competition state resets on a competition switch
+  (#258), argon2 run at test cost with every CI job time-bounded (#207), and the
+  frontend image now ships its `public/` static assets (#282).
+
 ### Planned
 
 Summarised from the open milestones; the milestone pages are authoritative.
 
-- **v1.5.0** — the live milestone. Headlined by an **i18n pass** (#78) and a
-  **Major League Cyber integration** (#59), alongside more built-in sign-in
-  options — a **generic OAuth2 provider kind → built-in GitHub + Discord**
-  (#193) and **multi-tenant Entra issuer-validation hardening** (#194) — plus
-  **admin-authored custom pages** (#198) and **post-event report generation**
-  (#134). See the
-  [milestone](https://github.com/tbcsec/flagpost/milestones) for the current
-  list.
+- **v1.6.0** — the live milestone. See the
+  [milestones page](https://github.com/tbcsec/flagpost/milestones) for the
+  current list.
+
+**Deferred this cycle:** the **Major League Cyber integration** (#59) was triaged
+out of v1.5.0 and closed as not-planned — its SSO half is subsumed by the
+external-identity framework (a future MLC provider is a provider config, not a
+bespoke path), and the feed/tracking half needs concrete MLC API scope before it
+can be planned.
 
 ---
 

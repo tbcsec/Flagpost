@@ -1156,6 +1156,9 @@ export interface SiteSettings {
   // Whether an unverified account is blocked from joining a competition
   // (#74). Public so the join button / profile banner can explain a 403.
   email_verification_enabled: boolean;
+  // Whether accounts may rename themselves (#298). Public so the profile page
+  // can hide its username card; admin rename is never gated by it.
+  username_changes_enabled: boolean;
 }
 
 // Admin shape adds the last-updated timestamp.
@@ -1166,6 +1169,8 @@ export interface SiteSettingsAdmin extends SiteSettings {
 /** Operational site config (Admin → Site settings): registration + SMTP. */
 export interface OperationalSettings {
   registration_open: boolean;
+  /** Self-service rename toggle (#298); admin rename is unaffected. */
+  username_changes_enabled: boolean;
   smtp_host: string | null;
   smtp_port: number;
   smtp_username: string | null;
@@ -1232,6 +1237,10 @@ export type BackupImportResult = Record<string, { created: number; skipped: numb
 
 export interface OperationalSettingsUpdate {
   registration_open: boolean;
+  /** Self-service rename toggle (#298). Omit to leave unchanged (the
+   *  update_checks_enabled pattern — a whole-object PUT must not silently
+   *  re-enable a feature an admin turned off). */
+  username_changes_enabled?: boolean;
   smtp_host: string | null;
   smtp_port: number;
   smtp_username: string | null;

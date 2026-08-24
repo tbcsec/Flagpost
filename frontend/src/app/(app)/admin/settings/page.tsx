@@ -241,6 +241,7 @@ function SettingsForm({
   const t = useTranslations("admin.settings");
   const update = useUpdateOperationalSettings();
   const [registrationOpen, setRegistrationOpen] = useState(data.registration_open);
+  const [usernameChanges, setUsernameChanges] = useState(data.username_changes_enabled);
   const [updateChecks, setUpdateChecks] = useState(data.update_checks_enabled);
   const [host, setHost] = useState(data.smtp_host ?? "");
   const [port, setPort] = useState(String(data.smtp_port));
@@ -317,6 +318,7 @@ function SettingsForm({
     update.mutate(
       {
         registration_open: registrationOpen,
+        username_changes_enabled: usernameChanges,
         smtp_host: host.trim() || null,
         smtp_port: Number(port) || 587,
         smtp_username: username.trim() || null,
@@ -364,6 +366,27 @@ function SettingsForm({
               >
                 <option value="open">{t("signupOpen")}</option>
                 <option value="closed">{t("signupClosed")}</option>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("usernameChanges")}</CardTitle>
+            <CardDescription>{t("usernameChangesDescription")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-2">
+              <Label htmlFor="username-changes">{t("selfServiceRenames")}</Label>
+              <Select
+                id="username-changes"
+                value={usernameChanges ? "on" : "off"}
+                onChange={(e) => setUsernameChanges(e.target.value === "on")}
+                className="max-w-xs"
+              >
+                <option value="on">{t("renamesOn")}</option>
+                <option value="off">{t("renamesOff")}</option>
               </Select>
             </div>
           </CardContent>

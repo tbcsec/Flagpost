@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useSiteSettings } from "@/lib/hooks/use-site-settings";
 import { useChangeUsername } from "@/lib/hooks/use-users";
 import { useAuthStore } from "@/stores/auth";
 import { toast } from "@/stores/toast";
@@ -26,11 +27,15 @@ import { toast } from "@/stores/toast";
 export function UsernameCard() {
   const t = useTranslations("profile.username");
   const user = useAuthStore((s) => s.user);
+  const site = useSiteSettings();
   const change = useChangeUsername();
   const [name, setName] = useState(user?.display_name ?? "");
   const [password, setPassword] = useState("");
 
   if (!user) return null;
+  // Site policy (#298): renames disabled ⇒ no card at all — the server 403s
+  // anyway, so offering the form would only manufacture a dead end.
+  if (site.data && !site.data.username_changes_enabled) return null;
 
   const allowedAt = user.username_change_allowed_at
     ? new Date(user.username_change_allowed_at)

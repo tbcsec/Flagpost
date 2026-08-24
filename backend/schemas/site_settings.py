@@ -90,6 +90,10 @@ class SiteSettingsOut(BaseModel):
     # (issue #74). Public so the join button / profile banner can explain a
     # 403 without a round-trip to admin-only settings.
     email_verification_enabled: bool = False
+    # Whether accounts may rename themselves (#298). Public so the profile page
+    # can hide its username card without an admin-only round-trip; a policy
+    # bit, not infrastructure detail.
+    username_changes_enabled: bool = True
 
 
 class SiteSettingsUpdate(BaseModel):
@@ -143,6 +147,8 @@ class OperationalSettingsOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     registration_open: bool
+    # Self-service rename toggle (#298); admin rename is never gated by it.
+    username_changes_enabled: bool
     smtp_host: str | None
     smtp_port: int
     smtp_username: str | None
@@ -191,6 +197,11 @@ class BackupImportRequest(BaseModel):
 
 class OperationalSettingsUpdate(BaseModel):
     registration_open: bool
+    # Self-service rename toggle (#298). **Omitted / null = leave unchanged**,
+    # the update_checks_enabled pattern below: this PUT replaces the whole
+    # object, and a `= True` default would let a scripted client that tweaks
+    # SMTP and omits this field silently re-enable renames an admin turned off.
+    username_changes_enabled: bool | None = None
     smtp_host: str | None = Field(default=None, max_length=255)
     smtp_port: int = Field(default=587, ge=1, le=65535)
     smtp_username: str | None = Field(default=None, max_length=255)

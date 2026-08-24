@@ -93,6 +93,12 @@ class SiteSettings(Base, TimestampMixin):
     registration_open: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="1"
     )
+    # Whether accounts may rename themselves from the profile page (#298). Off
+    # pins usernames to what was provisioned — only the self-service path is
+    # gated; manage_users holders can always rename from Admin → Users.
+    username_changes_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="1"
+    )
     # Outbound SMTP for the send_email automation action (§5.3). When smtp_host
     # is set these override the env config; unset = fall back to env (or, if that
     # too is unset, email is a logged no-op).

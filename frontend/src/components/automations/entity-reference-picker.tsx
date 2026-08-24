@@ -12,6 +12,7 @@
 // hint. All list hooks are called unconditionally (rules of hooks) and gated to
 // idle by passing an empty scope, so only the relevant list actually fetches.
 
+import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import {
@@ -34,23 +35,6 @@ const COMPETITION_SCOPED: ReadonlySet<EntityRefType> = new Set<EntityRefType>([
   "user",
 ]);
 
-const PLACEHOLDER: Record<EntityRefType, string> = {
-  competition: "Pick a competition",
-  challenge: "Pick a challenge",
-  survey: "Pick a survey",
-  hint: "Pick a hint",
-  team: "Pick a team",
-  user: "Pick a participant",
-  role: "Pick a role",
-};
-
-/** Hints have no title — label them by position with a short body preview. */
-function hintLabel(body: string | null, cost: number, index: number): string {
-  const preview = (body ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
-  const suffix = cost > 0 ? ` · ${cost} pts` : "";
-  return preview ? `${index + 1}. ${preview}${suffix}` : `Hint ${index + 1}${suffix}`;
-}
-
 export function EntityReferencePicker({
   entityType,
   competitionId,
@@ -67,6 +51,7 @@ export function EntityReferencePicker({
   id?: string;
   disabled?: boolean;
 }) {
+  const t = useTranslations("automations.picker");
   const scoped = COMPETITION_SCOPED.has(entityType);
   // Global-rule scope choices — local UI state, never stored in the rule config.
   const [scopeComp, setScopeComp] = React.useState("");
@@ -118,10 +103,17 @@ export function EntityReferencePicker({
       }));
       break;
     case "hint":
-      options = (hints.data ?? []).map((h, i) => ({
-        value: h.id,
-        label: hintLabel(h.body, h.cost, i),
-      }));
+      options = (hints.data ?? []).map((h, i) => {
+        // Hints have no title — label by position with a short body preview.
+        const preview = (h.body ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
+        const suffix = h.cost > 0 ? t("hintCostSuffix", { cost: h.cost }) : "";
+        return {
+          value: h.id,
+          label: preview
+            ? `${i + 1}. ${preview}${suffix}`
+            : `${t("hintFallback", { n: i + 1 })}${suffix}`,
+        };
+      });
       break;
     // No list hook feeds "role" (notify.role_name stays a plain name field) or
     // any other unmapped type, so this yields no options. CONTRACT: adding a new
@@ -139,8 +131,8 @@ export function EntityReferencePicker({
         options={options}
         value={value}
         onChange={onChange}
-        placeholder={PLACEHOLDER[entityType]}
-        emptyText="No matches"
+        placeholder={t(`placeholder.${entityType}`)}
+        emptyText={t("noMatches")}
         disabled={disabled}
         className="h-9"
       />
@@ -162,8 +154,8 @@ export function EntityReferencePicker({
             setScopeChallenge("");
             onChange(""); // the previous pick belonged to another competition
           }}
-          placeholder="Pick a competition"
-          emptyText="No competitions"
+          placeholder={t("placeholder.competition")}
+          emptyText={t("noCompetitions")}
           className="h-9"
         />
       )}
@@ -176,8 +168,8 @@ export function EntityReferencePicker({
             setScopeChallenge(v);
             onChange("");
           }}
-          placeholder="Pick a challenge"
-          emptyText={effectiveComp ? "No challenges" : "Pick a competition first"}
+          placeholder={t("placeholder.challenge")}
+          emptyText={effectiveComp ? t("noChallenges") : t("pickCompetitionFirst")}
           disabled={!effectiveComp}
           className="h-9"
         />
@@ -187,8 +179,8 @@ export function EntityReferencePicker({
         options={options}
         value={value}
         onChange={onChange}
-        placeholder={PLACEHOLDER[entityType]}
-        emptyText={effectiveComp ? "No matches" : "Pick a competition first"}
+        placeholder={t(`placeholder.${entityType}`)}
+        emptyText={effectiveComp ? t("noMatches") : t("pickCompetitionFirst")}
         disabled={entityDisabled}
         className="h-9"
       />

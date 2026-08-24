@@ -5,6 +5,7 @@
 // backend-only change. Serialization lives in lib/automation-builder (pure,
 // tested); this component is just the flow UI over that state.
 
+import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -76,6 +77,7 @@ export function RuleBuilder({
   saving?: boolean;
   error?: string | null;
 }) {
+  const t = useTranslations("automations.builder");
   const [state, setState] = React.useState<BuilderState>(() =>
     initial ? fromRule(initial, catalog) : blankRule(catalog, personal),
   );
@@ -132,22 +134,22 @@ export function RuleBuilder({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[88vh] max-w-[52rem] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{initial ? "Edit rule" : personal ? "New personal rule" : "New rule"}</DialogTitle>
+          <DialogTitle>{initial ? t("editTitle") : personal ? t("newPersonalTitle") : t("newTitle")}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-1.5">
-          <Label htmlFor="rule-name">Name</Label>
+          <Label htmlFor="rule-name">{t("name")}</Label>
           <Input
             id="rule-name"
             value={state.name}
             onChange={(e) => patch({ name: e.target.value })}
-            placeholder="e.g. First-blood bonus"
+            placeholder={t("namePlaceholder")}
           />
         </div>
 
         <ol>
           {/* 1 — Trigger */}
-          <Step index={1} label="When this happens">
+          <Step index={1} label={t("stepTrigger")}>
             <Select
               value={state.trigger_type}
               onChange={(e) => patch({ trigger_type: e.target.value, conditions: [] })}
@@ -161,10 +163,13 @@ export function RuleBuilder({
           </Step>
 
           {/* 2 — Conditions */}
-          <Step index={2} label="And these are all true (optional)">
+          <Step index={2} label={t("stepConditions")}>
             {state.conditions.length === 0 ? (
               <p className="text-[13px] text-muted-foreground">
-                No conditions — runs on every <span className="text-foreground">{trigger?.label}</span>.
+                {t.rich("noConditions", {
+                  event: trigger?.label ?? "",
+                  b: (chunks) => <span className="text-foreground">{chunks}</span>,
+                })}
               </p>
             ) : (
               <div className="space-y-2">
@@ -178,8 +183,8 @@ export function RuleBuilder({
                           options={triggerFields.map((f) => ({ value: f.key, label: f.label }))}
                           value={c.field}
                           onChange={(v) => updateCondition(i, { field: v })}
-                          placeholder="field"
-                          emptyText="No suggested fields"
+                          placeholder={t("fieldPlaceholder")}
+                          emptyText={t("noSuggestedFields")}
                           className="h-9"
                         />
                       </div>
@@ -217,7 +222,7 @@ export function RuleBuilder({
                               <Input
                                 value={c.value == null ? "" : String(c.value)}
                                 onChange={(e) => updateCondition(i, { value: e.target.value })}
-                                placeholder="value"
+                                placeholder={t("valuePlaceholder")}
                                 className="h-9 w-full"
                               />
                             );
@@ -225,7 +230,7 @@ export function RuleBuilder({
                         </div>
                       )}
                       <IconButton
-                        label="Remove condition"
+                        label={t("removeCondition")}
                         onClick={() =>
                           patch({ conditions: state.conditions.filter((_, j) => j !== i) })
                         }
@@ -247,12 +252,12 @@ export function RuleBuilder({
               }
               className="mt-2 text-xs font-medium text-primary hover:underline"
             >
-              + Add condition
+              {t("addCondition")}
             </button>
           </Step>
 
           {/* 3 — Actions */}
-          <Step index={3} label="Do this" last>
+          <Step index={3} label={t("stepActions")} last>
             <div className="space-y-3">
               {state.actions.map((action, i) => {
                 const entry = actionByType.get(action.type);
@@ -275,7 +280,7 @@ export function RuleBuilder({
                       </Select>
                       {state.actions.length > 1 && (
                         <IconButton
-                          label="Remove action"
+                          label={t("removeAction")}
                           onClick={() =>
                             patch({ actions: state.actions.filter((_, j) => j !== i) })
                           }
@@ -313,7 +318,7 @@ export function RuleBuilder({
                   }}
                   className="text-xs font-medium text-primary hover:underline"
                 >
-                  + Add action
+                  {t("addAction")}
                 </button>
               )}
             </div>
@@ -324,13 +329,13 @@ export function RuleBuilder({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("cancel")}
           </Button>
           <Button
             disabled={!isValid || saving}
             onClick={() => onSubmit(toRuleInput(state, catalog))}
           >
-            {saving ? "Saving…" : initial ? "Save changes" : "Create rule"}
+            {saving ? t("saving") : initial ? t("saveChanges") : t("createRule")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -382,6 +387,7 @@ function FieldInput({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const t = useTranslations("automations.builder");
   const placeholder = field.placeholder ?? undefined;
   const controlId = `field-${React.useId()}`;
   let control: React.ReactNode;
@@ -421,9 +427,9 @@ function FieldInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={
           field.kind === "string_list"
-            ? (placeholder ?? "one per line")
+            ? (placeholder ?? t("onePerLine"))
             : field.kind === "keyvalue"
-              ? "Header-Name: value (one per line)"
+              ? t("keyvaluePlaceholder")
               : placeholder
         }
       />
@@ -445,12 +451,12 @@ function FieldInput({
     <div className="space-y-1">
       <Label htmlFor={controlId} className={cn("text-xs", !field.required && "text-muted-foreground")}>
         {field.label}
-        {!field.required && <span className="ml-1 font-normal">(optional)</span>}
+        {!field.required && <span className="ml-1 font-normal">{t("optional")}</span>}
       </Label>
       {control}
       {field.templateable && triggerFields.length > 0 && (
         <p className="text-[11px] text-muted-foreground">
-          Insert: {triggerFields.map((f) => `{${f.key}}`).join(" ")}
+          {t("insert", { tokens: triggerFields.map((f) => `{${f.key}}`).join(" ") })}
         </p>
       )}
     </div>

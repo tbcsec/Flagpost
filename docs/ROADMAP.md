@@ -1,7 +1,8 @@
 # Roadmap
 
-Flagpost shipped **v1.0.0 on 2026-07-25**; the latest tag is **v1.5.0**
-(2026-08-24). `main` is now `1.5.0-src`, accumulating the **v1.6.0** milestone.
+Flagpost shipped **v1.0.0 on 2026-07-25**; the latest tag is **v1.5.1**
+(2026-08-25, the Apache-2.0 relicense). `main` is now `1.5.1-src`, accumulating
+the **v1.6.0** milestone.
 This document has two halves:
 
 - **[Tiers 0–3](#tier-0--foundation)** — the pre-1.0 build order, breaking

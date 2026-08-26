@@ -29,8 +29,9 @@ file, don't ignore it.
 ## Where the project is
 
 Tiers 0–3 are complete and the platform shipped **v1.0.0 on 2026-07-25**, then
-v1.1.0, v1.1.1, v1.2.0, v1.3.0, v1.4.0 and **v1.5.0 (2026-08-24)**. **The latest
-tag is `v1.5.0`; `main` is now `1.5.0-src`**, accumulating the not-yet-tagged
+v1.1.0, v1.1.1, v1.2.0, v1.3.0, v1.4.0, v1.5.0 and **v1.5.1 (2026-08-25, the
+Apache-2.0 relicense — ADR-0035)**. **The latest
+tag is `v1.5.1`; `main` is now `1.5.1-src`**, accumulating the not-yet-tagged
 v1.6.0 milestone (`SOURCE_BUILD_VERSION` in `backend/config.py`, bumped at tag
 time; see CONTRIBUTING → "Cutting a release").
 

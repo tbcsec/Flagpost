@@ -68,3 +68,4 @@ Status is one of:
 | [0032](0032-multi-tenant-entra-issuer-validation.md) | Multi-tenant Entra issuer validation via a tenant-substituted issuer template | Accepted |
 | [0033](0033-generic-oauth2-provider-kind.md) | A generic `oauth2` provider kind, with userinfo as the identity source | Accepted |
 | [0034](0034-custom-pages-render-as-a-react-tree.md) | Custom pages store rich text and render as a React tree, never as HTML | Accepted |
+| [0035](0035-relicense-apache-2.0.md) | Relicense from AGPL-3.0 to Apache 2.0; module exception retired | Accepted |

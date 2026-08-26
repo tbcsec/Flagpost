@@ -2,7 +2,7 @@
   "name": "flagpost-frontend",
   "version": "0.0.0",
   "private": true,
-  "license": "AGPL-3.0-or-later",
+  "license": "Apache-2.0",
   "scripts": {
     "dev": "next dev",
     "build": "next build && node scripts/check-yjs-singleton.mjs",

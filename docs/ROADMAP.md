@@ -438,6 +438,12 @@ closed:
   (#258), argon2 run at test cost with every CI job time-bounded (#207), and the
   frontend image now ships its `public/` static assets (#282).
 
+**v1.5.1** — **relicensed to Apache 2.0** (ADR-0035). The whole platform moves
+from AGPL-3.0 to the Apache License 2.0 to remove the enterprise-adoption
+blocker of a copyleft licence; the Flagpost Module Exception is retired (a
+permissive licence needs none), and a `NOTICE` file is added. No functional
+changes. Releases up to v1.5.0 remain available under AGPL-3.0 as published.
+
 ### Planned
 
 Summarised from the open milestones; the milestone pages are authoritative.

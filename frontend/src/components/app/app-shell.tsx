@@ -416,19 +416,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </span>
               )}
               {navExpanded && (
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-medium leading-tight">
-                    {user?.display_name ?? "—"}
-                  </span>
-                  {/* Truncate like the display name above it: a long email must
-                      not push "Sign out" out of the rail (#48). The title gives
-                      the full value back on hover. */}
-                  <span
-                    className="block truncate text-[11px] leading-tight text-muted-foreground"
-                    title={user?.email ?? undefined}
-                  >
-                    {user?.email ?? ""}
-                  </span>
+                // Username only (#301): the email always truncated in the rail
+                // and lives on the profile page this block links to. Truncation
+                // still matters — a long name must not push "Sign out" out of
+                // the rail (#48); the title gives the full value back on hover.
+                <span
+                  className="min-w-0 flex-1 truncate text-[13px] font-medium leading-tight"
+                  title={user?.display_name ?? undefined}
+                >
+                  {user?.display_name ?? "—"}
                 </span>
               )}
             </Link>

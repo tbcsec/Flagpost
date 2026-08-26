@@ -4,7 +4,7 @@
 
 **A modern, open-source platform for running Capture&nbsp;the&nbsp;Flag competitions —<br>self-hosted, real-time, and batteries-included.**
 
-[![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-2bbd7e.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-2bbd7e.svg)](LICENSE)
 [![CI](https://github.com/tbcsec/flagpost/actions/workflows/ci.yml/badge.svg)](https://github.com/tbcsec/flagpost/actions/workflows/ci.yml)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-2bbd7e.svg)](CONTRIBUTING.md)
 ![Backend: FastAPI](https://img.shields.io/badge/backend-FastAPI-009688.svg)
@@ -346,10 +346,11 @@ the call is never attempted at all. Full detail in [`PRIVACY.md`](PRIVACY.md).
 
 Copyright © 2026 **Tom Collier**.
 
-Flagpost is licensed under the **[GNU Affero General Public License v3.0](LICENSE)**.
-You're free to use, modify, and self-host it; if you run a **modified** version as
-a network service, the AGPL's §13 requires you to offer your users its source. The
-built-in "Powered by Flagpost" footer links every page to this repository, which
-is how Flagpost surfaces its source to remote users.
+Flagpost is licensed under the **[Apache License 2.0](LICENSE)** (from v1.5.1 —
+earlier releases were published under AGPL-3.0 and remain available on those
+terms). You're free to use, modify, self-host, and build on it, commercially or
+otherwise, with the license's explicit patent grant. The name "Flagpost" and the
+project marks are not part of the grant (License §6). The built-in "Powered by
+Flagpost" footer links every page back to this repository.
 
 <div align="center"><sub>Built for the CTF community. Fly your flag. 🚩</sub></div>

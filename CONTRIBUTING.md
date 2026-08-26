@@ -146,5 +146,8 @@ knowing when deciding where to spend effort on packaging.
 
 ## Licensing of contributions
 
-Flagpost is licensed under the **GNU AGPL-3.0** (see [`LICENSE`](LICENSE)). By
-submitting a contribution, you agree that it is licensed under the same terms.
+Flagpost is licensed under the **Apache License 2.0** (see [`LICENSE`](LICENSE)).
+By submitting a contribution, you agree that it is licensed under the same terms
+(Apache-2.0 §5: unless you explicitly state otherwise, any contribution
+intentionally submitted for inclusion is under the terms of the license,
+without additional terms or conditions).

@@ -81,6 +81,9 @@ vi.mock("@/components/challenges/hints-section", () => ({ HintsSection: () => nu
 vi.mock("@/components/challenges/challenge-guesses-section", () => ({
   ChallengeGuessesSection: () => null,
 }));
+vi.mock("@/components/challenges/deployment-section", () => ({
+  DeploymentSection: () => null,
+}));
 vi.mock("@/stores/toast", () => ({ toast: vi.fn() }));
 
 afterEach(() => {

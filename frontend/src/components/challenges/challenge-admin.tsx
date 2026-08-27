@@ -12,6 +12,7 @@ import {
 
 import { AttachmentsSection } from "@/components/challenges/attachments-section";
 import { ChallengeGuessesSection } from "@/components/challenges/challenge-guesses-section";
+import { DeploymentSection } from "@/components/challenges/deployment-section";
 import { HintsSection } from "@/components/challenges/hints-section";
 import { useConfirm } from "@/components/ui/confirm";
 import { Button } from "@/components/ui/button";
@@ -893,6 +894,10 @@ function ChallengeForm({
                 challengeId={challenge.id}
               />
             )}
+            <DeploymentSection
+              competitionId={competitionId}
+              challengeId={challenge.id}
+            />
           </div>
         )}
       </CardContent>

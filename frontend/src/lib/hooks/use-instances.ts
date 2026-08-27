@@ -10,6 +10,7 @@ import {
   ApiError,
   deploymentsApi,
   instanceApi,
+  instanceOpsApi,
   instancesAdminApi,
 } from "@/lib/api";
 import type {
@@ -167,5 +168,33 @@ export function useDestroyInstance(competitionId: string, challengeId: string) {
       queryClient.invalidateQueries({
         queryKey: instanceKeys.detail(competitionId, challengeId),
       }),
+  });
+}
+
+// --- staff: running-instance ops ---------------------------------------------
+
+const opsKeys = {
+  list: (competitionId: string) => ["admin_instances", competitionId] as const,
+};
+
+/** Every active instance in the competition (staff, instance_view). Refreshes
+ *  live over the activity room — instance events invalidate this key too (see
+ *  lib/live.ts). */
+export function useAdminInstances(competitionId: string, enabled = true) {
+  const isAuthenticated = useAuthStore((s) => s.status === "authenticated");
+  return useQuery({
+    queryKey: opsKeys.list(competitionId),
+    queryFn: () => instanceOpsApi.list(competitionId),
+    enabled: isAuthenticated && enabled && Boolean(competitionId),
+  });
+}
+
+export function useKillInstance(competitionId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (instanceId: string) =>
+      instanceOpsApi.kill(competitionId, instanceId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: opsKeys.list(competitionId) }),
   });
 }

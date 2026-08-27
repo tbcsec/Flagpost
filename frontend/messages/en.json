@@ -48,7 +48,8 @@
       "competitors": "competitors",
       "tickets": "tickets",
       "accounts": "accounts",
-      "users": "users"
+      "users": "users",
+      "instances": "instances"
     },
     "competitionMode": {
       "team": "team",
@@ -123,6 +124,7 @@
       "analytics": "Analytics",
       "automations": "Automations",
       "aiTranscripts": "AI transcripts",
+      "instances": "Instances",
       "settings": "Settings",
       "lobby": "Lobby",
       "admin": "Admin"
@@ -788,6 +790,38 @@
         "removeConfirmLabel": "Remove"
       },
       "readGuide": "Read the Judge guide"
+    }
+  },
+  "instances": {
+    "title": "Running instances",
+    "subtitle": "Every live challenge instance in this competition.",
+    "noAccessSubtitle": "Staff only",
+    "noAccessTitle": "No access",
+    "noAccessDescription": "You need permission to view running instances in this competition.",
+    "unavailableTitle": "Instances unavailable",
+    "unavailableDescription": "Instancing isn't enabled for this competition, or couldn't be loaded.",
+    "emptyTitle": "No running instances",
+    "emptyDescription": "Instances competitors launch will appear here.",
+    "colChallenge": "Challenge",
+    "colSubject": "Subject",
+    "colStatus": "Status",
+    "colExpires": "Expires",
+    "colActions": "Actions",
+    "kill": "Kill",
+    "killed": "Instance killed",
+    "killFailed": "Couldn't kill the instance",
+    "killConfirmTitle": "Kill this instance?",
+    "killConfirmDescription": "The instance is destroyed immediately. The subject can launch a new one.",
+    "expiresDue": "due",
+    "expiresInMin": "in {count}m",
+    "expiresInHour": "in {count}h",
+    "status": {
+      "requested": "Requested",
+      "provisioning": "Starting",
+      "running": "Running",
+      "expiring": "Stopping",
+      "destroyed": "Stopped",
+      "failed": "Failed"
     }
   },
   "support": {

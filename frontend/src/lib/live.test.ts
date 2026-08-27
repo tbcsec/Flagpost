@@ -54,9 +54,10 @@ describe("keysForActivity", () => {
     expect(keysForActivity("competition.updated", CID)).toEqual([["competitions"]]);
   });
 
-  it("maps instance lifecycle events to the instance query prefix", () => {
-    // The subject's open instance panel refetches as it moves through the
-    // lifecycle; the ["instance", cid] prefix covers whichever dialog is open.
+  it("maps instance lifecycle events to the instance + ops query prefixes", () => {
+    // The subject's open instance panel (["instance", cid]) and the staff ops
+    // table (["admin_instances", cid]) both refetch as an instance moves through
+    // its lifecycle.
     for (const event of [
       "challenge.instance_requested",
       "challenge.instance_started",
@@ -65,7 +66,10 @@ describe("keysForActivity", () => {
       "challenge.instance_destroyed",
       "challenge.instance_provision_failed",
     ]) {
-      expect(keysForActivity(event, CID)).toEqual([["instance", CID]]);
+      expect(keysForActivity(event, CID)).toEqual([
+        ["instance", CID],
+        ["admin_instances", CID],
+      ]);
     }
   });
 

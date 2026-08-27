@@ -1,0 +1,208 @@
+# ADR-0036: Challenge instancing — provisioner contract, lifecycle, and flag semantics
+
+**Status:** Accepted
+**Date:** 2026-08-27
+**Architecture reference:** `ARCHITECTURE.md` §3 (events), §5 (automation), §7
+(RBAC), §11 (modules). The instancing section itself is added to
+`ARCHITECTURE.md` with the Phase 1 implementation, per #266.
+
+## Context
+
+Flagpost's challenge model is static: flags, attachments, hints,
+prerequisites, scheduled release. There is no way to give each team (or each
+user, in individual mode) an isolated, running copy of a challenge with live
+connection details — which is table stakes for pwn, web, cloud and OT events,
+and the hard blocker named in #266. The ecosystem solves this with
+orchestration bolted onto the platform (CTFd-Whale and kin) or beside it
+(rCTF + Klodd, kCTF on GKE).
+
+Bringing this into Flagpost forces five decisions at once, and they are
+entangled enough to record together:
+
+1. **How deployment backends plug in** — one hardcoded Docker path, or an
+   abstraction that can also cover Kubernetes and shared/static endpoints?
+2. **Where slow container work runs** — the backend is single-process by
+   default (ADR-0025/0026 made multi-worker opt-in); container starts take
+   seconds and must not live on the request path. Does reaping justify a new
+   worker process?
+3. **What holding Docker privileges means** — the platform hosts deliberately
+   vulnerable containers; the control plane must not be reachable from them,
+   and the app must not hold host-root via a mounted Docker socket.
+4. **How per-instance unique flags interact with grading**, first blood and
+   dynamic-scoring decay.
+5. **How competitors reach instances** — TCP and HTTP exposure, including
+   when the instance host is a different machine from the platform.
+
+A cross-cutting constraint from the owner: same-host and remote-host
+deployment must be **as close to identical as possible**, configured in the
+UI, with the out-of-band infrastructure work reduced to a bootstrap command —
+and misconfiguration must surface as labelled, actionable errors in the admin
+UI rather than as dead connection strings on event day.
+
+## Decision
+
+Ship instancing as an optional **`instances` module** (the seventh optional
+module) built around a **provisioner kind registry**, with provisioning on
+the existing background lane, reaping on the existing scheduler, hash-at-rest
+unique flags resolved ahead of the static grading paths, TCP port-range
+exposure first, and Docker access exclusively through a least-privilege
+socket proxy whose health is proven by a **staged `validate()` contract**
+surfaced in the UI as "Test connection". In detail:
+
+### 1. Provisioner contract — kinds, like identity providers
+
+A `Provisioner` is an async interface — `create(spec, subject) → handle`,
+`status(handle)`, `endpoints(handle)`, `destroy(handle)`, `list()`,
+`validate() → [CheckResult]` — registered by kind, exactly as external auth
+registers `IdentityProvider` kinds (ADR-0021/0022/0033): **a new backend is a
+new kind, not a fork**. Initial kinds:
+
+- **`docker`** — talks the Docker Engine HTTP API to a configured endpoint.
+  That endpoint is *always* a least-privilege socket proxy (allow
+  containers/images/networks; deny exec, volumes, build, swarm, system).
+  Same-host runs the proxy as a shipped compose-profile sidecar; a remote
+  challenge host runs the identical proxy beside its own daemon, reached
+  over a private path (VPC / WireGuard / TLS-fronted). One code path — the
+  topology is a URL. The app composes every create payload itself
+  (`no-new-privileges`, dropped capabilities, cpu/mem/pids limits, a
+  dedicated instance network, no volume mounts); challenge authors supply an
+  image reference and ports, never raw Docker options, so no user input
+  reaches privileged fields.
+- **`kubernetes`** — same contract over namespaced workloads with
+  NetworkPolicy isolation; ships after the Docker kind (see shipping order).
+- **`shared-static`** — no lifecycle; returns fixed endpoints. Covers
+  "one always-on nc host" challenges and doubles as the zero-infra kind for
+  development and tests.
+
+**`validate()` is a first-class part of the contract**, not a ping. It
+returns an ordered list of named check legs, each pass/fail with detail, and
+the admin UI renders them individually (the AI panel's two-leg connection
+test is the in-repo precedent). For the `docker` kind the legs are:
+
+1. endpoint reachable and API version compatible;
+2. privilege posture probe — allowed verbs succeed **and** denied verbs
+   (exec, volumes) return errors, proving the proxy's allowlist is actually
+   in force;
+3. pull a probe image;
+4. run and destroy a probe container with the hardened spec;
+5. **public reachability** — the backend dials the configured public
+   hostname on a port from the configured range, end to end, catching the
+   closed-firewall / wrong-hostname class of failure;
+6. (HTTP mode, Phase 2) wildcard DNS resolves and the ingress answers.
+
+A failing leg names itself and what to fix. This is the mechanism that makes
+"seamless, UI-configured" honest: the one out-of-band step per topology is a
+documented bootstrap command, and everything after it is settings plus a
+green checklist.
+
+### 2. Concurrency — no new process class
+
+Provisioning is slow but it is async HTTP; it runs as **background-lane work
+(ADR-0012)**, never on the request path. The `challenge_instance` row itself
+is the job: `requested → provisioning → running → expiring → destroyed`
+(terminal failure state `failed`), transitions idempotent and guarded so a
+subject holds at most their cap of active instances per challenge. TTL
+reaping, orphan GC (backend containers with no matching row, rows with no
+matching container) and health checks are periodic work and belong to the
+**existing scheduler** — in-process in the single-worker default, the
+scheduler sidecar under multi-worker (ADR-0025/0026).
+
+Explicitly rejected: a dedicated instancer daemon. Nothing here needs
+sub-second scheduling, and a new always-on process is a real operational cost
+for self-hosters. If instancing load ever outgrows the shared scheduler, that
+is a tuning problem inside the same design, not a new architecture.
+
+### 3. Unique flags — hashed at rest, resolved before static grading
+
+`flag_mode: unique_per_instance` renders the challenge's `flag_template` at
+provision time, injects the plaintext into the instance **once** (env or
+file), and stores **only the hash** on the instance row — the same at-rest
+posture as static flags. Staff cannot read a live instance flag; the remedy
+is re-provisioning. (Rejected: an `EncryptedString` recoverable copy — it
+widens who can read live flags for marginal support value.)
+
+Grading resolves in this order: if the challenge is unique-mode, compare
+against the subject's *active* instance hash; otherwise (and on fall-through)
+the existing static/regex/MCQ paths run unchanged. **First blood and decay
+need no semantic change** — both key on which *subject* solved and how many
+solves exist, not on flag identity.
+
+Because every instance flag is subject-bound, a wrong submission is also
+checked against *other* subjects' active instance hashes for the same
+challenge. A match is provable flag sharing and emits
+`challenge.flag_shared_detected` for staff and automation. No automatic
+penalty — policy stays human.
+
+### 4. Exposure and routing
+
+- **Phase 1 — TCP.** A configured public hostname plus a configured port
+  range on the instance host; the allocator treats exhaustion as a clean,
+  evented refusal. Connection details render as `nc <host> <port>`.
+- **Phase 2 — HTTP.** Wildcard DNS (`*.chal.<domain>`) and a wildcard
+  certificate pointing at the **instance host**, with a label-driven ingress
+  running on that host (caddy-docker-proxy pattern): the provisioner sets
+  routing labels at create time and the ingress configures itself. No
+  control-plane round-trip per request, identical behaviour same-host and
+  remote, and the platform's own Caddy is untouched. The Kubernetes kind
+  maps the same shape onto Ingress + NetworkPolicy.
+
+### 5. Configuration, guardrails, and platform integration
+
+- **Site level** (new admin surface, gated by a new `manage_instance_infra`
+  permission — infrastructure credentials are a higher-stakes grant than
+  site settings, the auth-providers precedent): provisioner kind, endpoint,
+  registry credentials (ADR-0020 `EncryptedString`), public hostname, TCP
+  port range, default resource limits, global concurrency ceiling, spawn
+  rate limits, egress policy. Ships unconfigured: like the AI module
+  (ADR-0023), the module is **inert until an operator configures a
+  provisioner**, on top of the per-competition toggle.
+- **Per competition**: max alive instances, instance session length
+  (default lifetime), and the extension policy (how many extensions / max
+  total lifetime). Competitors can extend a running instance from the
+  challenge modal within that policy, and see their running instances (with
+  expiry countdowns, live over the existing WS rooms) on the challenges
+  page.
+- **Per challenge**: image reference, exposure and ports, env, lifetime
+  override, per-subject cap, flag mode and template — plus a staff
+  test-launch that works pre-publish and while the competition is
+  `not_started`.
+- **Lifecycle ties**: launches require competition `running` (#221 gate);
+  `ended` and archival reap and purge instances; pause blocks new launches
+  but keeps instances alive. Demo mode force-disables launching (same class
+  as `DEMO_DISABLED_ACTIONS`). Every transition emits a §3.2 catalogue event
+  with `TRIGGER_PERMISSIONS` entries, is audited, and is pushed to the
+  subject over the existing rooms.
+- **Portability**: deployment *specs* are authoring content — they ride the
+  backup (ADR-0016) and the ctfcli mapping. Instances are runtime state and
+  are never exported.
+
+### Shipping order
+
+Phases per #266: foundations and the Docker kind with TCP exposure and
+shared flags first (the shippable slice); unique flags, extension, quotas and
+HTTP routing second; the Kubernetes kind third, behind the same contract.
+The v1.6.0 target is the Docker path end-to-end; `kubernetes` lands in a
+following milestone unless capacity allows sooner.
+
+## Consequences
+
+- **Easier:** pwn/web-heavy events become viable on Flagpost alone. One
+  contract covers three topologies, and moving from same-host to a
+  sacrificial challenge host is a two-field settings change plus a bootstrap
+  command. No new daemon for self-hosters. The staged validator converts the
+  most likely field failures (firewall, hostname, proxy misconfig) into
+  labelled admin-UI errors before competitors ever see a connection string.
+- **Harder:** a new class of operator-configured outbound dependency (the
+  container runtime endpoint — joins SMTP/webhooks/IdPs/AI in `PRIVACY.md`).
+  HTTP challenges put a wildcard DNS + certificate burden on self-hosters,
+  documented as a prerequisite. The socket proxy cannot inspect create
+  payloads — that risk is carried by app-composed hardened specs and the
+  recommended remote-host posture, and must be re-examined in the Phase 2
+  security pass. Hash-only flags mean staff support answers are
+  "re-provision", never "here's your flag".
+- **Foreclosed / accepted risks:** egress-deny-by-default will break
+  internet-needing challenges unless the per-competition opt-in is used —
+  deliberate. Deferring Kubernetes means large events on k8s wait a
+  milestone; the kind registry exists precisely so that arrival changes no
+  core logic. Windows containers, Attack-Defense rotation and browser
+  workstations stay out of scope here and build on this substrate later.

@@ -146,11 +146,11 @@ def _docker_config(settings: InstanceSettings, deployment: ChallengeDeployment):
     drags in the httpx docker client."""
     from utils.provisioner_docker import DockerConfig
 
-    require_internal = settings.egress_policy != "allow"
+    egress_denied = settings.egress_policy != "allow"
     return DockerConfig(
         endpoint_url=settings.endpoint_url or "",
         public_host=settings.public_host or "",
-        require_internal_network=require_internal,
+        egress_denied=egress_denied,
         default_cpu=settings.default_cpu,
         default_memory_mb=settings.default_memory_mb,
         default_pids=settings.default_pids,
@@ -189,11 +189,11 @@ def provisioner_from_settings(settings: InstanceSettings, *, transport=None) -> 
     if settings.backend == "docker":
         from utils.provisioner_docker import DockerConfig, DockerProvisioner
 
-        require_internal = settings.egress_policy != "allow"
+        egress_denied = settings.egress_policy != "allow"
         cfg = DockerConfig(
             endpoint_url=settings.endpoint_url or "",
             public_host=settings.public_host or "",
-            require_internal_network=require_internal,
+            egress_denied=egress_denied,
             default_cpu=settings.default_cpu,
             default_memory_mb=settings.default_memory_mb,
             default_pids=settings.default_pids,

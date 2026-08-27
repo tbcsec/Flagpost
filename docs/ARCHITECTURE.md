@@ -1657,9 +1657,14 @@ the same free port / the same under-cap count and then both commit (the
 `submissions._lock_subject` pattern: real on Postgres, a no-op SQLite drops).
 Guardrails: per-subject cap (deployment), per-competition `instance_max_alive`, a
 global concurrency ceiling (site settings), and app-composed hardened container
-specs (dropped caps, `no-new-privileges`, read-only rootfs, cpu/mem/pids, an
-isolated `internal` network, no mounts); the docker kind pulls the image before
-create (an absent image would 404 the create). Flags are shared in Phase 1 (the
+specs (dropped caps, `no-new-privileges`, read-only rootfs, cpu/mem/pids, a
+dedicated bridge network, no mounts); the docker kind pulls the image before
+create (an absent image would 404 the create). The instance network is a
+**normal bridge, not `internal: true`** — Docker won't publish a TCP port from a
+container that is only on an internal network, so egress-deny is a host-firewall
+concern, not the Docker internal flag (ADR-0036 amended, found by live testing;
+the `network_isolation` validate leg verifies the network exists and surfaces
+the firewall responsibility). Flags are shared in Phase 1 (the
 ordinary
 static/regex/MCQ grading is untouched); `unique_per_instance` (Phase 2) renders
 a template at provision time and stores only the hash, resolved ahead of the

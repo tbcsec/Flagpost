@@ -110,16 +110,20 @@ class DockerConfig:
     # private/loopback address in the common same-host and private-subnet
     # topologies (ADR-0036 §1), which a blocklist would reject.
     public_host: str
-    # Isolated bridge network the container is attached to. MUST be created with
-    # ``internal: true`` at deploy time to deny egress and control-plane reach
-    # (ADR-0036 §5). The provisioner references it by name AND — when egress is
-    # denied — the ``network_isolation`` validate leg verifies its ``Internal``
-    # flag, so a misconfigured (non-internal) network fails Test Connection
-    # rather than silently letting instances reach Postgres/Redis/MinIO.
+    # The dedicated bridge network the container is attached to. It must be a
+    # NORMAL bridge, NOT ``internal: true``: Docker cannot publish a TCP port
+    # from a container that is only on an internal network (no gateway to NAT
+    # through), so an internal network breaks the whole TCP-exposure feature —
+    # verified by live testing (ADR-0036 amended). Egress-deny for instances is
+    # therefore a HOST-FIREWALL concern (block outbound from the instance subnet),
+    # not the Docker internal flag. The ``network_isolation`` validate leg checks
+    # the network EXISTS and reports the egress posture; it no longer requires
+    # internal.
     network: str = "flagpost-instances"
-    # When true (site egress policy = deny), validate() requires the network to
-    # be internal. Set false only for an explicitly egress-allowed competition.
-    require_internal_network: bool = True
+    # True when the site egress policy is ``deny`` — the isolation leg then
+    # reminds the operator to enforce egress with firewall rules (Docker can't,
+    # given published ports). Purely advisory; it never fails Test Connection.
+    egress_denied: bool = True
     # Host interface published ports bind to. A challenge port must be reachable
     # by competitors — that's the feature — so 0.0.0.0 by default; isolation is
     # at the container (dropped caps, no-new-privileges, isolated net), not by
@@ -464,12 +468,13 @@ class DockerProvisioner(Provisioner):
         return legs
 
     async def _check_network_isolation(self) -> CheckResult:
-        if not self._cfg.require_internal_network:
-            return CheckResult(
-                "network_isolation",
-                True,
-                "egress is allowed for this configuration — isolation not required",
-            )
+        # Verify the instance network EXISTS and report its egress posture. It is
+        # deliberately NOT required to be ``internal``: Docker won't publish a TCP
+        # port from a container attached only to an internal network, so a normal
+        # bridge is mandatory for TCP challenges and egress-deny is a host-firewall
+        # concern (ADR-0036 amended; docs/CHALLENGE_INSTANCES.md). This leg can't
+        # verify firewall rules, so it passes as long as the network exists and
+        # surfaces the operator's remaining responsibility as actionable detail.
         try:
             resp = await self._request(
                 "GET", f"/networks/{self._cfg.network}", timeout=_TIMEOUT_QUICK
@@ -480,26 +485,34 @@ class DockerProvisioner(Provisioner):
             return CheckResult(
                 "network_isolation",
                 False,
-                f"network '{self._cfg.network}' does not exist — create it with "
-                "internal: true before enabling instances",
+                f"network '{self._cfg.network}' does not exist — create it "
+                "(a normal bridge; see the deploy guide) before enabling instances",
             )
         if resp.status_code != 200:
-            return CheckResult(
-                "network_isolation", False, _daemon_detail(resp)
-            )
+            return CheckResult("network_isolation", False, _daemon_detail(resp))
         internal = bool(resp.json().get("Internal"))
-        if not internal:
+        if internal:
+            # An internal network denies egress at the Docker layer, but then no
+            # published port routes — only usable for exposure=none challenges.
             return CheckResult(
                 "network_isolation",
-                False,
-                f"network '{self._cfg.network}' is NOT internal — instances could "
-                "reach the control plane (Postgres/Redis/MinIO) or the internet; "
-                "recreate it with internal: true",
+                True,
+                f"network '{self._cfg.network}' is internal — egress is denied, but "
+                "published TCP ports will NOT route; use a normal bridge for TCP "
+                "challenges",
+            )
+        if self._cfg.egress_denied:
+            return CheckResult(
+                "network_isolation",
+                True,
+                f"network '{self._cfg.network}' is a bridge — egress policy is "
+                "'deny', so block outbound from the instance subnet with host "
+                "firewall rules (Docker can't both isolate and publish ports)",
             )
         return CheckResult(
             "network_isolation",
             True,
-            f"network '{self._cfg.network}' is internal (egress denied)",
+            f"network '{self._cfg.network}' is a bridge (egress allowed)",
         )
 
     async def _probe_pull(self) -> tuple[bool, str]:

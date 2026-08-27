@@ -282,8 +282,9 @@ def _healthy_router() -> _Router:
         .on("POST", "/exec", httpx.Response(403, text="Forbidden"))
         .on("GET", "/volumes", httpx.Response(403, text="Forbidden"))
         .on("POST", "/build", httpx.Response(403, text="Forbidden"))
-        # the instance network exists and is internal (egress denied)
-        .on("GET", "/networks/flagpost-instances", httpx.Response(200, json={"Internal": True}))
+        # the instance network exists as a normal bridge (the recommended config —
+        # a TCP port can't be published from an internal network)
+        .on("GET", "/networks/flagpost-instances", httpx.Response(200, json={"Internal": False}))
         # pull streams success NDJSON ending in the terminal Status line
         .on("POST", "/images/create", httpx.Response(200, content=b'{"status":"Pulling from library/alpine"}\n{"status":"Status: Downloaded newer image for alpine:3.20"}\n'))
         # probe run
@@ -381,21 +382,32 @@ async def test_validate_reports_unreachable_public_host():
     assert router.saw("DELETE", "/containers/probe1")
 
 
-async def test_validate_fails_on_non_internal_network():
-    # Network exists but is NOT internal ⇒ instances could reach the control
-    # plane. The leg must fail and later legs must not run.
+async def test_validate_passes_on_a_bridge_with_an_egress_advisory():
+    # A normal bridge is REQUIRED for TCP (an internal network can't publish a
+    # port). The leg passes but, under egress=deny, advises firewall rules — and
+    # validation continues to the later legs (unlike a hard failure).
+    router = _healthy_router()  # network is a bridge
+    prov = DockerProvisioner(_cfg(), transport=router.transport(), tcp_probe=lambda h, p: _true())
+    legs = await prov.validate()
+    iso = next(leg for leg in legs if leg.name == "network_isolation")
+    assert iso.ok is True and "firewall" in iso.detail
+    # It did NOT stop early — image pull + probe run happened.
+    assert router.saw("POST", "/images/create")
+
+
+async def test_validate_warns_internal_network_wont_publish_ports():
+    # An internal network denies egress but can't publish TCP ports — the leg
+    # passes (existence) yet flags that published ports won't route.
     router = _healthy_router()
     router.routes = [
         r if r[1] != "/networks/flagpost-instances"
-        else ("GET", "/networks/flagpost-instances", httpx.Response(200, json={"Internal": False}))
+        else ("GET", "/networks/flagpost-instances", httpx.Response(200, json={"Internal": True}))
         for r in router.routes
     ]
     prov = DockerProvisioner(_cfg(), transport=router.transport(), tcp_probe=lambda h, p: _true())
     legs = await prov.validate()
     iso = next(leg for leg in legs if leg.name == "network_isolation")
-    assert iso.ok is False and "NOT internal" in iso.detail
-    assert [leg.name for leg in legs] == ["endpoint_reachable", "privilege_posture", "network_isolation"]
-    assert not router.saw("POST", "/images/create")
+    assert iso.ok is True and "will NOT route" in iso.detail
 
 
 async def test_validate_fails_when_network_missing():
@@ -411,17 +423,18 @@ async def test_validate_fails_when_network_missing():
     assert iso.ok is False and "does not exist" in iso.detail
 
 
-async def test_validate_skips_isolation_when_egress_allowed():
-    # An explicitly egress-allowed config doesn't require an internal network.
+async def test_validate_isolation_notes_egress_allowed():
+    # An explicitly egress-allowed config: the bridge passes with no firewall
+    # advisory.
     router = _healthy_router()
     prov = DockerProvisioner(
-        _cfg(require_internal_network=False),
+        _cfg(egress_denied=False),
         transport=router.transport(),
         tcp_probe=lambda h, p: _true(),
     )
     legs = await prov.validate()
     iso = next(leg for leg in legs if leg.name == "network_isolation")
-    assert iso.ok is True and "not required" in iso.detail
+    assert iso.ok is True and "egress allowed" in iso.detail
 
 
 async def test_validate_rejects_truncated_pull_stream():

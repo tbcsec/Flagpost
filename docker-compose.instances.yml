@@ -10,12 +10,15 @@
 #     published to NO host interface — only the backend reaches it, over the
 #     internal `flagpost-control` network.
 #
-#   * `flagpost-instances` — the network challenge containers attach to,
-#     created `internal: true` so an instance can't reach the control plane
-#     (Postgres/Redis/MinIO/API) or the internet. Inbound published TCP ports
-#     still route (DNAT), which is what competitors connect to; container-
-#     initiated egress is blocked. Verify end-to-end from
-#     Admin → Site settings → Instances → Test connection after bootstrapping.
+#   * `flagpost-instances` — the network challenge containers attach to. It is a
+#     NORMAL bridge, NOT `internal: true`: Docker cannot publish a TCP port from a
+#     container that is only on an internal network (there's no gateway to NAT
+#     through), so an internal network would silently break TCP challenges
+#     (verified by live testing). Egress-deny for instances is therefore a
+#     HOST-FIREWALL job — block outbound from this network's subnet (and the cloud
+#     metadata IP 169.254.169.254) with iptables/nftables. Verify end-to-end from
+#     Admin → Site settings → Instances → Test connection after bootstrapping; the
+#     network-isolation leg reminds you of the firewall step.
 #
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.instances.yml up -d
@@ -74,9 +77,10 @@ networks:
   # Backend ↔ socket-proxy only. Not internet-facing.
   flagpost-control:
     driver: bridge
-  # Challenge instances live here. `internal: true` denies egress + control-plane
-  # reach; inbound published ports still route to competitors (ADR-0036 §5).
+  # Challenge instances live here. A NORMAL bridge (NOT internal): published TCP
+  # ports only route on a non-internal network. Deny egress + control-plane reach
+  # with host firewall rules on this subnet, not `internal: true` — see the header
+  # comment and docs/CHALLENGE_INSTANCES.md (ADR-0036, amended).
   flagpost-instances:
     name: flagpost-instances
     driver: bridge
-    internal: true

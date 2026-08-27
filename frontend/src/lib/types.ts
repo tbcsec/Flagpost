@@ -1338,6 +1338,54 @@ export interface AiConnectionResult {
   model: string;
 }
 
+// --- challenge instancing (#266, ADR-0036): site infra config ----------------
+
+/** Admin → Site settings → Instances. The registry credential is write-only —
+ *  only `registry_credentials_set` is read back (never the value). */
+export interface InstanceSettings {
+  enabled: boolean;
+  backend: string;
+  endpoint_url: string | null;
+  public_host: string | null;
+  registry_credentials_set: boolean;
+  tcp_port_min: number;
+  tcp_port_max: number;
+  default_cpu: number;
+  default_memory_mb: number;
+  default_pids: number;
+  max_concurrent: number;
+  egress_policy: string;
+}
+
+/** Partial update. Omit `registry_credentials` to keep the stored one; `""`
+ *  clears it. */
+export interface InstanceSettingsUpdate {
+  enabled?: boolean;
+  backend?: string;
+  endpoint_url?: string | null;
+  public_host?: string | null;
+  registry_credentials?: string;
+  tcp_port_min?: number;
+  tcp_port_max?: number;
+  default_cpu?: number;
+  default_memory_mb?: number;
+  default_pids?: number;
+  max_concurrent?: number;
+  egress_policy?: string;
+}
+
+/** One staged leg of the "Test connection" probe (ADR-0036 §1). */
+export interface InstanceConnectionLeg {
+  name: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface InstanceConnectionResult {
+  ok: boolean;
+  legs: InstanceConnectionLeg[];
+}
+
 export interface AiConversation {
   id: string;
   assistant_type: string;

@@ -27,6 +27,9 @@ import type {
   AiSettings,
   AiSettingsUpdate,
   AiConnectionResult,
+  InstanceSettings,
+  InstanceSettingsUpdate,
+  InstanceConnectionResult,
   AiAssistantType,
   AiAvailability,
   AiCompetitionSettings,
@@ -1205,6 +1208,23 @@ export const aiAdminApi = {
   // Probe the saved config: a completion + a forced tool call, reported apart.
   testConnection: () =>
     apiFetch<AiConnectionResult>("/api/admin/ai/test-connection", {
+      method: "POST",
+    }),
+};
+
+// Challenge instancing site infra config (#266, ADR-0036). Same write-only
+// secret + staged test-connection posture as the AI panel.
+export const instancesAdminApi = {
+  get: () => apiFetch<InstanceSettings>("/api/admin/instances/settings"),
+  // Omit registry_credentials to leave the stored one; "" clears it.
+  update: (input: InstanceSettingsUpdate) =>
+    apiFetch<InstanceSettings>("/api/admin/instances/settings", {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  // Run the provisioner's staged validate() against the saved config.
+  testConnection: () =>
+    apiFetch<InstanceConnectionResult>("/api/admin/instances/test-connection", {
       method: "POST",
     }),
 };

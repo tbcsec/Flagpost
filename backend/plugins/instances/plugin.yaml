@@ -1,0 +1,14 @@
+id: instances
+name: Challenge Instances
+version: 0.1.0
+description: >-
+  Per-subject, isolated running copies of a challenge via a least-privilege
+  container backend (Docker). TCP connection details, TTL reaping, staff kill
+  controls, and a staged "Test connection" for the operator's infrastructure.
+required_core: false
+provides:
+  routes: true
+  event_listeners: true
+dependencies:
+  - competitions
+  - challenges

@@ -42,6 +42,27 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     ],
     "challenge.guesses_reset": ["competition_id", "challenge_id", "user_id", "team_id"],
     "challenge.rated": ["competition_id", "challenge_id", "user_id", "rating"],
+    # Challenge instancing (#266) — every lifecycle event carries the same id set
+    # (subject + instance), never the flag or connection detail.
+    "challenge.instance_requested": [
+        "competition_id", "challenge_id", "instance_id", "user_id", "team_id",
+    ],
+    "challenge.instance_started": [
+        "competition_id", "challenge_id", "instance_id", "user_id", "team_id",
+    ],
+    "challenge.instance_extended": [
+        "competition_id", "challenge_id", "instance_id", "user_id", "team_id",
+    ],
+    "challenge.instance_expired": [
+        "competition_id", "challenge_id", "instance_id", "user_id", "team_id",
+    ],
+    "challenge.instance_destroyed": [
+        "competition_id", "challenge_id", "instance_id", "user_id", "team_id",
+    ],
+    "challenge.instance_provision_failed": [
+        "competition_id", "challenge_id", "instance_id", "user_id", "team_id",
+    ],
+    "instance.settings_updated": ["actor_user_id", "enabled"],
     "challenge.hint_requested": [
         "competition_id", "challenge_id", "hint_id", "user_id", "team_id", "cost",
     ],
@@ -201,6 +222,16 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     # Others' attempts (incl. failures) are staff analytics data, not
     # member-visible play state — same gate as reading the analytics page.
     "challenge.attempted": "view_competition_analytics",
+    # Instance lifecycle (#266) — operational visibility, so the read-tier
+    # instance permission gates automating on it (a Judge holds instance_view).
+    "challenge.instance_requested": "instance_view",
+    "challenge.instance_started": "instance_view",
+    "challenge.instance_extended": "instance_view",
+    "challenge.instance_expired": "instance_view",
+    "challenge.instance_destroyed": "instance_view",
+    "challenge.instance_provision_failed": "instance_view",
+    # Site provisioner config is admin-domain, like ai.settings_updated.
+    "instance.settings_updated": "manage_instance_infra",
     # Member-visible events (published challenges, solves, scoreboard-facing).
     "challenge.published": "challenge_view",
     "challenge.solved": "challenge_view",

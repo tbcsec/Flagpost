@@ -69,6 +69,15 @@ class _Router:
             for method, contains, response in self.routes:
                 if request.method == method and contains in request.url.path:
                     return response(request) if callable(response) else response
+            # Default: a successful image pull. create() pulls before creating
+            # (an absent image would 404 the create), and most create tests don't
+            # care about the pull — a test that does adds its own /images/create
+            # route above, which wins by matching first.
+            if request.method == "POST" and request.url.path.endswith("/images/create"):
+                return httpx.Response(
+                    200,
+                    content=b'{"status":"Status: Downloaded newer image"}\n',
+                )
             return httpx.Response(500, json={"message": f"unrouted {request.method} {request.url.path}"})
 
         return httpx.MockTransport(handler)
@@ -127,6 +136,41 @@ async def test_create_composes_a_hardened_payload():
     # Container named for the instance.
     create_req = next(r for r in router.requests if r.url.path.endswith("/containers/create"))
     assert create_req.url.params["name"] == "flagpost-inst-inst-1"
+
+
+async def test_create_pulls_the_image_before_creating():
+    # An explicit pull route so we can assert the order and the pulled image.
+    router = (
+        _Router()
+        .on("POST", "/images/create", httpx.Response(
+            200, content=b'{"status":"Status: Downloaded newer image for ghcr.io/example/pwn:1"}\n'))
+        .on("POST", "/containers/create", httpx.Response(201, json={"Id": "x"}))
+        .on("POST", "/start", httpx.Response(204))
+    )
+    prov = DockerProvisioner(_cfg(), transport=router.transport())
+    await prov.create(_spec())
+
+    paths = [(r.method, r.url.path) for r in router.requests]
+    pull_i = paths.index(("POST", "/images/create"))
+    create_i = next(i for i, p in enumerate(paths) if p[1].endswith("/containers/create"))
+    assert pull_i < create_i  # pulled before the container was created
+    pull_req = router.requests[pull_i]
+    assert pull_req.url.params["fromImage"] == "ghcr.io/example/pwn"
+    assert pull_req.url.params["tag"] == "1"
+
+
+async def test_create_fails_and_creates_nothing_when_the_pull_fails():
+    router = (
+        _Router()
+        .on("POST", "/images/create", httpx.Response(
+            200, content=b'{"status":"Pulling"}\n{"error":"manifest for ghcr.io/example/pwn:1 not found"}\n'))
+        .on("POST", "/containers/create", httpx.Response(201, json={"Id": "should-not-happen"}))
+    )
+    prov = DockerProvisioner(_cfg(), transport=router.transport())
+    with pytest.raises(ProvisionerError, match="image pull failed"):
+        await prov.create(_spec())
+    # A failed pull must not create a container.
+    assert not router.saw("POST", "/containers/create")
 
 
 async def test_create_resource_overrides_and_fractional_cpu():

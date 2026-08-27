@@ -1,0 +1,82 @@
+# Challenge instancing — same-host socket-proxy sidecar (#266, ADR-0036).
+#
+# Overlay for the production stack. Brings up:
+#
+#   * `socket-proxy` — a tecnativa/docker-socket-proxy in front of the host
+#     Docker daemon, exposing ONLY the verbs the provisioner needs
+#     (containers / images / networks + POST) and denying the dangerous ones
+#     (exec, volumes, build, swarm, the raw socket). The backend never mounts
+#     /var/run/docker.sock; it talks HTTP to this proxy. The proxy's port is
+#     published to NO host interface — only the backend reaches it, over the
+#     internal `flagpost-control` network.
+#
+#   * `flagpost-instances` — the network challenge containers attach to,
+#     created `internal: true` so an instance can't reach the control plane
+#     (Postgres/Redis/MinIO/API) or the internet. Inbound published TCP ports
+#     still route (DNAT), which is what competitors connect to; container-
+#     initiated egress is blocked. Verify end-to-end from
+#     Admin → Site settings → Instances → Test connection after bootstrapping.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.instances.yml up -d
+# Then, in the admin UI, set the endpoint to http://socket-proxy:2375, the
+# public host to the address competitors reach, and enable the module.
+#
+# A remote challenge host runs THIS SAME socket-proxy beside its own daemon and
+# is reached over a private path (VPC / WireGuard / TLS-fronted); only the
+# endpoint URL changes. One code path — the topology is a URL (ADR-0036 §1).
+
+services:
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    restart: unless-stopped
+    environment:
+      # --- allowed (the provisioner's whole surface) ---
+      CONTAINERS: 1      # create / inspect / start / stop / remove instances
+      IMAGES: 1          # pull challenge + probe images
+      NETWORKS: 1        # inspect the instance network (isolation validate leg)
+      POST: 1            # create/start/pull are POSTs — off by default in the proxy
+      PING: 1            # GET /_ping (reachability + API version leg)
+      VERSION: 1
+      # --- denied (defaults, pinned explicitly as documentation) ---
+      EXEC: 0            # no docker exec into a live instance
+      VOLUMES: 0         # no volume create/mount surface
+      BUILD: 0           # no image build
+      SWARM: 0
+      SECRETS: 0
+      CONFIGS: 0
+      SERVICES: 0
+      TASKS: 0
+      NODES: 0
+      SYSTEM: 0
+      INFO: 0
+      AUTH: 0
+      DISTRIBUTION: 0
+      PLUGINS: 0
+      SESSION: 0
+    volumes:
+      # Read-only mount of the host socket. The proxy — not the app — holds this.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - flagpost-control
+    # Deliberately NO `ports:` — never published to a host interface.
+
+  backend:
+    # Join the control network so the backend can reach http://socket-proxy:2375.
+    networks:
+      - default
+      - flagpost-control
+    depends_on:
+      socket-proxy:
+        condition: service_started
+
+networks:
+  # Backend ↔ socket-proxy only. Not internet-facing.
+  flagpost-control:
+    driver: bridge
+  # Challenge instances live here. `internal: true` denies egress + control-plane
+  # reach; inbound published ports still route to competitors (ADR-0036 §5).
+  flagpost-instances:
+    name: flagpost-instances
+    driver: bridge
+    internal: true

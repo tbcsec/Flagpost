@@ -1594,3 +1594,90 @@ Keep this section honest — update as decisions are made:
   workers accept each other's tokens (ADR-0019). The owner's goal is "low
   thousands on one box", explicitly **not** multi-machine horizontal scaling,
   which stays unbuilt.
+
+---
+
+## 16. Challenge Instancing
+
+Per-subject, isolated, running copies of a challenge with live connection
+details — table stakes for pwn/web/cloud events (#266, ADR-0036). Shipped as the
+seventh **optional module** (`instances`), off by default and toggled per
+competition, inert until an operator points it at a container runtime. The
+Phase-1 slice is the `docker` kind with TCP exposure and shared flags; unique
+flags and HTTP routing (Phase 2) and the `kubernetes` kind (Phase 3) build on
+the same contract.
+
+### 16.1 Provisioner kinds
+
+A `Provisioner` (`utils/provisioners.py`) is an async interface —
+`create(spec)→handle`, `status`, `endpoints`, `destroy`, `list`,
+`validate()→[CheckResult]` — registered **by kind**, exactly as external auth
+registers `IdentityProvider` kinds (§7 / ADR-0021): *a new backend is a new
+kind, not a fork*. Kinds: `docker` (`utils/provisioner_docker.py`, the Docker
+Engine HTTP API over an injectable httpx transport), `shared-static` (fixed
+manifest endpoints, no lifecycle — the zero-infra kind dev/tests run against),
+and `kubernetes` (Phase 3). `validate()` is a first-class part of the contract,
+not a ping: it returns an *ordered* list of named legs (reachable, privilege
+posture, network isolation, image pull, probe run, public reachability), and the
+admin **Test connection** renders each individually so a field misconfiguration
+is a labelled, actionable error rather than a dead connection string on event
+day.
+
+### 16.2 Data model & lifecycle
+
+`ChallengeDeployment` (one per challenge, authoring content — rides the backup,
+§13) holds image/manifest, exposure, ports, env, guardrails and flag mode.
+`ChallengeInstance` is **the provisioning job itself** (ADR-0036 §2): its
+`status` walks `requested → provisioning → running → expiring → destroyed`
+(terminal `failed`) via a guarded, idempotent state machine
+(`instance_can_transition`), so there is no separate queue to keep consistent
+with the DB. Subject is `COALESCE(team_id, user_id)` — team in team mode, user
+otherwise — the same idiom as `Submission` and the awarded-solve index.
+
+Provisioning runs on the **background lane** (§3 / ADR-0012), never the request
+path: the launch route commits a `requested` row and emits
+`challenge.instance_requested`; the module's background listener
+(`utils/instance_service.provision`) talks to the backend and flips the row to
+`running`/`failed`. Reaping is periodic work on the **existing scheduler**
+(`utils/instance_reaper` in `automation_scheduler._loop`) — no new process
+(ADR-0036 §2 rejected a dedicated daemon): TTL expiry, stuck-provision cleanup,
+and orphan GC (backend containers with no live row, reaped under a two-tick
+safety rule that closes the create→commit-handle window).
+
+### 16.3 Exposure, guardrails, flags
+
+TCP-first (Phase 1): the service allocates a host port per declared container
+port from the configured range and records it on the instance's `endpoints`
+(the connection block and the allocation ledger at once, exposed to the subject
+only once running); range exhaustion is a clean, evented refusal. Launch
+admission (the cap checks + port allocation) is serialised on a `FOR UPDATE`
+lock over the settings singleton — a **global** gate, since the port range and
+the global ceiling are host-wide — so two concurrent launches can't both read
+the same free port / the same under-cap count and then both commit (the
+`submissions._lock_subject` pattern: real on Postgres, a no-op SQLite drops).
+Guardrails: per-subject cap (deployment), per-competition `instance_max_alive`, a
+global concurrency ceiling (site settings), and app-composed hardened container
+specs (dropped caps, `no-new-privileges`, read-only rootfs, cpu/mem/pids, an
+isolated `internal` network, no mounts); the docker kind pulls the image before
+create (an absent image would 404 the create). Flags are shared in Phase 1 (the
+ordinary
+static/regex/MCQ grading is untouched); `unique_per_instance` (Phase 2) renders
+a template at provision time and stores only the hash, resolved ahead of the
+static grading paths.
+
+### 16.4 Configuration & integration
+
+Site config (`InstanceSettings`, a singleton like `ai_settings`) is gated by the
+GLOBAL `manage_instance_infra` grant — infrastructure credentials are
+higher-stakes than site settings, the auth-providers precedent — and is
+excluded from the backup (a Docker endpoint isn't environment-portable). The
+endpoint is **always a least-privilege socket proxy**, never a raw socket; it is
+a trusted operator setting, so exempt from the webhook SSRF blocklist (ADR-0013)
+like the SMTP host and OIDC issuer. Per-competition: max alive + session length;
+per-challenge: the deployment spec. Launch requires competition `running` (#221;
+staff `instance_manage` bypass to test-launch pre-publish) and is force-disabled
+in demo mode. Every transition emits a §3.2 catalogue event
+(`challenge.instance_*`, plus `instance.settings_updated`) with
+`TRIGGER_PERMISSIONS` entries, is audited, and pings the competition `activity`
+room so a subject's challenges view refetches live. Deploy recipe:
+`docs/CHALLENGE_INSTANCES.md`.

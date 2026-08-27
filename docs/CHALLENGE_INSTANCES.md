@@ -50,9 +50,20 @@ This adds:
   internal `flagpost-control` network. Allowed: `CONTAINERS`, `IMAGES`,
   `NETWORKS`, `POST`, `PING`, `VERSION`. Denied: `EXEC`, `VOLUMES`, `BUILD`,
   `SWARM`, and the rest.
-- `flagpost-instances`, a bridge network created `internal: true`: instances
-  can't reach Postgres/Redis/MinIO/the API or the internet, but their published
-  TCP ports still route to competitors.
+- `flagpost-instances`, a **normal bridge** network. It is deliberately *not*
+  `internal: true`: Docker can't publish a TCP port from a container that's only
+  on an internal network, so an internal network would break TCP challenges.
+  Egress-deny is therefore a **host-firewall** job (see below), not the Docker
+  internal flag.
+
+> **Egress control (do this for a real event).** A normal bridge lets instances
+> reach the internet and the host by default. Block outbound from the
+> `flagpost-instances` subnet with host firewall rules — drop forwarded traffic
+> from that subnet except to the ports competitors need, and always block the
+> cloud metadata IP `169.254.169.254`. Keep the control plane
+> (Postgres/Redis/MinIO/API) off any address the instance subnet can reach. The
+> `network_isolation` leg of Test connection reminds you of this; it can't verify
+> your firewall rules for you.
 
 Then in **Admin → Site settings → Instances**:
 
@@ -76,7 +87,8 @@ On the challenge host, run the same socket proxy beside its daemon and expose it
 only on the private path to Flagpost (never the public internet). Then set the
 endpoint URL to that private address (e.g. `http://10.0.0.5:2375` or a
 TLS-fronted `https://…`). Create the `flagpost-instances` network on the
-**challenge host's** daemon (`docker network create --internal flagpost-instances`).
+**challenge host's** daemon (`docker network create flagpost-instances`, a normal
+bridge — then apply the egress firewall rules described above on that host).
 Everything else — the admin fields, Test connection, authoring — is identical.
 
 ## Authoring an instanced challenge
@@ -103,17 +115,21 @@ the competition is `running`. Launch is force-disabled in demo mode.
 - **Reaping** rides the existing scheduler tick — no new process: TTL expiry,
   stuck-provision cleanup, and orphan GC (containers with no live row, reaped
   under a two-tick safety rule).
-- **Egress** defaults to deny (the internal network). A challenge that genuinely
-  needs the internet uses the per-competition egress opt-in; the network
-  isolation validate leg is skipped for those.
+- **Egress** is a host-firewall responsibility (see the network note above), not
+  a Docker internal-network setting — an internal network can't publish TCP
+  ports. The per-competition `egress_policy` records your intent (`deny` is the
+  default and makes the `network_isolation` leg remind you to add firewall rules;
+  `allow` drops the reminder for challenges that legitimately need the internet).
 
 ## Troubleshooting
 
 - **`privilege_posture` fails** — the endpoint isn't a restricted proxy (a
   dangerous verb returned something other than 403). Do not point Flagpost at a
   raw `/var/run/docker.sock`.
-- **`network_isolation` fails** — `flagpost-instances` is missing or wasn't
-  created `internal: true`. Recreate it.
+- **`network_isolation` fails** — `flagpost-instances` doesn't exist. Create it
+  (`docker network create flagpost-instances`, a normal bridge). The leg passes
+  once it exists; under `egress_policy: deny` it also *advises* firewall rules
+  (it can't verify them) — that's a note, not a failure.
 - **`public_reachable` fails** — the firewall is closed on the port range, or
   the public host is wrong. This is the leg that catches the failure competitors
   would otherwise hit as a dead connection string on event day.

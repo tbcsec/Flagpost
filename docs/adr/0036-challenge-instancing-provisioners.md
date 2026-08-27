@@ -1,6 +1,6 @@
 # ADR-0036: Challenge instancing — provisioner contract, lifecycle, and flag semantics
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-08-27 — see "Amendment: egress model")
 **Date:** 2026-08-27
 **Architecture reference:** `ARCHITECTURE.md` §3 (events), §5 (automation), §7
 (RBAC), §11 (modules). The instancing section itself is added to
@@ -206,3 +206,30 @@ following milestone unless capacity allows sooner.
   milestone; the kind registry exists precisely so that arrival changes no
   core logic. Windows containers, Attack-Defense rotation and browser
   workstations stay out of scope here and build on this substrate later.
+
+## Amendment: egress model (2026-08-27)
+
+Decision #5 above (and the original §4 exposure text) assumed the instance
+network would be `internal: true` — denying egress and control-plane reach at
+the Docker layer while published TCP ports "still route (DNAT)". **Live testing
+against a real daemon disproved that:** Docker will **not** publish a host port
+from a container attached only to an `internal` network — there is no gateway to
+NAT through — so an internal network silently breaks the entire TCP-exposure
+feature (the `public_reachable` validate leg fails with "probe published no
+port"). Internal-network egress-deny and published-port TCP are mutually
+exclusive on Docker.
+
+**Corrected decision:** the instance network is a **normal bridge**. Egress-deny
+for instances is a **host-firewall** responsibility (drop forwarded traffic from
+the instance subnet except the competitor-facing ports; always block the cloud
+metadata IP `169.254.169.254`), the same posture CTFd-Whale / kCTF take. The
+`egress_policy` setting is retained as operator *intent*: `deny` (default) makes
+the `network_isolation` validate leg **remind** the operator to apply firewall
+rules — it can't verify them — rather than hard-requiring an internal network
+(which it previously, and wrongly, did). An `internal` network remains valid only
+for `exposure: none` challenges (no published port). This is a security-posture
+change: control-plane isolation and egress-deny are no longer automatic from the
+network driver; they are a documented deploy step
+(`docs/CHALLENGE_INSTANCES.md`). Everything else in the validate contract —
+proxy privilege posture, image pull, hardened probe run, public reachability —
+was confirmed working end-to-end against real Docker.

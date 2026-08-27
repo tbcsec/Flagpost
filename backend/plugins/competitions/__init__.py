@@ -35,6 +35,15 @@ ACTIVITY_EVENTS: tuple[str, ...] = (
     "challenge.guesses_reset",
     "challenge.rated",
     "challenge.hint_requested",
+    # Instance lifecycle (#266): a subject's /challenges view shows their running
+    # instances with live countdowns, so it must refetch when one changes state.
+    # Id-only frames (event + challenge_id) — no endpoint/flag leaks.
+    "challenge.instance_requested",
+    "challenge.instance_started",
+    "challenge.instance_extended",
+    "challenge.instance_expired",
+    "challenge.instance_destroyed",
+    "challenge.instance_provision_failed",
     "hint.released",
     "category.created",
     "category.deleted",

@@ -516,6 +516,7 @@ def stop() -> None:
 async def _loop(db_factory, interval_seconds: float) -> None:
     # Imported here, not at module top: retention pulls in the storage layer,
     # which the pure rule-evaluation imports above shouldn't drag along.
+    from utils.instance_reaper import reap_instances
     from utils.retention import purge_expired_competitions
     from utils.update_check import run_check
 
@@ -535,6 +536,10 @@ async def _loop(db_factory, interval_seconds: float) -> None:
             # platform housekeeping like the lifecycle events, active
             # regardless of any per-competition module toggle.
             await purge_expired_competitions(db_factory)
+            # Challenge-instance reaping (#266, ADR-0036): TTL expiry, stuck
+            # provisions, and orphan containers. Rides the same tick and is a
+            # cheap no-op when no instances exist / instancing isn't configured.
+            await reap_instances(db_factory)
             # Update check + adoption count (#111). Self-rate-limiting to once
             # a day off its own persisted timestamps, so calling it every tick
             # costs one row read that almost always returns immediately.

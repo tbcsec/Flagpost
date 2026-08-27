@@ -262,6 +262,13 @@ class DockerProvisioner(Provisioner):
         if not spec.image_ref:
             raise ProvisionerError("docker deployment has no image reference")
 
+        # Ensure the image is present — the daemon's /containers/create 404s on
+        # an absent image, so provision would otherwise fail for any image not
+        # already cached on the instance host.
+        pulled, detail = await self._pull_image(spec.image_ref)
+        if not pulled:
+            raise ProvisionerError(f"image pull failed: {detail}")
+
         name = f"flagpost-inst-{spec.instance_id}"
         created = await self._request(
             "POST",
@@ -487,7 +494,14 @@ class DockerProvisioner(Provisioner):
         )
 
     async def _probe_pull(self) -> tuple[bool, str]:
-        image = self._cfg.probe_image
+        return await self._pull_image(self._cfg.probe_image)
+
+    async def _pull_image(self, image: str) -> tuple[bool, str]:
+        """Pull ``image`` through the proxy, draining the NDJSON stream and
+        requiring the terminal completion marker (not merely the absence of an
+        error). Used by the validate probe AND by ``create`` — ``/containers/
+        create`` 404s on an absent image and a challenge image is rarely
+        pre-cached on the instance host; a present image is a fast no-op."""
         name, _, tag = image.partition(":")
         headers = (
             {"X-Registry-Auth": self._cfg.registry_auth}

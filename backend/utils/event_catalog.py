@@ -55,6 +55,17 @@ EVENT_TYPES: tuple[str, ...] = (
     "hint.published",
     "category.created",
     "category.deleted",
+    # Challenge instancing (#266, ADR-0036, optional module). Per-subject
+    # lifecycle on the background lane: requested → started, then expired (TTL)
+    # / destroyed (manual) / provision_failed. extended renews a running
+    # instance's TTL. Payloads carry ids only (activity-room routing + audit) —
+    # never the flag or connection detail.
+    "challenge.instance_requested",
+    "challenge.instance_started",
+    "challenge.instance_extended",
+    "challenge.instance_expired",
+    "challenge.instance_destroyed",
+    "challenge.instance_provision_failed",
     "user.registered",
     "user.password_changed",
     "user.email_verified",
@@ -125,6 +136,10 @@ EVENT_TYPES: tuple[str, ...] = (
     "report.generated",
     "announcement.published",
     "site.settings_updated",
+    # Instancing infrastructure config change (#266, ADR-0036 §5) — admin-domain
+    # like ai.settings_updated; carries no endpoint/credential, only who + the
+    # new enabled flag.
+    "instance.settings_updated",
     "score.adjusted",
     "achievement.awarded",
     "scoreboard.frozen",

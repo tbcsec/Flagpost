@@ -2,7 +2,8 @@
 
 Challenge instancing gives each team (or each user, in individual mode) an
 isolated, running copy of a challenge with live connection details — the
-`docker` provisioner kind, TCP exposure, shared flags. It is the optional
+`docker` provisioner kind, TCP exposure, and either a shared flag or a
+[unique per-instance flag](#unique-per-instance-flags). It is the optional
 **Challenge Instances** module (#266, ADR-0036), off by default and toggled per
 competition.
 
@@ -102,10 +103,35 @@ On a challenge, open its deployment spec (staff, `challenge_edit`):
 - **Env**: non-secret environment for the container.
 - **Resource limits / lifetime / per-subject cap**: override the site defaults
   as needed.
+- **Flag mode**: `static` (the challenge's own flag applies — everyone submits
+  the same flag) or `unique_per_instance` (see below).
 
 Staff can test-launch before publishing and while the competition is
 `not_started`; competitors launch, extend and stop from the challenge modal once
 the competition is `running`. Launch is force-disabled in demo mode.
+
+## Unique per-instance flags
+
+Set **flag mode** to `unique_per_instance` and give a **flag template** — a flag
+string containing the placeholder `<random>`, e.g. `flag{pwned-<random>}`. At
+provision time the provisioner substitutes a fresh random token for `<random>`,
+injects the rendered flag into the container **once** (env var `FLAG`), and
+stores only its salted hash on the instance row (ADR-0036 §3) — the same
+never-plaintext posture as a static flag, so staff can't read a live instance's
+flag and the remedy for a lost one is re-provisioning.
+
+- The challenge itself needs **no static flag**: grading compares a submission
+  against the submitting subject's own live instance flag(s). Publishing such a
+  challenge is allowed even though it has no static flag.
+- **Flag sharing is provable and detected.** A wrong submission that matches
+  *another* subject's live instance flag emits `challenge.flag_shared_detected`
+  (staff + automation, gated on `view_submissions`). There is **no automatic
+  penalty** — policy stays human; it is a signal, not an enforcement action.
+- First blood and dynamic decay are unchanged — they key on which subject
+  solved and how many solves exist, not on flag identity.
+- `unique_per_instance` requires a per-instance backend (`docker`); it is
+  rejected for `shared-static`, whose one shared endpoint can't hold a
+  per-subject flag.
 
 ## Guardrails and reaping
 

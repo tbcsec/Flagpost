@@ -184,6 +184,12 @@ HTTP routing second; the Kubernetes kind third, behind the same contract.
 The v1.6.0 target is the Docker path end-to-end; `kubernetes` lands in a
 following milestone unless capacity allows sooner.
 
+**Status (2026-08-28):** the Docker MVP shipped (Phases 0–1). Phase 2a —
+**unique per-instance flags** (§3): provision-time template render + inject +
+hash-store, unique-mode grading against the subject's live instance, and
+`challenge.flag_shared_detected` — has landed. Remaining Phase 2: HTTP
+subdomain routing + wildcard TLS (§4).
+
 ## Consequences
 
 - **Easier:** pwn/web-heavy events become viable on Flagpost alone. One

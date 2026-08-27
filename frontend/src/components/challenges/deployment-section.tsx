@@ -19,10 +19,14 @@ import { toast } from "@/stores/toast";
 
 // Challenge editor → Deployment (#266, ADR-0036). The per-challenge spec that
 // turns a jeopardy challenge into an instanced one: a Docker image, the TCP
-// ports competitors reach, environment, guardrails, and lifetime. At most one
-// per challenge — the editor upserts it in place. Nothing here launches an
-// instance; that's the competitor surface. Phase 1 targets the Docker backend
-// with shared flags (unique flags arrive with Phase 2).
+// ports competitors reach, environment, guardrails, lifetime, and the flag mode
+// (a shared flag, or a unique per-instance flag rendered from a template). At
+// most one per challenge — the editor upserts it in place. Nothing here launches
+// an instance; that's the competitor surface.
+
+// The placeholder a unique flag_template must contain — the backend substitutes
+// a fresh random token for it per instance (must match the backend constant).
+const FLAG_TEMPLATE_TOKEN = "<random>";
 
 function clampNum(value: string, lo: number, hi: number, fallback: number): number {
   const n = Number(value);
@@ -92,6 +96,8 @@ function DeploymentForm({
   const [pids, setPids] = useState(
     limits.pids != null ? String(limits.pids) : "",
   );
+  const [flagMode, setFlagMode] = useState(data?.flag_mode ?? "static");
+  const [flagTemplate, setFlagTemplate] = useState(data?.flag_template ?? "");
 
   function onSave() {
     if (!imageRef.trim()) {
@@ -100,6 +106,14 @@ function DeploymentForm({
     }
     if (exposure === "tcp" && ports.length === 0) {
       toast(t("portsRequired"), { variant: "destructive" });
+      return;
+    }
+    // A unique flag needs a template with the <random> placeholder so every
+    // instance renders a distinct flag; the backend re-validates this.
+    if (flagMode === "unique_per_instance" && !flagTemplate.includes(FLAG_TEMPLATE_TOKEN)) {
+      toast(t("flagTemplateRequired", { token: FLAG_TEMPLATE_TOKEN }), {
+        variant: "destructive",
+      });
       return;
     }
     const resourceLimits: Record<string, number> = {};
@@ -118,8 +132,9 @@ function DeploymentForm({
       resource_limits: Object.keys(resourceLimits).length ? resourceLimits : null,
       lifetime_s: lifetime ? clampNum(lifetime, 60, 86400, 3600) : null,
       per_subject_cap: clampNum(cap, 1, 100, 1),
-      flag_mode: "static",
-      flag_template: null,
+      flag_mode: flagMode,
+      flag_template:
+        flagMode === "unique_per_instance" ? flagTemplate.trim() : null,
     };
     upsert.mutate(payload, {
       onSuccess: () => toast(t("saved"), { variant: "success" }),
@@ -244,6 +259,43 @@ function DeploymentForm({
             placeholder={t("competitionDefault")}
           />
         </div>
+      </div>
+
+      <div className="grid gap-3 border-t border-border pt-4">
+        <div className="grid gap-2">
+          <Label htmlFor={`dep-flagmode-${challengeId}`}>{t("flagMode")}</Label>
+          <Select
+            id={`dep-flagmode-${challengeId}`}
+            value={flagMode}
+            onChange={(e) => setFlagMode(e.target.value)}
+          >
+            <option value="static">{t("flagModeStatic")}</option>
+            <option value="unique_per_instance">{t("flagModeUnique")}</option>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {flagMode === "unique_per_instance"
+              ? t("flagModeUniqueHelp")
+              : t("flagModeStaticHelp")}
+          </p>
+        </div>
+        {flagMode === "unique_per_instance" && (
+          <div className="grid gap-2">
+            <Label htmlFor={`dep-flagtemplate-${challengeId}`}>
+              {t("flagTemplate")}
+            </Label>
+            <Input
+              id={`dep-flagtemplate-${challengeId}`}
+              value={flagTemplate}
+              onChange={(e) => setFlagTemplate(e.target.value)}
+              placeholder="flag{pwned-<random>}"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t("flagTemplateHelp", { token: FLAG_TEMPLATE_TOKEN })}
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

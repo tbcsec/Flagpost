@@ -24,6 +24,7 @@ from models.challenge_instancing import (
     DEPLOYMENT_BACKENDS,
     DEPLOYMENT_EXPOSURES,
     FLAG_MODES,
+    FLAG_TEMPLATE_TOKEN,
 )
 
 # --- deployment authoring ----------------------------------------------------
@@ -60,8 +61,20 @@ class DeploymentUpdate(BaseModel):
             return "tcp exposure needs at least one container port"
         if any(not (0 < p < 65536) for p in self.ports):
             return "ports must be in 1..65535"
-        if self.flag_mode == "unique_per_instance" and not self.flag_template:
-            return "unique_per_instance flag mode needs a flag_template"
+        if self.flag_mode == "unique_per_instance":
+            if not self.flag_template:
+                return "unique_per_instance flag mode needs a flag_template"
+            if FLAG_TEMPLATE_TOKEN not in self.flag_template:
+                return (
+                    f"a unique flag_template must contain {FLAG_TEMPLATE_TOKEN} "
+                    "so each instance gets a distinct flag"
+                )
+            # A shared-static endpoint is one fixed container the whole event
+            # connects to — it can't hold a per-subject flag, so the combination
+            # would render a flag that never reaches a container and grade as
+            # unsolvable. Reject at authoring rather than silently at grading.
+            if self.backend == "shared-static":
+                return "unique_per_instance flags require a per-instance backend, not shared-static"
         return None
 
 

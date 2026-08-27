@@ -44,6 +44,7 @@ from schemas.submission import SubmitFlagRequest, SubmitResult
 from utils.competition_status import require_playable
 from utils.event_bus import event_bus
 from utils.flags import verify_regex_flag, verify_static_flag
+from utils.instance_grading import deployment_flag_mode, grade_unique
 from utils.scoring import (
     challenge_value,
     penalised_value,
@@ -104,7 +105,15 @@ async def submit_flag(
     challenge = await load_visible_challenge(
         db, competition_id, challenge_id, current_user
     )
-    if not challenge.has_flag:
+    # Unique-per-instance mode (ADR-0036 §3) lives on the challenge's deployment,
+    # not the Challenge row — so the flag is graded against the subject's live
+    # instance, and the challenge itself may carry no static flag. One indexed
+    # lookup, then it also drives the grading branch below.
+    unique_mode = (
+        await deployment_flag_mode(db, competition_id, challenge_id)
+        == "unique_per_instance"
+    )
+    if not challenge.has_flag and not unique_mode:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This challenge has no flag to submit against",
@@ -181,11 +190,23 @@ async def submit_flag(
                 detail="No guesses remaining for this question",
             )
 
-    # Grade off the event-loop thread: a regex flag runs a bounded but
-    # potentially heavy match (ADR-0018), and `regex` releases the GIL, so a
-    # single match never stalls the loop for other requests. (Static/MC grading
-    # is trivially fast; the offload is uniform and harmless there.)
-    correct = await asyncio.to_thread(_flag_matches, challenge, body.flag)
+    # Unique-per-instance grading (ADR-0036 §3): compare against the subject's
+    # own live instance flag(s), not the challenge's static config. A wrong
+    # submission that matches ANOTHER subject's live flag is provable sharing —
+    # captured here, emitted after commit. Otherwise grade off the event-loop
+    # thread: a regex flag runs a bounded but potentially heavy match (ADR-0018),
+    # and `regex` releases the GIL, so a single match never stalls the loop.
+    # (Static/MC grading is trivially fast; the offload is uniform and harmless.)
+    shared_flag_match = None
+    if unique_mode:
+        grade = await grade_unique(
+            db, competition_id, challenge_id, subject, body.flag,
+            user_id=current_user.id,
+        )
+        correct = grade.correct
+        shared_flag_match = grade.shared_with
+    else:
+        correct = await asyncio.to_thread(_flag_matches, challenge, body.flag)
     already_solved = correct and await subject_has_solved(db, challenge_id, subject)
     award = correct and not already_solved
 
@@ -301,6 +322,22 @@ async def submit_flag(
                 "team_id": subject.team_id,
                 "points": points_awarded,
                 "is_first_blood": is_first_blood,
+            },
+        )
+    if shared_flag_match is not None:
+        # A wrong submission carried another subject's live per-instance flag —
+        # provable flag sharing (ADR-0036 §3). Signal only, for staff and
+        # automation; no automatic penalty, policy stays human. ids only.
+        await event_bus.emit(
+            "challenge.flag_shared_detected",
+            {
+                "competition_id": competition_id,
+                "challenge_id": challenge_id,
+                "user_id": current_user.id,
+                "team_id": subject.team_id,
+                "matched_user_id": shared_flag_match.user_id,
+                "matched_team_id": shared_flag_match.team_id,
+                "instance_id": shared_flag_match.instance_id,
             },
         )
 

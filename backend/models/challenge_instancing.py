@@ -61,6 +61,10 @@ DEPLOYMENT_EXPOSURES = ("tcp", "http", "none")
 # "static" = the challenge's ordinary flag config applies (static/regex/MCQ);
 # "unique_per_instance" = render flag_template at provision time (ADR-0036 §3).
 FLAG_MODES = ("static", "unique_per_instance")
+# The placeholder a unique-mode flag_template must contain; the provisioner
+# substitutes a fresh random token for it at provision time so every instance
+# gets a distinct flag. Authoring validation requires it to be present.
+FLAG_TEMPLATE_TOKEN = "<random>"
 
 # --- instance lifecycle ------------------------------------------------------
 

@@ -22,7 +22,7 @@ public demo on every merge).
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
 
@@ -50,12 +50,16 @@ class ProvisionSpec:
     memory on its way into the instance (ADR-0036 §3).
     """
 
+    # The instance row's id — names/labels the backend resource so the row and
+    # the container map 1:1 (and the orphan reaper can diff by label).
+    instance_id: str
     deployment_id: str
     challenge_id: str
     competition_id: str
     image_ref: str | None
     manifest: dict[str, Any] | None
     exposure: str
+    # Container ports the image listens on, e.g. [1337].
     ports: list[int]
     env: dict[str, str]
     resource_limits: dict[str, Any] | None
@@ -63,8 +67,13 @@ class ProvisionSpec:
     # The credited subject key (team id in team mode, user id otherwise) —
     # used for naming/labelling backend resources, never for auth decisions.
     subject_key: str
+    # Container-port → host-port bindings the lifecycle service allocated from
+    # the configured range (ADR-0036 §4). Empty for exposure="none".
+    host_ports: dict[int, int] = field(default_factory=dict)
     # Plaintext unique flag to inject, or None in static mode. Never stored.
     flag_plaintext: str | None = None
+    # Env var the unique flag is injected under when flag_plaintext is set.
+    flag_env: str = "FLAG"
 
 
 class ProvisionerError(Exception):

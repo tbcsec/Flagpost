@@ -402,10 +402,19 @@ class DockerProvisioner(Provisioner):
         # 2. Privilege posture — the security-critical leg. The proxy must
         # return 403 for dangerous verbs; anything else means its allowlist is
         # NOT in force and the endpoint is effectively a raw socket.
+        #
+        # The exec probe targets ``/exec/<id>/start``, NOT ``/containers/<id>/
+        # exec``: the socket proxy gates the latter under CONTAINERS (which we
+        # *require* for create/start/inspect), so it forwards it to the daemon
+        # regardless — verified against tecnativa/docker-socket-proxy. The
+        # danger — running a command inside a live instance — is neutralised by
+        # blocking exec *start*, which the proxy's own EXEC flag governs and
+        # returns 403 for when off. Probing the container path instead reported a
+        # false posture failure on a correctly-restricted proxy.
         posture_ok = True
         posture_notes: list[str] = []
         for label, method, path in (
-            ("exec", "POST", "/containers/flagpost-probe-nonexistent/exec"),
+            ("exec", "POST", "/exec/flagpost-probe/start"),
             ("volumes", "GET", "/volumes"),
             ("build", "POST", "/build"),
         ):

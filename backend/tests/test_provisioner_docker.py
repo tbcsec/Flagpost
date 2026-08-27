@@ -317,6 +317,28 @@ async def test_validate_all_green():
     assert "39999" in legs[-1].detail
 
 
+async def test_posture_exec_probe_targets_the_exec_start_path():
+    # The exec danger is blockable at POST /exec/<id>/start (the proxy's EXEC
+    # flag → 403), NOT /containers/<id>/exec, which the proxy gates under
+    # CONTAINERS (required for create/start/inspect) and therefore FORWARDS to
+    # the daemon (400/404, never 403). Probing the container path reported a
+    # false posture failure against a correctly-restricted socket proxy — caught
+    # by testing against a real tecnativa/docker-socket-proxy.
+    router = _healthy_router()
+    prov = DockerProvisioner(_cfg(), transport=router.transport(), tcp_probe=lambda h, p: _true())
+    await prov.validate()
+    exec_reqs = [r for r in router.requests if "/exec" in r.url.path]
+    assert exec_reqs, "no exec posture probe was made"
+    assert all(r.url.path.startswith("/exec/") for r in exec_reqs), [
+        r.url.path for r in exec_reqs
+    ]
+    # And never the CONTAINERS-gated path that a compliant proxy won't 403.
+    assert not any(
+        "/containers/" in r.url.path and r.url.path.endswith("/exec")
+        for r in router.requests
+    )
+
+
 async def test_validate_flags_an_unrestricted_proxy_and_stops():
     # VOLUMES not blocked (200) ⇒ the proxy allowlist is not in force.
     router = _healthy_router()

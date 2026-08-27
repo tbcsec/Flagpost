@@ -63,15 +63,16 @@ _DEFAULT_PROBE_IMAGE = "alpine:3.20"
 # container would fail (no CAP_NET_BIND_SERVICE).
 _PROBE_PORT = 45000
 
-# Probe listener command. busybox-safe: NO `-e` (exec is compiled out of most
-# busybox nc builds) and NO `-k` (keep-alive is not in busybox nc) — a
-# re-listening loop of single-shot `nc -l -p PORT` accepts each dial and closes.
-# Overridable per install for images without busybox nc.
-_DEFAULT_PROBE_CMD = [
-    "sh",
-    "-c",
-    f"while true; do nc -l -p {_PROBE_PORT} </dev/null >/dev/null 2>&1 || sleep 1; done",
-]
+# Probe listener command for the reachability leg. Deliberately **exec-form
+# argv, never `sh -c`**: there is no shell to parse it and nothing is
+# string-interpolated, so this can never become a shell-injection sink even if a
+# future change makes the port configurable. It also avoids `nc`'s dangerous
+# modes entirely — NO `-e`/`-c` (execute-on-connect, the classic netcat RCE) and
+# NO `-k` (unsupported in busybox anyway). A single-shot `nc -l -p PORT`: the one
+# reachability dial connects, nc relays nothing (its stdin is the container's
+# empty stdin, no `-e` to run anything), the dial closes, nc exits, the
+# AutoRemove container is gone. Overridable per install for non-busybox images.
+_DEFAULT_PROBE_CMD = ["nc", "-l", "-p", str(_PROBE_PORT)]
 
 
 async def _tcp_dial(host: str, port: int, timeout: float = 5.0) -> bool:

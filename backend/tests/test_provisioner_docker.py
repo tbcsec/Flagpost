@@ -373,15 +373,51 @@ async def test_validate_rejects_truncated_pull_stream():
     assert not router.saw("POST", "/containers/create")
 
 
-def test_probe_command_is_busybox_safe_and_unprivileged():
-    # The reachability probe must not depend on nc -e/-k (not in busybox) and
-    # must listen on an unprivileged port (CapDrop ALL forbids <1024).
+def test_probe_command_is_shell_free_execform_and_unprivileged():
+    # The reachability probe must be exec-form argv (NO shell to inject into),
+    # must not use nc's execute-on-connect (-e/-c, the classic RCE) or -k
+    # (unsupported in busybox), and must bind an unprivileged port (CapDrop ALL
+    # forbids <1024). See the security note in provisioner_docker.py.
     from utils.provisioner_docker import _DEFAULT_PROBE_CMD, _PROBE_PORT
 
-    joined = " ".join(_DEFAULT_PROBE_CMD)
-    assert " -e " not in joined and "-lk" not in joined and "nc -k" not in joined
+    # Exec form: argv list, launched directly, not through a shell.
+    assert isinstance(_DEFAULT_PROBE_CMD, list)
+    assert _DEFAULT_PROBE_CMD[0] == "nc"
+    assert "sh" not in _DEFAULT_PROBE_CMD and "-c" not in _DEFAULT_PROBE_CMD
+    # No execute-on-connect and no unsupported keep-alive.
+    for arg in _DEFAULT_PROBE_CMD:
+        assert arg not in ("-e", "-c", "-k", "-lk", "-lke")
+    # The only interpolated value is the constant port, as its own argv element.
+    assert str(_PROBE_PORT) in _DEFAULT_PROBE_CMD
     assert _PROBE_PORT >= 1024
-    assert str(_PROBE_PORT) in joined
+
+
+async def test_real_challenge_create_wraps_nothing_in_a_shell():
+    # The invariant behind the nc concern: a REAL instance runs the author's
+    # image entrypoint untouched — Flagpost never sets a Cmd for a real
+    # challenge, so no author/competitor input is ever placed on a command line
+    # or through a shell. The flag and env travel as structured Env entries
+    # (execve environment), not interpolated into any command.
+    router = (
+        _Router()
+        .on("POST", "/containers/create", httpx.Response(201, json={"Id": "x"}))
+        .on("POST", "/start", httpx.Response(204))
+    )
+    prov = DockerProvisioner(_cfg(), transport=router.transport())
+    await prov.create(
+        _spec(
+            env={"EVIL": "$(touch /pwned)", "SEMI": "a; rm -rf /"},
+            flag_plaintext="flag{`id`}",
+        )
+    )
+    body = router.create_body()
+    # No command at all — the image's own entrypoint runs.
+    assert "Cmd" not in body
+    assert "Entrypoint" not in body
+    # The shell-metacharacter env values are passed as inert structured Env,
+    # never a shell string.
+    assert "EVIL=$(touch /pwned)" in body["Env"]
+    assert "FLAG=flag{`id`}" in body["Env"]
 
 
 async def test_start_304_already_started_is_success():

@@ -19,6 +19,14 @@ type AuthStatus = "loading" | "authenticated" | "anonymous";
 // override ?? site-default and mirrors it onto <html data-palette>.
 const PALETTE_OVERRIDE_KEY = "fp:palette-override";
 
+// The active-competition selection is client/UI context (§2), persisted so a
+// page reload keeps the competition the user was working in instead of snapping
+// back to the first one (#316). It is a plain id, not a credential — the shell
+// re-validates it against the competitions the current user can actually see
+// before trusting it, and it's cleared on logout so a different user on the same
+// browser doesn't inherit it. `hydrateActiveCompetition` restores it on load.
+const ACTIVE_COMPETITION_KEY = "fp:active-competition";
+
 interface AuthState {
   accessToken: string | null;
   user: User | null;
@@ -31,6 +39,9 @@ interface AuthState {
   setUser: (user: User) => void;
   clearSession: () => void;
   setActiveCompetition: (competitionId: string | null) => void;
+  /** Restore the persisted active competition on load. SSR-safe; a no-op when
+   *  nothing is stored. The shell validates the restored id before trusting it. */
+  hydrateActiveCompetition: () => void;
   setPaletteOverride: (palette: string | null) => void;
   hydratePaletteOverride: () => void;
 }
@@ -45,10 +56,39 @@ export const useAuthStore = create<AuthState>((set) => ({
   setSession: (accessToken, user) =>
     set({ accessToken, user, status: "authenticated" }),
   setUser: (user) => set({ user }),
-  clearSession: () =>
-    set({ accessToken: null, user: null, status: "anonymous" }),
-  setActiveCompetition: (competitionId) =>
-    set({ activeCompetitionId: competitionId }),
+  clearSession: () => {
+    // Logout (or a failed refresh) forgets the persisted competition so the next
+    // user on this browser starts from their own default, not the last one (#316).
+    try {
+      window.localStorage.removeItem(ACTIVE_COMPETITION_KEY);
+    } catch {
+      /* SSR / private mode — non-fatal */
+    }
+    set({
+      accessToken: null,
+      user: null,
+      status: "anonymous",
+      activeCompetitionId: null,
+    });
+  },
+  setActiveCompetition: (competitionId) => {
+    try {
+      if (competitionId)
+        window.localStorage.setItem(ACTIVE_COMPETITION_KEY, competitionId);
+      else window.localStorage.removeItem(ACTIVE_COMPETITION_KEY);
+    } catch {
+      /* SSR / private mode — the choice just won't survive a reload */
+    }
+    set({ activeCompetitionId: competitionId });
+  },
+  hydrateActiveCompetition: () => {
+    try {
+      const saved = window.localStorage.getItem(ACTIVE_COMPETITION_KEY);
+      if (saved) set({ activeCompetitionId: saved });
+    } catch {
+      /* no-op */
+    }
+  },
   setPaletteOverride: (palette) => {
     try {
       if (palette) window.localStorage.setItem(PALETTE_OVERRIDE_KEY, palette);

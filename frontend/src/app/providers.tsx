@@ -10,6 +10,7 @@ import { ThemeApplier } from "@/components/theme/theme-applier";
 import { ConfirmProvider } from "@/components/ui/confirm";
 import { Toaster } from "@/components/ui/toaster";
 import { authApi } from "@/lib/api";
+import { useAuthStore } from "@/stores/auth";
 
 // Defaults per §8: short-but-non-zero staleTime (real-time updates arrive over
 // the WebSocket layer later, not via polling) and no refetch-on-focus.
@@ -31,6 +32,11 @@ function SessionRestorer() {
   useEffect(() => {
     if (started.current) return;
     started.current = true;
+    // Restore the persisted active-competition selection (#316) synchronously,
+    // before the auth-gated shell mounts, so a reload keeps the user's
+    // competition instead of snapping to the first one. The shell re-validates
+    // the restored id against the competitions the user can see.
+    useAuthStore.getState().hydrateActiveCompetition();
     void authApi.restore();
   }, []);
   return null;

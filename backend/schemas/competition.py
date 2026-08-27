@@ -38,6 +38,9 @@ class CompetitionCreate(BaseModel):
     brackets: list[str] = Field(default_factory=list, max_length=20)
     # Max members per team (team-mode); null = unlimited.
     max_team_size: int | None = Field(default=None, ge=1, le=1000)
+    # Challenge instancing policy (#266); null = site defaults apply.
+    instance_max_alive: int | None = Field(default=None, ge=1, le=1000)
+    instance_lifetime_s: int | None = Field(default=None, ge=60, le=86400)
     # Halt gameplay (competitors can't submit flags); staff still can.
     paused: bool = False
     # Per-competition rules / code-of-conduct override (#57); null = use the
@@ -76,6 +79,8 @@ class CompetitionUpdate(BaseModel):
     ctftime_enabled: bool | None = None
     brackets: list[str] | None = Field(default=None, max_length=20)
     max_team_size: int | None = Field(default=None, ge=1, le=1000)
+    instance_max_alive: int | None = Field(default=None, ge=1, le=1000)
+    instance_lifetime_s: int | None = Field(default=None, ge=60, le=86400)
     paused: bool | None = None
     # Explicit null clears the override (falls back to the site-wide rules);
     # a new/changed non-null value forces re-acceptance (see the router).
@@ -116,6 +121,8 @@ class CompetitionOut(BaseModel):
     ctftime_enabled: bool = False
     brackets: list[str] = Field(default_factory=list)
     max_team_size: int | None = None
+    instance_max_alive: int | None = None
+    instance_lifetime_s: int | None = None
     paused: bool = False
     # The scoreboard-freeze instant (null = live). Surfaced so the settings
     # "Controls" panel can show Freeze/Unfreeze without loading the board.

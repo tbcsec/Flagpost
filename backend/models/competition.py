@@ -109,6 +109,12 @@ class Competition(Base, TimestampMixin):
     brackets: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Max members per team (team-mode). Null = unlimited. Enforced at join.
     max_team_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Challenge instancing (#266, ADR-0036) per-competition policy. Null = fall
+    # back to the site defaults. instance_max_alive caps how many instances one
+    # subject may hold at once across the competition; instance_lifetime_s is the
+    # default session length before TTL reaping (a deployment may override it).
+    instance_max_alive: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    instance_lifetime_s: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Paused = gameplay is halted: competitors can't submit flags (staff still
     # can, to test). Distinct from a scoreboard freeze (which only stops the
     # board from moving publicly). Toggled in competition settings.

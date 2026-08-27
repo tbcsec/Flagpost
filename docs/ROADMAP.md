@@ -449,9 +449,31 @@ changes. Releases up to v1.5.0 remain available under AGPL-3.0 as published.
 
 Summarised from the open milestones; the milestone pages are authoritative.
 
-- **v1.6.0** — the live milestone. See the
-  [milestones page](https://github.com/tbcsec/flagpost/milestones) for the
-  current list.
+- **v1.6.0** — the live milestone (accumulating on `main`; not yet tagged). See
+  the [milestones page](https://github.com/tbcsec/flagpost/milestones) for the
+  full list. **Landed so far:**
+  - **Challenge instancing — Docker MVP** (#266, ADR-0036) — per-team (or
+    per-user) isolated, running instances of a challenge with live connection
+    details. An optional **`instances` module** built on a **provisioner kind
+    registry** (`docker`, `shared-static`, with `kubernetes` reserved — a new
+    backend is a new kind, not a fork): a hardened Docker provisioner over a
+    least-privilege **socket proxy** (dropped caps, `no-new-privileges`,
+    read-only rootfs, cpu/mem/pids limits, image pull-on-create), the
+    `challenge_instance` row as its own background-lane job through a
+    `requested → running → destroyed` state machine, a TCP **port allocator**,
+    and a scheduler **reaper** (TTL / stuck / orphan GC) — **no new process**.
+    A staged **"Test connection"** validator surfaces proxy/network/reachability
+    misconfig as labelled admin-UI errors. Full UI: admin infra config,
+    per-challenge deployment authoring, the competitor challenge-modal (launch /
+    live countdown / connection block / extend / stop, live over the activity
+    room), and a staff ops view (list + force-kill). Ships **inert** (off until
+    an operator configures a provisioner), per-competition toggle. Scope: shared
+    flags + TCP exposure, single-host or remote-host (the topology is a URL);
+    egress-deny is a **host-firewall** step, not a Docker internal network
+    (ADR-0036 amended after live-testing against a real daemon). Deploy overlay +
+    guide in `docs/CHALLENGE_INSTANCES.md`. Unique-per-instance flags, HTTP
+    subdomain routing + wildcard TLS, spawn rate-limiting, and the Kubernetes
+    kind are the follow-on phases.
 
 **Deferred this cycle:** the **Major League Cyber integration** (#59) was triaged
 out of v1.5.0 and closed as not-planned — its SSO half is subsumed by the

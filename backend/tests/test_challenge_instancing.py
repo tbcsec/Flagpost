@@ -56,6 +56,7 @@ async def _make_challenge(client, comp: str) -> str:
 
 def _spec(**over) -> ProvisionSpec:
     base = dict(
+        instance_id="i1",
         deployment_id="d1",
         challenge_id="c1",
         competition_id="comp1",

@@ -1435,6 +1435,17 @@ export interface Instance {
   failure_reason: string | null;
 }
 
+/** The staff ops view of an instance — adds the subject + backend handle the
+ *  competitor view hides (GET /competitions/{c}/instances, instance_view). */
+export interface AdminInstance extends Instance {
+  competition_id: string;
+  user_id: string;
+  team_id: string | null;
+  backend_handle: string | null;
+  created_at: string | null;
+  last_seen_at: string | null;
+}
+
 /** Upsert payload — the full spec is replaced on each save (PUT). */
 export interface ChallengeDeploymentUpdate {
   backend: string;

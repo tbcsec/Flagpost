@@ -33,6 +33,7 @@ import type {
   ChallengeDeployment,
   ChallengeDeploymentUpdate,
   Instance,
+  AdminInstance,
   AiAssistantType,
   AiAvailability,
   AiCompetitionSettings,
@@ -1276,6 +1277,18 @@ export const instanceApi = {
     apiFetch<{ status: string }>(instanceApi.base(competitionId, challengeId), {
       method: "DELETE",
     }),
+};
+
+// Staff running-instance ops (#266): list every active instance in a
+// competition (instance_view) and force-kill any (instance_manage).
+export const instanceOpsApi = {
+  list: (competitionId: string) =>
+    apiFetch<AdminInstance[]>(`/api/competitions/${competitionId}/instances`),
+  kill: (competitionId: string, instanceId: string) =>
+    apiFetch<{ status: string }>(
+      `/api/competitions/${competitionId}/instances/${instanceId}`,
+      { method: "DELETE" },
+    ),
 };
 
 // The administrator assistant's conversation API (#98, ADR-0023 Phase 2).

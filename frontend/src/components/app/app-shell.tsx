@@ -77,6 +77,10 @@ const transcriptIcon: Icon = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><path d="M8 8h8M8 12h5" /></svg>
 );
 
+const instancesIcon: Icon = (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="7" rx="1" /><rect x="3" y="13" width="18" height="7" rx="1" /><path d="M7 7.5h.01M7 16.5h.01" /></svg>
+);
+
 // `manage: true` items are shown only to a Judge/organiser of the active
 // competition (gated by useAccess); the rest are competitor-facing. `module`
 // ties an item to an optional module (§11.3) — the item is hidden when that
@@ -96,6 +100,7 @@ type NavKey =
   | "analytics"
   | "automations"
   | "aiTranscripts"
+  | "instances"
   | "settings";
 
 const COMP_NAV: {
@@ -117,6 +122,9 @@ const COMP_NAV: {
   // Competitor-assistant transcript review (#98) — its own grant, not the
   // manage bundle, so a transcripts-only reviewer role reaches it.
   { href: "/ai-transcripts", key: "aiTranscripts", icon: transcriptIcon, module: "ai", permission: "ai_view_transcripts" },
+  // Running-instance ops (#266) — its own grant (instance_view), shown only when
+  // the instances module is enabled for the competition.
+  { href: "/instances", key: "instances", icon: instancesIcon, module: "instances", permission: "instance_view" },
   { href: "/settings", key: "settings", icon: settingsIcon, manage: true },
 ];
 

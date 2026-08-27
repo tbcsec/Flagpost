@@ -19,6 +19,7 @@ import { Lockup } from "@/components/brand/flagpost-mark";
 import { PaletteMenu } from "@/components/theme/palette-menu";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
+import { pickActiveCompetitionId } from "@/lib/competition-selection";
 import { useCompetitions } from "@/lib/hooks/use-competitions";
 import { severityStyle } from "@/lib/announcement-severity";
 import { useActivityLive } from "@/lib/hooks/use-activity";
@@ -535,11 +536,18 @@ function Topbar({
   const unreadCount = items.reduce((n, item) => (item.read ? n : n + 1), 0);
   const hasUnread = unreadCount > 0;
 
-  // Default the active competition to the first one once the list loads.
+  // Resolve the active competition once the list loads: keep the current (or
+  // localStorage-restored, #316) selection when it's still visible, otherwise
+  // fall back to the first. This both seeds the initial default and corrects a
+  // stale/foreign restored id (deleted competition, or a different user on this
+  // browser) — leaving the switcher pointing at something the user can't load.
   React.useEffect(() => {
-    if (!activeCompetitionId && competitions && competitions.length > 0) {
-      setActiveCompetition(competitions[0].id);
-    }
+    if (!competitions || competitions.length === 0) return;
+    const next = pickActiveCompetitionId(
+      activeCompetitionId,
+      competitions.map((c) => c.id),
+    );
+    if (next && next !== activeCompetitionId) setActiveCompetition(next);
   }, [activeCompetitionId, competitions, setActiveCompetition]);
 
   React.useEffect(() => {

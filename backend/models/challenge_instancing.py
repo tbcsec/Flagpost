@@ -25,6 +25,8 @@ from uuid import uuid4
 
 from sqlalchemy import (
     JSON,
+    Boolean,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -35,6 +37,18 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base, CompetitionScopedMixin, TimestampMixin, UtcDateTime
 from datetime import datetime
+
+from utils.crypto import EncryptedString
+
+# Site-level provisioner config is a singleton, like ai_settings / site_settings.
+INSTANCE_SETTINGS_ID = "instances"
+# Orchestrating backends the *site* configures. "shared-static" is inherently
+# per-deployment (fixed endpoints in the challenge's manifest), so it is not a
+# site backend — only these run a lifecycle.
+SITE_BACKENDS = ("docker", "kubernetes")
+DEFAULT_TCP_PORT_MIN = 30000
+DEFAULT_TCP_PORT_MAX = 32767
+DEFAULT_MAX_CONCURRENT = 100
 
 # --- deployment spec vocab ---------------------------------------------------
 
@@ -84,6 +98,84 @@ def instance_can_transition(current: str, target: str) -> bool:
     if current == target:
         return True
     return target in INSTANCE_TRANSITIONS.get(current, ())
+
+
+class InstanceSettings(Base, TimestampMixin):
+    """Site-level provisioner configuration (ADR-0036 §5), a singleton like
+    ``ai_settings``. Site-wide, so **no** ``CompetitionScopedMixin``.
+
+    Ships unconfigured and disabled: the instances module is inert until an
+    operator points it at a container-runtime endpoint and enables it, on top
+    of the per-competition module toggle — the AI-module posture (ADR-0023).
+    Nothing here is environment-portable (a Docker endpoint is specific to the
+    host), so this row is deliberately excluded from the backup export, like
+    the operator's other infrastructure credentials.
+    """
+
+    __tablename__ = "instance_settings"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=INSTANCE_SETTINGS_ID
+    )
+    # Master switch. Off until an operator configures + enables a backend; no
+    # provisioning happens while false. Enabling is refused at the API unless
+    # backend + endpoint are set, so "enabled but unconfigured" isn't reachable
+    # (the AiSettings / identity-provider posture).
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    # Orchestrating backend kind (SITE_BACKENDS).
+    backend: Mapped[str] = mapped_column(
+        String, nullable=False, default="docker", server_default="docker"
+    )
+    # The container-runtime API endpoint — **always** a least-privilege socket
+    # proxy (ADR-0036 §1), never a raw Docker socket. A trusted operator setting
+    # (the SMTP-host / OIDC-issuer class), so not run through the ADR-0013 SSRF
+    # blocklist: it is expected to point at a private address (the sidecar, or a
+    # challenge host on a private subnet).
+    endpoint_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Public hostname competitors connect to (TCP host / HTTP subdomain base).
+    public_host: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Registry auth for private challenge images. Presented to the runtime, so
+    # encrypted at rest not hashed (ADR-0020), write-only over the API, dropped
+    # from backup — and deferred, so re-entering a rotated credential on the
+    # settings page can't 500 on a decrypt mismatch (the AiSettings.api_key
+    # lesson).
+    registry_credentials: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True
+    )
+    # TCP exposure port range on the instance host (inclusive).
+    tcp_port_min: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=DEFAULT_TCP_PORT_MIN,
+        server_default=str(DEFAULT_TCP_PORT_MIN),
+    )
+    tcp_port_max: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=DEFAULT_TCP_PORT_MAX,
+        server_default=str(DEFAULT_TCP_PORT_MAX),
+    )
+    # Default per-instance resource limits, overridable per deployment.
+    # Fractional CPUs (0.5) are the common case, so Float; the generic type
+    # carries across SQLite/Postgres.
+    default_cpu: Mapped[float] = mapped_column(
+        Float, nullable=False, default=1.0, server_default="1"
+    )
+    default_memory_mb: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=256, server_default="256"
+    )
+    default_pids: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=256, server_default="256"
+    )
+    # Global ceiling on simultaneously-live instances across all competitions —
+    # the compute-exhaustion backstop (ADR-0036 §5).
+    max_concurrent: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=DEFAULT_MAX_CONCURRENT,
+        server_default=str(DEFAULT_MAX_CONCURRENT),
+    )
+    # Instance egress policy: "deny" (default — no outbound from instances) or
+    # "allow" (per-competition opt-in for challenges that need the internet).
+    egress_policy: Mapped[str] = mapped_column(
+        String, nullable=False, default="deny", server_default="deny"
+    )
 
 
 class ChallengeDeployment(Base, CompetitionScopedMixin, TimestampMixin):

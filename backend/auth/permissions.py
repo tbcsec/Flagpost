@@ -147,6 +147,21 @@ PERMISSIONS: tuple[Permission, ...] = (
     # Audit — reading the cross-competition event log (§3.3). Site oversight, so
     # global-scoped and Administrator-only among the built-in roles.
     Permission("view_audit_log", "Audit", Scope.GLOBAL),
+    # Challenge instancing (#266, ADR-0036). Site provisioner configuration —
+    # its own grant for the same reason as auth providers and AI: it holds
+    # infrastructure credentials and points the platform at a container runtime,
+    # materially higher-stakes than a palette or SMTP host. Administrator-only
+    # among the built-in roles.
+    Permission("manage_instance_infra", "Site Settings", Scope.GLOBAL),
+    # Launch a per-subject challenge instance (competitor-facing). Held by
+    # Participant, but every launch is *additionally* gated server-side by
+    # challenge eligibility (published, released, prerequisites met, competition
+    # running) — the permission is the floor, not the whole check.
+    Permission("instance_launch", "Challenge Instances", Scope.COMPETITION),
+    # See every running instance in a competition + resource usage (staff ops).
+    Permission("instance_view", "Challenge Instances", Scope.COMPETITION),
+    # Kill or extend any subject's instance (staff moderation).
+    Permission("instance_manage", "Challenge Instances", Scope.COMPETITION),
 )
 
 PERMISSIONS_BY_KEY: dict[str, Permission] = {p.key: p for p in PERMISSIONS}
@@ -210,6 +225,14 @@ JUDGE_PERMISSIONS: list[str] = [
     "automation_view",
     "automation_create",
     "automation_edit",
+    # Challenge instances (#266): a Judge sees and moderates every subject's
+    # instance in their competition — "full operational control" (§7.3).
+    # Reaches existing installs via the startup role re-sync. Not
+    # manage_instance_infra: site provisioner config stays Administrator-only.
+    "instance_view",
+    "instance_manage",
+    # A Judge may also launch (e.g. to test a challenge before publish).
+    "instance_launch",
 ]
 
 # Participant: competitor-facing only — view challenges, view the scoreboard,
@@ -221,4 +244,8 @@ PARTICIPANT_PERMISSIONS: list[str] = [
     "ticket_respond",
     # Answer a post-competition survey (ROADMAP #22).
     "feedback_submit",
+    # Launch a per-subject instance of an eligible challenge (#266). The launch
+    # route re-checks challenge eligibility and competition status on top of
+    # this floor grant.
+    "instance_launch",
 ]

@@ -262,3 +262,127 @@ async def test_one_deployment_per_challenge(client):
         )
         with pytest.raises(IntegrityError):
             await session.commit()
+
+
+# --- P1a: settings, permissions, per-competition policy ----------------------
+
+
+def test_new_permissions_are_catalogued_and_role_granted():
+    from auth.permissions import (
+        ALL_PERMISSION_KEYS,
+        ADMINISTRATOR_PERMISSIONS,
+        JUDGE_PERMISSIONS,
+        PARTICIPANT_PERMISSIONS,
+    )
+
+    keys = (
+        "manage_instance_infra",
+        "instance_launch",
+        "instance_view",
+        "instance_manage",
+    )
+    for k in keys:
+        assert k in ALL_PERMISSION_KEYS
+        assert k in ADMINISTRATOR_PERMISSIONS  # Administrator holds everything
+
+    # Competitor-facing launch reaches Participants; staff view/manage do not.
+    assert "instance_launch" in PARTICIPANT_PERMISSIONS
+    assert "instance_view" not in PARTICIPANT_PERMISSIONS
+    assert "instance_manage" not in PARTICIPANT_PERMISSIONS
+
+    # A Judge runs their competition: launch + view + manage, but site
+    # provisioner config stays Administrator-only.
+    for k in ("instance_launch", "instance_view", "instance_manage"):
+        assert k in JUDGE_PERMISSIONS
+    assert "manage_instance_infra" not in JUDGE_PERMISSIONS
+
+
+async def test_seeded_roles_carry_the_new_grants(client):
+    # The startup role re-sync (seed_system_roles) runs in the test bootstrap,
+    # so an existing install's built-in roles gain the keys with no migration.
+    from sqlalchemy import select
+
+    from models.role import Role
+
+    async with SessionLocal() as session:
+        admin = await session.scalar(
+            select(Role).where(Role.name == "Administrator", Role.is_system.is_(True))
+        )
+        judge = await session.scalar(
+            select(Role).where(Role.name == "Judge", Role.is_system.is_(True))
+        )
+        participant = await session.scalar(
+            select(Role).where(Role.name == "Participant", Role.is_system.is_(True))
+        )
+    assert "manage_instance_infra" in admin.permissions
+    assert "instance_manage" in judge.permissions
+    assert "manage_instance_infra" not in judge.permissions
+    assert "instance_launch" in participant.permissions
+    assert "instance_view" not in participant.permissions
+
+
+async def test_instance_settings_singleton_defaults():
+    from models.challenge_instancing import (
+        DEFAULT_MAX_CONCURRENT,
+        DEFAULT_TCP_PORT_MAX,
+        DEFAULT_TCP_PORT_MIN,
+        INSTANCE_SETTINGS_ID,
+        InstanceSettings,
+    )
+
+    async with SessionLocal() as session:
+        row = InstanceSettings()
+        session.add(row)
+        await session.commit()
+        await session.refresh(row)
+
+    assert row.id == INSTANCE_SETTINGS_ID
+    # Ships inert: disabled, no endpoint, deny-egress by default.
+    assert row.enabled is False
+    assert row.backend == "docker"
+    assert row.endpoint_url is None
+    assert row.egress_policy == "deny"
+    assert row.tcp_port_min == DEFAULT_TCP_PORT_MIN
+    assert row.tcp_port_max == DEFAULT_TCP_PORT_MAX
+    assert row.max_concurrent == DEFAULT_MAX_CONCURRENT
+    assert row.default_cpu == 1.0
+
+
+async def test_competition_instancing_policy_roundtrips(client):
+    token = await admin_token(client)
+
+    created = await client.post(
+        "/api/competitions",
+        json={"name": "Instanced", "instance_max_alive": 3, "instance_lifetime_s": 1800},
+        headers=_auth(token),
+    )
+    assert created.status_code == 201, created.text
+    comp_id = created.json()["id"]
+    assert created.json()["instance_max_alive"] == 3
+    assert created.json()["instance_lifetime_s"] == 1800
+
+    # PATCH overrides via the ordinary competition update (setattr path).
+    patched = await client.patch(
+        f"/api/competitions/{comp_id}",
+        json={"instance_max_alive": 1},
+        headers=_auth(token),
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["instance_max_alive"] == 1
+    assert patched.json()["instance_lifetime_s"] == 1800  # untouched
+
+    # Null policy is legal (means "use site defaults") and is what a
+    # competition created without the fields carries.
+    plain = await client.post(
+        "/api/competitions", json={"name": "Plain"}, headers=_auth(token)
+    )
+    assert plain.json()["instance_max_alive"] is None
+    assert plain.json()["instance_lifetime_s"] is None
+
+    # Out-of-range values are rejected by the schema, not silently clamped.
+    bad = await client.patch(
+        f"/api/competitions/{comp_id}",
+        json={"instance_lifetime_s": 5},  # below the 60s floor
+        headers=_auth(token),
+    )
+    assert bad.status_code == 422

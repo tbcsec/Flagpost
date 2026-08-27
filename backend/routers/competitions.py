@@ -207,6 +207,8 @@ async def create_competition(
         ctftime_enabled=body.ctftime_enabled,
         brackets=body.brackets or None,
         max_team_size=body.max_team_size,
+        instance_max_alive=body.instance_max_alive,
+        instance_lifetime_s=body.instance_lifetime_s,
         paused=body.paused,
         rules_override=body.rules_override,
         rules_display_only=body.rules_display_only,

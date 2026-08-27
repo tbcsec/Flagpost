@@ -1444,6 +1444,10 @@ export interface AdminInstance extends Instance {
   backend_handle: string | null;
   created_at: string | null;
   last_seen_at: string | null;
+  /** Human labels resolved server-side (fall back to ids). subject_label is the
+   *  team name (team mode) or the requesting user's display name. */
+  challenge_title: string | null;
+  subject_label: string | null;
 }
 
 /** Upsert payload — the full spec is replaced on each save (PUT). */

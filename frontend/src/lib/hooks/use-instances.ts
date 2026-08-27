@@ -6,7 +6,12 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { ApiError, deploymentsApi, instancesAdminApi } from "@/lib/api";
+import {
+  ApiError,
+  deploymentsApi,
+  instanceApi,
+  instancesAdminApi,
+} from "@/lib/api";
 import type {
   ChallengeDeploymentUpdate,
   InstanceSettingsUpdate,
@@ -93,5 +98,74 @@ export function useDeleteChallengeDeployment(
         deploymentKeys.detail(competitionId, challengeId),
         null,
       ),
+  });
+}
+
+// --- competitor: my instance of a challenge ----------------------------------
+
+const instanceKeys = {
+  detail: (competitionId: string, challengeId: string) =>
+    ["instance", competitionId, challengeId] as const,
+};
+
+/** The requesting subject's own active instance of a challenge, or `null` when
+ *  they have none (GET 404). Live over the activity room: a `challenge.instance_*`
+ *  ping invalidates the `["instance", competitionId]` prefix (see lib/live.ts),
+ *  so the panel reflects provisioning → running → expired without polling. Pass
+ *  `enabled=false` to skip the fetch (challenge not instanced / module off / dialog
+ *  closed). */
+export function useMyInstance(
+  competitionId: string,
+  challengeId: string,
+  enabled = true,
+) {
+  const isAuthenticated = useAuthStore((s) => s.status === "authenticated");
+  return useQuery({
+    queryKey: instanceKeys.detail(competitionId, challengeId),
+    queryFn: async () => {
+      try {
+        return await instanceApi.get(competitionId, challengeId);
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null;
+        throw err;
+      }
+    },
+    enabled:
+      isAuthenticated && enabled && Boolean(competitionId) && Boolean(challengeId),
+  });
+}
+
+export function useLaunchInstance(competitionId: string, challengeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => instanceApi.launch(competitionId, challengeId),
+    onSuccess: (data) =>
+      queryClient.setQueryData(
+        instanceKeys.detail(competitionId, challengeId),
+        data,
+      ),
+  });
+}
+
+export function useExtendInstance(competitionId: string, challengeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => instanceApi.extend(competitionId, challengeId),
+    onSuccess: (data) =>
+      queryClient.setQueryData(
+        instanceKeys.detail(competitionId, challengeId),
+        data,
+      ),
+  });
+}
+
+export function useDestroyInstance(competitionId: string, challengeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => instanceApi.destroy(competitionId, challengeId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: instanceKeys.detail(competitionId, challengeId),
+      }),
   });
 }

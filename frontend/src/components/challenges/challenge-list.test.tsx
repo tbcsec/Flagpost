@@ -35,6 +35,7 @@ function mk(partial: Partial<Challenge> & { id: string; title: string }): Challe
     my_rating: null,
     solved: false,
     solve_count: 0,
+    instanced: false,
     created_at: "2026-01-01T00:00:00Z",
     ...partial,
   };

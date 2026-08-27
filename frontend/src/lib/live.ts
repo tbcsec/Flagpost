@@ -87,6 +87,17 @@ const ACTIVITY_INVALIDATIONS: Record<string, (cid: string) => QueryKey[]> = {
     ["analytics", cid],
   ],
   "challenge.guesses_reset": (cid) => [["challenges", cid]],
+  // Instance lifecycle (#266): refresh the subject's open instance panel as it
+  // moves requested → running → expired/destroyed/failed. The prefix
+  // ["instance", cid] covers whichever challenge dialog is open (the frame
+  // carries the challenge id, but keysForActivity is keyed by event; the prefix
+  // invalidates the one active instance query).
+  "challenge.instance_requested": (cid) => [["instance", cid]],
+  "challenge.instance_started": (cid) => [["instance", cid]],
+  "challenge.instance_extended": (cid) => [["instance", cid]],
+  "challenge.instance_expired": (cid) => [["instance", cid]],
+  "challenge.instance_destroyed": (cid) => [["instance", cid]],
+  "challenge.instance_provision_failed": (cid) => [["instance", cid]],
   "challenge.rated": (cid) => [["challenge-ratings", cid], ["analytics", cid]],
   "challenge.hint_requested": (cid) => [["analytics", cid]],
   "hint.released": (cid) => [["hints", cid], ["challenges", cid]],

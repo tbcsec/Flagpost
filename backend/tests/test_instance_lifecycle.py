@@ -173,6 +173,33 @@ async def test_deployment_validation_rejects_a_bad_shape(client):
     assert "image reference" in resp.json()["detail"]
 
 
+async def test_instanced_flag_exposed_on_challenge_reads(client):
+    # The competitor-facing challenge list + detail carry `instanced` so the UI
+    # knows which challenges offer a "Launch instance" panel — true only where a
+    # deployment spec exists.
+    admin = await admin_token(client)
+    comp = await _make_competition(client, admin)
+    chal_a = await _make_challenge(client, comp, admin)
+    chal_b = await _make_challenge(client, comp, admin)
+    await _put_deployment(client, comp, chal_a, admin)
+
+    listing = await client.get(
+        f"/api/competitions/{comp}/challenges", headers=_auth(admin)
+    )
+    by_id = {c["id"]: c for c in listing.json()}
+    assert by_id[chal_a]["instanced"] is True
+    assert by_id[chal_b]["instanced"] is False
+
+    detail_a = await client.get(
+        f"/api/competitions/{comp}/challenges/{chal_a}", headers=_auth(admin)
+    )
+    assert detail_a.json()["instanced"] is True
+    detail_b = await client.get(
+        f"/api/competitions/{comp}/challenges/{chal_b}", headers=_auth(admin)
+    )
+    assert detail_b.json()["instanced"] is False
+
+
 async def test_deployment_authoring_needs_challenge_edit(client):
     admin = await admin_token(client)
     comp = await _make_competition(client, admin)

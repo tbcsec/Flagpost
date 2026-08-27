@@ -426,6 +426,12 @@ async def test_staff_can_list_and_kill_any_instance(client):
     assert instance_id in ids
     # The staff view carries the subject + handle the competitor view hides.
     assert "user_id" in listing.json()[0]
+    # Labels are resolved server-side (challenge title + the subject's display
+    # name), so the ops table never shows a bare id — and it works for any
+    # subject, not just those in the competitor roster.
+    row0 = next(r for r in listing.json() if r["id"] == instance_id)
+    assert row0["challenge_title"] == "pwn me"
+    assert row0["subject_label"] and row0["subject_label"] != row0["user_id"]
 
     kill = await client.delete(
         f"/api/competitions/{comp}/instances/{instance_id}", headers=_auth(admin)

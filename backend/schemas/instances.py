@@ -120,6 +120,12 @@ class AdminInstanceOut(InstanceOut):
     backend_handle: str | None = None
     created_at: datetime | None = None
     last_seen_at: datetime | None = None
+    # Human labels resolved server-side (the ids stay for correlation): the
+    # challenge's title and the subject's name (team in team mode, else the
+    # requesting user's display name — resolved from the users table, so it
+    # covers staff test-launches too, unlike a competitor-roster lookup).
+    challenge_title: str | None = None
+    subject_label: str | None = None
 
 
 # --- site settings + test connection -----------------------------------------

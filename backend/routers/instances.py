@@ -32,6 +32,7 @@ from models.challenge_instancing import (
     ChallengeInstance,
 )
 from models.competition import Competition
+from models.team import Team
 from models.user import User
 from plugins.loader import is_module_enabled
 from schemas.instances import (
@@ -264,7 +265,59 @@ async def list_instances(
             .order_by(ChallengeInstance.created_at.desc())
         )
     ).scalars().all()
-    return [AdminInstanceOut.model_validate(row) for row in rows]
+
+    # Resolve human labels server-side (ids stay on the row for correlation),
+    # batched so the ops view costs no N+1. Subject names come from the users /
+    # teams tables — not the competitor roster — so a staff test-launch shows the
+    # staff member's name rather than a bare id.
+    challenge_ids = {r.challenge_id for r in rows}
+    team_ids = {r.team_id for r in rows if r.team_id}
+    user_ids = {r.user_id for r in rows if not r.team_id}
+    titles = (
+        dict(
+            (
+                await db.execute(
+                    select(Challenge.id, Challenge.title).where(
+                        Challenge.id.in_(challenge_ids)
+                    )
+                )
+            ).all()
+        )
+        if challenge_ids
+        else {}
+    )
+    team_names = (
+        dict(
+            (
+                await db.execute(
+                    select(Team.id, Team.name).where(Team.id.in_(team_ids))
+                )
+            ).all()
+        )
+        if team_ids
+        else {}
+    )
+    user_names = (
+        dict(
+            (
+                await db.execute(
+                    select(User.id, User.display_name).where(User.id.in_(user_ids))
+                )
+            ).all()
+        )
+        if user_ids
+        else {}
+    )
+    out: list[AdminInstanceOut] = []
+    for row in rows:
+        row.challenge_title = titles.get(row.challenge_id)
+        row.subject_label = (
+            team_names.get(row.team_id)
+            if row.team_id
+            else user_names.get(row.user_id)
+        )
+        out.append(AdminInstanceOut.model_validate(row))
+    return out
 
 
 @router.delete(

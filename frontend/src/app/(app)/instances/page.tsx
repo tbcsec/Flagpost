@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { NoCompetition } from "@/components/app/no-competition";
 import { SectionHeader } from "@/components/app/section-header";
@@ -21,22 +21,29 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { parseServerDate } from "@/lib/datetime";
-import { useChallenges } from "@/lib/hooks/use-challenges";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
 import { useDataTable } from "@/lib/hooks/use-data-table";
 import { useAdminInstances, useKillInstance } from "@/lib/hooks/use-instances";
-import { useParticipants } from "@/lib/hooks/use-participants";
 import { useAccess } from "@/lib/hooks/use-permissions";
-import { useTeams } from "@/lib/hooks/use-teams";
 import type { AdminInstance } from "@/lib/types";
 import { toast } from "@/stores/toast";
 
 // Running-instance ops (#266, ADR-0036). Every live challenge instance in the
 // competition, with force-kill — gated on instance_view (read) / instance_manage
 // (kill). Refreshes live over the activity room (lib/live.ts invalidates
-// ["admin_instances", cid] on any challenge.instance_* event). The list carries
-// ids only, so challenge/subject labels are resolved from the rosters already
-// loaded elsewhere.
+// ["admin_instances", cid] on any challenge.instance_* event). Challenge titles
+// and subject names are resolved server-side (AdminInstance.challenge_title /
+// subject_label), which covers staff test-launches too; ids are the fallback.
+
+/** The subject that owns an instance: team name (team mode) or user display name
+ *  (individual), resolved server-side; falls back to the raw id. */
+function subjectOf(i: AdminInstance): string {
+  return i.subject_label ?? i.team_id ?? i.user_id;
+}
+
+function challengeOf(i: AdminInstance): string {
+  return i.challenge_title ?? i.challenge_id;
+}
 
 function statusVariant(status: string): "success" | "destructive" | "muted" {
   if (status === "running") return "success";
@@ -78,33 +85,13 @@ export default function InstancesPage() {
   }, []);
 
   const instances = useAdminInstances(competitionId ?? "", canView);
-  const challenges = useChallenges(competitionId ?? "");
-  const teams = useTeams(competitionId ?? "");
-  const participants = useParticipants(competitionId ?? "", canView);
   const kill = useKillInstance(competitionId ?? "");
 
-  const challengeTitle = useMemo(
-    () => new Map((challenges.data ?? []).map((c) => [c.id, c.title])),
-    [challenges.data],
-  );
-  const teamName = useMemo(
-    () => new Map((teams.data ?? []).map((tm) => [tm.id, tm.name])),
-    [teams.data],
-  );
-  const userName = useMemo(
-    () => new Map((participants.data ?? []).map((p) => [p.user_id, p.display_name])),
-    [participants.data],
-  );
-
   const rows = instances.data ?? [];
-  const subjectOf = (i: AdminInstance) =>
-    i.team_id
-      ? (teamName.get(i.team_id) ?? i.team_id)
-      : (userName.get(i.user_id) ?? i.user_id);
 
   const table = useDataTable(rows, {
     columns: {
-      challenge: (i: AdminInstance) => challengeTitle.get(i.challenge_id) ?? i.challenge_id,
+      challenge: challengeOf,
       subject: subjectOf,
       status: (i: AdminInstance) => i.status,
       expires: { value: (i: AdminInstance) => i.expires_at ?? "", defaultDir: "asc" },
@@ -177,9 +164,7 @@ export default function InstancesPage() {
               <TableBody>
                 {table.rows.map((i) => (
                   <TableRow key={i.id}>
-                    <TableCell className="font-medium">
-                      {challengeTitle.get(i.challenge_id) ?? i.challenge_id}
-                    </TableCell>
+                    <TableCell className="font-medium">{challengeOf(i)}</TableCell>
                     <TableCell>{subjectOf(i)}</TableCell>
                     <TableCell>
                       <Badge variant={statusVariant(i.status)}>{t(`status.${i.status}`)}</Badge>

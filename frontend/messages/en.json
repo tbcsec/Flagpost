@@ -549,6 +549,41 @@
       "submitAnswer": "Submit answer",
       "submitFlag": "Submit flag"
     },
+    "instance": {
+      "title": "Instance",
+      "loading": "Checking for a running instance…",
+      "loadError": "Couldn't load your instance status.",
+      "retry": "Retry",
+      "intro": "Launch your own isolated copy of this challenge.",
+      "launch": "Launch instance",
+      "launching": "Launching…",
+      "launchAgain": "Launch again",
+      "launchError": "Couldn't launch an instance",
+      "provisioning": "Starting your instance… this can take a moment.",
+      "failed": "The instance failed to start.",
+      "noEndpoints": "No connection details — this instance is reached indirectly.",
+      "expiresIn": "Expires in {time}",
+      "extend": "Extend",
+      "extending": "Extending…",
+      "extended": "Instance extended",
+      "extendError": "Couldn't extend the instance",
+      "destroy": "Stop",
+      "destroying": "Stopping…",
+      "destroyError": "Couldn't stop the instance",
+      "destroyConfirmTitle": "Stop this instance?",
+      "destroyConfirmDescription": "Your running instance will be destroyed. You can launch a new one.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "copyError": "Couldn't copy to clipboard",
+      "status": {
+        "requested": "Requested",
+        "provisioning": "Starting",
+        "running": "Running",
+        "expiring": "Stopping",
+        "destroyed": "Stopped",
+        "failed": "Failed"
+      }
+    },
     "solveToast": {
       "description": "{title} · +{points} pts",
       "descriptionReduced": "{title} · +{points} pts (reduced from {full})"

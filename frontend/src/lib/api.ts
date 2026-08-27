@@ -32,6 +32,7 @@ import type {
   InstanceConnectionResult,
   ChallengeDeployment,
   ChallengeDeploymentUpdate,
+  Instance,
   AiAssistantType,
   AiAvailability,
   AiCompetitionSettings,
@@ -1251,6 +1252,28 @@ export const deploymentsApi = {
     }),
   remove: (competitionId: string, challengeId: string) =>
     apiFetch<void>(deploymentsApi.base(competitionId, challengeId), {
+      method: "DELETE",
+    }),
+};
+
+// A competitor's own instance of a challenge (#266). GET 404s when they have
+// none; launch/extend/destroy drive its lifecycle (provisioning is async, so
+// the row starts `requested` and goes live over the activity room).
+export const instanceApi = {
+  base: (competitionId: string, challengeId: string) =>
+    `/api/competitions/${competitionId}/challenges/${challengeId}/instance`,
+  get: (competitionId: string, challengeId: string) =>
+    apiFetch<Instance>(instanceApi.base(competitionId, challengeId)),
+  launch: (competitionId: string, challengeId: string) =>
+    apiFetch<Instance>(instanceApi.base(competitionId, challengeId), {
+      method: "POST",
+    }),
+  extend: (competitionId: string, challengeId: string) =>
+    apiFetch<Instance>(`${instanceApi.base(competitionId, challengeId)}/extend`, {
+      method: "POST",
+    }),
+  destroy: (competitionId: string, challengeId: string) =>
+    apiFetch<{ status: string }>(instanceApi.base(competitionId, challengeId), {
       method: "DELETE",
     }),
 };

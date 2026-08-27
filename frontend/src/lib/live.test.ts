@@ -54,6 +54,21 @@ describe("keysForActivity", () => {
     expect(keysForActivity("competition.updated", CID)).toEqual([["competitions"]]);
   });
 
+  it("maps instance lifecycle events to the instance query prefix", () => {
+    // The subject's open instance panel refetches as it moves through the
+    // lifecycle; the ["instance", cid] prefix covers whichever dialog is open.
+    for (const event of [
+      "challenge.instance_requested",
+      "challenge.instance_started",
+      "challenge.instance_extended",
+      "challenge.instance_expired",
+      "challenge.instance_destroyed",
+      "challenge.instance_provision_failed",
+    ]) {
+      expect(keysForActivity(event, CID)).toEqual([["instance", CID]]);
+    }
+  });
+
   it("returns nothing for unmapped events (frontend allowlist)", () => {
     expect(keysForActivity("user.banned", CID)).toEqual([]);
     expect(keysForActivity("something.new", CID)).toEqual([]);

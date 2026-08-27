@@ -907,6 +907,9 @@ export interface Challenge {
   solved: boolean;
   /** Number of distinct subjects that have solved this challenge. */
   solve_count: number;
+  /** Whether this challenge offers per-subject instances (#266) — drives the
+   *  competitor "Launch instance" panel. */
+  instanced: boolean;
   created_at: string;
 }
 
@@ -1403,6 +1406,33 @@ export interface ChallengeDeployment {
   per_subject_cap: number;
   flag_mode: string;
   flag_template: string | null;
+}
+
+/** A connection endpoint on a running instance, as shown to the subject. */
+export interface InstanceEndpoint {
+  kind: string;
+  host?: string | null;
+  port?: number | null;
+  url?: string | null;
+}
+
+/** The requesting subject's own instance of a challenge (#266). Endpoints are
+ *  populated only while `status === "running"`. */
+export interface Instance {
+  id: string;
+  challenge_id: string;
+  status:
+    | "requested"
+    | "provisioning"
+    | "running"
+    | "expiring"
+    | "destroyed"
+    | "failed";
+  endpoints: InstanceEndpoint[];
+  expires_at: string | null;
+  started_at: string | null;
+  extend_count: number;
+  failure_reason: string | null;
 }
 
 /** Upsert payload — the full spec is replaced on each save (PUT). */

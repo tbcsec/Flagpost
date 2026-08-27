@@ -156,4 +156,9 @@ class ChallengeOut(BaseModel):
     # publish responses (which don't compute solve state) stay valid.
     solved: bool = False
     solve_count: int = 0
+    # Whether this challenge offers per-subject instances (#266, ADR-0036) — a
+    # deployment spec exists for it. Drives the competitor "Launch instance"
+    # panel. Computed on the read paths; false on create/update/publish responses
+    # (which don't look it up).
+    instanced: bool = False
     created_at: datetime

@@ -9,6 +9,7 @@ import Link from "next/link";
 import { NoCompetition } from "@/components/app/no-competition";
 import { ChallengeConnection } from "@/components/challenges/challenge-connection";
 import { ChallengeHints } from "@/components/challenges/challenge-hints";
+import { ChallengeInstance } from "@/components/challenges/challenge-instance";
 import { ChallengeList } from "@/components/challenges/challenge-list";
 import { ChallengeValue } from "@/components/challenges/challenge-value";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -461,6 +462,14 @@ function ChallengeDialogBody({
       {challenge.connection_info && (
         <ChallengeConnection value={challenge.connection_info} />
       )}
+
+      {/* Per-subject instance (#266) — renders only when the challenge is
+          instanced and the module is enabled; otherwise it's a no-op. */}
+      <ChallengeInstance
+        competitionId={competitionId}
+        challengeId={challenge.id}
+        instanced={challenge.instanced}
+      />
 
       {challenge.locked ? (
         <div className="grid gap-2 rounded-lg border border-border bg-muted/40 p-6 text-center">

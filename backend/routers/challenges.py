@@ -24,6 +24,7 @@ from auth.deps import require_permission, user_has_permission
 from db import ensure_aware_utc, get_db, utcnow
 from models.attachment import Attachment
 from models.challenge import Category, Challenge
+from models.challenge_instancing import ChallengeDeployment
 from models.competition import Competition
 from models.feedback import ChallengeRating
 from models.mc_guess_reset import MCGuessReset
@@ -375,10 +376,27 @@ async def list_challenges(
                 )
             ).all()
         }
+    # Which of these challenges offer per-subject instances (#266) — one batched
+    # lookup so the "Launch instance" affordance costs no N+1 over the card grid.
+    instanced_ids: set[str] = set()
+    if challenges:
+        instanced_ids = set(
+            (
+                await db.execute(
+                    select(ChallengeDeployment.challenge_id).where(
+                        ChallengeDeployment.competition_id == competition_id,
+                        ChallengeDeployment.challenge_id.in_(
+                            [c.id for c in challenges]
+                        ),
+                    )
+                )
+            ).scalars().all()
+        )
     for challenge in challenges:
         challenge.solve_count = counts.get(challenge.id, 0)
         challenge.value = challenge_value(challenge, challenge.solve_count)
         challenge.solved = challenge.id in solved
+        challenge.instanced = challenge.id in instanced_ids
         # Locked = a prerequisite the subject hasn't solved. Staff see everything
         # unlocked; a subjectless viewer (manager not on a team) also isn't gated.
         challenge.locked = (
@@ -537,6 +555,14 @@ async def get_challenge(
                 ChallengeRating.user_id == current_user.id,
             )
         )
+    challenge.instanced = (
+        await db.scalar(
+            select(ChallengeDeployment.id).where(
+                ChallengeDeployment.competition_id == competition_id,
+                ChallengeDeployment.challenge_id == challenge_id,
+            )
+        )
+    ) is not None
     _redact_for_competitor(challenge, can_edit=can_edit, solved_ids=solved_ids)
     return challenge
 

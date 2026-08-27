@@ -30,6 +30,8 @@ import type {
   InstanceSettings,
   InstanceSettingsUpdate,
   InstanceConnectionResult,
+  ChallengeDeployment,
+  ChallengeDeploymentUpdate,
   AiAssistantType,
   AiAvailability,
   AiCompetitionSettings,
@@ -1226,6 +1228,30 @@ export const instancesAdminApi = {
   testConnection: () =>
     apiFetch<InstanceConnectionResult>("/api/admin/instances/test-connection", {
       method: "POST",
+    }),
+};
+
+// The per-challenge deployment spec (authoring). One per challenge; GET 404s
+// when none is set yet, upsert replaces it, DELETE removes it.
+export const deploymentsApi = {
+  base: (competitionId: string, challengeId: string) =>
+    `/api/competitions/${competitionId}/challenges/${challengeId}/deployment`,
+  get: (competitionId: string, challengeId: string) =>
+    apiFetch<ChallengeDeployment>(
+      deploymentsApi.base(competitionId, challengeId),
+    ),
+  upsert: (
+    competitionId: string,
+    challengeId: string,
+    input: ChallengeDeploymentUpdate,
+  ) =>
+    apiFetch<ChallengeDeployment>(deploymentsApi.base(competitionId, challengeId), {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  remove: (competitionId: string, challengeId: string) =>
+    apiFetch<void>(deploymentsApi.base(competitionId, challengeId), {
+      method: "DELETE",
     }),
 };
 

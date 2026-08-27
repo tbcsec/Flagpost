@@ -1386,6 +1386,40 @@ export interface InstanceConnectionResult {
   legs: InstanceConnectionLeg[];
 }
 
+/** The per-challenge deployment spec (authoring content). At most one per
+ *  challenge; the editor upserts it in place. */
+export interface ChallengeDeployment {
+  id: string;
+  challenge_id: string;
+  competition_id: string;
+  backend: string;
+  image_ref: string | null;
+  manifest: Record<string, unknown> | null;
+  exposure: string;
+  ports: number[];
+  env: Record<string, string>;
+  resource_limits: Record<string, unknown> | null;
+  lifetime_s: number | null;
+  per_subject_cap: number;
+  flag_mode: string;
+  flag_template: string | null;
+}
+
+/** Upsert payload — the full spec is replaced on each save (PUT). */
+export interface ChallengeDeploymentUpdate {
+  backend: string;
+  image_ref?: string | null;
+  manifest?: Record<string, unknown> | null;
+  exposure: string;
+  ports: number[];
+  env: Record<string, string>;
+  resource_limits?: Record<string, unknown> | null;
+  lifetime_s?: number | null;
+  per_subject_cap: number;
+  flag_mode: string;
+  flag_template?: string | null;
+}
+
 export interface AiConversation {
   id: string;
   assistant_type: string;

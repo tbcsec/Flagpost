@@ -7,6 +7,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { SectionHeader } from "@/components/app/section-header";
 import { AiSettingsPanel } from "@/components/admin/ai-settings-panel";
 import { AppearancePanel } from "@/components/admin/appearance-panel";
+import { InstancesSettingsPanel } from "@/components/admin/instances-settings-panel";
 import { AuthProvidersPanel } from "@/components/admin/auth-providers-panel";
 import { BackupPanel } from "@/components/admin/backup-panel";
 import { RulesSettingsPanel } from "@/components/admin/rules-settings-panel";
@@ -35,15 +36,15 @@ import { toast } from "@/stores/toast";
 // Following the Competition Settings precedent, panels stay **mounted** and are
 // toggled with `hidden` rather than conditionally rendered, so an unsaved edit
 // in one tab survives a look at another.
-type Tab = "general" | "email" | "auth" | "rules" | "backup" | "appearance" | "ai";
+type Tab = "general" | "email" | "auth" | "rules" | "backup" | "appearance" | "ai" | "instances";
 
 /** The two tabs that are views of the one settings form. */
 type FormSection = Extract<Tab, "general" | "email">;
 
-const TAB_ORDER: Tab[] = ["general", "email", "auth", "rules", "backup", "appearance", "ai"];
+const TAB_ORDER: Tab[] = ["general", "email", "auth", "rules", "backup", "appearance", "ai", "instances"];
 
 /** Tab → message key in the admin.settings namespace. */
-const TAB_KEY: Record<Tab, "tabGeneral" | "tabEmail" | "tabAuth" | "tabRules" | "tabBackup" | "tabAppearance" | "tabAi"> = {
+const TAB_KEY: Record<Tab, "tabGeneral" | "tabEmail" | "tabAuth" | "tabRules" | "tabBackup" | "tabAppearance" | "tabAi" | "tabInstances"> = {
   general: "tabGeneral",
   email: "tabEmail",
   auth: "tabAuth",
@@ -51,6 +52,7 @@ const TAB_KEY: Record<Tab, "tabGeneral" | "tabEmail" | "tabAuth" | "tabRules" | 
   backup: "tabBackup",
   appearance: "tabAppearance",
   ai: "tabAi",
+  instances: "tabInstances",
 };
 
 function isFormSection(tab: Tab): tab is FormSection {
@@ -80,6 +82,9 @@ function AdminSettingsInner() {
   // AI provider config is its own grant too (holds an API key + enables
   // outbound calls) — same higher-stakes treatment as auth providers.
   const canManageAi = access.has("manage_ai");
+  // Instancing infra is a higher-stakes grant again (a container-runtime
+  // endpoint + registry credential), so it gets its own tab like auth/AI.
+  const canManageInstances = access.has("manage_instance_infra");
   const settings = useOperationalSettings();
   const data = settings.data;
   const router = useRouter();
@@ -87,7 +92,7 @@ function AdminSettingsInner() {
   const searchParams = useSearchParams();
 
   if (!access.ready) return <Skeleton className="h-64 w-full" />;
-  if (!canManage && !canManageAuth && !canManageAi) {
+  if (!canManage && !canManageAuth && !canManageAi && !canManageInstances) {
     return (
       <>
         <SectionHeader title={t("title")} subtitle={t("subtitleShort")} />
@@ -99,6 +104,7 @@ function AdminSettingsInner() {
   const visibleTabs = TAB_ORDER.filter((value) => {
     if (value === "auth") return canManageAuth;
     if (value === "ai") return canManageAi;
+    if (value === "instances") return canManageInstances;
     return canManage;
   }).map((value) => ({ value, label: t(TAB_KEY[value]) }));
 
@@ -187,6 +193,16 @@ function AdminSettingsInner() {
               {t("aiHeadingDescription")}
             </p>
             <AiSettingsPanel />
+          </div>
+        )}
+
+        {canManageInstances && (
+          <div className={tab === "instances" ? "" : "hidden"}>
+            <h2 className="text-lg font-semibold">{t("instancesHeading")}</h2>
+            <p className="mb-4 mt-1 text-sm text-muted-foreground">
+              {t("instancesHeadingDescription")}
+            </p>
+            <InstancesSettingsPanel />
           </div>
         )}
       </div>

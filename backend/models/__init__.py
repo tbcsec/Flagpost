@@ -53,6 +53,7 @@ from models.rules_acceptance import RulesAcceptance
 from models.score_adjustment import ScoreAdjustment
 from models.site_settings import SiteSettings
 from models.submission import Submission
+from models.theme_preset import ThemePreset
 from models.team import Team, TeamApplication, TeamMembership
 from models.ticket import Ticket, TicketMessage
 from models.ticket_attachment import TicketAttachment

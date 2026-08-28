@@ -22,6 +22,7 @@ from auth.deps import require_permission, user_has_permission
 from config import settings as app_config
 from db import get_db, utcnow
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
+from models.theme_preset import ThemePreset
 from models.user import User
 from schemas.rules import RulesSettingsOut, RulesSettingsUpdate
 from schemas.site_settings import (
@@ -62,6 +63,10 @@ async def get_or_create_settings(db: AsyncSession) -> SiteSettings:
 async def read_site_settings(db: AsyncSession = Depends(get_db)) -> SiteSettings:
     # Public: the branding is needed before authentication.
     settings = await get_or_create_settings(db)
+    # If default_palette names a custom theme preset (#323) rather than a
+    # built-in palette, embed its token pack so the pre-auth runtime paint can
+    # inject it. db.get returns None for a built-in id — annotate for serialization.
+    settings.active_theme = await db.get(ThemePreset, settings.default_palette)
     # demo_mode is config-driven, not stored — annotate the row for serialization.
     settings.demo_mode = app_config.demo_mode
     # email_required mirrors the allowlist + verification flags; the domain

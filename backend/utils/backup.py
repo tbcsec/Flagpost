@@ -86,6 +86,7 @@ from models.page import Page
 from models.role import Role, RoleAssignment
 from models.score_adjustment import ScoreAdjustment
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
+from models.theme_preset import ThemePreset
 from models.submission import Submission
 from models.team import Team, TeamMembership
 from models.ticket import Ticket, TicketMessage
@@ -226,6 +227,14 @@ async def _nk_page(db: AsyncSession, row: dict) -> str | None:
     return await db.scalar(select(Page.id).where(Page.slug == row["slug"]))
 
 
+async def _nk_theme(db: AsyncSession, row: dict) -> str | None:
+    # The id is a stable slug, so it's the natural key: a preset already present
+    # by that id is left untouched (additive import), matching pages.
+    return await db.scalar(
+        select(ThemePreset.id).where(ThemePreset.id == row.get("id"))
+    )
+
+
 async def _nk_competition(db: AsyncSession, row: dict) -> str | None:
     return await db.scalar(select(Competition.id).where(Competition.name == row["name"]))
 
@@ -272,6 +281,12 @@ SPECS: tuple[Spec, ...] = (
     # restore onto an install that already has /p/about leaves that page alone
     # rather than creating a second one that can't have the URL.
     Spec("pages", Page, "site_settings", id_map="page", natural_key=_nk_page),
+    # Custom brand themes (#323) — portable branding. keep_id: the slug id is what
+    # default_palette points at, so it must survive the round-trip. created_by is
+    # install-local authorship (a user id that may not exist on the target), so
+    # it's dropped on export like a non-portable column rather than dangling a FK.
+    Spec("theme_presets", ThemePreset, "site_settings", keep_id=True,
+         natural_key=_nk_theme, secret_columns=("created_by",)),
     Spec("users", User, "users", id_map="user", natural_key=_nk_user),
     Spec("roles", Role, "roles", id_map="role", natural_key=_nk_role),
     Spec("competitions", Competition, "competitions", id_map="competition",

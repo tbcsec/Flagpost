@@ -20,6 +20,7 @@ Docker Engine API v1.47 spec and the proxy README (see ADR-0036 and the PR).
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 from collections.abc import Awaitable, Callable
@@ -53,6 +54,43 @@ _TIMEOUT_LIFECYCLE = 60.0
 _TIMEOUT_PULL = 300.0
 
 _MAX_ERROR_BODY = 500
+
+
+def _norm_registry(host: str) -> str:
+    """Normalise a registry host for comparison: drop any scheme and path, lower-
+    case, and canonicalise the several Docker Hub spellings to ``docker.io``."""
+    host = (host or "").strip().lower()
+    if "://" in host:
+        host = host.split("://", 1)[1]
+    host = host.split("/", 1)[0]
+    if host in ("", "index.docker.io", "registry-1.docker.io", "docker.io"):
+        return "docker.io"
+    return host
+
+
+def image_registry_host(image: str) -> str:
+    """The registry host an image reference pulls from, per Docker's own rule:
+    the first path component is the registry only when it contains a ``.`` or
+    ``:`` or is ``localhost``; otherwise the image comes from Docker Hub."""
+    first = image.split("/", 1)[0]
+    if "/" in image and ("." in first or ":" in first or first == "localhost"):
+        return _norm_registry(first)
+    return "docker.io"
+
+
+def credential_registry_host(registry_auth: str | None) -> str | None:
+    """The registry a stored ``X-Registry-Auth`` credential is scoped to — its
+    ``serveraddress`` — or None when the blob can't be parsed or names no server.
+    Used to refuse forwarding the credential to any other registry (F1)."""
+    if not registry_auth:
+        return None
+    try:
+        data = json.loads(base64.b64decode(registry_auth))
+    except (ValueError, json.JSONDecodeError):
+        return None
+    server = data.get("serveraddress") or data.get("serverAddress") if isinstance(data, dict) else None
+    return _norm_registry(server) if server else None
+
 
 # A tiny public image for the run/destroy + reachability validate legs. Chosen
 # to be near-universally cached and cheap to pull; overridable per install.
@@ -525,9 +563,17 @@ class DockerProvisioner(Provisioner):
         create`` 404s on an absent image and a challenge image is rarely
         pre-cached on the instance host; a present image is a fast no-op."""
         name, _, tag = image.partition(":")
+        # Forward the operator's registry credential ONLY to the registry it is
+        # scoped to (its own serveraddress). image_ref is lower-trust authoring
+        # content (a challenge_edit holder sets it), so without this a Judge
+        # could point image_ref at an attacker-run registry and harvest the
+        # site-global credential from the X-Registry-Auth header (F1). A pull
+        # whose registry doesn't match goes out anonymous — a private image
+        # elsewhere simply fails to pull, which is the safe outcome.
+        cred_host = credential_registry_host(self._cfg.registry_auth)
         headers = (
             {"X-Registry-Auth": self._cfg.registry_auth}
-            if self._cfg.registry_auth
+            if cred_host is not None and cred_host == image_registry_host(image)
             else {}
         )
         async with self._client(_TIMEOUT_PULL) as http:

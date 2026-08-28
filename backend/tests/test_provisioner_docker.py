@@ -7,6 +7,7 @@ The create-body assertions are the security crux: every privileged field must
 be pinned by Flagpost regardless of what a challenge author supplies.
 """
 
+import base64
 import json
 
 import httpx
@@ -16,6 +17,8 @@ from utils.provisioner_docker import (
     LABEL_MANAGED,
     DockerConfig,
     DockerProvisioner,
+    credential_registry_host,
+    image_registry_host,
 )
 from utils.provisioners import ProvisionSpec, ProvisionerError
 
@@ -552,3 +555,50 @@ async def _true() -> bool:
 
 async def _false() -> bool:
     return False
+
+
+# --- F1: registry credential is scoped to its own registry -------------------
+
+
+def _reg_auth(server: str) -> str:
+    """A base64 X-Registry-Auth blob (Docker AuthConfig) for ``server``."""
+    return base64.b64encode(
+        json.dumps({"username": "u", "password": "p", "serveraddress": server}).encode()
+    ).decode()
+
+
+def test_image_registry_host_follows_docker_rules():
+    assert image_registry_host("ghcr.io/example/pwn:1") == "ghcr.io"
+    assert image_registry_host("registry.example.com:5000/x") == "registry.example.com:5000"
+    assert image_registry_host("localhost:5000/x") == "localhost:5000"
+    # No dotted/colon'd first component -> Docker Hub.
+    assert image_registry_host("alpine:3.20") == "docker.io"
+    assert image_registry_host("library/alpine:3") == "docker.io"
+
+
+def test_credential_registry_host_parses_serveraddress():
+    assert credential_registry_host(_reg_auth("ghcr.io")) == "ghcr.io"
+    assert credential_registry_host(_reg_auth("https://index.docker.io/v1/")) == "docker.io"
+    assert credential_registry_host(None) is None
+    assert credential_registry_host("not base64 at all !!!") is None
+
+
+@pytest.mark.asyncio
+async def test_registry_credential_is_never_forwarded_to_a_foreign_registry():
+    # F1: image_ref is author-controlled (challenge_edit). The operator's
+    # site-global registry credential must go ONLY to the registry it belongs to,
+    # never to an attacker-named registry host in the image reference.
+    router = _Router()
+    cfg = _cfg(registry_auth=_reg_auth("ghcr.io"))
+    prov = DockerProvisioner(cfg, transport=router.transport())
+
+    await prov._pull_image("ghcr.io/example/pwn:1")     # matches -> credential sent
+    await prov._pull_image("evil.attacker.com/x:latest")  # foreign -> credential withheld
+
+    pulls = {
+        r.url.params.get("fromImage"): r
+        for r in router.requests
+        if r.url.path.endswith("/images/create")
+    }
+    assert pulls["ghcr.io/example/pwn"].headers.get("X-Registry-Auth") == cfg.registry_auth
+    assert "X-Registry-Auth" not in pulls["evil.attacker.com/x"].headers

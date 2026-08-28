@@ -122,6 +122,22 @@ async def test_configured_install_cannot_be_reclaimed_after_losing_its_admins(cl
         assert await db.scalar(select(User).where(User.display_name == "Owner")) is None
 
 
+async def test_cleared_setup_flag_with_admin_present_still_refuses(client):
+    # F2 defense in depth: if setup_completed_at is wrongly cleared (e.g. a
+    # crafted backup import) but an Administrator still exists, the public
+    # owner-provisioning endpoint must still refuse — the flag is not the only gate.
+    async with SessionLocal() as db:
+        settings = await db.get(SiteSettings, SITE_SETTINGS_ID)
+        settings.setup_completed_at = None  # clear the flag; keep the seeded admin
+        await db.commit()
+
+    resp = await client.post("/api/setup", json=_setup_body())
+    assert resp.status_code == 409, resp.text
+
+    async with SessionLocal() as db:
+        assert await db.scalar(select(User).where(User.display_name == "Owner")) is None
+
+
 async def test_complete_setup_provisions_owner_and_settings(client):
     await _simulate_fresh_install()
 

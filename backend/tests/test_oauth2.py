@@ -656,3 +656,20 @@ async def test_corrupt_stored_config_is_a_skip_not_a_500(client, idp):
     resp = await client.get("/api/auth/oauth2/gh/login", follow_redirects=False)
     assert resp.status_code == 404
     assert (await client.get("/api/auth/providers")).json() == []
+
+
+async def test_oauth2_callback_rejected_without_the_state_binding_cookie(client, idp):
+    # F3 (login CSRF / session fixation) for the plain-OAuth2 kind: a callback in
+    # a browser that never started the login (no state-binding cookie) is refused.
+    admin = await admin_token(client)
+    await _create_provider(client, admin, config=_github_config())
+    state, _ = await _begin_login(client)
+
+    client.cookies.clear()  # victim's browser: no sso_login_state cookie
+    resp = await client.get(
+        f"/api/auth/oauth2/gh/callback?code=abc&state={state}",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert "error=invalid_state" in resp.headers["location"]
+    assert "refresh_token" not in resp.headers.get("set-cookie", "")

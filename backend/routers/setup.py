@@ -15,7 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.identity import display_name_taken, email_taken
 from auth.security import hash_password
-from auth.setup import ADMINISTRATOR_ROLE_NAME, mark_setup_complete, setup_is_complete
+from auth.setup import (
+    ADMINISTRATOR_ROLE_NAME,
+    active_global_admin_count,
+    mark_setup_complete,
+    setup_is_complete,
+)
 from db import get_db
 from models.role import Role, RoleAssignment
 from models.user import User
@@ -48,6 +53,17 @@ async def complete_setup(
     # which an unauthenticated caller may mint an owner. Conflating them let a
     # configured install be re-claimed by anyone once its admin count hit zero.
     if await setup_is_complete(db):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This instance is already set up.",
+        )
+
+    # Defense in depth (security F2): the setup flag is the gate, but never let
+    # this unauthenticated owner-provisioning endpoint run while an Administrator
+    # already exists — so even if the flag were wrongly cleared (e.g. a crafted
+    # backup import) on a populated install, it can't be re-claimed. A genuine
+    # zero-admin install still has count 0 and proceeds.
+    if await active_global_admin_count(db) > 0:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="This instance is already set up.",

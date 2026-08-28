@@ -184,6 +184,13 @@ class Spec:
     # tolerates the absent key (load_row only sets present columns), so the
     # secret is simply re-entered after a restore.
     secret_columns: tuple[str, ...] = ()
+    # Columns an import must NEVER write, even when present in the payload. These
+    # are one-way security flags whose value is an install-local fact, not
+    # portable content: clearing `site_settings.setup_completed_at` on import
+    # would re-open the unauthenticated first-run setup wizard on a live install
+    # (security F2). Unlike `secret_columns` (dropped on *export*), these are
+    # ignored on *import* — an attacker who hand-crafts the backup can't set them.
+    immutable_columns: tuple[str, ...] = ()
     # Set for tables whose rows point at an object-storage blob. The engine then
     # carries the bytes in a ``_object_data`` side-car on export and re-puts them
     # on import under a freshly-minted key built by this callable (the old key
@@ -257,7 +264,8 @@ _COMP = ("competition_id", "competition", True)
 # Order matters: a table's referenced entities must be imported before it.
 SPECS: tuple[Spec, ...] = (
     Spec("site_settings", SiteSettings, "site_settings", singleton=True,
-         secret_columns=("smtp_password",)),
+         secret_columns=("smtp_password",),
+         immutable_columns=("setup_completed_at",)),
     # Custom pages (#198, ADR-0034). Site-level, no foreign keys and no secrets,
     # so it needs nothing but a natural key: `slug` is unique and is the page's
     # address, which makes it the right identity for the additive import — a
@@ -468,7 +476,7 @@ async def import_data(
             object_data = row.pop("_object_data", None)
 
             if spec.singleton:
-                await _upsert_singleton(db, spec.model, row)
+                await _upsert_singleton(db, spec.model, row, spec.immutable_columns)
                 created += 1
                 continue
 
@@ -535,12 +543,16 @@ def _remap(row: dict, spec: Spec, state: _State) -> bool:
     return True
 
 
-async def _upsert_singleton(db: AsyncSession, model, row: dict) -> None:
+async def _upsert_singleton(
+    db: AsyncSession, model, row: dict, immutable_columns: tuple[str, ...] = ()
+) -> None:
     obj = await db.get(model, SITE_SETTINGS_ID)
     if obj is None:
         obj = model(id=SITE_SETTINGS_ID)
         db.add(obj)
     for key, val in load_row(model, row).items():
-        if key == "id":
+        # `id` is fixed; immutable columns are one-way security flags the import
+        # must never touch (F2 — e.g. setup_completed_at).
+        if key == "id" or key in immutable_columns:
             continue
         setattr(obj, key, val)

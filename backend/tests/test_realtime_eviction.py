@@ -87,3 +87,59 @@ async def test_ban_closes_the_users_live_socket(client):
         await event_bus.wait_for_background()
 
         assert await ws.expect_close() == 4403
+
+
+# --- F4: mid-session privilege revocation evicts live sockets ----------------
+
+from realtime.manager import manager as _global_manager  # noqa: E402
+
+
+async def test_role_unassigned_evicts_the_demoted_user_not_the_actor():
+    # F4: unassigning a role mid-session must drop the demoted user's live staff
+    # sockets. The demoted user is `subject_user_id`; `user_id` is the acting admin.
+    demoted, actor = _FakeWS(), _FakeWS()
+    _global_manager.join("note", "ticket:f4a", demoted, "judge-f4")
+    _global_manager.join("note", "ticket:f4a", actor, "admin-f4")
+    try:
+        await event_bus.emit(
+            "role.unassigned",
+            {"user_id": "admin-f4", "subject_user_id": "judge-f4",
+             "role_id": "r", "competition_id": "c"},
+        )
+        await event_bus.wait_for_background()
+        assert demoted.closed_code == 4403      # the demoted judge is evicted
+        assert actor.closed_code is None         # the acting admin is untouched
+    finally:
+        _global_manager.leave("note", "ticket:f4a", demoted)
+        _global_manager.leave("note", "ticket:f4a", actor)
+
+
+async def test_role_updated_evicts_affected_holders_only_on_permission_change():
+    # F4: a custom role's permission change re-handshakes its current holders,
+    # carried in affected_user_ids. A cosmetic edit (no such key) evicts nobody.
+    holder, bystander = _FakeWS(), _FakeWS()
+    _global_manager.join("note", "ticket:f4b", holder, "holder-f4")
+    _global_manager.join("note", "ticket:f4b", bystander, "other-f4")
+    try:
+        await event_bus.emit(
+            "role.updated",
+            {"user_id": "admin-f4", "role_id": "r", "name": "Senior Judge",
+             "affected_user_ids": ["holder-f4"]},
+        )
+        await event_bus.wait_for_background()
+        assert holder.closed_code == 4403
+        assert bystander.closed_code is None
+
+        # A name-only edit carries no affected_user_ids -> no eviction.
+        cosmetic = _FakeWS()
+        _global_manager.join("note", "ticket:f4b", cosmetic, "holder-f4")
+        await event_bus.emit(
+            "role.updated",
+            {"user_id": "admin-f4", "role_id": "r", "name": "Renamed"},
+        )
+        await event_bus.wait_for_background()
+        assert cosmetic.closed_code is None
+        _global_manager.leave("note", "ticket:f4b", cosmetic)
+    finally:
+        _global_manager.leave("note", "ticket:f4b", holder)
+        _global_manager.leave("note", "ticket:f4b", bystander)

@@ -36,7 +36,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import settings
 from db import ensure_aware_utc, get_db, utcnow
 from models.identity_provider import AuthLoginState, IdentityProvider
-from routers.auth import _issue_session
+from routers.auth import (
+    _issue_session,
+    clear_sso_state_cookie,
+    set_sso_state_cookie,
+    sso_state_cookie_matches,
+)
 from routers.oidc import _frontend_base, _safe_return_to
 from schemas.auth_providers import OAuth2Config, provider_config_or_none
 from utils import oauth2 as oauth2_utils
@@ -166,10 +171,14 @@ async def oauth2_login(
     # A provider's authorize URL may already carry query parameters (some
     # tenanted servers do), so append rather than assume a bare path.
     separator = "&" if "?" in config.authorize_url else "?"
-    return RedirectResponse(
+    redirect = RedirectResponse(
         f"{config.authorize_url}{separator}{urlencode(params)}",
         status_code=status.HTTP_302_FOUND,
     )
+    # Bind this login to the initiating browser (F3): the callback must present
+    # this cookie matching `state`.
+    set_sso_state_cookie(redirect, state, int(_STATE_TTL.total_seconds()))
+    return redirect
 
 
 @router.get("/{slug}/callback", name="oauth2_callback")
@@ -187,9 +196,14 @@ async def oauth2_callback(
     if not code or not state:
         return _fail("callback missing code or state", "invalid_response")
 
-    # Consume the state row first: single-use, so a replayed callback finds
-    # nothing. This is also the CSRF check — a callback we didn't initiate has
-    # no matching row.
+    # Login-CSRF / session-fixation guard (F3): require the state-binding cookie
+    # set at /login, proving the same browser started the flow. The single-use
+    # state row prevents replay; this prevents a callback URL delivered to a
+    # victim from fixating the attacker's session.
+    if not sso_state_cookie_matches(request, state):
+        return _fail("login state cookie missing or mismatched", "invalid_state")
+
+    # Consume the state row: single-use, so a replayed callback finds nothing.
     login_state = await db.get(AuthLoginState, state)
     if login_state is None:
         return _fail("unknown or already-used state", "invalid_state")
@@ -252,6 +266,8 @@ async def oauth2_callback(
     # is intentionally discarded — the frontend fetches its own via
     # /api/auth/refresh so no token is ever put in a URL.
     await _issue_session(db, user, response)
+    # The login is done — retire the state-binding cookie.
+    clear_sso_state_cookie(response)
 
     destination = login_state.return_to or "/"
     redirect = RedirectResponse(

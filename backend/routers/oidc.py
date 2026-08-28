@@ -37,7 +37,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import settings
 from db import ensure_aware_utc, get_db, utcnow
 from models.identity_provider import AuthLoginState, IdentityProvider
-from routers.auth import _issue_session
+from routers.auth import (
+    _issue_session,
+    clear_sso_state_cookie,
+    set_sso_state_cookie,
+    sso_state_cookie_matches,
+)
 from schemas.auth_providers import OidcConfig, provider_config_or_none
 from utils import oidc as oidc_utils
 from utils.oidc import OidcError
@@ -187,10 +192,14 @@ async def oidc_login(
         "code_challenge": challenge,
         "code_challenge_method": "S256",
     }
-    return RedirectResponse(
+    redirect = RedirectResponse(
         f"{document['authorization_endpoint']}?{urlencode(params)}",
         status_code=status.HTTP_302_FOUND,
     )
+    # Bind this login to the browser that started it (F3): the callback must
+    # present this cookie matching `state`, or it isn't the same browser.
+    set_sso_state_cookie(redirect, state, int(_STATE_TTL.total_seconds()))
+    return redirect
 
 
 @router.get("/{slug}/callback", name="oidc_callback")
@@ -208,9 +217,14 @@ async def oidc_callback(
     if not code or not state:
         return _fail("callback missing code or state", "invalid_response")
 
-    # Consume the state row first: single-use, so a replayed callback finds
-    # nothing. This is also the CSRF check — a callback we didn't initiate has
-    # no matching row.
+    # Login-CSRF / session-fixation guard (F3): the callback must be completed in
+    # the same browser that started the login, proven by the state-binding cookie
+    # set at /login. The single-use state row prevents *replay*; this prevents a
+    # valid callback URL delivered to a victim from fixating the attacker's session.
+    if not sso_state_cookie_matches(request, state):
+        return _fail("login state cookie missing or mismatched", "invalid_state")
+
+    # Consume the state row: single-use, so a replayed callback finds nothing.
     login_state = await db.get(AuthLoginState, state)
     if login_state is None:
         return _fail("unknown or already-used state", "invalid_state")
@@ -290,6 +304,8 @@ async def oidc_callback(
     # returns is intentionally discarded — the frontend fetches its own via
     # /api/auth/refresh so no token is ever put in a URL.
     await _issue_session(db, user, response)
+    # The login is done — retire the state-binding cookie.
+    clear_sso_state_cookie(response)
 
     destination = login_state.return_to or "/"
     redirect = RedirectResponse(
@@ -297,7 +313,8 @@ async def oidc_callback(
         status_code=status.HTTP_302_FOUND,
     )
     # RedirectResponse is a different object than the injected `response`, so
-    # the cookie _issue_session set has to be carried across explicitly.
+    # the cookies _issue_session / clear_sso_state_cookie set have to be carried
+    # across explicitly.
     for header_value in response.headers.getlist("set-cookie"):
         redirect.headers.append("set-cookie", header_value)
     logger.info(

@@ -7,7 +7,10 @@ import {
   isCustomAccent,
   paletteMode,
   resolveAccentHex,
+  resolveTheme,
+  THEME_TOKENS,
 } from "@/lib/theme";
+import type { CustomTheme } from "@/lib/theme";
 
 describe("hexToHslChannels", () => {
   it("converts primaries to HSL channel triples", () => {
@@ -72,6 +75,43 @@ describe("applyTheme", () => {
   it("falls back to the default palette for an unknown id", () => {
     const root = document.createElement("html");
     applyTheme(root, { palette: "bogus", accent: "signal" });
+    expect(root.dataset.palette).toBe("harbor");
+  });
+});
+
+describe("custom themes (#323)", () => {
+  const CUSTOM: CustomTheme = {
+    id: "acme",
+    mode: "dark",
+    tokens: Object.fromEntries(THEME_TOKENS.map((t) => [t, "#112233"])),
+  };
+
+  it("resolves a preset into a full token var map when it's the active palette", () => {
+    const t = resolveTheme({ palette: "acme", accent: "signal", customTheme: CUSTOM });
+    expect(t.palette).toBe("acme");
+    expect(t.mode).toBe("dark");
+    expect(t.primary).toBeNull(); // the theme owns primary; accent doesn't compose
+    expect(Object.keys(t.vars ?? {})).toHaveLength(THEME_TOKENS.length);
+    expect(t.vars?.["--background"]).toBe(hexToHslChannels("#112233"));
+  });
+
+  it("ignores the preset when a per-user override selects a built-in", () => {
+    const t = resolveTheme({ palette: "eclipse", accent: "signal", customTheme: CUSTOM });
+    expect(t.palette).toBe("eclipse");
+    expect(t.vars).toBeUndefined();
+  });
+
+  it("injects the token pack inline and clears it when switching to a built-in", () => {
+    const root = document.createElement("html");
+    applyTheme(root, { palette: "acme", accent: "signal", customTheme: CUSTOM });
+    expect(root.dataset.palette).toBe("acme");
+    expect(root.dataset.mode).toBe("dark");
+    expect(root.style.getPropertyValue("--background")).toBe(hexToHslChannels("#112233"));
+    expect(root.style.getPropertyValue("--primary")).toBe(hexToHslChannels("#112233"));
+    // Switching to a built-in must remove every injected token var.
+    applyTheme(root, { palette: "harbor", accent: "signal" });
+    expect(root.style.getPropertyValue("--background")).toBe("");
+    expect(root.style.getPropertyValue("--primary")).toBe("");
     expect(root.dataset.palette).toBe("harbor");
   });
 });

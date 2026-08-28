@@ -189,26 +189,80 @@ export function accentForegroundChannels(hex: string): string {
   return brightness > 150 ? FG_INK : FG_WHITE;
 }
 
+// --- Custom brand themes (#323) --------------------------------------------
+
+// The complete design-token set a custom theme defines — must match the backend
+// utils.theme_tokens.THEME_TOKENS and the [data-palette] blocks in globals.css.
+export const THEME_TOKENS = [
+  "background", "foreground",
+  "card", "card-foreground",
+  "popover", "popover-foreground",
+  "primary", "primary-foreground",
+  "secondary", "secondary-foreground",
+  "muted", "muted-foreground",
+  "accent", "accent-foreground",
+  "destructive", "destructive-foreground",
+  "success", "success-foreground",
+  "warning", "warning-foreground",
+  "border", "input", "ring",
+] as const;
+
+const THEME_TOKEN_VARS = THEME_TOKENS.map((t) => `--${t}`);
+
+/** A custom theme preset's runtime shape — the active theme embedded in the
+ *  public site-settings payload, or one being previewed in the editor. `tokens`
+ *  maps each THEME_TOKENS key to a `#RRGGBB` value. */
+export interface CustomTheme {
+  id: string;
+  mode: PaletteMode;
+  tokens: Record<string, string>;
+}
+
 // --- Applying to the DOM ----------------------------------------------------
 
 export interface ThemeChoice {
   palette: string;
   accent: string;
+  /** The active custom theme (if any). Applied when the selected `palette` is
+   *  this theme's id — i.e. a preset is the active choice, not a built-in. */
+  customTheme?: CustomTheme | null;
 }
 
-/** The fully-resolved theme: palette id + mode, and the accent channel overrides
- *  (null when the default "signal" accent keeps each palette's own primary). This
- *  is what gets applied to <html> *and* cached for the no-flash inline script, so
- *  both paths apply identical values with no colour math at load. */
+/** The fully-resolved theme: palette id + mode, plus either the accent channel
+ *  overrides (built-in palette) or a full `vars` token map (custom theme). This
+ *  is applied to <html> *and* cached for the no-flash inline script, so both
+ *  paths apply identical values with no colour math at load. */
 export interface AppliedTheme {
   palette: string;
   mode: PaletteMode;
   primary: string | null;
   primaryForeground: string | null;
   ring: string | null;
+  /** `--token` → `"H S% L%"` for every design token, set when a custom theme is
+   *  active. Undefined for a built-in palette. */
+  vars?: Record<string, string>;
 }
 
-export function resolveTheme({ palette, accent }: ThemeChoice): AppliedTheme {
+export function resolveTheme({ palette, accent, customTheme }: ThemeChoice): AppliedTheme {
+  // A custom theme is active only when the selected palette *is* that preset —
+  // a per-user override to a built-in still wins (its id won't match).
+  if (customTheme && customTheme.id === palette) {
+    const vars: Record<string, string> = {};
+    for (const token of THEME_TOKENS) {
+      const hex = customTheme.tokens[token];
+      if (hex) vars[`--${token}`] = hexToHslChannels(hex);
+    }
+    return {
+      palette: customTheme.id,
+      mode: customTheme.mode,
+      // The theme's own primary/ring tokens are authoritative — the accent
+      // control doesn't compose over a custom theme.
+      primary: null,
+      primaryForeground: null,
+      ring: null,
+      vars,
+    };
+  }
   const paletteId = isKnownPalette(palette) ? palette : DEFAULT_PALETTE;
   const hex = resolveAccentHex(accent);
   return {
@@ -220,16 +274,21 @@ export function resolveTheme({ palette, accent }: ThemeChoice): AppliedTheme {
   };
 }
 
-/** Apply a resolved theme to a root element (usually <html>): set the palette
- *  attributes and override / clear the accent channels. Idempotent. */
+/** Apply a resolved theme to a root element (usually <html>). Idempotent: every
+ *  managed token is cleared first, so switching between a custom theme and a
+ *  built-in palette never leaves stale inline vars behind. */
 export function applyResolvedTheme(root: HTMLElement, t: AppliedTheme): void {
   root.dataset.palette = t.palette;
   root.dataset.mode = t.mode;
+  // Reset all managed token vars → the [data-palette] CSS block governs again.
+  for (const v of THEME_TOKEN_VARS) root.style.removeProperty(v);
+  if (t.vars) {
+    // Custom theme: inject the full token pack inline (overrides the CSS block).
+    for (const [k, val] of Object.entries(t.vars)) root.style.setProperty(k, val);
+    return;
+  }
   if (t.primary === null) {
-    // Default "signal": let each palette's own brand-green primary show through.
-    root.style.removeProperty("--primary");
-    root.style.removeProperty("--primary-foreground");
-    root.style.removeProperty("--ring");
+    // Default "signal": let the palette's own brand-green primary show through.
     return;
   }
   root.style.setProperty("--primary", t.primary);

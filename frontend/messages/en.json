@@ -2410,7 +2410,53 @@
       "logoUpdated": "Logo updated",
       "couldntUploadLogo": "Couldn't upload logo",
       "logoRemoved": "Logo removed",
-      "couldntRemoveLogo": "Couldn't remove logo"
+      "couldntRemoveLogo": "Couldn't remove logo",
+      "customThemeTag": "Custom theme",
+      "accentManagedByTheme": "This custom theme defines its own action colour, so the accent picker doesn't apply while it's selected."
+    },
+    "themes": {
+      "heading": "Custom themes",
+      "description": "Build a theme from your brand colours and apply it site-wide. Themes appear alongside the built-in palettes above.",
+      "upload": "Upload theme",
+      "newTheme": "New theme",
+      "loading": "Loading themes…",
+      "empty": "No custom themes yet. Create one or upload a theme file.",
+      "source": {
+        "builtin": "Example",
+        "custom": "Custom"
+      },
+      "mode": {
+        "label": "Mode",
+        "dark": "Dark",
+        "light": "Light"
+      },
+      "edit": "Edit",
+      "download": "Download",
+      "delete": "Delete",
+      "deleted": "Theme deleted",
+      "couldntDelete": "Couldn't delete the theme",
+      "deleteTitle": "Delete {name}?",
+      "deleteDescription": "This removes the theme from the library. If it's the active site theme, switch to another first.",
+      "badFile": "That file isn't valid JSON.",
+      "badFileTokens": "That theme file is missing or has invalid values for {count} colour token(s).",
+      "invalidId": "The id must be a lowercase slug (letters, numbers, hyphens).",
+      "nameRequired": "Give the theme a name.",
+      "invalidColor": "The {token} colour must be a #RRGGBB hex value.",
+      "couldntSave": "Couldn't save the theme",
+      "saved": "Theme saved",
+      "id": "Id",
+      "name": "Name",
+      "group": {
+        "surfaces": "Surfaces",
+        "text": "Text",
+        "actions": "Actions",
+        "status": "Status",
+        "borders": "Borders"
+      },
+      "previewLabel": "Preview",
+      "save": "Save theme",
+      "saving": "Saving…",
+      "cancel": "Cancel"
     },
     "instances": {
       "provider": "Provider",

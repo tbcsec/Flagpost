@@ -1127,10 +1127,48 @@ export interface HintUpdate {
 }
 
 // Site-wide theme + branding (§9). Public shape (login/register read it).
+// A custom brand theme (#323). Admin-managed presets whose token pack the theme
+// layer injects at runtime when one is the active `default_palette`.
+export type ThemeMode = "dark" | "light";
+
+/** The active theme embedded in the public site-settings payload — the minimum
+ *  the runtime paint needs (id + mode + token map), null for a built-in palette. */
+export interface ActiveTheme {
+  id: string;
+  mode: ThemeMode;
+  tokens: Record<string, string>;
+}
+
+/** A theme preset as the admin manager sees it (GET /api/admin/themes). */
+export interface ThemePreset {
+  id: string;
+  name: string;
+  mode: ThemeMode;
+  tokens: Record<string, string>;
+  source: "builtin" | "custom";
+  created_at: string;
+}
+
+export interface ThemePresetInput {
+  id: string;
+  name: string;
+  mode: ThemeMode;
+  tokens: Record<string, string>;
+}
+
+export interface ThemePresetUpdate {
+  name?: string;
+  mode?: ThemeMode;
+  tokens?: Record<string, string>;
+}
+
 export interface SiteSettings {
   platform_name: string;
   default_palette: string;
   accent: string;
+  // The active custom theme's token pack (#323) when default_palette names a
+  // preset, else null (a built-in palette). Public — needed pre-auth to paint.
+  active_theme: ActiveTheme | null;
   // Front-door animated background slug (#195): "none" (flat), "aurora",
   // "gradient", or "constellation". Public so the login/register/public pages
   // render it before there's a session.

@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { SkeletonCards } from "@/components/ui/skeleton";
 import { FlagpostMark } from "@/components/brand/flagpost-mark";
+import { ThemeManager } from "@/components/admin/theme-manager";
 import { BackgroundPreview } from "@/components/theme/site-background";
 import { richTextToPlain } from "@/lib/rich-text";
 import type { RichTextDoc } from "@/lib/types";
@@ -21,6 +22,7 @@ import {
   useUpdateSiteSettings,
   useUploadLogo,
 } from "@/lib/hooks/use-site-settings";
+import { useThemes } from "@/lib/hooks/use-themes";
 import {
   ACCENTS,
   BACKGROUNDS,
@@ -52,6 +54,7 @@ export function AppearancePanel({ active }: { active: boolean }) {
   const deleteLogo = useDeleteLogo();
   const paletteOverride = useAuthStore((s) => s.paletteOverride);
 
+  const { data: themes } = useThemes();
   const saved = data ?? FALLBACK_SETTINGS;
   const [platformName, setPlatformName] = useState(saved.platform_name);
   const [palette, setPalette] = useState(saved.default_palette);
@@ -74,13 +77,20 @@ export function AppearancePanel({ active }: { active: boolean }) {
     }
   }, [data]);
 
+  // The selected palette may be a custom theme preset (#323); its token pack
+  // drives the preview when it's the active choice. A ThemePreset is structurally
+  // a CustomTheme, and is a stable reference from the query cache.
+  const selectedPreset = themes?.find((th) => th.id === palette) ?? null;
+
   // Live preview: apply the *being-configured* palette + accent directly — but
   // only while this tab is on screen, so an unsaved preview never bleeds across
   // the rest of the admin UI. Re-applies when the tab is re-entered, since
   // `active` is a dependency.
   useEffect(() => {
-    if (active) applyTheme(document.documentElement, { palette, accent });
-  }, [active, palette, accent]);
+    if (active) {
+      applyTheme(document.documentElement, { palette, accent, customTheme: selectedPreset });
+    }
+  }, [active, palette, accent, selectedPreset]);
 
   // On leaving without saving — switching tabs *or* navigating away — restore
   // what the viewer actually sees (their own palette override, if any, over the
@@ -104,6 +114,9 @@ export function AppearancePanel({ active }: { active: boolean }) {
       applyTheme(document.documentElement, {
         palette: overrideRef.current ?? s.default_palette,
         accent: s.accent,
+        // Restore the *saved* active theme (if the site default is a preset),
+        // unless the viewer's own override is a built-in palette.
+        customTheme: overrideRef.current ? null : s.active_theme,
       });
     };
   }, [active]);
@@ -219,9 +232,39 @@ export function AppearancePanel({ active }: { active: boolean }) {
                   <span className="text-[11px] leading-snug text-muted-foreground">{p.description}</span>
                 </button>
               ))}
+
+              {/* Custom brand themes (#323) — selectable alongside the built-ins. */}
+              {(themes ?? []).map((th) => (
+                <button
+                  key={th.id}
+                  onClick={() => setPalette(th.id)}
+                  className={cn(
+                    "grid gap-2 rounded-lg border p-3 text-left transition-colors",
+                    palette === th.id ? "border-primary ring-1 ring-primary" : "border-border hover:border-primary/40",
+                  )}
+                >
+                  <div
+                    className="flex h-16 items-end gap-1 rounded-md border p-2"
+                    style={{ backgroundColor: th.tokens.background, borderColor: th.tokens.border }}
+                  >
+                    <span className="h-6 flex-1 rounded" style={{ backgroundColor: th.tokens.card }} />
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: th.tokens.primary }} />
+                  </div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-sm font-semibold">{th.name}</span>
+                    {palette === th.id && <CheckIcon />}
+                  </div>
+                  <span className="text-[11px] leading-snug text-muted-foreground">{t("customThemeTag")}</span>
+                </button>
+              ))}
             </div>
           </section>
 
+          <ThemeManager />
+
+          {selectedPreset ? (
+            <p className="text-xs text-muted-foreground">{t("accentManagedByTheme")}</p>
+          ) : (
           <section className="grid gap-3">
             <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("accentHeading")}</h3>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -275,6 +318,7 @@ export function AppearancePanel({ active }: { active: boolean }) {
               </label>
             </div>
           </section>
+          )}
 
           <section className="grid gap-3">
             <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">

@@ -25,7 +25,7 @@ export const metadata: Metadata = {
 // admin's site default + the user's palette override + the accent) is applied by
 // <ThemeApplier>; the inline script below repaints from the last-known cached
 // theme *before* first paint so a non-default theme doesn't flash the default.
-const NO_FLASH = `(function(){try{var r=localStorage.getItem('fp:site-theme');if(!r)return;var t=JSON.parse(r),e=document.documentElement,s=e.style;if(t.palette)e.setAttribute('data-palette',t.palette);if(t.mode)e.setAttribute('data-mode',t.mode);if(t.primary){s.setProperty('--primary',t.primary);s.setProperty('--ring',t.ring||t.primary);s.setProperty('--primary-foreground',t.primaryForeground||'0 0% 100%');}}catch(e){}})();`;
+const NO_FLASH = `(function(){try{var r=localStorage.getItem('fp:site-theme');if(!r)return;var t=JSON.parse(r),e=document.documentElement,s=e.style;if(t.palette)e.setAttribute('data-palette',t.palette);if(t.mode)e.setAttribute('data-mode',t.mode);if(t.vars){for(var k in t.vars)s.setProperty(k,t.vars[k]);}else if(t.primary){s.setProperty('--primary',t.primary);s.setProperty('--ring',t.ring||t.primary);s.setProperty('--primary-foreground',t.primaryForeground||'0 0% 100%');}}catch(e){}})();`;
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   // Cookie-resolved locale (ADR-0029, src/i18n/request.ts). Reading it makes

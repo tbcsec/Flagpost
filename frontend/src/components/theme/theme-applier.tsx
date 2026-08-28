@@ -32,16 +32,19 @@ export function ThemeApplier() {
   const settings = data ?? FALLBACK_SETTINGS;
   const palette = paletteOverride ?? settings.default_palette;
   const accent = settings.accent;
+  // The active custom theme (#323), when default_palette names a preset. A
+  // per-user palette override to a built-in still wins (its id won't match).
+  const customTheme = settings.active_theme ?? null;
 
   useEffect(() => {
-    const resolved = resolveTheme({ palette, accent });
+    const resolved = resolveTheme({ palette, accent, customTheme });
     applyResolvedTheme(document.documentElement, resolved);
     try {
       window.localStorage.setItem(SITE_THEME_CACHE_KEY, JSON.stringify(resolved));
     } catch {
       /* private mode — the no-flash cache just won't be available next load */
     }
-  }, [palette, accent]);
+  }, [palette, accent, customTheme]);
 
   // The platform name brands the browser tab too (§9), not just the UI chrome.
   useEffect(() => {

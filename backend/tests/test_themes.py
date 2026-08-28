@@ -142,6 +142,29 @@ async def test_active_theme_embedded_when_default_names_a_preset(client):
     assert pub["active_theme"]["tokens"]["background"] == "#abcdef"
 
 
+async def test_update_response_carries_the_active_theme(client):
+    # Regression (#323): the admin PUT response must resolve active_theme too, not
+    # just the public GET — the frontend caches the PUT response and the global
+    # ThemeApplier reads it, so a save that dropped it reverted the whole site to
+    # the default palette (only the appearance preview kept the custom theme).
+    admin = await admin_token(client)
+    await client.post(
+        "/api/admin/themes",
+        json=_theme_body(id="brandy", tokens=_tokens(primary="#ff0000")),
+        headers=_auth(admin),
+    )
+    resp = await client.put(
+        "/api/site-settings",
+        json={"platform_name": "X", "default_palette": "brandy", "accent": "signal"},
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["active_theme"] is not None
+    assert body["active_theme"]["id"] == "brandy"
+    assert body["active_theme"]["tokens"]["primary"] == "#ff0000"
+
+
 async def test_active_theme_is_null_for_a_builtin_palette(client):
     admin = await admin_token(client)
     await client.put(

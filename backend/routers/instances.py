@@ -384,6 +384,17 @@ async def upsert_deployment(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=error
         )
+    # A challenge can't have both its own static/regex/MCQ flag and a unique
+    # per-instance flag — grading would silently use the per-instance flag and
+    # ignore the authored one (ADR-0036 §3). Refuse the contradictory combo.
+    if body.flag_mode == "unique_per_instance" and challenge.has_flag:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "This challenge already has its own flag. Clear it before using "
+                "unique per-instance flags — the two would conflict at grading."
+            ),
+        )
 
     deployment = await _deployment_for(db, competition_id, challenge_id)
     if deployment is None:

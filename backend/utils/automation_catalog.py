@@ -62,6 +62,12 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "challenge.instance_provision_failed": [
         "competition_id", "challenge_id", "instance_id", "user_id", "team_id",
     ],
+    # Flag sharing (ADR-0036 §3): the submitter (user_id/team_id) plus the leak
+    # source (matched_user_id/matched_team_id) and the instance the flag came from.
+    "challenge.flag_shared_detected": [
+        "competition_id", "challenge_id", "user_id", "team_id",
+        "matched_user_id", "matched_team_id", "instance_id",
+    ],
     "instance.settings_updated": ["actor_user_id", "enabled"],
     "challenge.hint_requested": [
         "competition_id", "challenge_id", "hint_id", "user_id", "team_id", "cost",
@@ -230,6 +236,10 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     "challenge.instance_expired": "instance_view",
     "challenge.instance_destroyed": "instance_view",
     "challenge.instance_provision_failed": "instance_view",
+    # Flag sharing exposes which subject submitted whose flag — raw-attempt data,
+    # so it takes the analytics/submissions read tier, not challenge_view (a
+    # Participant must not automate on other subjects' sharing).
+    "challenge.flag_shared_detected": "view_submissions",
     # Site provisioner config is admin-domain, like ai.settings_updated.
     "instance.settings_updated": "manage_instance_infra",
     # Member-visible events (published challenges, solves, scoreboard-facing).

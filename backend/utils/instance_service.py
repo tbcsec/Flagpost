@@ -23,6 +23,7 @@ service stays reusable by the reaper and tests.
 from __future__ import annotations
 
 import logging
+import secrets
 from datetime import timedelta
 
 from sqlalchemy import func, select
@@ -31,6 +32,7 @@ from sqlalchemy.orm import undefer
 from db import utcnow
 from models.challenge_instancing import (
     DEFAULT_MAX_CONCURRENT,
+    FLAG_TEMPLATE_TOKEN,
     INSTANCE_ACTIVE_STATUSES,
     INSTANCE_SETTINGS_ID,
     SITE_BACKENDS,
@@ -41,6 +43,7 @@ from models.challenge_instancing import (
 )
 from models.competition import Competition
 from utils.event_bus import event_bus
+from utils.flags import hash_static_flag, make_salt
 from utils.provisioners import (
     Provisioner,
     ProvisionerError,
@@ -78,6 +81,12 @@ class NotExtendable(InstanceError):
     """The instance can't be extended (not running, or extension cap reached)."""
 
 
+# Random-token width in bytes (hex-encoded) substituted for FLAG_TEMPLATE_TOKEN.
+# 64 bits — unguessable and unique per instance, matching a static flag's
+# entropy expectations.
+FLAG_TOKEN_BYTES = 8
+
+
 # --- helpers -----------------------------------------------------------------
 
 
@@ -85,6 +94,16 @@ def subject_key(instance: ChallengeInstance) -> str:
     """The credited subject — team in team mode, user otherwise (mirrors
     ``Submission`` / the awarded-solve index)."""
     return instance.team_id or instance.user_id
+
+
+def render_flag_template(template: str) -> str:
+    """Render a unique-mode ``flag_template`` into a concrete per-instance flag
+    (ADR-0036 §3) by replacing every ``<random>`` placeholder with one fresh
+    random hex token. Only the placeholder is substituted, so the staff-authored
+    flag format around it is preserved verbatim. Authoring validation requires
+    the placeholder to be present, so a rendered flag is always unique."""
+    token = secrets.token_hex(FLAG_TOKEN_BYTES)
+    return template.replace(FLAG_TEMPLATE_TOKEN, token)
 
 
 def transition(instance: ChallengeInstance, target: str) -> bool:
@@ -400,7 +419,10 @@ async def launch(
 
 
 def _spec_for(
-    instance: ChallengeInstance, deployment: ChallengeDeployment, lifetime: int
+    instance: ChallengeInstance,
+    deployment: ChallengeDeployment,
+    lifetime: int,
+    flag_plaintext: str | None = None,
 ) -> ProvisionSpec:
     # Rebuild the container-port → host-port map from the declared ports paired
     # positionally with the allocated endpoints recorded at request time.
@@ -423,9 +445,9 @@ def _spec_for(
         lifetime_s=lifetime,
         subject_key=subject_key(instance),
         host_ports=host_ports,
-        # Shared-flag mode (Phase 1): no per-instance flag injected. Unique
-        # flags arrive in Phase 2.
-        flag_plaintext=None,
+        # Unique-flag mode (ADR-0036 §3) injects the rendered plaintext into the
+        # container once; None in shared-flag mode. Never stored on the row.
+        flag_plaintext=flag_plaintext,
     )
 
 
@@ -453,7 +475,18 @@ async def provision(db_factory, instance_id: str) -> None:
         await db.commit()
 
     lifetime = lifetime_for(deployment, competition)
-    spec = _spec_for(instance, deployment, lifetime)
+    # Unique-flag mode (ADR-0036 §3): render a fresh per-instance flag now, inject
+    # it into the container via the spec, and keep only its salted hash on the
+    # row (stored in the running-transition commit below). The plaintext lives
+    # solely in this function frame — it is never persisted anywhere.
+    flag_salt: str | None = None
+    flag_hash: str | None = None
+    flag_plaintext: str | None = None
+    if deployment.flag_mode == "unique_per_instance" and deployment.flag_template:
+        flag_plaintext = render_flag_template(deployment.flag_template)
+        flag_salt = make_salt()
+        flag_hash = hash_static_flag(flag_plaintext, flag_salt, case_insensitive=False)
+    spec = _spec_for(instance, deployment, lifetime, flag_plaintext=flag_plaintext)
     handle: str | None = None
     try:
         provisioner = provisioner_for(settings, deployment)
@@ -494,6 +527,12 @@ async def provision(db_factory, instance_id: str) -> None:
         row.last_seen_at = utcnow()
         if resolved:
             row.endpoints = resolved
+        if flag_hash is not None:
+            # Store only the hash (ADR-0036 §3), the same at-rest posture as a
+            # static flag. The plaintext was already injected into the container
+            # by provisioner.create(spec) and dies with this function frame.
+            row.flag_hash = flag_hash
+            row.flag_salt = flag_salt
         await db.commit()
         await event_bus.emit("challenge.instance_started", _event_payload(row))
 

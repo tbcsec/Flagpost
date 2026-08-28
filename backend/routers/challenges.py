@@ -44,6 +44,7 @@ from utils.challenge_yaml import export_challenges, import_challenges
 from utils.competition_status import is_playable, require_playable
 from utils.event_bus import event_bus
 from utils.flags import hash_static_flag, make_salt
+from utils.instance_grading import deployment_flag_mode
 from utils.scoreboard import visible_solve_cutoff
 from utils.scoring import (
     challenge_value,
@@ -768,10 +769,19 @@ async def publish_challenge(
 ) -> Challenge:
     challenge = await _get_scoped_challenge(db, competition_id, challenge_id)
     if not challenge.has_flag:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A challenge needs a flag before it can be published",
+        # A unique-per-instance challenge (ADR-0036 §3) legitimately carries no
+        # static flag — its flag is rendered per instance and graded against the
+        # subject's live instance — so a unique-mode deployment satisfies "has a
+        # flag to grade against" for publish, exactly as it does for submit.
+        unique_mode = (
+            await deployment_flag_mode(db, competition_id, challenge_id)
+            == "unique_per_instance"
         )
+        if not unique_mode:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A challenge needs a flag before it can be published",
+            )
     if challenge.state != "published":
         challenge.state = "published"
         await db.commit()

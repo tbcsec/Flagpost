@@ -66,6 +66,10 @@ EVENT_TYPES: tuple[str, ...] = (
     "challenge.instance_expired",
     "challenge.instance_destroyed",
     "challenge.instance_provision_failed",
+    # A wrong submission carried another subject's live unique-per-instance flag
+    # (ADR-0036 §3) — provable flag sharing. Staff/automation signal, no auto-
+    # penalty. ids only (submitter + the leak source's subject + instance).
+    "challenge.flag_shared_detected",
     "user.registered",
     "user.password_changed",
     "user.email_verified",

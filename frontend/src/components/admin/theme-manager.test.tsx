@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- #RRGGBB values are theme test data, not UI colours (§9). */
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

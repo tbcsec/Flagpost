@@ -963,6 +963,15 @@ This makes a few features possible without touching component code:
   `localStorage`); the accent and platform name stay site-wide. The
   per-competition / white-label variant is deferred and may return later if
   demand warrants (ADR-0011).
+- **Custom brand themes (#323, ADR-0011 amendment)**: the same token layer takes
+  a full **custom theme** — a validated pack of every design token (`#RRGGBB`
+  hex + a `dark`/`light` mode) stored as a site-level `theme_presets` row and
+  injected onto `<html>` at runtime, generalising the custom-accent path from one
+  colour to the whole set. Additive: presets appear alongside the built-in
+  palettes and the active one is just the site's `default_palette` (a preset id
+  or a built-in). A **token pack only** — never arbitrary CSS/JS/fonts, so it has
+  no injection surface and layout stays fixed. Admin-authored (editor or an
+  uploaded/downloadable JSON file, `docs/THEMING.md`), rides the backup.
 - **Custom logo (site-wide branding, Tier 3 Phase 9)**: an administrator may
   replace the built-in Flagpost mark with the organisation's own **logo** — a
   superset of the earlier "only the name is white-labelled" rule (this relaxes

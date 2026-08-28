@@ -48,3 +48,32 @@ about what UI/data we build on top of it, not a change to the mechanism.
   mechanism already supports it, so it's additive, not a rewrite).
 - Forecloses: nothing permanently — this is "not yet", not "never". The
   §9 mechanism and this ADR both leave the per-competition door open.
+
+## Amendment: custom brand themes (2026-08-28, #323)
+
+Site-wide theming gained a **custom theme** axis alongside the built-in palette
+and accent: an administrator can author or upload a **complete pack of the
+design tokens** (the same CSS variables the built-in palettes set), stored as
+`theme_presets` rows and injected onto `<html>` at runtime — generalising the
+existing custom-accent-hex path from one colour to the full token set.
+
+This does **not** change the scope decision above:
+
+- Still **site-wide, admin-only.** A preset is selected as the site's
+  `default_palette` (its id may now name a preset or a built-in). The per-user
+  override and per-scope token mechanism (§9) are unchanged.
+- **Additive, not a rewrite.** No `Competition.theme` column; presets are
+  site-level rows. Per-competition / white-label theming remains deferred and
+  would build on this (a preset is exactly the shape a scoped theme would need).
+
+Two boundaries make it safe and consistent, and are the reason to keep it:
+
+- **Token pack only** — colours (`#RRGGBB`) for a fixed allowlist of tokens,
+  plus a `dark`/`light` mode. **Not** arbitrary CSS/JS/fonts/markup: the
+  validator constrains keys and values so the map can't carry CSS control
+  characters, so injecting it as inline `--token` styles has no injection
+  surface. Arbitrary CSS/JS was explicitly rejected (CSP/exfil/UI-redress risk,
+  and a poor fit for a compiled front end).
+- **Layout is fixed** — themes recolour; they don't move or restyle components.
+
+See `docs/THEMING.md` for the theme-file format and token reference.

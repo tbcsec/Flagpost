@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import func, select
@@ -69,6 +70,39 @@ _DUMMY_PASSWORD_HASH = hash_password("flagpost-login-timing-equalizer")
 
 REFRESH_COOKIE_NAME = "refresh_token"
 REFRESH_COOKIE_PATH = "/api/auth"
+
+# Binds an in-flight SSO login (OIDC / OAuth2) to the browser that started it.
+# The `state` nonce alone prevents replay but not cross-browser injection: an
+# attacker can complete an `open`-posture login as themselves and hand the still-
+# valid callback URL to a victim, fixating the attacker's session into the
+# victim's browser (security F3). Requiring a matching httpOnly cookie the victim
+# never received closes that (RFC 6749 §10.12). Lax so it rides the top-level
+# redirect back from the IdP; path-scoped to the auth routes.
+SSO_STATE_COOKIE_NAME = "sso_login_state"
+SSO_STATE_COOKIE_PATH = "/api/auth"
+
+
+def set_sso_state_cookie(response: Response, state: str, max_age_seconds: int) -> None:
+    response.set_cookie(
+        key=SSO_STATE_COOKIE_NAME,
+        value=state,
+        max_age=max_age_seconds,
+        httponly=True,
+        secure=settings.refresh_cookie_secure,
+        samesite="lax",
+        path=SSO_STATE_COOKIE_PATH,
+    )
+
+
+def sso_state_cookie_matches(request: Request, state: str) -> bool:
+    """True iff the callback carries the state-binding cookie set at login and it
+    matches the `state` the provider echoed back (constant-time)."""
+    cookie = request.cookies.get(SSO_STATE_COOKIE_NAME)
+    return bool(cookie) and secrets.compare_digest(cookie, state)
+
+
+def clear_sso_state_cookie(response: Response) -> None:
+    response.delete_cookie(SSO_STATE_COOKIE_NAME, path=SSO_STATE_COOKIE_PATH)
 
 
 async def _throttle(

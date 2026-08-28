@@ -1214,3 +1214,23 @@ async def test_multi_tenant_entra_sign_in_end_to_end(client, idp):
             )
         )
         assert link is not None
+
+
+async def test_callback_rejected_without_the_state_binding_cookie(client, idp):
+    # F3 (login CSRF / session fixation): a valid callback URL delivered to a
+    # browser that never started the login — i.e. one holding no state-binding
+    # cookie — must be refused, so an attacker can't plant their own session in a
+    # victim's browser. The single-use state row alone doesn't stop this.
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+    state, _ = await _begin_login(client, idp)
+
+    client.cookies.clear()  # the victim's browser: no sso_login_state cookie
+    resp = await client.get(
+        f"/api/auth/oidc/testidp/callback?code=abc&state={state}",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert "error=invalid_state" in resp.headers["location"]
+    # And no session was planted.
+    assert "refresh_token" not in resp.headers.get("set-cookie", "")

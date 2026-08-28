@@ -29,6 +29,7 @@ export const FALLBACK_SETTINGS: SiteSettings = {
   platform_name: DEFAULT_PLATFORM_NAME,
   default_palette: DEFAULT_PALETTE,
   accent: DEFAULT_ACCENT,
+  active_theme: null,
   background_style: "none",
   login_notice: null,
   registration_open: true,

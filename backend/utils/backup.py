@@ -86,12 +86,19 @@ from models.page import Page
 from models.role import Role, RoleAssignment
 from models.score_adjustment import ScoreAdjustment
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
+from models.theme_preset import ThemePreset
 from models.submission import Submission
 from models.team import Team, TeamMembership
 from models.ticket import Ticket, TicketMessage
 from models.ticket_attachment import TicketAttachment
 from models.user import User
 from storage.base import ObjectStorage
+from utils.theme_tokens import (
+    RESERVED_PALETTE_IDS,
+    ThemeValidationError,
+    validate_theme_mode,
+    validate_theme_tokens,
+)
 
 SCHEMA_VERSION = 1
 
@@ -198,6 +205,13 @@ class Spec:
     # per-table keeps the object handling generic instead of special-casing table
     # names in the export/import loops.
     object_key_for: Callable[[dict], str] | None = None
+    # A per-row content validator run on import, right before the ORM row is
+    # built. ``load_row`` does no content validation, so a table whose CRUD routes
+    # enforce a content invariant (e.g. ``theme_presets``' ``#RRGGBB`` token
+    # boundary) must repeat it here — otherwise a hand-crafted backup bypasses the
+    # boundary the interactive routes guard (#323 review). It raises
+    # :class:`ImportError_` to reject the whole document with a 400.
+    validate_row: Callable[[dict], None] | None = None
 
 
 def _challenge_object_key(row: dict) -> str:
@@ -224,6 +238,34 @@ async def _nk_role(db: AsyncSession, row: dict) -> str | None:
 
 async def _nk_page(db: AsyncSession, row: dict) -> str | None:
     return await db.scalar(select(Page.id).where(Page.slug == row["slug"]))
+
+
+async def _nk_theme(db: AsyncSession, row: dict) -> str | None:
+    # The id is a stable slug, so it's the natural key: a preset already present
+    # by that id is left untouched (additive import), matching pages.
+    return await db.scalar(
+        select(ThemePreset.id).where(ThemePreset.id == row.get("id"))
+    )
+
+
+def _validate_theme_row(row: dict) -> None:
+    """Enforce the theme boundary the CRUD routes apply — ``validate_theme_tokens``
+    / ``validate_theme_mode`` plus the reserved-id guard — on an imported
+    ``theme_presets`` row. ``load_row`` does no content validation and
+    ``ThemePreset.tokens`` is a generic JSON column, so without this a
+    hand-crafted backup could persist a non-``#RRGGBB`` (or non-dict) token map, a
+    bad mode, or a reserved id that shadows a built-in palette — bypassing the
+    module's whole safety boundary (``theme_tokens`` header) and, once named by
+    ``default_palette``, 500-ing the *public* site-settings paint (#323 review)."""
+    try:
+        validate_theme_tokens(row.get("tokens"))
+        validate_theme_mode(row.get("mode"))
+    except ThemeValidationError as exc:
+        raise ImportError_(f"theme_presets {row.get('id')!r}: {exc}") from exc
+    if row.get("id") in RESERVED_PALETTE_IDS:
+        raise ImportError_(
+            f"theme_presets id {row.get('id')!r} collides with a built-in palette"
+        )
 
 
 async def _nk_competition(db: AsyncSession, row: dict) -> str | None:
@@ -272,6 +314,13 @@ SPECS: tuple[Spec, ...] = (
     # restore onto an install that already has /p/about leaves that page alone
     # rather than creating a second one that can't have the URL.
     Spec("pages", Page, "site_settings", id_map="page", natural_key=_nk_page),
+    # Custom brand themes (#323) — portable branding. keep_id: the slug id is what
+    # default_palette points at, so it must survive the round-trip. created_by is
+    # install-local authorship (a user id that may not exist on the target), so
+    # it's dropped on export like a non-portable column rather than dangling a FK.
+    Spec("theme_presets", ThemePreset, "site_settings", keep_id=True,
+         natural_key=_nk_theme, secret_columns=("created_by",),
+         validate_row=_validate_theme_row),
     Spec("users", User, "users", id_map="user", natural_key=_nk_user),
     Spec("roles", Role, "roles", id_map="role", natural_key=_nk_role),
     Spec("competitions", Competition, "competitions", id_map="competition",
@@ -507,6 +556,11 @@ async def import_data(
                 row[col] = generate_invite_code()
             if spec.object_key_for is not None and object_data:
                 row["object_key"] = spec.object_key_for(row)
+
+            # Re-apply any content invariant the CRUD routes guard (load_row does
+            # not) before the row lands — see Spec.validate_row (#323 review).
+            if spec.validate_row is not None:
+                spec.validate_row(row)
 
             obj = spec.model(**load_row(spec.model, row))
             if actor_global is not None:

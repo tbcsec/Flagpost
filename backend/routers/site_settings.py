@@ -22,6 +22,7 @@ from auth.deps import require_permission, user_has_permission
 from config import settings as app_config
 from db import get_db, utcnow
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
+from models.theme_preset import ThemePreset
 from models.user import User
 from schemas.rules import RulesSettingsOut, RulesSettingsUpdate
 from schemas.site_settings import (
@@ -58,10 +59,21 @@ async def get_or_create_settings(db: AsyncSession) -> SiteSettings:
     return settings
 
 
+async def _resolve_active_theme(db: AsyncSession, settings: SiteSettings) -> None:
+    """Annotate the row with the active custom theme's token pack (#323) when
+    ``default_palette`` names a preset, so it's carried by EVERY response that
+    feeds the site-settings cache (read *and* the write/logo routes) — the
+    ThemeApplier reads it from that cache, so a save that dropped it would revert
+    the whole site to the default palette. ``db.get`` returns None for a built-in
+    id or an unknown one."""
+    settings.active_theme = await db.get(ThemePreset, settings.default_palette)
+
+
 @router.get("", response_model=SiteSettingsOut)
 async def read_site_settings(db: AsyncSession = Depends(get_db)) -> SiteSettings:
     # Public: the branding is needed before authentication.
     settings = await get_or_create_settings(db)
+    await _resolve_active_theme(db, settings)
     # demo_mode is config-driven, not stored — annotate the row for serialization.
     settings.demo_mode = app_config.demo_mode
     # email_required mirrors the allowlist + verification flags; the domain
@@ -93,6 +105,9 @@ async def update_site_settings(
     settings.show_wordmark = body.show_wordmark
     await db.commit()
     await db.refresh(settings)
+    # Carry the active theme on the admin response so the cache the ThemeApplier
+    # reads keeps it after a save (#323).
+    await _resolve_active_theme(db, settings)
 
     await event_bus.emit(
         "site.settings_updated",
@@ -149,6 +164,7 @@ async def upload_logo(
     settings.logo_updated_at = utcnow()
     await db.commit()
     await db.refresh(settings)
+    await _resolve_active_theme(db, settings)  # keep the active theme in the cache (#323)
 
     await event_bus.emit(
         "site.settings_updated",
@@ -169,6 +185,7 @@ async def delete_logo(
     settings.logo_updated_at = None
     await db.commit()
     await db.refresh(settings)
+    await _resolve_active_theme(db, settings)  # keep the active theme in the cache (#323)
 
     await event_bus.emit(
         "site.settings_updated",

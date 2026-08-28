@@ -110,6 +110,9 @@ import type {
   SubmitResult,
   Team,
   TeamApplication,
+  ThemePreset,
+  ThemePresetInput,
+  ThemePresetUpdate,
   TeamJoinResult,
   TeamUpdate,
   Ticket,
@@ -992,6 +995,26 @@ export const pagesApi = {
     apiFetch<AdminPage[]>("/api/admin/pages/reorder", {
       method: "POST",
       body: JSON.stringify({ page_ids: pageIds }),
+    }),
+};
+
+// Custom brand themes (#323) — admin CRUD for the site-wide theme library. The
+// active theme is selected via the site-settings default_palette, not here.
+export const themesApi = {
+  list: () => apiFetch<ThemePreset[]>("/api/admin/themes"),
+  create: (input: ThemePresetInput) =>
+    apiFetch<ThemePreset>("/api/admin/themes", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  update: (id: string, input: ThemePresetUpdate) =>
+    apiFetch<ThemePreset>(`/api/admin/themes/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  remove: (id: string) =>
+    apiFetch<void>(`/api/admin/themes/${encodeURIComponent(id)}`, {
+      method: "DELETE",
     }),
 };
 

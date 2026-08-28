@@ -138,6 +138,9 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "page.created": ["page_id", "slug", "actor_user_id"],
     "page.updated": ["page_id", "slug", "fields", "actor_user_id"],
     "page.deleted": ["page_id", "slug", "actor_user_id"],
+    "theme.created": ["theme_id", "name", "actor_user_id"],
+    "theme.updated": ["theme_id", "name", "actor_user_id"],
+    "theme.deleted": ["theme_id", "actor_user_id"],
     "identity.linked": ["user_id", "provider_id", "provider_slug"],
     "identity.unlinked": ["user_id", "provider_id", "provider_slug"],
 }
@@ -184,6 +187,10 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     "page.created": "manage_pages",
     "page.updated": "manage_pages",
     "page.deleted": "manage_pages",
+    # Theme presets are site branding — same admin gate as site settings.
+    "theme.created": "manage_site_settings",
+    "theme.updated": "manage_site_settings",
+    "theme.deleted": "manage_site_settings",
     # AI provider config is admin-domain, like site settings and auth providers.
     "ai.settings_updated": "manage_ai",
     # Per-competition assistant usage/errors — staff operational data, like the

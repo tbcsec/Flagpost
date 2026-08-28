@@ -46,6 +46,11 @@ async def lifespan(app: FastAPI):
     account (ADR-0017, supersedes the seeded default admin of ADR-0010)."""
     async with SessionLocal() as session:
         await seed_system_roles(session)
+        # Ship the example brand themes (#323) on first boot — seeds only when the
+        # theme library is empty, so admin edits/deletes survive restarts.
+        from utils.theme_seed import seed_builtin_themes
+
+        await seed_builtin_themes(session)
         # Demo instances seed well-known accounts + sample data (demo-only,
         # idempotent). The hourly reset is external; a fresh boot re-seeds.
         if settings.demo_mode:

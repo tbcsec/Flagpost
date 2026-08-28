@@ -14,6 +14,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from schemas.theme import ThemePublic
+
 from utils.rich_text import validate_rich_text_doc
 
 # Serialized-size cap for the sign-in notice (#197). It rides the public,
@@ -56,6 +58,10 @@ class SiteSettingsOut(BaseModel):
     platform_name: str
     default_palette: str
     accent: str
+    # The active custom theme's token pack (#323), when ``default_palette`` names
+    # a preset rather than a built-in palette — so the pre-auth runtime paint can
+    # inject its colours. Null for a built-in palette. Non-sensitive (colours).
+    active_theme: ThemePublic | None = None
     # Front-door animated background slug (#195); "none" = flat. Public so the
     # login/register/public pages can render it before there's a session.
     background_style: str = "none"

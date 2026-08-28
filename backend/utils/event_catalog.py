@@ -105,6 +105,12 @@ EVENT_TYPES: tuple[str, ...] = (
     "page.created",
     "page.updated",
     "page.deleted",
+    # Custom brand themes (#323, ADR-0011). Admin CRUD of a site-wide theme
+    # preset; the audit trail an operator needs for branding changes. Payloads
+    # carry the theme id/name, never a competitor-visible surface.
+    "theme.created",
+    "theme.updated",
+    "theme.deleted",
     # AI module (#98, ADR-0023). Provider config change, per-exchange usage
     # (ai.query) and upstream failure (ai.error) — usage metadata only, never
     # message content (spec §4) — plus a competitor's one-time acceptance of the

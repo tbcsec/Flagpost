@@ -118,7 +118,9 @@ Subsystem by subsystem, with the non-obvious bits called out:
 - **Collaboration** — Y.js CRDT under TipTap, transported as a **dumb relay**
   with client-snapshot persistence (ADR-0014). The server never decodes the CRDT.
 - **Admin** — users directory + soft-ban, custom role editor, site-wide theming
-  and branding (custom logo in the DB, not object storage), SMTP, cross-
+  and branding (built-in palettes + accent, a custom logo in the DB, and
+  **custom brand themes** — admin-authored full token packs stored as
+  `theme_presets`, #323/ADR-0011 amendment, `docs/THEMING.md`), SMTP, cross-
   competition audit log, a site overview, and a full **export/import backup**
   (ADR-0016 — additive, carries secrets, so the file is sensitive).
 - **AI assistants** — the optional `ai` module (ADR-0023): an administrator

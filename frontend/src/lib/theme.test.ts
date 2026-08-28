@@ -101,6 +101,16 @@ describe("custom themes (#323)", () => {
     expect(t.vars).toBeUndefined();
   });
 
+  it("carries a light theme's mode onto data-mode (drives native color-scheme)", () => {
+    // globals.css keys `color-scheme` off `data-mode`, not the palette id, so a
+    // light custom theme must set data-mode="light" or native controls (date
+    // pickers, scrollbars, autofill) render dark on a light surface (#323 review).
+    const root = document.createElement("html");
+    const light: CustomTheme = { id: "corp", mode: "light", tokens: CUSTOM.tokens };
+    applyTheme(root, { palette: "corp", accent: "signal", customTheme: light });
+    expect(root.dataset.mode).toBe("light");
+  });
+
   it("injects the token pack inline and clears it when switching to a built-in", () => {
     const root = document.createElement("html");
     applyTheme(root, { palette: "acme", accent: "signal", customTheme: CUSTOM });

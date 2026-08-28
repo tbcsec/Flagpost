@@ -223,3 +223,49 @@ async def test_theme_rides_the_backup(client):
         assert restored is not None
         assert restored.tokens["primary"] == "#123456"
         assert restored.created_by is None
+
+
+async def test_import_re_enforces_the_theme_token_boundary(client):
+    """The backup import path must apply the same token/mode/reserved-id boundary
+    the CRUD routes do (#323 review, HIGH). load_row does no content validation and
+    ThemePreset.tokens is a generic JSON column, so a hand-crafted document could
+    otherwise persist a non-#RRGGBB (or non-dict) token map, a bad mode, or a
+    built-in-shadowing id — which, once named by default_palette, would 500 the
+    *public* GET /api/site-settings paint every login screen depends on."""
+    from storage.memory import InMemoryStorage
+    from utils import backup
+
+    storage = InMemoryStorage()
+
+    def _doc(preset: dict) -> dict:
+        return {
+            "flagpost_export": True,
+            "schema_version": backup.SCHEMA_VERSION,
+            "sections": ["site_settings"],
+            "data": {"theme_presets": [preset]},
+        }
+
+    bad_presets = [
+        {"id": "evil", "name": "x", "mode": "dark", "tokens": "not-a-dict"},  # exploit A
+        {"id": "evil", "name": "x", "mode": "dark", "tokens": _tokens(background=123)},
+        {"id": "evil", "name": "x", "mode": "dark", "tokens": _tokens(background="red")},
+        {"id": "evil", "name": "x", "mode": "dark", "tokens": {k: "#101010" for k in list(THEME_TOKENS)[:-1]}},
+        {"id": "evil", "name": "x", "mode": "rainbow", "tokens": _tokens()},
+        {"id": "harbor", "name": "x", "mode": "dark", "tokens": _tokens()},  # exploit B (reserved)
+    ]
+    for preset in bad_presets:
+        async with SessionLocal() as db:
+            with pytest.raises(backup.ImportError_):
+                await backup.import_data(db, storage, _doc(preset), ["site_settings"])
+
+    # The whole document is rejected atomically — nothing lands.
+    async with SessionLocal() as db:
+        assert (await db.scalars(select(ThemePreset.id))).all() == []
+
+    # A well-formed preset still imports through the same path (happy path intact).
+    async with SessionLocal() as db:
+        await backup.import_data(
+            db, storage, _doc(_theme_body(id="clean")), ["site_settings"]
+        )
+    async with SessionLocal() as db:
+        assert await db.get(ThemePreset, "clean") is not None

@@ -53,24 +53,25 @@
   --radius: 0.5rem;
 }
 
-/* Tell the browser which way each palette leans, so **native** UI renders to
+/* Tell the browser which way the active theme leans, so **native** UI renders to
  * match (#49). Without this, Chromium draws every built-in control in light
  * mode regardless of our tokens — which is why the date field's calendar glyph
  * came out near-black on a dark ground. `color-scheme` fixes the whole family
  * in one place (date/time pickers, native select popups, autofill, the default
  * scrollbar) rather than us re-tinting each control by hand.
  *
- * Mirrors PaletteMode in lib/theme.ts — keep the two in step when adding a
- * palette. Harbor is the unset default, hence the bare :root. */
-:root,
-[data-palette="harbor"],
-[data-palette="eclipse"],
-[data-palette="umbra"] {
+ * Keyed off `data-mode` — which the shell always sets on <html> (the SSR default
+ * attribute, the no-flash script, and ThemeApplier all write it) — rather than
+ * the built-in palette ids. A *custom* brand theme (#323) sets `data-palette` to
+ * its own slug, so a palette-id list would miss it and leave a light custom theme
+ * with dark native controls; keying off the mode it declares covers built-ins and
+ * customs alike. Harbor's dark is the pre-hydration default via the
+ * <html data-mode="dark"> attribute. */
+[data-mode="dark"] {
   color-scheme: dark;
 }
 
-[data-palette="daybreak"],
-[data-palette="sandstone"] {
+[data-mode="light"] {
   color-scheme: light;
 }
 

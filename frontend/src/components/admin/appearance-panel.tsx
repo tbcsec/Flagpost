@@ -30,6 +30,7 @@ import {
   accentSwatchHex,
   applyTheme,
   isCustomAccent,
+  isKnownPalette,
   paletteMode,
 } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -77,10 +78,24 @@ export function AppearancePanel({ active }: { active: boolean }) {
     }
   }, [data]);
 
-  // The selected palette may be a custom theme preset (#323); its token pack
+  // The selection can go stale: the admin picks a custom preset, then deletes it
+  // in the manager below without saving. A palette that's neither a built-in nor a
+  // still-present preset is *derived* back to the saved default — deriving it
+  // (rather than storing it via a setState-in-effect) keeps Save from ever
+  // persisting a dangling `default_palette`, which `_resolve_active_theme` can't
+  // resolve on reload and which would silently revert the whole site to the
+  // default palette (#323 review). While `themes` is still loading the selection
+  // is assumed valid, so the preview doesn't flicker.
+  const paletteResolvable =
+    isKnownPalette(palette) ||
+    themes === undefined ||
+    themes.some((th) => th.id === palette);
+  const effectivePalette = paletteResolvable ? palette : saved.default_palette;
+
+  // The effective palette may be a custom theme preset (#323); its token pack
   // drives the preview when it's the active choice. A ThemePreset is structurally
   // a CustomTheme, and is a stable reference from the query cache.
-  const selectedPreset = themes?.find((th) => th.id === palette) ?? null;
+  const selectedPreset = themes?.find((th) => th.id === effectivePalette) ?? null;
 
   // Live preview: apply the *being-configured* palette + accent directly — but
   // only while this tab is on screen, so an unsaved preview never bleeds across
@@ -88,9 +103,9 @@ export function AppearancePanel({ active }: { active: boolean }) {
   // `active` is a dependency.
   useEffect(() => {
     if (active) {
-      applyTheme(document.documentElement, { palette, accent, customTheme: selectedPreset });
+      applyTheme(document.documentElement, { palette: effectivePalette, accent, customTheme: selectedPreset });
     }
-  }, [active, palette, accent, selectedPreset]);
+  }, [active, effectivePalette, accent, selectedPreset]);
 
   // On leaving without saving — switching tabs *or* navigating away — restore
   // what the viewer actually sees (their own palette override, if any, over the
@@ -126,7 +141,7 @@ export function AppearancePanel({ active }: { active: boolean }) {
   const noticeValue = richTextToPlain(notice).trim() ? notice : null;
   const dirty =
     platformName !== saved.platform_name ||
-    palette !== saved.default_palette ||
+    effectivePalette !== saved.default_palette ||
     accent !== saved.accent ||
     background !== saved.background_style ||
     JSON.stringify(noticeValue) !== JSON.stringify(saved.login_notice) ||
@@ -136,7 +151,7 @@ export function AppearancePanel({ active }: { active: boolean }) {
     update.mutate(
       {
         platform_name: platformName.trim(),
-        default_palette: palette,
+        default_palette: effectivePalette,
         accent,
         background_style: background,
         login_notice: noticeValue,
@@ -215,7 +230,7 @@ export function AppearancePanel({ active }: { active: boolean }) {
                   onClick={() => setPalette(p.id)}
                   className={cn(
                     "grid gap-2 rounded-lg border p-3 text-left transition-colors",
-                    palette === p.id ? "border-primary ring-1 ring-primary" : "border-border hover:border-primary/40",
+                    effectivePalette === p.id ? "border-primary ring-1 ring-primary" : "border-border hover:border-primary/40",
                   )}
                 >
                   <div
@@ -227,7 +242,7 @@ export function AppearancePanel({ active }: { active: boolean }) {
                   </div>
                   <div className="flex items-center justify-between gap-1">
                     <span className="text-sm font-semibold">{p.label}</span>
-                    {palette === p.id && <CheckIcon />}
+                    {effectivePalette === p.id && <CheckIcon />}
                   </div>
                   <span className="text-[11px] leading-snug text-muted-foreground">{p.description}</span>
                 </button>
@@ -240,7 +255,7 @@ export function AppearancePanel({ active }: { active: boolean }) {
                   onClick={() => setPalette(th.id)}
                   className={cn(
                     "grid gap-2 rounded-lg border p-3 text-left transition-colors",
-                    palette === th.id ? "border-primary ring-1 ring-primary" : "border-border hover:border-primary/40",
+                    effectivePalette === th.id ? "border-primary ring-1 ring-primary" : "border-border hover:border-primary/40",
                   )}
                 >
                   <div
@@ -252,7 +267,7 @@ export function AppearancePanel({ active }: { active: boolean }) {
                   </div>
                   <div className="flex items-center justify-between gap-1">
                     <span className="text-sm font-semibold">{th.name}</span>
-                    {palette === th.id && <CheckIcon />}
+                    {effectivePalette === th.id && <CheckIcon />}
                   </div>
                   <span className="text-[11px] leading-snug text-muted-foreground">{t("customThemeTag")}</span>
                 </button>
@@ -340,7 +355,7 @@ export function AppearancePanel({ active }: { active: boolean }) {
                   <BackgroundPreview
                     style={b.id}
                     animate={active}
-                    refreshKey={`${palette}:${accent}`}
+                    refreshKey={`${effectivePalette}:${accent}`}
                     className="h-16 w-full overflow-hidden rounded-md border border-border"
                   />
                   <div className="flex items-center justify-between gap-1">
@@ -353,7 +368,7 @@ export function AppearancePanel({ active }: { active: boolean }) {
                 </button>
               ))}
             </div>
-            {paletteMode(palette) === "light" && background !== "none" && (
+            {paletteMode(effectivePalette) === "light" && background !== "none" && (
               <p className="text-xs text-warning">{t("lightPaletteWarning")}</p>
             )}
           </section>

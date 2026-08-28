@@ -14,6 +14,7 @@ from models.challenge import Category, Challenge
 from models.competition import Competition
 from models.page import Page
 from models.role import Role, RoleAssignment
+from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 from models.submission import Submission
 from models.user import User
 from storage.memory import InMemoryStorage
@@ -169,6 +170,26 @@ async def test_smtp_password_is_excluded_but_settings_still_round_trip(client):
     # ...but the portable fields on the same row are still there.
     assert row["smtp_host"] == "smtp.example.com"
     assert row["registration_open"] is True
+
+
+async def test_import_cannot_clear_setup_completed_at(client):
+    # F2: a crafted backup that nulls the one-way setup flag must NOT re-open the
+    # unauthenticated first-run wizard. setup_completed_at is an immutable column
+    # on import — its stored value survives regardless of the payload.
+    storage = InMemoryStorage()
+    async with SessionLocal() as db:
+        stamped = await db.get(SiteSettings, SITE_SETTINGS_ID)
+        assert stamped.setup_completed_at is not None  # client fixture provisions it
+        doc = await backup.export_data(db, storage, ["site_settings"])
+
+    # Attacker tampers the export to clear the flag.
+    doc["data"]["site_settings"][0]["setup_completed_at"] = None
+    async with SessionLocal() as db:
+        await backup.import_data(db, storage, doc, ["site_settings"])
+
+    async with SessionLocal() as db:
+        row = await db.get(SiteSettings, SITE_SETTINGS_ID)
+        assert row.setup_completed_at is not None  # preserved despite the null
 
 
 async def test_import_rejects_foreign_document(client):

@@ -213,20 +213,38 @@ async def update_role(
         role.name = body.name
     if body.description is not None:
         role.description = body.description
+    permissions_changed = False
     if body.permissions is not None:
         _validate_permission_keys(body.permissions)
         await _assert_may_grant(
             db, current_user, body.permissions, already_granted=role.permissions
         )
+        permissions_changed = set(body.permissions) != set(role.permissions)
         role.permissions = list(body.permissions)
+
+    # When the permission set actually changes, the holders' effective access may
+    # have shrunk — carry their ids so the WS layer can evict their live sockets
+    # (security F4). Gathered before commit; the assignments themselves are
+    # unchanged by a role edit.
+    affected_user_ids: list[str] = []
+    if permissions_changed:
+        affected_user_ids = list(
+            (
+                await db.scalars(
+                    select(RoleAssignment.user_id)
+                    .where(RoleAssignment.role_id == role.id)
+                    .distinct()
+                )
+            ).all()
+        )
 
     await db.commit()
     await db.refresh(role)
 
-    await event_bus.emit(
-        "role.updated",
-        {"user_id": current_user.id, "role_id": role.id, "name": role.name},
-    )
+    payload = {"user_id": current_user.id, "role_id": role.id, "name": role.name}
+    if affected_user_ids:
+        payload["affected_user_ids"] = affected_user_ids
+    await event_bus.emit("role.updated", payload)
     return role
 
 

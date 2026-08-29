@@ -4,7 +4,11 @@
 // transforms between the persisted wire shape, the code-defined default, and the
 // in-memory 2D layout the grid renders.
 
-import type { LayoutEntry, WidgetDef } from "@/lib/dashboard/registry";
+import type {
+  DashboardAudience,
+  LayoutEntry,
+  WidgetDef,
+} from "@/lib/dashboard/registry";
 import type { DashboardLayoutEntry } from "@/lib/types";
 
 /** The dashboard grid is 12 columns wide (issue #21). */
@@ -47,16 +51,21 @@ export function clampEntry(def: WidgetDef, e: LayoutEntry): LayoutEntry {
   const h = Math.max(Math.round(e.h), def.minSize.h);
   const x = clamp(Math.round(e.x), 0, GRID_COLS - w);
   const y = Math.max(0, Math.round(e.y));
-  return { widgetId: e.widgetId, x, y, w, h, hidden: e.hidden };
+  return { widgetId: e.widgetId, x, y, w, h };
 }
 
 /** Merge a saved layout with the registry into the entries the grid renders.
  *  - `null` saved (no customization yet) → the code default, cloned (§10.5).
+ *  - Renders *exactly* the saved (added) set — a section is present iff it has
+ *    an entry (#330). It does **not** re-append the default set: a section the
+ *    user removed must stay gone, and a genuinely-new registry section surfaces
+ *    through the Add-section catalog, not by auto-placing itself on the grid.
  *  - Drops entries whose widget no longer exists (uninstalled/renamed).
  *  - Drops entries not in the 2D shape (pre-#21 saves) — they reset to default.
- *  - Clamps each surviving entry to the widget's min size and the grid bounds.
- *  - Appends any default widgets missing from the save (widgets added to the
- *    registry since the user last saved) so new widgets surface. */
+ *  - Drops a legacy `hidden: true` entry — the old customize UX hid sections in
+ *    place; under the catalog model that means "not added", so it's removed from
+ *    the grid (and reappears in the Add-section catalog).
+ *  - Clamps each surviving entry to the widget's min size and the grid bounds. */
 export function mergeLayout(
   saved: DashboardLayoutEntry[] | null,
   def: LayoutEntry[],
@@ -68,28 +77,17 @@ export function mergeLayout(
   const seen = new Set<string>();
   for (const s of saved) {
     const widget = registry[s.widget_id];
-    if (!widget || seen.has(s.widget_id) || !isValidSaved(s)) continue;
+    if (!widget || seen.has(s.widget_id) || !isValidSaved(s) || s.hidden) continue;
     seen.add(s.widget_id);
     merged.push(
-      clampEntry(widget, {
-        widgetId: s.widget_id,
-        x: s.x,
-        y: s.y,
-        w: s.w,
-        h: s.h,
-        hidden: Boolean(s.hidden),
-      }),
+      clampEntry(widget, { widgetId: s.widget_id, x: s.x, y: s.y, w: s.w, h: s.h }),
     );
-  }
-  for (const e of def) {
-    if (!seen.has(e.widgetId) && registry[e.widgetId]) {
-      merged.push({ ...e });
-    }
   }
   return merged;
 }
 
-/** Serialize in-memory entries to the persisted wire shape (§10.3). */
+/** Serialize in-memory entries to the persisted wire shape (§10.3). `hidden` is
+ *  no longer written — a section is present iff it has an entry (#330). */
 export function toSaved(entries: LayoutEntry[]): DashboardLayoutEntry[] {
   return entries.map((e) => ({
     widget_id: e.widgetId,
@@ -97,8 +95,35 @@ export function toSaved(entries: LayoutEntry[]): DashboardLayoutEntry[] {
     y: e.y,
     w: e.w,
     h: e.h,
-    hidden: Boolean(e.hidden),
   }));
+}
+
+/** The Add-section catalog (#330): the audience's eligible sections that aren't
+ *  already on the dashboard, in registry order. Fed to the Add-section modal. */
+export function catalogFor(
+  audience: DashboardAudience,
+  present: LayoutEntry[],
+  registry: Record<string, WidgetDef>,
+): WidgetDef[] {
+  const on = new Set(present.map((e) => e.widgetId));
+  return Object.values(registry).filter(
+    (w) => w.audiences.includes(audience) && !on.has(w.id),
+  );
+}
+
+/** Place a newly-added section at the bottom of the grid (full-left, below every
+ *  existing entry) at its default size, clamped to the grid (#330). Vertical
+ *  compaction in the grid tidies the exact row afterwards. */
+export function addEntry(entries: LayoutEntry[], def: WidgetDef): LayoutEntry[] {
+  const bottom = entries.reduce((max, e) => Math.max(max, e.y + e.h), 0);
+  const placed = clampEntry(def, {
+    widgetId: def.id,
+    x: 0,
+    y: bottom,
+    w: def.defaultSize.w,
+    h: def.defaultSize.h,
+  });
+  return [...entries, placed];
 }
 
 /** Project entries into react-grid-layout items, carrying each widget's min size

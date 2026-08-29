@@ -17,10 +17,16 @@ import type { Layout, ResponsiveLayouts } from "react-grid-layout/legacy";
 import "react-grid-layout/css/styles.css";
 import "@/components/dashboard/dashboard-grid.css";
 
+import { AddSectionModal } from "@/components/dashboard/add-section-modal";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { type LayoutEntry, WIDGETS } from "@/lib/dashboard/registry";
 import {
+  type DashboardAudience,
+  type LayoutEntry,
+  WIDGETS,
+} from "@/lib/dashboard/registry";
+import {
+  addEntry,
   applyGridItems,
   mergeLayout,
   nudgeEntry,
@@ -33,7 +39,6 @@ import {
   useResetDashboardLayout,
   useSaveDashboardLayout,
 } from "@/lib/hooks/use-dashboard";
-import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast";
 
 // Recreating the HOC each render would remount the grid, so build it once.
@@ -50,11 +55,8 @@ const COLS = { lg: 12, sm: 1 };
 const gripIcon = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden><circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" /><circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" /><circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" /></svg>
 );
-const eyeIcon = (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></svg>
-);
-const eyeOffIcon = (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c6.5 0 10 7 10 7a13 13 0 0 1-2.16 2.92" /><path d="M6.6 6.6A13 13 0 0 0 2 11s3.5 7 10 7a9 9 0 0 0 5.4-1.6" /><path d="M3 3l18 18" /></svg>
+const removeIcon = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
 );
 
 interface DashboardGridProps {
@@ -62,6 +64,9 @@ interface DashboardGridProps {
   dashboardKey: string;
   defaultLayout: LayoutEntry[];
   editable: boolean;
+  // Which dashboard this is — scopes the Add-section catalog (#330). Only the
+  // manager dashboard is editable today, so in practice this is "manager".
+  audience: DashboardAudience;
 }
 
 /** Positions equal? (order is preserved by applyGridItems, so compare pairwise.) */
@@ -80,6 +85,7 @@ export function DashboardGrid({
   dashboardKey,
   defaultLayout,
   editable,
+  audience,
 }: DashboardGridProps) {
   const t = useTranslations("dashboard.grid");
   const layoutQuery = useDashboardLayout(competitionId, dashboardKey, editable);
@@ -115,12 +121,7 @@ export function DashboardGrid({
 
   // Non-editable audiences render the fixed default statically, with no fetch.
   if (!editable) {
-    return (
-      <StaticGrid
-        entries={defaultLayout.filter((e) => !e.hidden)}
-        competitionId={competitionId}
-      />
-    );
+    return <StaticGrid entries={defaultLayout} competitionId={competitionId} />;
   }
 
   if (layoutQuery.isLoading) return loadingSkeleton;
@@ -162,8 +163,10 @@ export function DashboardGrid({
     });
   };
 
-  const toggleHidden = (index: number) =>
-    setDraft((d) => d.map((e, i) => (i === index ? { ...e, hidden: !e.hidden } : e)));
+  const add = (widgetId: string) =>
+    setDraft((d) => (WIDGETS[widgetId] ? addEntry(d, WIDGETS[widgetId]) : d));
+  const remove = (index: number) =>
+    setDraft((d) => d.filter((_, i) => i !== index));
   const nudge = (index: number, dx: number, dy: number) =>
     setDraft((d) =>
       d.map((e, i) => (i === index ? nudgeEntry(WIDGETS[e.widgetId], e, dx, dy) : e)),
@@ -185,6 +188,7 @@ export function DashboardGrid({
             <span className="mr-1 text-sm text-muted-foreground">
               {t("editHint")}
             </span>
+            <AddSectionModal audience={audience} present={draft} onAdd={add} />
             <Button size="sm" onClick={save} disabled={saveLayout.isPending}>
               {saveLayout.isPending ? t("saving") : t("saveLayout")}
             </Button>
@@ -227,7 +231,7 @@ export function DashboardGrid({
                 <EditableWidget
                   entry={entry}
                   competitionId={competitionId}
-                  onToggleHidden={() => toggleHidden(index)}
+                  onRemove={() => remove(index)}
                   onNudge={(dx, dy) => nudge(index, dx, dy)}
                   onResize={(dw, dh) => resize(index, dw, dh)}
                 />
@@ -236,10 +240,7 @@ export function DashboardGrid({
           </ResponsiveGridLayout>
         </div>
       ) : (
-        <StaticGrid
-          entries={committed.filter((e) => !e.hidden)}
-          competitionId={competitionId}
-        />
+        <StaticGrid entries={committed} competitionId={competitionId} />
       )}
     </div>
   );
@@ -289,19 +290,20 @@ function StaticGrid({
 interface EditableWidgetProps {
   entry: LayoutEntry;
   competitionId: string;
-  onToggleHidden: () => void;
+  onRemove: () => void;
   onNudge: (dx: number, dy: number) => void;
   onResize: (dw: number, dh: number) => void;
 }
 
 /** A widget in edit mode: a drag handle (mouse) plus keyboard move/resize
- *  fallbacks (RGL's drag/resize can't be driven from the keyboard), a hide
- *  toggle, and a pointer-events shield so clicks rearrange rather than interact
- *  with the widget's own controls (§10.4). */
+ *  fallbacks (RGL's drag/resize can't be driven from the keyboard), a remove
+ *  control (returns the section to the Add-section catalog, #330), and a
+ *  pointer-events shield so clicks rearrange rather than interact with the
+ *  widget's own controls (§10.4). */
 function EditableWidget({
   entry,
   competitionId,
-  onToggleHidden,
+  onRemove,
   onNudge,
   onResize,
 }: EditableWidgetProps) {
@@ -312,12 +314,7 @@ function EditableWidget({
   const label = t(`widgetLabels.${def.labelKey}`);
 
   return (
-    <div
-      className={cn(
-        "flex h-full flex-col overflow-hidden rounded-lg border-2 border-dashed border-primary/40 bg-background/40",
-        entry.hidden && "opacity-50",
-      )}
-    >
+    <div className="flex h-full flex-col overflow-hidden rounded-lg border-2 border-dashed border-primary/40 bg-background/40">
       {/* Edit chrome — above the shield so its controls stay clickable. */}
       <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-1 border-b border-border/60 bg-background/80 px-2 py-1 backdrop-blur">
         <span
@@ -326,7 +323,6 @@ function EditableWidget({
         >
           {gripIcon}
           {label}
-          {entry.hidden && <span className="italic">{t("grid.hiddenSuffix")}</span>}
         </span>
         <span className="flex items-center gap-0.5">
           <ChromeGroup label={t("grid.groupMove")}>
@@ -343,11 +339,11 @@ function EditableWidget({
           </ChromeGroup>
           <button
             type="button"
-            onClick={onToggleHidden}
-            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-            aria-label={entry.hidden ? t("grid.show", { label }) : t("grid.hide", { label })}
+            onClick={onRemove}
+            className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            aria-label={t("grid.remove", { label })}
           >
-            {entry.hidden ? eyeOffIcon : eyeIcon}
+            {removeIcon}
           </button>
         </span>
       </div>

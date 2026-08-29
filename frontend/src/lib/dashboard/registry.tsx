@@ -27,8 +27,9 @@ export interface WidgetSize {
   h: number;
 }
 
-/** Key into `dashboard.widgetLabels.*` — the edit-chrome name is resolved with
- *  `t()` in the grid (§10.4), so the registry stays free of display strings. */
+/** Key into `dashboard.widgetLabels.*` / `dashboard.widgetDescriptions.*` — the
+ *  edit-chrome name and the Add-section card copy are resolved with `t()` in the
+ *  UI (§10.4), so the registry stays free of display strings. */
 export type WidgetLabelKey =
   | "stats"
   | "standing"
@@ -38,9 +39,18 @@ export type WidgetLabelKey =
   | "supportQueue"
   | "mySolves";
 
+/** Which dashboard a section belongs on. The Add-section catalog (#330) is
+ *  filtered by the current dashboard's audience, so competitor-personal sections
+ *  (`standing`, `my-solves`) never surface on the manager dashboard's catalog and
+ *  vice-versa. A section neutral to both (e.g. `announcements`) tags both. Only
+ *  the manager dashboard is customizable today; the tag also sets up a future
+ *  participant catalog cleanly. */
+export type DashboardAudience = "manager" | "participant";
+
 export interface WidgetDef {
   id: string;
   labelKey: WidgetLabelKey; // shown in edit-mode chrome (§10.4), via t()
+  audiences: DashboardAudience[]; // which dashboards may add this section (#330)
   minSize: WidgetSize; // smallest the widget may be dragged down to (issue #21)
   defaultSize: WidgetSize; // size in the code-defined default layout
   Component: React.ComponentType<{ competitionId: string }>;
@@ -50,6 +60,7 @@ export const WIDGETS: Record<string, WidgetDef> = {
   stats: {
     id: "stats",
     labelKey: "stats",
+    audiences: ["manager"],
     minSize: { w: 4, h: 2 },
     defaultSize: { w: 12, h: 2 },
     Component: StatsWidget,
@@ -57,6 +68,7 @@ export const WIDGETS: Record<string, WidgetDef> = {
   standing: {
     id: "standing",
     labelKey: "standing",
+    audiences: ["participant"],
     minSize: { w: 4, h: 2 },
     defaultSize: { w: 12, h: 2 },
     Component: StandingWidget,
@@ -64,6 +76,7 @@ export const WIDGETS: Record<string, WidgetDef> = {
   activity: {
     id: "activity",
     labelKey: "activity",
+    audiences: ["manager", "participant"],
     minSize: { w: 4, h: 3 },
     defaultSize: { w: 6, h: 5 },
     Component: ActivityWidget,
@@ -71,6 +84,7 @@ export const WIDGETS: Record<string, WidgetDef> = {
   announcements: {
     id: "announcements",
     labelKey: "announcements",
+    audiences: ["manager", "participant"],
     minSize: { w: 4, h: 3 },
     defaultSize: { w: 6, h: 5 },
     Component: AnnouncementsWidget,
@@ -78,6 +92,7 @@ export const WIDGETS: Record<string, WidgetDef> = {
   "challenge-health": {
     id: "challenge-health",
     labelKey: "challengeHealth",
+    audiences: ["manager"],
     minSize: { w: 4, h: 3 },
     defaultSize: { w: 6, h: 5 },
     Component: ChallengeHealthWidget,
@@ -85,6 +100,7 @@ export const WIDGETS: Record<string, WidgetDef> = {
   "support-queue": {
     id: "support-queue",
     labelKey: "supportQueue",
+    audiences: ["manager"],
     minSize: { w: 4, h: 3 },
     defaultSize: { w: 6, h: 5 },
     Component: SupportQueueWidget,
@@ -92,11 +108,18 @@ export const WIDGETS: Record<string, WidgetDef> = {
   "my-solves": {
     id: "my-solves",
     labelKey: "mySolves",
+    audiences: ["participant"],
     minSize: { w: 4, h: 3 },
     defaultSize: { w: 6, h: 5 },
     Component: MySolvesWidget,
   },
 };
+
+/** The sections a given dashboard audience may add (#330) — used to build the
+ *  Add-section catalog. Order = the registry's declared order. */
+export function widgetsForAudience(audience: DashboardAudience): WidgetDef[] {
+  return Object.values(WIDGETS).filter((w) => w.audiences.includes(audience));
+}
 
 export interface LayoutEntry {
   widgetId: string;
@@ -104,7 +127,8 @@ export interface LayoutEntry {
   y: number; // row offset (0-indexed)
   w: number; // column span
   h: number; // row span
-  hidden?: boolean; // customized-out but re-addable in edit mode (§10.4)
+  // A section is present iff it has an entry (#330). There is no in-memory
+  // "hidden" any more — the customize UX adds/removes entries instead.
 }
 
 /** A default-layout entry: a widget placed at (x, y) at its default size. */

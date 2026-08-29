@@ -344,7 +344,6 @@
       "resetToast": "Przywróć domyślny pulpit",
       "resetErrorToast": "Nie można zresetować układu",
       "dragToMove": "Przeciągnij, aby przenieść {label}",
-      "hiddenSuffix": "· hidden",
       "groupMove": "Przenieś",
       "groupResize": "Zmień rozmiar",
       "moveLeft": "Przesuń {label} w lewo",
@@ -355,8 +354,8 @@
       "wider": "Szersze {label}",
       "shorter": "Krótsze {label}",
       "taller": "Taller {label}",
-      "show": "Pokaż {label}",
-      "hide": "Ukryj {label}"
+      "addSection": "Add section",
+      "remove": "Remove {label}"
     },
     "firstRun": {
       "title": "Pierwsze kroki",
@@ -366,6 +365,23 @@
       "inviteTeamsDesc": "Udostępnij link dołączenia lub kod zaproszenia, aby gracze mogli się zarejestrować i tworzyć zespoły.",
       "brandEvent": "Marka swojego wydarzenia",
       "brandEventDesc": "Ustaw nazwę platformy, paletę i akcent w panelu administracyjnym → Ustawienia witryny → Wygląd."
+    },
+    "addSection": {
+      "title": "Add a section",
+      "description": "Pick a section to add to your dashboard — you can drag and resize it afterwards.",
+      "add": "Add",
+      "addNamed": "Add {label}",
+      "empty": "Every available section is already on your dashboard. Remove one to add it back here.",
+      "done": "Done"
+    },
+    "widgetDescriptions": {
+      "stats": "Competition-wide totals — solves, submissions, active participants and published challenges.",
+      "standing": "Your own rank, points and solve count at a glance.",
+      "activity": "A live feed of the latest solves across the competition.",
+      "announcements": "The competition’s announcements, newest first.",
+      "challengeHealth": "Per-challenge solves versus attempts, to spot too-easy or too-hard challenges.",
+      "supportQueue": "Open support tickets waiting for a response.",
+      "mySolves": "The challenges you have solved so far."
     }
   },
   "lobby": {

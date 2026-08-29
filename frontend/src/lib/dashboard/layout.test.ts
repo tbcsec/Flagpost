@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  addEntry,
   applyGridItems,
+  catalogFor,
   clampEntry,
   mergeLayout,
   nudgeEntry,
@@ -15,8 +17,9 @@ import type { DashboardLayoutEntry } from "@/lib/types";
 // A minimal fixture registry so these stay pure (no component imports needed).
 const Noop = (() => null) as unknown as WidgetDef["Component"];
 const REG: Record<string, WidgetDef> = {
-  a: { id: "a", labelKey: "stats", minSize: { w: 4, h: 1 }, defaultSize: { w: 12, h: 2 }, Component: Noop },
-  b: { id: "b", labelKey: "standing", minSize: { w: 4, h: 3 }, defaultSize: { w: 6, h: 5 }, Component: Noop },
+  a: { id: "a", labelKey: "stats", audiences: ["manager"], minSize: { w: 4, h: 1 }, defaultSize: { w: 12, h: 2 }, Component: Noop },
+  b: { id: "b", labelKey: "standing", audiences: ["participant"], minSize: { w: 4, h: 3 }, defaultSize: { w: 6, h: 5 }, Component: Noop },
+  c: { id: "c", labelKey: "activity", audiences: ["manager", "participant"], minSize: { w: 4, h: 3 }, defaultSize: { w: 6, h: 5 }, Component: Noop },
 };
 
 const DEFAULT: LayoutEntry[] = [
@@ -27,7 +30,7 @@ const DEFAULT: LayoutEntry[] = [
 describe("clampEntry", () => {
   it("clamps width to the widget minimum and the grid, and keeps it on-grid", () => {
     const e = clampEntry(REG.a, { widgetId: "a", x: 20, y: -3, w: 1, h: 0 });
-    expect(e).toEqual({ widgetId: "a", x: 8, y: 0, w: 4, h: 1, hidden: undefined });
+    expect(e).toEqual({ widgetId: "a", x: 8, y: 0, w: 4, h: 1 });
   });
 
   it("caps width at the 12-column grid", () => {
@@ -44,55 +47,103 @@ describe("mergeLayout", () => {
     expect(merged[0]).not.toBe(DEFAULT[0]); // cloned, not aliased
   });
 
-  it("round-trips a saved 2D layout, clamping and preserving hidden state", () => {
+  it("renders exactly the saved (added) set, clamping — no `hidden` carried", () => {
     const saved: DashboardLayoutEntry[] = [
-      { widget_id: "b", x: 6, y: 0, w: 6, h: 4, hidden: false },
-      { widget_id: "a", x: 0, y: 4, w: 8, h: 1, hidden: true },
+      { widget_id: "b", x: 6, y: 0, w: 6, h: 4 },
+      { widget_id: "a", x: 0, y: 4, w: 8, h: 1 },
     ];
     expect(mergeLayout(saved, DEFAULT, REG)).toEqual([
-      { widgetId: "b", x: 6, y: 0, w: 6, h: 4, hidden: false },
-      { widgetId: "a", x: 0, y: 4, w: 8, h: 1, hidden: true },
+      { widgetId: "b", x: 6, y: 0, w: 6, h: 4 },
+      { widgetId: "a", x: 0, y: 4, w: 8, h: 1 },
     ]);
+  });
+
+  it("does NOT re-append default widgets missing from a saved layout (#330)", () => {
+    // Under the catalog model a removed section stays gone; only the Add-section
+    // modal brings it back. So a save with just `a` renders just `a` — `b` (a
+    // default) is not auto-placed.
+    const saved: DashboardLayoutEntry[] = [{ widget_id: "a", x: 0, y: 0, w: 12, h: 2 }];
+    expect(mergeLayout(saved, DEFAULT, REG).map((e) => e.widgetId)).toEqual(["a"]);
+  });
+
+  it("drops a legacy `hidden: true` entry (old hide == not added, #330)", () => {
+    const saved: DashboardLayoutEntry[] = [
+      { widget_id: "a", x: 0, y: 0, w: 12, h: 2, hidden: false },
+      { widget_id: "b", x: 0, y: 2, w: 6, h: 5, hidden: true },
+    ];
+    expect(mergeLayout(saved, DEFAULT, REG).map((e) => e.widgetId)).toEqual(["a"]);
   });
 
   it("resets a pre-#21 {cols,rows} layout to the default (backward compat)", () => {
     // Old ordered-flow saves have no x/y/w/h — they can't map to 2D, so each is
     // treated as unrecognized and the default layout applies instead.
     const stale = [
-      { widget_id: "a", cols: 4, rows: 1, hidden: false },
-      { widget_id: "b", cols: 2, rows: 2, hidden: false },
+      { widget_id: "a", cols: 4, rows: 1 },
+      { widget_id: "b", cols: 2, rows: 2 },
     ] as unknown as DashboardLayoutEntry[];
-    expect(mergeLayout(stale, DEFAULT, REG)).toEqual(DEFAULT);
+    // No valid 2D entries survive → renders nothing (an empty dashboard), which
+    // the customize UI then lets the user rebuild from the catalog.
+    expect(mergeLayout(stale, DEFAULT, REG)).toEqual([]);
   });
 
-  it("drops entries for widgets no longer in the registry, appending missing defaults", () => {
+  it("drops entries for widgets no longer in the registry", () => {
     const saved: DashboardLayoutEntry[] = [
-      { widget_id: "ghost", x: 0, y: 0, w: 6, h: 4, hidden: false },
-      { widget_id: "a", x: 0, y: 0, w: 12, h: 2, hidden: false },
+      { widget_id: "ghost", x: 0, y: 0, w: 6, h: 4 },
+      { widget_id: "a", x: 0, y: 0, w: 12, h: 2 },
     ];
-    const merged = mergeLayout(saved, DEFAULT, REG);
-    expect(merged.map((e) => e.widgetId)).toEqual(["a", "b"]); // ghost gone, b appended
+    expect(mergeLayout(saved, DEFAULT, REG).map((e) => e.widgetId)).toEqual(["a"]);
   });
 
   it("clamps a saved size below the widget minimum back up to the minimum", () => {
-    const saved: DashboardLayoutEntry[] = [
-      { widget_id: "b", x: 0, y: 0, w: 1, h: 1, hidden: false },
-    ];
-    const merged = mergeLayout(saved, DEFAULT, REG);
-    expect(merged[0]).toMatchObject({ widgetId: "b", w: 4, h: 3 }); // min {4,3}
+    const saved: DashboardLayoutEntry[] = [{ widget_id: "b", x: 0, y: 0, w: 1, h: 1 }];
+    expect(mergeLayout(saved, DEFAULT, REG)[0]).toMatchObject({ widgetId: "b", w: 4, h: 3 });
   });
 });
 
 describe("toSaved", () => {
-  it("serializes to the 2D wire shape", () => {
+  it("serializes to the 2D wire shape without `hidden` (#330)", () => {
     const entries: LayoutEntry[] = [
-      { widgetId: "a", x: 0, y: 0, w: 12, h: 2, hidden: true },
+      { widgetId: "a", x: 0, y: 0, w: 12, h: 2 },
       { widgetId: "b", x: 0, y: 2, w: 6, h: 5 },
     ];
     expect(toSaved(entries)).toEqual([
-      { widget_id: "a", x: 0, y: 0, w: 12, h: 2, hidden: true },
-      { widget_id: "b", x: 0, y: 2, w: 6, h: 5, hidden: false },
+      { widget_id: "a", x: 0, y: 0, w: 12, h: 2 },
+      { widget_id: "b", x: 0, y: 2, w: 6, h: 5 },
     ]);
+  });
+});
+
+describe("catalogFor", () => {
+  it("offers the audience's eligible sections that aren't already present", () => {
+    // manager-eligible = a, c (b is participant-only). `a` is present → only `c`.
+    const present: LayoutEntry[] = [{ widgetId: "a", x: 0, y: 0, w: 12, h: 2 }];
+    expect(catalogFor("manager", present, REG).map((w) => w.id)).toEqual(["c"]);
+  });
+
+  it("excludes sections not tagged for the audience", () => {
+    // participant-eligible = b, c; none present → both, in registry order.
+    expect(catalogFor("participant", [], REG).map((w) => w.id)).toEqual(["b", "c"]);
+  });
+
+  it("returns empty when every eligible section is already on the dashboard", () => {
+    const present: LayoutEntry[] = [
+      { widgetId: "a", x: 0, y: 0, w: 12, h: 2 },
+      { widgetId: "c", x: 0, y: 2, w: 6, h: 5 },
+    ];
+    expect(catalogFor("manager", present, REG)).toEqual([]);
+  });
+});
+
+describe("addEntry", () => {
+  it("places a new section at the bottom at its default size, clamped", () => {
+    const entries: LayoutEntry[] = [{ widgetId: "a", x: 0, y: 0, w: 12, h: 2 }];
+    const next = addEntry(entries, REG.c);
+    expect(next).toHaveLength(2);
+    expect(next[1]).toEqual({ widgetId: "c", x: 0, y: 2, w: 6, h: 5 }); // below `a` (y=0+h=2)
+  });
+
+  it("places at the top of an empty dashboard", () => {
+    expect(addEntry([], REG.b)[0]).toMatchObject({ widgetId: "b", x: 0, y: 0, w: 6, h: 5 });
   });
 });
 
@@ -104,9 +155,9 @@ describe("toGridItems / applyGridItems", () => {
     ]);
   });
 
-  it("folds RGL positions back in, preserving id, order and hidden", () => {
+  it("folds RGL positions back in, preserving id and order", () => {
     const entries: LayoutEntry[] = [
-      { widgetId: "a", x: 0, y: 0, w: 12, h: 2, hidden: true },
+      { widgetId: "a", x: 0, y: 0, w: 12, h: 2 },
       { widgetId: "b", x: 0, y: 2, w: 6, h: 5 },
     ];
     // RGL may return items in a different order.
@@ -115,7 +166,7 @@ describe("toGridItems / applyGridItems", () => {
       { i: "a", x: 0, y: 4, w: 8, h: 3 },
     ];
     expect(applyGridItems(entries, items)).toEqual([
-      { widgetId: "a", x: 0, y: 4, w: 8, h: 3, hidden: true },
+      { widgetId: "a", x: 0, y: 4, w: 8, h: 3 },
       { widgetId: "b", x: 6, y: 0, w: 6, h: 4 },
     ]);
   });

@@ -66,6 +66,7 @@ export default function DashboardPage() {
         dashboardKey="manager"
         defaultLayout={isManager ? DEFAULT_LAYOUT_MANAGER : DEFAULT_LAYOUT_PARTICIPANT}
         editable={canCustomize}
+        audience={isManager ? "manager" : "participant"}
       />
     </>
   );

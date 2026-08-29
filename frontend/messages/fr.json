@@ -344,7 +344,6 @@
       "resetToast": "Le tableau de bord est réinitialisé à la valeur par défaut",
       "resetErrorToast": "Impossible de réinitialiser la disposition",
       "dragToMove": "Faites glisser pour déplacer {label}",
-      "hiddenSuffix": "· hidden",
       "groupMove": "Déplacer",
       "groupResize": "Redimensionner",
       "moveLeft": "Déplacer vers la gauche vers {label}",
@@ -355,8 +354,8 @@
       "wider": "{label} plus large",
       "shorter": "Raccourci {label}",
       "taller": "Grand {label}",
-      "show": "Afficher {label}",
-      "hide": "Cacher {label}"
+      "addSection": "Add section",
+      "remove": "Remove {label}"
     },
     "firstRun": {
       "title": "Commencer",
@@ -366,6 +365,23 @@
       "inviteTeamsDesc": "Partagez le lien ou le code d'invitation pour que les joueurs puissent s'inscrire et former des équipes.",
       "brandEvent": "Marquer votre événement",
       "brandEventDesc": "Définissez le nom de la plate-forme, la palette et l'accent sous Admin → Paramètres du site → Apparence."
+    },
+    "addSection": {
+      "title": "Add a section",
+      "description": "Pick a section to add to your dashboard — you can drag and resize it afterwards.",
+      "add": "Add",
+      "addNamed": "Add {label}",
+      "empty": "Every available section is already on your dashboard. Remove one to add it back here.",
+      "done": "Done"
+    },
+    "widgetDescriptions": {
+      "stats": "Competition-wide totals — solves, submissions, active participants and published challenges.",
+      "standing": "Your own rank, points and solve count at a glance.",
+      "activity": "A live feed of the latest solves across the competition.",
+      "announcements": "The competition’s announcements, newest first.",
+      "challengeHealth": "Per-challenge solves versus attempts, to spot too-easy or too-hard challenges.",
+      "supportQueue": "Open support tickets waiting for a response.",
+      "mySolves": "The challenges you have solved so far."
     }
   },
   "lobby": {

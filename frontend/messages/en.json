@@ -344,7 +344,6 @@
       "resetToast": "Dashboard reset to default",
       "resetErrorToast": "Couldn't reset layout",
       "dragToMove": "Drag to move {label}",
-      "hiddenSuffix": "· hidden",
       "groupMove": "Move",
       "groupResize": "Resize",
       "moveLeft": "Move {label} left",
@@ -355,8 +354,8 @@
       "wider": "Wider {label}",
       "shorter": "Shorter {label}",
       "taller": "Taller {label}",
-      "show": "Show {label}",
-      "hide": "Hide {label}"
+      "addSection": "Add section",
+      "remove": "Remove {label}"
     },
     "firstRun": {
       "title": "Getting started",
@@ -366,6 +365,23 @@
       "inviteTeamsDesc": "Share the join link or invite code so players can register and form teams.",
       "brandEvent": "Brand your event",
       "brandEventDesc": "Set the platform name, palette, and accent under Admin → Site settings → Appearance."
+    },
+    "addSection": {
+      "title": "Add a section",
+      "description": "Pick a section to add to your dashboard — you can drag and resize it afterwards.",
+      "add": "Add",
+      "addNamed": "Add {label}",
+      "empty": "Every available section is already on your dashboard. Remove one to add it back here.",
+      "done": "Done"
+    },
+    "widgetDescriptions": {
+      "stats": "Competition-wide totals — solves, submissions, active participants and published challenges.",
+      "standing": "Your own rank, points and solve count at a glance.",
+      "activity": "A live feed of the latest solves across the competition.",
+      "announcements": "The competition’s announcements, newest first.",
+      "challengeHealth": "Per-challenge solves versus attempts, to spot too-easy or too-hard challenges.",
+      "supportQueue": "Open support tickets waiting for a response.",
+      "mySolves": "The challenges you have solved so far."
     }
   },
   "lobby": {

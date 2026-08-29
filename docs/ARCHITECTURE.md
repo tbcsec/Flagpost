@@ -1015,7 +1015,8 @@ judge-specific.
 > in Tier 2 with a *fixed* layout; the customization layer described below is
 > now built for the **manager** dashboard — per-user `dashboard_layouts`
 > persistence (§10.3), an edit mode with drag-reorder, a size-cycle control,
-> show/hide, and save / cancel / reset-to-default (§10.4–10.5), gated on
+> add/remove sections from a catalog (§10.4, #330), and save / cancel /
+> reset-to-default (§10.4–10.5), gated on
 > `customize_dashboard`. Two simplifications from the spec below: the grid is an
 > **ordered flow** of column-spanned widgets (CSS grid reflow) rather than a 2D
 > `{row, col}` positioning engine, and row-spans stay declared metadata (widgets
@@ -1091,6 +1092,18 @@ save/cancel/reset-to-default appears). This mirrors the presence/soft-lock
 `mode: 'edit' | 'view'` distinction already used in §4.1 — a UI convention
 worth keeping consistent across the app rather than reinventing per
 feature.
+
+**Sections are added from a catalog, not hidden in place (#330).** A section
+is present on the dashboard iff it has a layout entry: edit mode offers an
+**Add section** modal listing the sections *not yet* on the board as cards
+(name + description), and each placed section carries a **Remove** control
+that returns it to the catalog. The catalog is filtered by the dashboard's
+**audience** (`WidgetDef.audiences`), so competitor-personal sections never
+surface on the manager dashboard and vice-versa. This replaced an earlier
+per-section hide/show toggle; the older `hidden` field on a saved entry is
+read for back-compat and treated as "not added" (dropped on load), and new
+saves omit it. A genuinely new registry section therefore surfaces through
+the catalog, *not* by auto-placing itself on every existing layout.
 
 ### 10.5 Defaults and Reset
 

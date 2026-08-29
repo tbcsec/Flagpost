@@ -4,6 +4,7 @@ import {
   DEFAULT_LAYOUT_MANAGER,
   DEFAULT_LAYOUT_PARTICIPANT,
   WIDGETS,
+  widgetsForAudience,
 } from "@/lib/dashboard/registry";
 import { GRID_COLS } from "@/lib/dashboard/layout";
 
@@ -28,6 +29,25 @@ describe("dashboard widget registry", () => {
       expect(entry.x, `${entry.widgetId} starts off-grid`).toBeGreaterThanOrEqual(0);
       expect(entry.x + entry.w, `${entry.widgetId} overflows the grid width`).toBeLessThanOrEqual(GRID_COLS);
       expect(entry.y).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("every widget declares at least one audience", () => {
+    for (const def of Object.values(WIDGETS)) {
+      expect(def.audiences.length, `${def.id} has no audience`).toBeGreaterThan(0);
+    }
+  });
+
+  it("each default-layout section is addable for its own dashboard's audience (#330)", () => {
+    // A removed default must be re-addable from the catalog, which is filtered by
+    // audience — so every default entry's widget must be tagged for that audience.
+    const managerIds = new Set(widgetsForAudience("manager").map((w) => w.id));
+    for (const entry of DEFAULT_LAYOUT_MANAGER) {
+      expect(managerIds.has(entry.widgetId), `${entry.widgetId} not manager-eligible`).toBe(true);
+    }
+    const participantIds = new Set(widgetsForAudience("participant").map((w) => w.id));
+    for (const entry of DEFAULT_LAYOUT_PARTICIPANT) {
+      expect(participantIds.has(entry.widgetId), `${entry.widgetId} not participant-eligible`).toBe(true);
     }
   });
 });

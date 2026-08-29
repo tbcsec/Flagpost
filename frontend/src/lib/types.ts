@@ -153,7 +153,11 @@ export interface DashboardLayoutEntry {
   y: number;
   w: number;
   h: number;
-  hidden: boolean;
+  // Legacy (pre-catalog) field: the old customize UX hid sections in place. The
+  // catalog model (#330) instead adds/removes them, so a section is present iff
+  // it has an entry. Kept optional to read old saves — a legacy `hidden: true`
+  // entry is treated as "not added" (dropped) on load. New saves omit it.
+  hidden?: boolean;
 }
 
 export interface DashboardLayout {

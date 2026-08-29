@@ -14,11 +14,18 @@
 import {
   ActivityWidget,
   AnnouncementsWidget,
+  BruteForceWidget,
   ChallengeHealthWidget,
+  DifficultyProgressWidget,
+  InstanceHealthWidget,
+  ModerationFeedWidget,
   MySolvesWidget,
+  ScheduleStatusWidget,
   StandingWidget,
   StatsWidget,
   SupportQueueWidget,
+  TeamActivityWidget,
+  UnsolvedChallengesWidget,
 } from "@/components/dashboard/widgets";
 
 /** A size in 12-column grid units: `w` columns wide, `h` rows tall. */
@@ -37,7 +44,15 @@ export type WidgetLabelKey =
   | "announcements"
   | "challengeHealth"
   | "supportQueue"
-  | "mySolves";
+  | "mySolves"
+  // New manager sections (#332)
+  | "unsolved"
+  | "difficulty"
+  | "teamActivity"
+  | "bruteForce"
+  | "moderation"
+  | "schedule"
+  | "instanceHealth";
 
 /** Which dashboard a section belongs on. The Add-section catalog (#330) is
  *  filtered by the current dashboard's audience, so competitor-personal sections
@@ -112,6 +127,65 @@ export const WIDGETS: Record<string, WidgetDef> = {
     minSize: { w: 4, h: 3 },
     defaultSize: { w: 6, h: 5 },
     Component: MySolvesWidget,
+  },
+  // New manager sections (#332) — catalog-only (not in DEFAULT_LAYOUT_MANAGER),
+  // so they surface via the Add-section modal without changing any existing
+  // dashboard.
+  "unsolved-challenges": {
+    id: "unsolved-challenges",
+    labelKey: "unsolved",
+    audiences: ["manager"],
+    minSize: { w: 4, h: 3 },
+    defaultSize: { w: 6, h: 5 },
+    Component: UnsolvedChallengesWidget,
+  },
+  "difficulty-progress": {
+    id: "difficulty-progress",
+    labelKey: "difficulty",
+    audiences: ["manager"],
+    minSize: { w: 4, h: 3 },
+    defaultSize: { w: 6, h: 5 },
+    Component: DifficultyProgressWidget,
+  },
+  "team-activity": {
+    id: "team-activity",
+    labelKey: "teamActivity",
+    audiences: ["manager"],
+    minSize: { w: 4, h: 3 },
+    defaultSize: { w: 6, h: 5 },
+    Component: TeamActivityWidget,
+  },
+  "brute-force": {
+    id: "brute-force",
+    labelKey: "bruteForce",
+    audiences: ["manager"],
+    minSize: { w: 4, h: 3 },
+    defaultSize: { w: 6, h: 5 },
+    Component: BruteForceWidget,
+  },
+  "moderation-feed": {
+    id: "moderation-feed",
+    labelKey: "moderation",
+    audiences: ["manager"],
+    minSize: { w: 4, h: 3 },
+    defaultSize: { w: 6, h: 5 },
+    Component: ModerationFeedWidget,
+  },
+  schedule: {
+    id: "schedule",
+    labelKey: "schedule",
+    audiences: ["manager"],
+    minSize: { w: 3, h: 2 },
+    defaultSize: { w: 4, h: 3 },
+    Component: ScheduleStatusWidget,
+  },
+  "instance-health": {
+    id: "instance-health",
+    labelKey: "instanceHealth",
+    audiences: ["manager"],
+    minSize: { w: 4, h: 3 },
+    defaultSize: { w: 6, h: 5 },
+    Component: InstanceHealthWidget,
   },
 };
 

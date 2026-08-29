@@ -57,6 +57,12 @@ import type {
   DashboardStats,
   MyStanding,
   RecentSolve,
+  UnsolvedChallenge,
+  DifficultyProgress,
+  TeamActivity,
+  BruteForceSubject,
+  ModerationEvent,
+  InstanceHealth,
   Challenge,
   ChallengeCreate,
   ChallengeSolver,
@@ -918,6 +924,19 @@ export const dashboardApi = {
     apiFetch<ChallengeHealth[]>(`${dashboardApi.base(competitionId)}/challenge-health`),
   me: (competitionId: string) =>
     apiFetch<MyStanding>(`${dashboardApi.base(competitionId)}/me`),
+  // New manager sections (#332) — staff-gated read slices.
+  unsolvedChallenges: (competitionId: string) =>
+    apiFetch<UnsolvedChallenge[]>(`${dashboardApi.base(competitionId)}/unsolved-challenges`),
+  difficultyProgress: (competitionId: string) =>
+    apiFetch<DifficultyProgress[]>(`${dashboardApi.base(competitionId)}/difficulty-progress`),
+  teamActivity: (competitionId: string) =>
+    apiFetch<TeamActivity[]>(`${dashboardApi.base(competitionId)}/team-activity`),
+  bruteForce: (competitionId: string) =>
+    apiFetch<BruteForceSubject[]>(`${dashboardApi.base(competitionId)}/brute-force`),
+  moderationFeed: (competitionId: string) =>
+    apiFetch<ModerationEvent[]>(`${dashboardApi.base(competitionId)}/moderation-feed`),
+  instanceHealth: (competitionId: string) =>
+    apiFetch<InstanceHealth>(`${dashboardApi.base(competitionId)}/instance-health`),
   // Layout customization (§10.2–10.5). Per-user; `key` selects which dashboard.
   getLayout: (competitionId: string, key: string) =>
     apiFetch<DashboardLayout | null>(

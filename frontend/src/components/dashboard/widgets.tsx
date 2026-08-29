@@ -16,10 +16,16 @@ import { useAnnouncements } from "@/lib/hooks/use-announcements";
 import { useChallenges } from "@/lib/hooks/use-challenges";
 import { useCompetition } from "@/lib/hooks/use-competitions";
 import {
+  useBruteForce,
   useChallengeHealth,
   useDashboardStats,
+  useDifficultyProgress,
+  useInstanceHealth,
+  useModerationFeed,
   useMyStanding,
   useRecentSolves,
+  useTeamActivity,
+  useUnsolvedChallenges,
 } from "@/lib/hooks/use-dashboard";
 import { useSupportQueueLive, useTickets } from "@/lib/hooks/use-tickets";
 
@@ -251,6 +257,279 @@ export function MySolvesWidget({ competitionId }: WidgetProps) {
             </li>
           ))}
         </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">{t("empty")}</p>
+      )}
+    </ListCard>
+  );
+}
+
+// --- New manager sections (#332) -------------------------------------------
+
+export function UnsolvedChallengesWidget({ competitionId }: WidgetProps) {
+  const t = useTranslations("dashboard.unsolved");
+  const rows = useUnsolvedChallenges(competitionId);
+  return (
+    <ListCard title={t("title")} description={t("description")}>
+      {rows.isLoading ? (
+        <Skeleton className="h-24 w-full" />
+      ) : rows.data && rows.data.length > 0 ? (
+        <ul className="grid gap-2">
+          {rows.data.map((c) => (
+            <li key={c.challenge_id} className="flex items-center justify-between gap-3 text-sm">
+              <span className="min-w-0 truncate">{c.title}</span>
+              <span className="whitespace-nowrap text-xs text-muted-foreground">
+                {t("attempts", { count: c.attempts })}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">{t("empty")}</p>
+      )}
+    </ListCard>
+  );
+}
+
+export function DifficultyProgressWidget({ competitionId }: WidgetProps) {
+  const t = useTranslations("dashboard.difficulty");
+  const rows = useDifficultyProgress(competitionId);
+  return (
+    <ListCard title={t("title")} description={t("description")}>
+      {rows.isLoading ? (
+        <Skeleton className="h-24 w-full" />
+      ) : rows.data && rows.data.length > 0 ? (
+        <ul className="grid gap-3">
+          {rows.data.map((d, i) => {
+            const pct = d.total > 0 ? Math.round((d.solved / d.total) * 100) : 0;
+            return (
+              <li key={d.difficulty ?? `__none__${i}`} className="grid gap-1">
+                <div className="flex items-baseline justify-between gap-3 text-sm">
+                  <span className="min-w-0 truncate capitalize">
+                    {d.difficulty ?? t("unspecified")}
+                  </span>
+                  <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">
+                    {d.solved}/{d.total}
+                  </span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">{t("empty")}</p>
+      )}
+    </ListCard>
+  );
+}
+
+export function TeamActivityWidget({ competitionId }: WidgetProps) {
+  const t = useTranslations("dashboard.teamActivity");
+  const rel = useRelativeTime();
+  const rows = useTeamActivity(competitionId);
+  return (
+    <ListCard title={t("title")} description={t("description")}>
+      {rows.isLoading ? (
+        <Skeleton className="h-24 w-full" />
+      ) : rows.data && rows.data.length > 0 ? (
+        <ul className="grid gap-2">
+          {rows.data.map((s) => (
+            <li key={s.subject_id} className="flex items-center justify-between gap-3 text-sm">
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="truncate">{s.name}</span>
+                {s.idle && (
+                  <span className="whitespace-nowrap rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("idle")}
+                  </span>
+                )}
+              </span>
+              <span className="whitespace-nowrap text-xs text-muted-foreground">
+                {t("submissions", { count: s.submissions })}
+                {s.last_active ? ` · ${rel(s.last_active)}` : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">{t("empty")}</p>
+      )}
+    </ListCard>
+  );
+}
+
+export function BruteForceWidget({ competitionId }: WidgetProps) {
+  const t = useTranslations("dashboard.bruteForce");
+  const rows = useBruteForce(competitionId);
+  return (
+    <ListCard title={t("title")} description={t("description")}>
+      {rows.isLoading ? (
+        <Skeleton className="h-24 w-full" />
+      ) : rows.data && rows.data.length > 0 ? (
+        <ul className="grid gap-2">
+          {rows.data.map((s) => (
+            <li key={s.subject_id} className="flex items-center justify-between gap-3 text-sm">
+              <span className="min-w-0 truncate">{s.name}</span>
+              <span className="whitespace-nowrap font-mono text-xs text-warning">
+                {t("wrong", { wrong: s.wrong, total: s.total })}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">{t("empty")}</p>
+      )}
+    </ListCard>
+  );
+}
+
+// The moderation allowlist mirrors the backend (#332). Maps each audit event to
+// an i18n label key so the feed reads as sentences, not raw event names.
+const MODERATION_LABELS = {
+  "score.adjusted": "scoreAdjusted",
+  "challenge.deleted": "challengeDeleted",
+  "category.deleted": "categoryDeleted",
+  "team.deleted": "teamDeleted",
+  "scoreboard.frozen": "scoreboardFrozen",
+  "scoreboard.unfrozen": "scoreboardUnfrozen",
+  "competition.started": "competitionStarted",
+  "competition.ended": "competitionEnded",
+  "competition.archived": "competitionArchived",
+} as const;
+type ModLabelKey = (typeof MODERATION_LABELS)[keyof typeof MODERATION_LABELS];
+
+export function ModerationFeedWidget({ competitionId }: WidgetProps) {
+  const t = useTranslations("dashboard.moderation");
+  const rel = useRelativeTime();
+  const rows = useModerationFeed(competitionId);
+  return (
+    <ListCard title={t("title")} description={t("description")}>
+      {rows.isLoading ? (
+        <Skeleton className="h-24 w-full" />
+      ) : rows.data && rows.data.length > 0 ? (
+        <ul className="grid gap-2">
+          {rows.data.map((ev, i) => {
+            const key: ModLabelKey | undefined =
+              MODERATION_LABELS[ev.event_name as keyof typeof MODERATION_LABELS];
+            return (
+              <li key={i} className="flex items-baseline justify-between gap-3 text-sm">
+                <span className="min-w-0">
+                  <span className="font-medium">
+                    {key ? t(`events.${key}`) : ev.event_name}
+                  </span>
+                  {ev.actor_name && (
+                    <span className="text-muted-foreground"> · {ev.actor_name}</span>
+                  )}
+                </span>
+                <span className="whitespace-nowrap text-xs text-muted-foreground">
+                  {rel(ev.at)}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">{t("empty")}</p>
+      )}
+    </ListCard>
+  );
+}
+
+export function ScheduleStatusWidget({ competitionId }: WidgetProps) {
+  const t = useTranslations("dashboard.schedule");
+  const rel = useRelativeTime();
+  const competition = useCompetition(competitionId);
+  const c = competition.data;
+  if (competition.isLoading || !c) return <Skeleton className="h-24 w-full" />;
+
+  // `paused` overrides the coarse status for display; otherwise show the status.
+  const statusKey = c.paused ? "paused" : c.status;
+  // The next schedule boundary: start if not started, end if running.
+  const boundary =
+    c.status === "not_started" ? c.start_at : c.status === "running" ? c.end_at : null;
+  const boundaryLabel = c.status === "not_started" ? "starts" : "ends";
+
+  return (
+    <ListCard title={t("title")}>
+      <div className="grid gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">{t("statusLabel")}</span>
+          <span className="rounded px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-primary ring-1 ring-primary/40">
+            {t(`status.${statusKey}`)}
+          </span>
+        </div>
+        {boundary && (
+          <div className="text-sm">
+            {t(boundaryLabel === "starts" ? "startsIn" : "endsIn", { when: rel(boundary) })}
+          </div>
+        )}
+        {c.scoreboard_frozen_at && (
+          <div className="text-xs text-warning">{t("frozen")}</div>
+        )}
+      </div>
+    </ListCard>
+  );
+}
+
+// The active instance lifecycle statuses the backend reports (#266); narrowed so
+// the label lookup keys off a literal union (next-intl needs a static key).
+const INSTANCE_STATUS_KEYS = ["requested", "provisioning", "running", "expiring"] as const;
+type InstanceStatusKey = (typeof INSTANCE_STATUS_KEYS)[number];
+const isKnownInstanceStatus = (s: string): s is InstanceStatusKey =>
+  (INSTANCE_STATUS_KEYS as readonly string[]).includes(s);
+
+export function InstanceHealthWidget({ competitionId }: WidgetProps) {
+  const t = useTranslations("dashboard.instanceHealth");
+  const rel = useRelativeTime();
+  const health = useInstanceHealth(competitionId);
+  const data = health.data;
+  const totalActive = (data?.active_by_status ?? []).reduce((n, s) => n + s.count, 0);
+  const hasContent =
+    (data?.active_by_status.length ?? 0) > 0 || (data?.failures.length ?? 0) > 0;
+
+  return (
+    <ListCard title={t("title")} description={t("active", { count: totalActive })}>
+      {health.isLoading ? (
+        <Skeleton className="h-24 w-full" />
+      ) : hasContent ? (
+        <div className="grid gap-3">
+          {(data?.active_by_status.length ?? 0) > 0 && (
+            <ul className="grid gap-1">
+              {data!.active_by_status.map((s) => (
+                <li key={s.status} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="capitalize text-muted-foreground">
+                    {isKnownInstanceStatus(s.status) ? t(`status.${s.status}`) : s.status}
+                  </span>
+                  <span className="font-mono text-xs">{s.count}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {(data?.failures.length ?? 0) > 0 && (
+            <div className="grid gap-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-warning">
+                {t("failuresHeading")}
+              </span>
+              <ul className="grid gap-1">
+                {data!.failures.map((f, i) => (
+                  <li key={i} className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="min-w-0 truncate">
+                      {f.challenge_title}
+                      {f.reason && (
+                        <span className="text-muted-foreground"> · {f.reason}</span>
+                      )}
+                    </span>
+                    <span className="whitespace-nowrap text-xs text-muted-foreground">
+                      {rel(f.at)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
       ) : (
         <p className="text-sm text-muted-foreground">{t("empty")}</p>
       )}

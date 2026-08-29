@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { renderWithIntl } from "@/test/intl";
 
 import { AddSectionModal } from "@/components/dashboard/add-section-modal";
-import type { LayoutEntry } from "@/lib/dashboard/registry";
+import { type LayoutEntry, widgetsForAudience } from "@/lib/dashboard/registry";
 
 // Add-section catalog modal (#330): the audience-scoped card list, add fires
 // onAdd(widgetId), already-present sections are excluded, and an empty state
@@ -20,6 +20,9 @@ describe("AddSectionModal", () => {
     expect(screen.getByText("At a glance")).toBeInTheDocument(); // stats
     expect(screen.getByText("Challenge health")).toBeInTheDocument();
     expect(screen.getByText("Support queue")).toBeInTheDocument();
+    // New manager sections (#332) surface in the catalog.
+    expect(screen.getByText("Unsolved challenges")).toBeInTheDocument();
+    expect(screen.getByText("Instance health")).toBeInTheDocument();
     // Competitor-personal sections must not surface on the manager catalog.
     expect(screen.queryByText("Your solves")).not.toBeInTheDocument();
     expect(screen.queryByText("Your standing")).not.toBeInTheDocument();
@@ -38,13 +41,14 @@ describe("AddSectionModal", () => {
   });
 
   it("shows the empty state when every eligible section is present", () => {
-    const present: LayoutEntry[] = [
-      { widgetId: "stats", x: 0, y: 0, w: 12, h: 2 },
-      { widgetId: "activity", x: 0, y: 2, w: 6, h: 5 },
-      { widgetId: "announcements", x: 6, y: 2, w: 6, h: 5 },
-      { widgetId: "challenge-health", x: 0, y: 7, w: 6, h: 5 },
-      { widgetId: "support-queue", x: 6, y: 7, w: 6, h: 5 },
-    ];
+    // Derive from the registry so this stays correct as manager sections grow.
+    const present: LayoutEntry[] = widgetsForAudience("manager").map((w, i) => ({
+      widgetId: w.id,
+      x: 0,
+      y: i,
+      w: w.defaultSize.w,
+      h: w.defaultSize.h,
+    }));
     renderWithIntl(
       <AddSectionModal audience="manager" present={present} onAdd={vi.fn()} />,
     );

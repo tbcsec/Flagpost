@@ -163,6 +163,166 @@ async def test_dashboard_requires_competition_access(client):
     assert resp.status_code == 403
 
 
+# --- New manager sections (#332) -------------------------------------------
+
+
+async def test_unsolved_challenges_lists_zero_solve_published(client):
+    comp = await _competition(client)
+    solved = await _published_challenge(client, comp, "flag{s}", 100)
+    unsolved = await _published_challenge(client, comp, "flag{u}", 200)
+    admin = await admin_token(client)
+    token = await _team_player(client, comp, "p1@example.com", "Alpha")
+    await _submit(client, comp, unsolved, token, "flag{no}")  # attempt, still unsolved
+    await _submit(client, comp, solved, token, "flag{s}")  # solved
+
+    rows = (
+        await client.get(
+            f"/api/competitions/{comp}/dashboard/unsolved-challenges", headers=_auth(admin)
+        )
+    ).json()
+    ids = [r["challenge_id"] for r in rows]
+    assert unsolved in ids and solved not in ids
+    row = next(r for r in rows if r["challenge_id"] == unsolved)
+    assert row["attempts"] == 1 and row["points"] == 200
+
+
+async def test_unsolved_challenges_requires_analytics(client):
+    comp = await _competition(client)
+    token = await _team_player(client, comp, "p1@example.com", "Alpha")
+    resp = await client.get(
+        f"/api/competitions/{comp}/dashboard/unsolved-challenges", headers=_auth(token)
+    )
+    assert resp.status_code == 403
+
+
+async def test_difficulty_progress_buckets_total_and_solved(client):
+    from db import SessionLocal
+    from models.challenge import Challenge
+
+    comp = await _competition(client)
+    easy = await _published_challenge(client, comp, "flag{e}", 100)
+    hard = await _published_challenge(client, comp, "flag{h}", 500)
+    admin = await admin_token(client)
+    async with SessionLocal() as db:
+        (await db.get(Challenge, easy)).difficulty = "easy"
+        (await db.get(Challenge, hard)).difficulty = "hard"
+        await db.commit()
+    token = await _team_player(client, comp, "p1@example.com", "Alpha")
+    await _submit(client, comp, hard, token, "flag{h}")  # solve the hard one
+
+    rows = (
+        await client.get(
+            f"/api/competitions/{comp}/dashboard/difficulty-progress", headers=_auth(admin)
+        )
+    ).json()
+    by = {r["difficulty"]: r for r in rows}
+    assert by["easy"]["total"] == 1 and by["easy"]["solved"] == 0
+    assert by["hard"]["total"] == 1 and by["hard"]["solved"] == 1
+
+
+async def test_team_activity_reports_submissions_and_last_active(client):
+    comp = await _competition(client)
+    chal = await _published_challenge(client, comp, "flag{a}", 100)
+    admin = await admin_token(client)
+    a = await _team_player(client, comp, "a@example.com", "Alpha")
+    b = await _team_player(client, comp, "b@example.com", "Beta")
+    await _submit(client, comp, chal, a, "flag{no}")
+    await _submit(client, comp, chal, b, "flag{no}")
+
+    rows = (
+        await client.get(
+            f"/api/competitions/{comp}/dashboard/team-activity", headers=_auth(admin)
+        )
+    ).json()
+    by = {r["name"]: r for r in rows}
+    assert set(by) == {"Alpha", "Beta"}
+    assert by["Alpha"]["submissions"] == 1 and by["Alpha"]["last_active"] is not None
+
+
+async def test_brute_force_counts_wrong_and_excludes_clean(client):
+    comp = await _competition(client)
+    chal = await _published_challenge(client, comp, "flag{a}", 100)
+    admin = await admin_token(client)
+    guesser = await _team_player(client, comp, "g@example.com", "Guessers")
+    clean = await _team_player(client, comp, "c@example.com", "Cleans")
+    for f in ("flag{1}", "flag{2}", "flag{3}"):
+        await _submit(client, comp, chal, guesser, f)  # 3 wrong
+    await _submit(client, comp, chal, clean, "flag{a}")  # 1 right, 0 wrong
+
+    rows = (
+        await client.get(
+            f"/api/competitions/{comp}/dashboard/brute-force", headers=_auth(admin)
+        )
+    ).json()
+    names = [r["name"] for r in rows]
+    assert "Guessers" in names
+    assert "Cleans" not in names  # HAVING wrong > 0 excludes the clean team
+    g = next(r for r in rows if r["name"] == "Guessers")
+    assert g["wrong"] == 3 and g["total"] == 3
+
+
+async def test_moderation_feed_filters_to_allowlist_and_names_actor(client):
+    from db import SessionLocal
+    from models.audit_log import AuditLogEntry
+
+    comp = await _competition(client)
+    admin = await admin_token(client)
+    me = (await client.get("/api/auth/me", headers=_auth(admin))).json()
+    async with SessionLocal() as db:
+        db.add(AuditLogEntry(event_name="score.adjusted", competition_id=comp, user_id=me["id"]))
+        db.add(AuditLogEntry(event_name="challenge.created", competition_id=comp, user_id=me["id"]))
+        await db.commit()
+
+    rows = (
+        await client.get(
+            f"/api/competitions/{comp}/dashboard/moderation-feed", headers=_auth(admin)
+        )
+    ).json()
+    events = [r["event_name"] for r in rows]
+    assert "score.adjusted" in events
+    assert "challenge.created" not in events  # not on the moderation allowlist
+    adj = next(r for r in rows if r["event_name"] == "score.adjusted")
+    assert adj["actor_name"] == me["display_name"]
+
+
+async def test_instance_health_aggregates_status_and_failures(client):
+    from db import SessionLocal
+    from models.challenge_instancing import ChallengeDeployment, ChallengeInstance
+
+    comp = await _competition(client)
+    chal = await _published_challenge(client, comp, "flag{a}", 100)
+    admin = await admin_token(client)
+    me = (await client.get("/api/auth/me", headers=_auth(admin))).json()
+    async with SessionLocal() as db:
+        dep = ChallengeDeployment(challenge_id=chal, competition_id=comp, backend="docker")
+        db.add(dep)
+        await db.flush()
+        db.add(ChallengeInstance(challenge_id=chal, deployment_id=dep.id, user_id=me["id"], competition_id=comp, status="running"))
+        db.add(ChallengeInstance(challenge_id=chal, deployment_id=dep.id, user_id=me["id"], competition_id=comp, status="failed", failure_reason="oom"))
+        await db.commit()
+
+    health = (
+        await client.get(
+            f"/api/competitions/{comp}/dashboard/instance-health", headers=_auth(admin)
+        )
+    ).json()
+    by = {s["status"]: s["count"] for s in health["active_by_status"]}
+    assert by.get("running") == 1
+    assert "failed" not in by  # failed is terminal, not an active status
+    assert len(health["failures"]) == 1
+    assert health["failures"][0]["reason"] == "oom"
+    assert health["failures"][0]["challenge_title"] == "Chal flag{a}"
+
+
+async def test_instance_health_requires_instance_view(client):
+    comp = await _competition(client)
+    token = await _team_player(client, comp, "p1@example.com", "Alpha")
+    resp = await client.get(
+        f"/api/competitions/{comp}/dashboard/instance-health", headers=_auth(token)
+    )
+    assert resp.status_code == 403
+
+
 # --- Layout customization (Phase 6, §10.2–10.5) ----------------------------
 
 

@@ -145,6 +145,58 @@ export interface MyStanding {
   solved_count: number;
 }
 
+// --- New manager sections (#332) -------------------------------------------
+
+export interface UnsolvedChallenge {
+  challenge_id: string;
+  title: string;
+  points: number;
+  attempts: number;
+}
+
+export interface DifficultyProgress {
+  difficulty: string | null;
+  total: number;
+  solved: number;
+}
+
+export interface TeamActivity {
+  subject_id: string;
+  name: string;
+  submissions: number;
+  last_active: string | null;
+  idle: boolean;
+}
+
+export interface BruteForceSubject {
+  subject_id: string;
+  name: string;
+  wrong: number;
+  total: number;
+}
+
+export interface ModerationEvent {
+  event_name: string;
+  actor_name: string | null;
+  at: string;
+}
+
+export interface InstanceStatusCount {
+  status: string;
+  count: number;
+}
+
+export interface InstanceFailure {
+  challenge_title: string;
+  reason: string | null;
+  at: string;
+}
+
+export interface InstanceHealth {
+  active_by_status: InstanceStatusCount[];
+  failures: InstanceFailure[];
+}
+
 /** Per-user dashboard layout customization (§10.2–10.5). Positions are 2D grid
  *  coordinates on a 12-column grid (issue #21). */
 export interface DashboardLayoutEntry {

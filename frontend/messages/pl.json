@@ -330,7 +330,14 @@
       "announcements": "Ogłoszenia",
       "challengeHealth": "Wyzwania zdrowotne",
       "supportQueue": "Kolejka wsparcia",
-      "mySolves": "Twoje rozwiązania"
+      "mySolves": "Twoje rozwiązania",
+      "unsolved": "Unsolved challenges",
+      "difficulty": "Difficulty progress",
+      "teamActivity": "Team activity",
+      "bruteForce": "Brute-force watch",
+      "moderation": "Moderation feed",
+      "schedule": "Schedule & status",
+      "instanceHealth": "Instance health"
     },
     "grid": {
       "customize": "Dostosuj",
@@ -381,7 +388,80 @@
       "announcements": "The competition’s announcements, newest first.",
       "challengeHealth": "Per-challenge solves versus attempts, to spot too-easy or too-hard challenges.",
       "supportQueue": "Open support tickets waiting for a response.",
-      "mySolves": "The challenges you have solved so far."
+      "mySolves": "The challenges you have solved so far.",
+      "unsolved": "Published challenges nobody has solved yet — spot the too-hard or broken ones.",
+      "difficulty": "How many challenges in each difficulty tier have been solved.",
+      "teamActivity": "Who is most active right now, and which teams have gone quiet.",
+      "bruteForce": "Teams submitting the most wrong flags — a flag-guessing signal.",
+      "moderation": "Recent significant actions: deletions, score changes, freezes.",
+      "schedule": "Current status, the countdown to start or end, and scoreboard freeze.",
+      "instanceHealth": "Live challenge instances by status, plus recent provisioning failures."
+    },
+    "unsolved": {
+      "title": "Unsolved challenges",
+      "description": "Published, still unsolved",
+      "attempts": "{count, plural, =0 {no attempts} one {# attempt} other {# attempts}}",
+      "empty": "Every published challenge has a solve."
+    },
+    "difficulty": {
+      "title": "Difficulty progress",
+      "description": "Solved vs. total per tier",
+      "unspecified": "Unspecified",
+      "empty": "No published challenges yet."
+    },
+    "teamActivity": {
+      "title": "Team activity",
+      "description": "Most recently active first",
+      "submissions": "{count, plural, one {# submission} other {# submissions}}",
+      "idle": "idle",
+      "empty": "No submissions yet."
+    },
+    "bruteForce": {
+      "title": "Brute-force watch",
+      "description": "Most wrong submissions first",
+      "wrong": "{wrong}/{total} wrong",
+      "empty": "No wrong submissions yet."
+    },
+    "moderation": {
+      "title": "Moderation feed",
+      "description": "Recent significant actions",
+      "empty": "No moderation actions yet.",
+      "events": {
+        "scoreAdjusted": "Score adjusted",
+        "challengeDeleted": "Challenge deleted",
+        "categoryDeleted": "Category deleted",
+        "teamDeleted": "Team deleted",
+        "scoreboardFrozen": "Scoreboard frozen",
+        "scoreboardUnfrozen": "Scoreboard unfrozen",
+        "competitionStarted": "Competition started",
+        "competitionEnded": "Competition ended",
+        "competitionArchived": "Competition archived"
+      }
+    },
+    "schedule": {
+      "title": "Schedule & status",
+      "statusLabel": "Status",
+      "status": {
+        "not_started": "Not started",
+        "running": "Running",
+        "ended": "Ended",
+        "paused": "Paused"
+      },
+      "startsIn": "Starts {when}",
+      "endsIn": "Ends {when}",
+      "frozen": "Scoreboard is frozen"
+    },
+    "instanceHealth": {
+      "title": "Instance health",
+      "active": "{count, plural, one {# active instance} other {# active instances}}",
+      "status": {
+        "requested": "Requested",
+        "provisioning": "Provisioning",
+        "running": "Running",
+        "expiring": "Expiring"
+      },
+      "failuresHeading": "Recent failures",
+      "empty": "No challenge instances."
     }
   },
   "lobby": {

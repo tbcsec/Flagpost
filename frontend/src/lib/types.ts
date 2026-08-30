@@ -1455,6 +1455,14 @@ export interface InstanceSettings {
   chal_base_domain: string | null;
   spawn_rate_limit: number;
   spawn_rate_window_seconds: number;
+  // Kubernetes kind (#320). The bearer token is write-only — only
+  // `k8s_bearer_token_set` is read back.
+  k8s_namespace: string;
+  k8s_bearer_token_set: boolean;
+  k8s_ca_cert: string | null;
+  k8s_ingress_class: string | null;
+  k8s_image_pull_secret: string | null;
+  k8s_cluster_cidr: string | null;
 }
 
 /** Partial update. Omit `registry_credentials` to keep the stored one; `""`
@@ -1476,6 +1484,14 @@ export interface InstanceSettingsUpdate {
   chal_base_domain?: string | null;
   spawn_rate_limit?: number;
   spawn_rate_window_seconds?: number;
+  // Kubernetes kind (#320). The bearer token is write-only — omit to keep the
+  // stored one, `""` clears it. The other fields clear on `""`.
+  k8s_namespace?: string;
+  k8s_bearer_token?: string;
+  k8s_ca_cert?: string;
+  k8s_ingress_class?: string;
+  k8s_image_pull_secret?: string;
+  k8s_cluster_cidr?: string;
 }
 
 /** One staged leg of the "Test connection" probe (ADR-0036 §1). */

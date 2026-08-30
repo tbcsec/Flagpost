@@ -141,6 +141,35 @@ async def _tcp_dial(host: str, port: int, timeout: float = 5.0) -> bool:
         return False
 
 
+async def _http_ingress_probe(fqdn: str, timeout: float = 5.0) -> tuple[bool, str]:
+    """HTTP-ingress reachability probe (#319, ADR-0036 §1 leg 6): resolve a probe
+    subdomain — proving wildcard DNS is configured — then open a connection to
+    :443 — proving the caddy-docker-proxy ingress is listening (and terminating
+    TLS). Returns ``(ok, operator-facing detail)`` so the two failure modes read
+    distinctly. Injected as a seam so validate() is testable without real DNS."""
+    import asyncio
+    import socket
+
+    loop = asyncio.get_running_loop()
+    try:
+        infos = await asyncio.wait_for(
+            loop.getaddrinfo(fqdn, 443, type=socket.SOCK_STREAM), timeout=timeout
+        )
+    except (OSError, asyncio.TimeoutError):
+        infos = []
+    if not infos:
+        return False, (
+            f"wildcard DNS did not resolve {fqdn} — point *.{fqdn.split('.', 1)[1]} "
+            "at the instance host"
+        )
+    if await _tcp_dial(fqdn, 443, timeout=timeout):
+        return True, f"{fqdn} resolves and the ingress answers on :443"
+    return False, (
+        f"{fqdn} resolves but nothing answers on :443 — is the caddy-docker-proxy "
+        "ingress running on the instance host?"
+    )
+
+
 @dataclass(frozen=True)
 class DockerConfig:
     """Everything the docker kind needs, derived from ``InstanceSettings`` plus
@@ -221,10 +250,12 @@ class DockerProvisioner(Provisioner):
         *,
         transport: httpx.AsyncBaseTransport | None = None,
         tcp_probe: Callable[[str, int], Awaitable[bool]] | None = None,
+        http_probe: Callable[[str], Awaitable[tuple[bool, str]]] | None = None,
     ) -> None:
         self._cfg = config
         self._transport = transport
         self._dial = tcp_probe or _tcp_dial
+        self._http_ingress = http_probe or _http_ingress_probe
 
     # --- HTTP plumbing -------------------------------------------------------
 
@@ -537,7 +568,21 @@ class DockerProvisioner(Provisioner):
         # host end-to-end, then tear it down. This is the leg that catches the
         # closed-firewall / wrong-public-host class before event day.
         legs.extend(await self._probe_run_and_dial())
+
+        # 6. HTTP mode (#319, ADR-0036 §4): wildcard DNS resolves and the ingress
+        # answers. Only when HTTP instancing is configured (a base domain is set);
+        # a TCP-only backend never sees this leg. Independent of the TCP probe.
+        if self._cfg.chal_base_domain:
+            legs.append(await self._check_http_ingress())
         return legs
+
+    async def _check_http_ingress(self) -> CheckResult:
+        # A synthetic probe subdomain: with a wildcard cert + wildcard DNS it
+        # resolves and TLS-terminates even though no instance backs it (caddy
+        # answers, typically 404) — which is exactly what proves the topology.
+        probe_fqdn = f"http-probe.{self._cfg.chal_base_domain}"
+        ok, detail = await self._http_ingress(probe_fqdn)
+        return CheckResult("http_ingress", ok, detail)
 
     async def _check_network_isolation(self) -> CheckResult:
         # Verify the instance network EXISTS and report its egress posture. It is

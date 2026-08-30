@@ -85,3 +85,22 @@ describe("DeploymentSection flag mode", () => {
     expect(payload.flag_template).toBeNull();
   });
 });
+
+describe("DeploymentSection HTTP exposure (#319)", () => {
+  it("offers HTTP and sends exposure=http with the container port", () => {
+    renderWithIntl(<DeploymentSection competitionId="c1" challengeId="ch1" />);
+    fireEvent.change(screen.getByLabelText("Container image"), {
+      target: { value: "img:1" },
+    });
+    fireEvent.change(screen.getByLabelText("Exposure"), { target: { value: "http" } });
+    // The port editor is shown for HTTP; add the container's HTTP port.
+    const portInput = screen.getByPlaceholderText("e.g. 1337");
+    fireEvent.change(portInput, { target: { value: "8080" } });
+    fireEvent.keyDown(portInput, { key: "Enter" });
+    save();
+    expect(mockUpsert).toHaveBeenCalledTimes(1);
+    const payload = mockUpsert.mock.calls[0][0];
+    expect(payload.exposure).toBe("http");
+    expect(payload.ports).toEqual([8080]);
+  });
+});

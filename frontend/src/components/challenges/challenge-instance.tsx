@@ -201,7 +201,11 @@ function RunningInstance({
     <div className="grid gap-2">
       {instance.endpoints.length > 0 ? (
         instance.endpoints.map((ep, i) => (
-          <CopyLine key={i} value={endpointText(ep)} />
+          <CopyLine
+            key={i}
+            value={endpointText(ep)}
+            href={ep.kind === "http" ? ep.url ?? undefined : undefined}
+          />
         ))
       ) : (
         <p className="text-sm text-muted-foreground">{t("noEndpoints")}</p>
@@ -237,7 +241,7 @@ function RunningInstance({
 }
 
 /** A monospace connection line with a copy button, matching ChallengeConnection. */
-function CopyLine({ value }: { value: string }) {
+function CopyLine({ value, href }: { value: string; href?: string }) {
   const t = useTranslations("challenges.instance");
   const [copied, setCopied] = useState(false);
 
@@ -251,11 +255,22 @@ function CopyLine({ value }: { value: string }) {
     }
   }
 
+  const box = "w-fit break-all rounded-md bg-muted px-3 py-1.5 font-mono text-sm";
   return (
     <div className="flex items-center gap-2">
-      <p className="w-fit break-all rounded-md bg-muted px-3 py-1.5 font-mono text-sm">
-        {value}
-      </p>
+      {href ? (
+        // An HTTP instance URL — open it directly (#319).
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`${box} text-primary hover:underline`}
+        >
+          {value}
+        </a>
+      ) : (
+        <p className={box}>{value}</p>
+      )}
       <Button type="button" size="sm" variant="outline" onClick={onCopy}>
         {copied ? t("copied") : t("copy")}
       </Button>

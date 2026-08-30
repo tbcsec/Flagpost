@@ -83,6 +83,11 @@ function InstancesSettingsForm({
   const [pids, setPids] = useState(String(data.default_pids));
   const [maxConcurrent, setMaxConcurrent] = useState(String(data.max_concurrent));
   const [egress, setEgress] = useState(data.egress_policy || "deny");
+  const [chalBaseDomain, setChalBaseDomain] = useState(data.chal_base_domain ?? "");
+  const [spawnRateLimit, setSpawnRateLimit] = useState(String(data.spawn_rate_limit));
+  const [spawnRateWindow, setSpawnRateWindow] = useState(
+    String(data.spawn_rate_window_seconds),
+  );
   const [result, setResult] = useState<InstanceConnectionResult | null>(null);
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -110,6 +115,10 @@ function InstancesSettingsForm({
       default_pids: clamp(pids, 16, 65536, 256),
       max_concurrent: clamp(maxConcurrent, 1, 100000, 100),
       egress_policy: egress,
+      // "" clears the base domain (the backend normalises a real value).
+      chal_base_domain: chalBaseDomain.trim(),
+      spawn_rate_limit: clamp(spawnRateLimit, 0, 100000, 0),
+      spawn_rate_window_seconds: clamp(spawnRateWindow, 1, 86400, 60),
       // Only touch the credential when the admin typed a new one or asked to clear it.
       ...(clearCredential
         ? { registry_credentials: "" }
@@ -203,6 +212,40 @@ function InstancesSettingsForm({
             />
             <p className="text-xs text-muted-foreground">{t("publicHostHint")}</p>
           </div>
+          <div className="grid gap-2">
+            <Label htmlFor="inst-base-domain">{t("chalBaseDomain")}</Label>
+            <Input
+              id="inst-base-domain"
+              value={chalBaseDomain}
+              onChange={(e) => setChalBaseDomain(e.target.value)}
+              placeholder="chal.example.org"
+              autoComplete="off"
+            />
+            <p className="text-xs text-muted-foreground">{t("chalBaseDomainHint")}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-2">
+              <Label htmlFor="inst-spawn-limit">{t("spawnRateLimit")}</Label>
+              <Input
+                id="inst-spawn-limit"
+                type="number"
+                min={0}
+                value={spawnRateLimit}
+                onChange={(e) => setSpawnRateLimit(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="inst-spawn-window">{t("spawnRateWindow")}</Label>
+              <Input
+                id="inst-spawn-window"
+                type="number"
+                min={1}
+                value={spawnRateWindow}
+                onChange={(e) => setSpawnRateWindow(e.target.value)}
+              />
+            </div>
+          </div>
+          <p className="-mt-1 text-xs text-muted-foreground">{t("spawnRateHint")}</p>
           <div className="grid gap-2">
             <Label htmlFor="inst-credential">{t("registryCredential")}</Label>
             <Input

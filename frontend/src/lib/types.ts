@@ -1452,6 +1452,9 @@ export interface InstanceSettings {
   default_pids: number;
   max_concurrent: number;
   egress_policy: string;
+  chal_base_domain: string | null;
+  spawn_rate_limit: number;
+  spawn_rate_window_seconds: number;
 }
 
 /** Partial update. Omit `registry_credentials` to keep the stored one; `""`
@@ -1469,6 +1472,10 @@ export interface InstanceSettingsUpdate {
   default_pids?: number;
   max_concurrent?: number;
   egress_policy?: string;
+  // "" clears the base domain.
+  chal_base_domain?: string | null;
+  spawn_rate_limit?: number;
+  spawn_rate_window_seconds?: number;
 }
 
 /** One staged leg of the "Test connection" probe (ADR-0036 §1). */

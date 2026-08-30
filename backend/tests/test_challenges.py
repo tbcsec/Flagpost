@@ -432,6 +432,83 @@ async def test_challenge_yaml_import_and_export_roundtrip(client):
     assert "connection_info" not in welcome.get("extra", {})
 
 
+async def test_challenge_yaml_deployment_block_roundtrips(client):
+    """#320: an instancing deployment spec rides ctfcli import/export under
+    extra.deployment, validated at the boundary like the authoring route."""
+    import io
+    import zipfile
+
+    import yaml
+    from sqlalchemy import select
+
+    from db import SessionLocal
+    from models.challenge_instancing import ChallengeDeployment
+
+    admin = await admin_token(client)
+    comp = await _make_competition(client)
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("web/challenge.yml", yaml.safe_dump({
+            "name": "Web Chal", "category": "web", "description": "pwn it", "value": 100,
+            "extra": {"deployment": {
+                "backend": "docker", "image": "ghcr.io/x/web:1", "exposure": "http",
+                "ports": [8080], "env": {"MODE": "hard"}, "flag_mode": "unique_per_instance",
+                "flag_template": "flag{web-<random>}", "per_subject_cap": 2, "lifetime_s": 1800,
+            }},
+        }))
+        # An invalid deployment (tcp with no ports) is reported per-challenge, not fatal.
+        zf.writestr("bad/challenge.yml", yaml.safe_dump({
+            "name": "Bad Deploy", "category": "web", "description": "oops", "value": 50,
+            "flags": ["flag{x}"],
+            "extra": {"deployment": {"backend": "docker", "image": "img:1", "exposure": "tcp", "ports": []}},
+        }))
+        # A malformed env (a YAML list, not a mapping) must be a per-challenge
+        # error string, NOT an uncaught AttributeError that 500s the whole import.
+        zf.writestr("badenv/challenge.yml", yaml.safe_dump({
+            "name": "Bad Env", "category": "web", "description": "oops2", "value": 50,
+            "flags": ["flag{y}"],
+            "extra": {"deployment": {"backend": "docker", "image": "img:1",
+                                     "exposure": "none", "env": ["MODE=hard"]}},
+        }))
+
+    imp = await client.post(
+        f"/api/competitions/{comp}/challenges/import",
+        files={"file": ("c.zip", buf.getvalue(), "application/zip")}, headers=_auth(admin),
+    )
+    assert imp.status_code == 200, imp.text
+    body = imp.json()
+    assert body["created"] == 3  # all challenges import; only the bad DEPLOYMENTS are rejected
+    assert any("Bad Deploy: deployment" in e for e in body["errors"])
+    # The non-dict env is reported per-challenge, not a 500.
+    assert any("Bad Env: deployment" in e and "env must be a mapping" in e for e in body["errors"])
+
+    listing = {c["title"]: c for c in (await client.get(f"/api/competitions/{comp}/challenges", headers=_auth(admin))).json()}
+    async with SessionLocal() as db:
+        deps = {
+            d.challenge_id: d for d in (await db.scalars(
+                select(ChallengeDeployment).where(ChallengeDeployment.competition_id == comp)
+            )).all()
+        }
+    web = deps[listing["Web Chal"]["id"]]
+    assert web.exposure == "http" and web.ports == [8080] and web.flag_mode == "unique_per_instance"
+    assert web.flag_template == "flag{web-<random>}" and web.per_subject_cap == 2 and web.lifetime_s == 1800
+    assert web.env == {"MODE": "hard"}
+    # The rejected deployments left no rows.
+    assert listing["Bad Deploy"]["id"] not in deps
+    assert listing["Bad Env"]["id"] not in deps
+
+    # Export carries the deployment back out under extra.deployment.
+    exp = await client.get(f"/api/competitions/{comp}/challenges/export", headers=_auth(admin))
+    out = zipfile.ZipFile(io.BytesIO(exp.content))
+    name = next(n for n in out.namelist() if n.startswith("web-chal") and n.endswith("challenge.yml"))
+    d = yaml.safe_load(out.read(name))["extra"]["deployment"]
+    assert d["backend"] == "docker" and d["exposure"] == "http" and d["ports"] == [8080]
+    assert d["flag_mode"] == "unique_per_instance" and d["flag_template"] == "flag{web-<random>}"
+    assert d["per_subject_cap"] == 2 and d["lifetime_s"] == 1800 and d["env"] == {"MODE": "hard"}
+    assert "image" in d
+
+
 async def test_connection_info_authored_and_withheld_while_locked(client):
     """#262: connection info reaches a competitor who can play the challenge, and
     is withheld while it's locked — it's an infrastructure address for content

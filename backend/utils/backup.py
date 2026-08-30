@@ -71,6 +71,7 @@ from models.attachment import Attachment
 from models.audit_log import AuditLogEntry
 from models.automation import Achievement, AutomationRule
 from models.challenge import Category, Challenge
+from models.challenge_instancing import ChallengeDeployment
 from models.competition import Competition, generate_invite_code
 from models.competition_module import CompetitionModule
 from models.feedback import (
@@ -268,6 +269,36 @@ def _validate_theme_row(row: dict) -> None:
         )
 
 
+def _validate_deployment_row(row: dict) -> None:
+    """Enforce the deployment-authoring boundary the CRUD route applies
+    (``DeploymentUpdate.validate_shape``) on an imported ``challenge_deployments``
+    row. ``load_row`` does no content validation, so without this a hand-crafted
+    backup could persist an internally-inconsistent spec (e.g. a ``docker`` spec
+    with no image, a ``tcp`` spec with no ports, or a ``unique_per_instance``
+    template missing its ``<random>`` placeholder) that the interactive editor
+    would have rejected — the #323/#324 lesson: the backup import must repeat any
+    invariant the route guards."""
+    from pydantic import ValidationError
+
+    from schemas.instances import DeploymentUpdate
+
+    # STRICT validation — no coercion. ``load_row`` persists the raw row as-is, so
+    # validating a *coerced* copy (e.g. accepting "1337" as a port and then
+    # storing the string) would let wrong types through the boundary; strict mode
+    # makes the raw types themselves the contract. It also rejects a row missing
+    # the NOT-NULL ``backend`` (absent → the required field errors) with a clean
+    # 400 instead of a NULL-insert 500 at flush. Extra keys (id/timestamps) are
+    # ignored. Our own exports are always correctly typed, so this only bites a
+    # hand-crafted backup.
+    try:
+        upd = DeploymentUpdate.model_validate(row, strict=True)
+    except ValidationError as exc:
+        raise ImportError_(f"challenge_deployments {row.get('id')!r}: {exc}") from exc
+    err = upd.validate_shape()
+    if err:
+        raise ImportError_(f"challenge_deployments {row.get('id')!r}: {err}")
+
+
 async def _nk_competition(db: AsyncSession, row: dict) -> str | None:
     return await db.scalar(select(Competition.id).where(Competition.name == row["name"]))
 
@@ -330,6 +361,15 @@ SPECS: tuple[Spec, ...] = (
          remaps=(_COMP,), owned_by_competition=True),
     Spec("challenges", Challenge, "competitions", id_map="challenge",
          remaps=(_COMP, ("category_id", "category", False)), owned_by_competition=True),
+    # Deployment spec (#266/#320, ADR-0036 §5): authoring content — one per
+    # challenge — so it rides the backup with the rest of the competition.
+    # image_ref/env/flag_template are non-secret authoring fields (no rendered
+    # flag, no credential — those live in InstanceSettings, which is never
+    # exported), so nothing is dropped. Instances (runtime state) are never
+    # exported. validate_row repeats the authoring invariant the route enforces.
+    Spec("challenge_deployments", ChallengeDeployment, "competitions",
+         remaps=(_COMP, ("challenge_id", "challenge", True)), owned_by_competition=True,
+         validate_row=_validate_deployment_row),
     Spec("hints", Hint, "competitions", id_map="hint",
          remaps=(_COMP, ("challenge_id", "challenge", True)), owned_by_competition=True),
     Spec("attachments", Attachment, "competitions",

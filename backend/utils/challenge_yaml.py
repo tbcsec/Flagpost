@@ -36,6 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.attachment import Attachment
 from models.challenge import Category, Challenge
+from models.challenge_instancing import ChallengeDeployment
 from models.competition import Competition
 from models.hint import Hint
 from storage.base import ObjectStorage
@@ -96,6 +97,16 @@ async def export_challenges(
         ).all()
     }
     title_by_id = {c.id: c.title for c in challenges}
+    deployments = {
+        d.challenge_id: d
+        for d in (
+            await db.scalars(
+                select(ChallengeDeployment).where(
+                    ChallengeDeployment.competition_id == competition.id
+                )
+            )
+        ).all()
+    }
 
     buf = io.BytesIO()
     taken: set[str] = set()
@@ -134,6 +145,10 @@ async def export_challenges(
                 data["prerequisites"] = [
                     title_by_id[p] for p in ch.prerequisites if p in title_by_id
                 ]
+            # Deployment spec (instancing) under extra.deployment.
+            dep = deployments.get(ch.id)
+            if dep is not None:
+                data.setdefault("extra", {})["deployment"] = _deployment_to_yaml(dep)
             # Hints.
             hints = (
                 await db.scalars(
@@ -167,6 +182,103 @@ async def export_challenges(
 
 
 # --- import ------------------------------------------------------------------
+
+
+# --- deployment spec (instancing, #266/#320, ADR-0036) ⇄ extra.deployment ----
+# A Flagpost-specific block under ``extra`` (like ``difficulty``), so real
+# ctfcli/CTFd bundles that don't have it round-trip untouched and one that does
+# is clearly a Flagpost extension. Carries the authoring fields only — image,
+# exposure, ports, env, flag mode/template, caps, lifetime (ADR-0036 §5) — never
+# a rendered flag or a credential (those aren't on the deployment).
+
+
+def _deployment_to_yaml(dep: ChallengeDeployment) -> dict:
+    out: dict = {
+        "backend": dep.backend,
+        "exposure": dep.exposure,
+        "flag_mode": dep.flag_mode,
+    }
+    if dep.image_ref:
+        out["image"] = dep.image_ref
+    if dep.ports:
+        out["ports"] = list(dep.ports)
+    if dep.env:
+        out["env"] = dict(dep.env)
+    if dep.manifest:
+        out["manifest"] = dep.manifest
+    if dep.resource_limits:
+        out["resource_limits"] = dep.resource_limits
+    if dep.lifetime_s is not None:
+        out["lifetime_s"] = dep.lifetime_s
+    if dep.per_subject_cap != 1:
+        out["per_subject_cap"] = dep.per_subject_cap
+    if dep.flag_template:
+        out["flag_template"] = dep.flag_template
+    return out
+
+
+def _deployment_from_yaml(
+    spec: dict, competition_id: str, challenge_id: str
+) -> tuple[ChallengeDeployment | None, str | None]:
+    """Build a validated ``ChallengeDeployment`` from a YAML ``extra.deployment``
+    block, or ``(None, error)``. Runs the same ``DeploymentUpdate.validate_shape``
+    the authoring route uses, so an inconsistent spec from an untrusted zip is
+    rejected at the boundary rather than persisted (the import bypasses the
+    route)."""
+    from pydantic import ValidationError
+
+    from schemas.instances import DeploymentUpdate
+
+    # YAML is human-authored and loose, so coerce leniently — but a malformed
+    # container value must become a per-challenge error string (author feedback),
+    # never an uncaught AttributeError that 500s the whole import nor a silent
+    # drop that loses the author's intent. per_subject_cap uses a None-test, not
+    # ``or``, so an explicit 0 is validated (and rejected by Field ge=1) rather
+    # than silently rewritten to 1.
+    _env = spec.get("env")
+    _ports = spec.get("ports")
+    if _env is not None and not isinstance(_env, dict):
+        return None, "env must be a mapping"
+    if _ports is not None and not isinstance(_ports, list):
+        return None, "ports must be a list"
+    try:
+        upd = DeploymentUpdate(
+            backend=str(spec.get("backend") or "docker"),
+            image_ref=spec.get("image"),
+            manifest=spec.get("manifest") if isinstance(spec.get("manifest"), dict) else None,
+            exposure=str(spec.get("exposure") or "tcp"),
+            ports=[int(p) for p in (_ports or [])],
+            env={str(k): str(v) for k, v in (_env or {}).items()},
+            resource_limits=spec.get("resource_limits")
+            if isinstance(spec.get("resource_limits"), dict) else None,
+            lifetime_s=int(spec["lifetime_s"]) if spec.get("lifetime_s") is not None else None,
+            per_subject_cap=int(spec["per_subject_cap"]) if spec.get("per_subject_cap") is not None else 1,
+            flag_mode=str(spec.get("flag_mode") or "static"),
+            flag_template=spec.get("flag_template"),
+        )
+    except (ValidationError, ValueError, TypeError, AttributeError) as exc:
+        return None, str(exc)
+    err = upd.validate_shape()
+    if err:
+        return None, err
+    return (
+        ChallengeDeployment(
+            competition_id=competition_id,
+            challenge_id=challenge_id,
+            backend=upd.backend,
+            image_ref=upd.image_ref,
+            manifest=upd.manifest,
+            exposure=upd.exposure,
+            ports=upd.ports,
+            env=upd.env,
+            resource_limits=upd.resource_limits,
+            lifetime_s=upd.lifetime_s,
+            per_subject_cap=upd.per_subject_cap,
+            flag_mode=upd.flag_mode,
+            flag_template=upd.flag_template,
+        ),
+        None,
+    )
 
 
 def _parse_flags(raw: object) -> tuple[str, str | None, str | None]:
@@ -294,6 +406,18 @@ async def import_challenges(
         title_to_id[title] = challenge.id
         existing_titles.add(title)
         created += 1
+
+        # Deployment spec (instancing) from extra.deployment, validated like the
+        # authoring route. A bad spec is reported per-challenge, not fatal.
+        dep_spec = extra.get("deployment")
+        if isinstance(dep_spec, dict):
+            deployment, dep_err = _deployment_from_yaml(
+                dep_spec, competition.id, challenge.id
+            )
+            if dep_err:
+                errors.append(f"{title}: deployment: {dep_err}")
+            else:
+                db.add(deployment)
 
         # Hints.
         for h in spec.get("hints") or []:

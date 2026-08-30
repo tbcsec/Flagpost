@@ -88,6 +88,21 @@ function InstancesSettingsForm({
   const [spawnRateWindow, setSpawnRateWindow] = useState(
     String(data.spawn_rate_window_seconds),
   );
+  // Kubernetes kind (#320). The bearer token is write-only, mirroring the
+  // registry credential (a set-indicator + a clear checkbox, never read back).
+  const [k8sNamespace, setK8sNamespace] = useState(
+    data.k8s_namespace || "flagpost-instances",
+  );
+  const [k8sToken, setK8sToken] = useState("");
+  const [clearK8sToken, setClearK8sToken] = useState(false);
+  const [k8sCaCert, setK8sCaCert] = useState(data.k8s_ca_cert ?? "");
+  const [k8sIngressClass, setK8sIngressClass] = useState(
+    data.k8s_ingress_class ?? "",
+  );
+  const [k8sPullSecret, setK8sPullSecret] = useState(
+    data.k8s_image_pull_secret ?? "",
+  );
+  const [k8sClusterCidr, setK8sClusterCidr] = useState(data.k8s_cluster_cidr ?? "");
   const [result, setResult] = useState<InstanceConnectionResult | null>(null);
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -95,6 +110,13 @@ function InstancesSettingsForm({
     // Mirror the server invariants for instant feedback.
     if (enabled && (!endpointUrl.trim() || !publicHost.trim())) {
       toast(t("setBeforeEnabling"), { variant: "destructive" });
+      return;
+    }
+    // The kubernetes kind can't authenticate without a service-account token.
+    const k8sTokenPresent =
+      Boolean(k8sToken) || (data.k8s_bearer_token_set && !clearK8sToken);
+    if (enabled && backend === "kubernetes" && !k8sTokenPresent) {
+      toast(t("k8sTokenBeforeEnabling"), { variant: "destructive" });
       return;
     }
     const min = clamp(portMin, 1, 65535, 30000);
@@ -125,6 +147,24 @@ function InstancesSettingsForm({
         : credential
           ? { registry_credentials: credential }
           : {}),
+      // Kubernetes fields only when that backend is selected — otherwise a value
+      // typed into the (now-hidden) k8s card would fail a docker save on a field
+      // the admin can no longer see. Namespace is non-empty (default if blank);
+      // the rest clear on "". The token mirrors the registry credential.
+      ...(backend === "kubernetes"
+        ? {
+            k8s_namespace: k8sNamespace.trim() || "flagpost-instances",
+            k8s_ca_cert: k8sCaCert.trim(),
+            k8s_ingress_class: k8sIngressClass.trim(),
+            k8s_image_pull_secret: k8sPullSecret.trim(),
+            k8s_cluster_cidr: k8sClusterCidr.trim(),
+            ...(clearK8sToken
+              ? { k8s_bearer_token: "" }
+              : k8sToken
+                ? { k8s_bearer_token: k8sToken }
+                : {}),
+          }
+        : {}),
     };
     update.mutate(payload, {
       onSuccess: () => {
@@ -157,6 +197,12 @@ function InstancesSettingsForm({
       ? t("credentialUnchanged")
       : t("credentialNotSet");
 
+  const k8sTokenPlaceholder = clearK8sToken
+    ? t("k8sTokenWillClear")
+    : data.k8s_bearer_token_set
+      ? t("k8sTokenUnchanged")
+      : t("k8sTokenNotSet");
+
   const testReady = Boolean(data.endpoint_url && data.public_host);
 
   return (
@@ -188,6 +234,7 @@ function InstancesSettingsForm({
               className="max-w-xs"
             >
               <option value="docker">{t("backendDocker")}</option>
+              <option value="kubernetes">{t("backendKubernetes")}</option>
             </Select>
           </div>
           <div className="grid gap-2">
@@ -279,6 +326,103 @@ function InstancesSettingsForm({
           </div>
         </CardContent>
       </Card>
+
+      {backend === "kubernetes" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("k8sTitle")}</CardTitle>
+            <CardDescription>{t("k8sDescription")}</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="inst-k8s-namespace">{t("k8sNamespace")}</Label>
+              <Input
+                id="inst-k8s-namespace"
+                value={k8sNamespace}
+                onChange={(e) => setK8sNamespace(e.target.value)}
+                placeholder="flagpost-instances"
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">{t("k8sNamespaceHint")}</p>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="inst-k8s-token">{t("k8sToken")}</Label>
+              <Input
+                id="inst-k8s-token"
+                type="password"
+                value={k8sToken}
+                onChange={(e) => {
+                  setK8sToken(e.target.value);
+                  if (e.target.value) setClearK8sToken(false);
+                }}
+                disabled={clearK8sToken}
+                autoComplete="new-password"
+                placeholder={k8sTokenPlaceholder}
+              />
+              <p className="text-xs text-muted-foreground">{t("k8sTokenHint")}</p>
+              {data.k8s_bearer_token_set && (
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={clearK8sToken}
+                    onChange={(e) => {
+                      setClearK8sToken(e.target.checked);
+                      if (e.target.checked) setK8sToken("");
+                    }}
+                  />
+                  {t("k8sTokenRemove")}
+                </label>
+              )}
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="inst-k8s-ca">{t("k8sCaCert")}</Label>
+              <textarea
+                id="inst-k8s-ca"
+                value={k8sCaCert}
+                onChange={(e) => setK8sCaCert(e.target.value)}
+                rows={4}
+                spellCheck={false}
+                placeholder="-----BEGIN CERTIFICATE-----"
+                className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              />
+              <p className="text-xs text-muted-foreground">{t("k8sCaCertHint")}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2">
+                <Label htmlFor="inst-k8s-ingress">{t("k8sIngressClass")}</Label>
+                <Input
+                  id="inst-k8s-ingress"
+                  value={k8sIngressClass}
+                  onChange={(e) => setK8sIngressClass(e.target.value)}
+                  placeholder="nginx"
+                  autoComplete="off"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="inst-k8s-pull">{t("k8sPullSecret")}</Label>
+                <Input
+                  id="inst-k8s-pull"
+                  value={k8sPullSecret}
+                  onChange={(e) => setK8sPullSecret(e.target.value)}
+                  placeholder="regcred"
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="inst-k8s-cidr">{t("k8sClusterCidr")}</Label>
+              <Input
+                id="inst-k8s-cidr"
+                value={k8sClusterCidr}
+                onChange={(e) => setK8sClusterCidr(e.target.value)}
+                placeholder="10.42.0.0/16,10.43.0.0/16"
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">{t("k8sClusterCidrHint")}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

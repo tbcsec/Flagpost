@@ -12,6 +12,7 @@ import httpx
 import pytest
 
 from utils.provisioner_kubernetes import (
+    _POSTURE_ALLOW,
     LABEL_MANAGED,
     KubernetesConfig,
     KubernetesProvisioner,
@@ -469,18 +470,7 @@ async def test_list_returns_managed_deployment_names():
     assert captured["selector"] == f"{LABEL_MANAGED}=true"
 
 
-# --- validate() (minimal; the full staged run lands in slice 4) -------------
-
-
-async def test_validate_reports_reachable_and_namespace():
-    router = (
-        _Router()
-        .on("GET", "/version", httpx.Response(200, json={"gitVersion": "v1.30.2"}))
-        .on("GET", lambda r: r.url.path.endswith("/deployments"), httpx.Response(200, json={"items": []}))
-    )
-    legs = await KubernetesProvisioner(_cfg(), transport=router.transport()).validate()
-    assert [(l.name, l.ok) for l in legs] == [("endpoint_reachable", True), ("namespace_ready", True)]
-    assert "v1.30.2" in legs[0].detail
+# --- validate() short-circuit legs (full staged run tested below) -----------
 
 
 async def test_validate_flags_a_rejected_token():
@@ -493,10 +483,191 @@ async def test_validate_flags_a_rejected_token():
 
 
 async def test_validate_flags_an_inoperable_namespace():
-    router = (
+    # A good token (posture passes) but the namespace list is forbidden.
+    router = _validate_router(namespace_ok=False)
+    legs = await KubernetesProvisioner(_cfg(), transport=router.transport(), sleep=_nosleep).validate()
+    ns = next(l for l in legs if l.name == "namespace_ready")
+    assert ns.ok is False
+
+
+# --- staged validate() (#320 D8) --------------------------------------------
+
+
+def _ssar_handler(*, cluster_admin: bool = False, denied_rights: frozenset = frozenset()):
+    """SelfSubjectAccessReview responder. A good namespace-scoped token allows
+    exactly the _POSTURE_ALLOW set (minus any ``denied_rights``) and denies
+    everything else; a cluster-admin token allows everything (failing the deny
+    checks)."""
+    allow_keys = {(v, g, r, s) for (v, g, r, s) in _POSTURE_ALLOW} - set(denied_rights)
+
+    def handler(request):
+        attrs = json.loads(request.content)["spec"]["resourceAttributes"]
+        key = (attrs["verb"], attrs.get("group", ""), attrs["resource"], attrs.get("subresource", ""))
+        allowed = True if cluster_admin else (key in allow_keys)
+        return httpx.Response(201, json={"status": {"allowed": allowed}})
+
+    return handler
+
+
+def _validate_router(
+    *, cluster_admin: bool = False, egress_exit: int | None = 1, baseline_exit: int = 0,
+    probe_running: bool = True, denied_rights: frozenset = frozenset(), namespace_ok: bool = True,
+) -> _Router:
+    """A router covering every call the staged validate() makes, with all legs
+    green by default (good token, netpol accepted, egress enforced — deny-all
+    blocks, unrestricted baseline reaches — and the probe pod up)."""
+    def pods_get(request):
+        p = request.url.path
+        if p.endswith("/flagpost-egress-probe"):  # phase 1: under deny-all policy
+            cs = [] if egress_exit is None else [{"state": {"terminated": {"exitCode": egress_exit}}}]
+            return httpx.Response(200, json={"status": {"phase": "Failed", "containerStatuses": cs}})
+        if p.endswith("/flagpost-egress-baseline"):  # phase 2: no policy (positive control)
+            return httpx.Response(200, json={"status": {"phase": "Succeeded", "containerStatuses": [
+                {"state": {"terminated": {"exitCode": baseline_exit}}}]}})
+        if p.endswith("/flagpost-probe"):
+            phase = "Running" if probe_running else "Pending"
+            return httpx.Response(200, json={"status": {"phase": phase}})
+        return httpx.Response(404, json={"message": "not found"})
+
+    ns_resp = (
+        httpx.Response(200, json={"items": []}) if namespace_ok
+        else httpx.Response(403, json={"message": "forbidden"})
+    )
+    return (
         _Router()
         .on("GET", "/version", httpx.Response(200, json={"gitVersion": "v1.30.2"}))
-        .on("GET", lambda r: r.url.path.endswith("/deployments"), httpx.Response(403, json={"message": "forbidden"}))
+        .on("POST", "/selfsubjectaccessreviews", _ssar_handler(cluster_admin=cluster_admin, denied_rights=denied_rights))
+        .on("GET", lambda r: r.url.path.endswith("/deployments"), ns_resp)
+        .on("POST", "/networkpolicies", httpx.Response(201, json={}))
+        .on("POST", "/pods", httpx.Response(201, json={}))
+        .on("POST", "/services", httpx.Response(201, json={}))
+        .on("GET", lambda r: "/pods/flagpost" in r.url.path, pods_get)
+        .on("GET", lambda r: "/services/flagpost-probe" in r.url.path,
+            httpx.Response(200, json={"spec": {"ports": [{"nodePort": 31234}]}}))
+        .on("DELETE", "/", httpx.Response(200, json={}))
     )
-    legs = await KubernetesProvisioner(_cfg(), transport=router.transport()).validate()
-    assert legs[1].name == "namespace_ready" and legs[1].ok is False
+
+
+async def _yes_dial(host, port):
+    return True
+
+
+async def _no_dial(host, port):
+    return False
+
+
+def _leg(legs, name):
+    return next(l for l in legs if l.name == name)
+
+
+async def test_validate_all_legs_pass():
+    router = _validate_router()
+    prov = KubernetesProvisioner(_cfg(), transport=router.transport(), sleep=_nosleep, tcp_probe=_yes_dial)
+    legs = await prov.validate()
+    names = [l.name for l in legs]
+    assert names == [
+        "endpoint_reachable", "privilege_posture", "namespace_ready",
+        "network_policy_support", "egress_enforcement", "probe_run", "public_reachable",
+    ]
+    assert all(l.ok for l in legs), [(l.name, l.detail) for l in legs if not l.ok]
+
+
+async def test_validate_posture_rejects_an_overprivileged_token():
+    # A cluster-admin token is allowed the dangerous verbs → posture fails and
+    # the run short-circuits (no probe pods driven through it).
+    router = _validate_router(cluster_admin=True)
+    prov = KubernetesProvisioner(_cfg(), transport=router.transport(), sleep=_nosleep, tcp_probe=_yes_dial)
+    legs = await prov.validate()
+    posture = _leg(legs, "privilege_posture")
+    assert posture.ok is False
+    assert "over-privileged" in posture.detail
+    # Short-circuited: nothing after posture ran.
+    assert [l.name for l in legs] == ["endpoint_reachable", "privilege_posture"]
+
+
+async def test_validate_posture_flags_a_missing_right():
+    # Deny a required right (create networkpolicies) → posture fails.
+    router = _validate_router(
+        denied_rights=frozenset({("create", "networking.k8s.io", "networkpolicies", "")})
+    )
+    legs = await KubernetesProvisioner(_cfg(), transport=router.transport(), sleep=_nosleep).validate()
+    posture = _leg(legs, "privilege_posture")
+    assert posture.ok is False
+    assert "DENIED" in posture.detail and "networkpolicies" in posture.detail
+
+
+async def test_validate_detects_a_non_enforcing_cni():
+    # The deny-all-egress probe REACHES the internet (exit 0) → the CNI is not
+    # enforcing NetworkPolicy: the silent-security-failure this leg exists for.
+    router = _validate_router(egress_exit=0)
+    prov = KubernetesProvisioner(_cfg(), transport=router.transport(), sleep=_nosleep, tcp_probe=_yes_dial)
+    legs = await prov.validate()
+    egress = _leg(legs, "egress_enforcement")
+    assert egress.ok is False
+    assert "not enforcing" in egress.detail
+    # The egress probe pod + its policy are always cleaned up.
+    assert router.saw("DELETE", "/pods/flagpost-egress-probe")
+    assert router.saw("DELETE", "/networkpolicies/flagpost-egress-probe")
+
+
+async def test_validate_egress_inconclusive_when_node_has_no_internet():
+    # Deny-all blocks (exit 1) but so does the unrestricted baseline (exit 1):
+    # the node has no route to the target, so enforcement can't be measured — a
+    # PASS here would be a false green (the air-gapped false-positive).
+    router = _validate_router(egress_exit=1, baseline_exit=1)
+    prov = KubernetesProvisioner(_cfg(), transport=router.transport(), sleep=_nosleep, tcp_probe=_yes_dial)
+    legs = await prov.validate()
+    egress = _leg(legs, "egress_enforcement")
+    assert egress.ok is False and "inconclusive" in egress.detail
+    # The positive-control baseline pod ran and was cleaned up.
+    assert router.saw("DELETE", "/pods/flagpost-egress-baseline")
+
+
+async def test_validate_egress_inconclusive_when_exit_code_unreadable():
+    # The deny-all pod reached a terminal phase but produced no exit code
+    # (evicted / OOM / status race): the probe never tested egress, so the leg
+    # must NOT claim enforcement.
+    router = _validate_router(egress_exit=None)
+    prov = KubernetesProvisioner(_cfg(), transport=router.transport(), sleep=_nosleep, tcp_probe=_yes_dial)
+    legs = await prov.validate()
+    egress = _leg(legs, "egress_enforcement")
+    assert egress.ok is False and "did not report a result" in egress.detail
+    # No positive-control baseline pod is created when phase 1 is inconclusive.
+    posted_pod_names = [
+        json.loads(r.content).get("metadata", {}).get("name")
+        for r in router.requests
+        if r.method == "POST" and r.url.path.endswith("/pods")
+    ]
+    assert "flagpost-egress-baseline" not in posted_pod_names
+
+
+async def test_validate_flags_unreachable_public_host():
+    router = _validate_router()
+    prov = KubernetesProvisioner(_cfg(), transport=router.transport(), sleep=_nosleep, tcp_probe=_no_dial)
+    legs = await prov.validate()
+    reach = _leg(legs, "public_reachable")
+    assert reach.ok is False and "NOT reachable" in reach.detail
+    # The probe pod + service are cleaned up regardless.
+    assert router.saw("DELETE", "/pods/flagpost-probe")
+    assert router.saw("DELETE", "/services/flagpost-probe")
+
+
+async def test_validate_adds_http_ingress_leg_when_base_domain_set():
+    async def http_ok(fqdn):
+        return True, f"{fqdn} resolves and the ingress answers on :443"
+
+    router = _validate_router()
+    prov = KubernetesProvisioner(
+        _cfg(chal_base_domain="chal.example.org"),
+        transport=router.transport(), sleep=_nosleep, tcp_probe=_yes_dial, http_probe=http_ok,
+    )
+    legs = await prov.validate()
+    http = _leg(legs, "http_ingress")
+    assert http.ok is True
+
+
+async def test_validate_no_http_leg_without_base_domain():
+    router = _validate_router()
+    prov = KubernetesProvisioner(_cfg(), transport=router.transport(), sleep=_nosleep, tcp_probe=_yes_dial)
+    legs = await prov.validate()
+    assert not any(l.name == "http_ingress" for l in legs)

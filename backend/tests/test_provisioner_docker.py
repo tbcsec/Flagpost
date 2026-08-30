@@ -352,6 +352,52 @@ async def test_validate_all_green():
     assert "39999" in legs[-1].detail
 
 
+async def test_validate_adds_http_leg_probing_the_wildcard_when_configured():
+    router = _healthy_router()
+    seen: dict = {}
+
+    async def probe(fqdn: str) -> tuple[bool, str]:
+        seen["fqdn"] = fqdn
+        return True, "resolves and the ingress answers"
+
+    prov = DockerProvisioner(
+        _cfg(chal_base_domain="chal.example.org"),
+        transport=router.transport(),
+        tcp_probe=lambda h, p: _true(),
+        http_probe=probe,
+    )
+    legs = await prov.validate()
+    # A final http_ingress leg is appended, probing the synthetic wildcard subdomain.
+    assert legs[-1].name == "http_ingress" and legs[-1].ok is True
+    assert seen["fqdn"] == "http-probe.chal.example.org"
+
+
+async def test_validate_http_leg_reports_a_dns_or_ingress_failure():
+    router = _healthy_router()
+
+    async def probe(fqdn: str) -> tuple[bool, str]:
+        return False, "wildcard DNS did not resolve"
+
+    prov = DockerProvisioner(
+        _cfg(chal_base_domain="chal.example.org"),
+        transport=router.transport(),
+        tcp_probe=lambda h, p: _true(),
+        http_probe=probe,
+    )
+    legs = await prov.validate()
+    http = next(leg for leg in legs if leg.name == "http_ingress")
+    assert http.ok is False and "DNS" in http.detail
+
+
+async def test_validate_omits_http_leg_without_a_base_domain():
+    router = _healthy_router()
+    prov = DockerProvisioner(
+        _cfg(), transport=router.transport(), tcp_probe=lambda h, p: _true()
+    )
+    legs = await prov.validate()
+    assert "http_ingress" not in [leg.name for leg in legs]
+
+
 async def test_posture_exec_probe_targets_the_exec_start_path():
     # The exec danger is blockable at POST /exec/<id>/start (the proxy's EXEC
     # flag → 403), NOT /containers/<id>/exec, which the proxy gates under

@@ -75,6 +75,102 @@ async def test_export_round_trip_and_additive_import(client):
         assert comps == 1
 
 
+async def test_challenge_deployment_rides_the_backup(client):
+    """#320: a challenge's instancing deployment spec is authoring content that
+    round-trips through export/import (ADR-0036 §5); instances never do."""
+    from models.challenge_instancing import ChallengeDeployment
+
+    async with SessionLocal() as db:
+        comp = Competition(name="Inst Export", participation_mode="individual",
+                           visibility="public", invite_code="INST0001")
+        db.add(comp)
+        await db.flush()
+        chal = Challenge(competition_id=comp.id, title="Web", description={},
+                         points=100, state="published")
+        db.add(chal)
+        await db.flush()
+        db.add(ChallengeDeployment(
+            competition_id=comp.id, challenge_id=chal.id, backend="docker",
+            image_ref="ghcr.io/x/web:1", exposure="http", ports=[8080],
+            env={"MODE": "hard"}, flag_mode="unique_per_instance",
+            flag_template="flag{web-<random>}", per_subject_cap=2, lifetime_s=1800,
+        ))
+        await db.commit()
+        comp_id = comp.id
+
+    storage = InMemoryStorage()
+    async with SessionLocal() as db:
+        doc = await backup.export_data(db, storage, ["competitions"])
+    assert any(d["image_ref"] == "ghcr.io/x/web:1" for d in doc["data"]["challenge_deployments"])
+
+    # Delete the competition (cascades to the challenge + its deployment), then
+    # re-import from the backup: the deployment comes back intact.
+    async with SessionLocal() as db:
+        await db.delete(await db.get(Competition, comp_id))
+        await db.commit()
+    async with SessionLocal() as db:
+        result = await backup.import_data(db, storage, doc, ["competitions"])
+    assert result["challenge_deployments"]["created"] == 1
+
+    async with SessionLocal() as db:
+        dep = await db.scalar(
+            select(ChallengeDeployment).where(ChallengeDeployment.image_ref == "ghcr.io/x/web:1")
+        )
+    assert dep is not None
+    assert dep.exposure == "http" and dep.ports == [8080] and dep.flag_mode == "unique_per_instance"
+    assert dep.flag_template == "flag{web-<random>}" and dep.per_subject_cap == 2 and dep.lifetime_s == 1800
+    # The imported deployment points at the freshly-imported challenge (FK remapped).
+    async with SessionLocal() as db:
+        chal = await db.get(Challenge, dep.challenge_id)
+    assert chal is not None and chal.title == "Web"
+
+
+async def test_backup_import_rejects_an_invalid_deployment_spec(client):
+    """#320/#324: a hand-crafted backup with an internally-inconsistent deployment
+    (tcp exposure, no ports) is rejected at import — load_row does no content
+    validation, so the Spec's validate_row must repeat the authoring invariant."""
+    async with SessionLocal() as db:
+        comp = Competition(name="Bad Inst", participation_mode="individual",
+                           visibility="public", invite_code="BADI0001")
+        db.add(comp)
+        await db.flush()
+        chal = Challenge(competition_id=comp.id, title="C", description={}, points=10, state="published")
+        db.add(chal)
+        await db.commit()
+        comp_id, chal_id = comp.id, chal.id
+
+    import copy
+
+    storage = InMemoryStorage()
+    # Export the competition + challenge (no deployment yet), then delete it, so
+    # each import below re-creates them in-transaction and the injected
+    # deployment's challenge_id remap resolves before validate_row fires.
+    async with SessionLocal() as db:
+        full_doc = await backup.export_data(db, storage, ["competitions"])
+    async with SessionLocal() as db:
+        await db.delete(await db.get(Competition, comp_id))
+        await db.commit()
+
+    base = {
+        "id": "dep-x", "competition_id": comp_id, "challenge_id": chal_id,
+        "backend": "docker", "image_ref": "img:1", "exposure": "tcp", "ports": [1337],
+        "env": {}, "manifest": None, "resource_limits": None, "lifetime_s": None,
+        "per_subject_cap": 1, "flag_mode": "static", "flag_template": None,
+    }
+    bad_rows = [
+        {**base, "exposure": "tcp", "ports": []},           # shape: tcp needs ports
+        {**base, "ports": ["1337"]},                        # strict: string port (no coercion)
+        {k: v for k, v in base.items() if k != "backend"},  # missing NOT-NULL backend
+        {**base, "backend": "nonsense"},                    # unknown backend
+    ]
+    for bad in bad_rows:
+        doc = copy.deepcopy(full_doc)
+        doc["data"]["challenge_deployments"] = [bad]
+        async with SessionLocal() as db:
+            with pytest.raises(backup.ImportError_):
+                await backup.import_data(db, storage, doc, ["competitions"])
+
+
 async def test_restore_after_delete(client):
     comp_id, _, _ = await _seed()
     storage = InMemoryStorage()

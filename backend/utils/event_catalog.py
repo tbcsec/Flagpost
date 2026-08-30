@@ -66,6 +66,10 @@ EVENT_TYPES: tuple[str, ...] = (
     "challenge.instance_expired",
     "challenge.instance_destroyed",
     "challenge.instance_provision_failed",
+    # A launch was refused by the per-subject spawn rate-limit (#319, ADR-0036
+    # §5) — a staff/automation abuse signal. No instance exists, so the payload
+    # carries the subject + challenge only, never an instance id.
+    "challenge.instance_launch_throttled",
     # A wrong submission carried another subject's live unique-per-instance flag
     # (ADR-0036 §3) — provable flag sharing. Staff/automation signal, no auto-
     # penalty. ids only (submitter + the leak source's subject + instance).

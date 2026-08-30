@@ -45,6 +45,7 @@ from utils.competition_status import gate_message, is_playable
 from utils.event_bus import event_bus
 from utils.instance_service import (
     InstanceError,
+    SpawnThrottled,
     extend,
     launch,
     teardown,
@@ -164,6 +165,11 @@ async def launch_instance(
             user_id=current_user.id,
             team_id=team_id,
         )
+    except SpawnThrottled as exc:
+        # A rate-limit refusal is 429, not the 409 the caps use.
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc)
+        ) from exc
     except InstanceError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=str(exc)

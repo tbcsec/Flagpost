@@ -62,6 +62,10 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "challenge.instance_provision_failed": [
         "competition_id", "challenge_id", "instance_id", "user_id", "team_id",
     ],
+    # Throttle refusal (#319) — no instance was created, so no instance_id.
+    "challenge.instance_launch_throttled": [
+        "competition_id", "challenge_id", "user_id", "team_id",
+    ],
     # Flag sharing (ADR-0036 §3): the submitter (user_id/team_id) plus the leak
     # source (matched_user_id/matched_team_id) and the instance the flag came from.
     "challenge.flag_shared_detected": [
@@ -243,6 +247,7 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     "challenge.instance_expired": "instance_view",
     "challenge.instance_destroyed": "instance_view",
     "challenge.instance_provision_failed": "instance_view",
+    "challenge.instance_launch_throttled": "instance_view",
     # Flag sharing exposes which subject submitted whose flag — raw-attempt data,
     # so it takes the analytics/submissions read tier, not challenge_view (a
     # Participant must not automate on other subjects' sharing).

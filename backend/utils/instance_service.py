@@ -69,6 +69,12 @@ class CapReached(InstanceError):
     """A per-subject / per-competition / global concurrency ceiling is hit."""
 
 
+class SpawnThrottled(InstanceError):
+    """The subject launched too many instances within the spawn-rate window
+    (#319, ADR-0036 §5). Distinct from a concurrency cap — the router maps it to
+    429, not 409."""
+
+
 class BackendNotReady(InstanceError):
     """The site orchestrating backend is not configured + enabled."""
 
@@ -344,6 +350,23 @@ async def _count_active(db, *, competition_id, challenge_id=None, subject=None) 
     return int(await db.scalar(stmt) or 0)
 
 
+async def _count_recent_launches(db, *, competition_id, subject, since) -> int:
+    """Instances this subject launched in this competition since ``since`` — ANY
+    status (a throttle counts launch *attempts*, including ones that then failed
+    to provision). Drives the spawn rate-limit (#319)."""
+    return int(
+        await db.scalar(
+            select(func.count(ChallengeInstance.id)).where(
+                ChallengeInstance.competition_id == competition_id,
+                func.coalesce(ChallengeInstance.team_id, ChallengeInstance.user_id)
+                == subject,
+                ChallengeInstance.created_at >= since,
+            )
+        )
+        or 0
+    )
+
+
 async def _lock_admission(db) -> InstanceSettings | None:
     """Serialise launch admission (cap checks + port allocation) against
     concurrent launches by taking a ``FOR UPDATE`` lock on the settings
@@ -429,6 +452,33 @@ async def launch(
             "The platform is at its instance capacity right now. Try again in a "
             "few minutes."
         )
+
+    # Spawn rate-limit (#319, ADR-0036 §5): refuse if this subject launched too
+    # many instances within the window — a best-effort abuse throttle on top of
+    # the hard caps above. Roll the (write-free) admission transaction back FIRST
+    # so its lock is released before the audit consumer's own session records the
+    # event (commit-before-emit).
+    if settings and settings.spawn_rate_limit > 0:
+        since = utcnow() - timedelta(seconds=settings.spawn_rate_window_seconds)
+        recent = await _count_recent_launches(
+            db, competition_id=competition.id, subject=subject, since=since
+        )
+        if recent >= settings.spawn_rate_limit:
+            # Snapshot the payload BEFORE rollback — rollback expires the ORM
+            # objects, so reading competition/deployment attrs afterwards would
+            # trigger a forbidden sync lazy-load (MissingGreenlet).
+            payload = {
+                "competition_id": competition.id,
+                "challenge_id": deployment.challenge_id,
+                "user_id": user_id,
+                "team_id": team_id,
+            }
+            await db.rollback()
+            await event_bus.emit("challenge.instance_launch_throttled", payload)
+            raise SpawnThrottled(
+                "You're launching instances too quickly. Wait a moment and try "
+                "again."
+            )
 
     endpoints, subdomain = await _plan_endpoints(db, settings, deployment)
     lifetime = lifetime_for(deployment, competition)

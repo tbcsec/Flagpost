@@ -292,6 +292,77 @@ async def test_competition_alive_cap_is_enforced(client):
     assert "competition's limit" in b.json()["detail"]
 
 
+async def _set_spawn_limit(client, admin, limit: int, window: int = 3600) -> None:
+    resp = await client.put(
+        "/api/admin/instances/settings",
+        json={"spawn_rate_limit": limit, "spawn_rate_window_seconds": window},
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 200, resp.text
+
+
+async def test_spawn_rate_limit_throttles_a_burst_and_emits(client):
+    admin = await admin_token(client)
+    comp = await _make_competition(client, admin)
+    chal = await _make_challenge(client, comp, admin)
+    # High per-subject cap so the throttle — not the cap — is the gate.
+    await _put_deployment(client, comp, chal, admin, per_subject_cap=5)
+    await _set_spawn_limit(client, admin, 1)
+    token, _ = await _competitor(client, comp)
+
+    first = await client.post(
+        f"/api/competitions/{comp}/challenges/{chal}/instance", headers=_auth(token)
+    )
+    assert first.status_code == 201, first.text
+    second = await client.post(
+        f"/api/competitions/{comp}/challenges/{chal}/instance", headers=_auth(token)
+    )
+    assert second.status_code == 429, second.text
+    await event_bus.wait_for_background()
+    assert await _events("challenge.instance_launch_throttled")
+
+
+async def test_spawn_rate_limit_off_by_default(client):
+    admin = await admin_token(client)
+    comp = await _make_competition(client, admin)
+    chal = await _make_challenge(client, comp, admin)
+    await _put_deployment(client, comp, chal, admin, per_subject_cap=5)
+    # No spawn limit configured (0 = off): a burst all succeeds.
+    token, _ = await _competitor(client, comp)
+    for _ in range(3):
+        r = await client.post(
+            f"/api/competitions/{comp}/challenges/{chal}/instance", headers=_auth(token)
+        )
+        assert r.status_code == 201, r.text
+
+
+async def test_spawn_rate_limit_only_counts_launches_inside_the_window(client):
+    admin = await admin_token(client)
+    comp = await _make_competition(client, admin)
+    chal = await _make_challenge(client, comp, admin)
+    await _put_deployment(client, comp, chal, admin, per_subject_cap=5)
+    await _set_spawn_limit(client, admin, 1, window=60)
+    token, uid = await _competitor(client, comp)
+
+    first = await client.post(
+        f"/api/competitions/{comp}/challenges/{chal}/instance", headers=_auth(token)
+    )
+    assert first.status_code == 201
+    # Age the first launch out of the 60s window — it must no longer count.
+    async with SessionLocal() as db:
+        row = (
+            await db.execute(
+                select(ChallengeInstance).where(ChallengeInstance.user_id == uid)
+            )
+        ).scalars().first()
+        row.created_at = utcnow() - timedelta(hours=1)
+        await db.commit()
+    second = await client.post(
+        f"/api/competitions/{comp}/challenges/{chal}/instance", headers=_auth(token)
+    )
+    assert second.status_code == 201, second.text  # aged out → not throttled
+
+
 async def test_extend_renews_lifetime_and_is_capped(client):
     admin = await admin_token(client)
     comp = await _make_competition(client, admin)

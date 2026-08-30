@@ -178,13 +178,80 @@ async def test_plan_endpoints_allocates_for_docker_tcp_only(client):
         ports=[1337],
     )
     async with SessionLocal() as db:
-        docker_eps = await svc._plan_endpoints(db, settings, docker_dep)
-        static_eps = await svc._plan_endpoints(db, settings, static_dep)
+        docker_eps, docker_sub = await svc._plan_endpoints(db, settings, docker_dep)
+        static_eps, static_sub = await svc._plan_endpoints(db, settings, static_dep)
     # One host port per declared container port, from the range, on the public host.
     assert [e["port"] for e in docker_eps] == [40000, 40001]
     assert all(e["host"] == "chal.example" for e in docker_eps)
+    assert docker_sub is None  # TCP exposure has no subdomain
     # Shared-static gets its endpoints from its manifest at provision time, not here.
-    assert static_eps == []
+    assert static_eps == [] and static_sub is None
+
+
+async def test_plan_endpoints_http_allocates_a_subdomain_url(client):
+    comp, chal, dep, uid = await _scaffold(client)
+    settings = InstanceSettings(
+        id=INSTANCE_SETTINGS_ID,
+        public_host="chal.example",
+        chal_base_domain="chal.example.org",
+    )
+    http_dep = ChallengeDeployment(
+        competition_id=comp,
+        challenge_id=chal,
+        backend="docker",
+        image_ref="img:latest",
+        exposure="http",
+        ports=[8080],
+    )
+    async with SessionLocal() as db:
+        eps, subdomain = await svc._plan_endpoints(db, settings, http_dep)
+    # A unique 8-char token drives a single https endpoint on the base domain.
+    assert subdomain is not None and len(subdomain) == 8
+    assert eps == [{"kind": "http", "url": f"https://{subdomain}.chal.example.org"}]
+
+
+async def test_plan_endpoints_http_needs_a_base_domain(client):
+    import pytest
+
+    comp, chal, dep, uid = await _scaffold(client)
+    settings = InstanceSettings(id=INSTANCE_SETTINGS_ID, chal_base_domain=None)
+    http_dep = ChallengeDeployment(
+        competition_id=comp,
+        challenge_id=chal,
+        backend="docker",
+        image_ref="img:latest",
+        exposure="http",
+        ports=[8080],
+    )
+    async with SessionLocal() as db:
+        with pytest.raises(svc.BackendNotReady):
+            await svc._plan_endpoints(db, settings, http_dep)
+
+
+async def test_spec_for_threads_the_subdomain_and_binds_no_ports():
+    inst = ChallengeInstance(
+        id="i1",
+        challenge_id="c1",
+        competition_id="comp1",
+        deployment_id="d1",
+        user_id="u1",
+        subdomain="k7m2q9xz",
+        endpoints=[{"kind": "http", "url": "https://k7m2q9xz.chal.example.org"}],
+    )
+    dep = ChallengeDeployment(
+        id="d1",
+        competition_id="comp1",
+        challenge_id="c1",
+        backend="docker",
+        exposure="http",
+        image_ref="img:latest",
+        ports=[8080],
+    )
+    spec = svc._spec_for(inst, dep, lifetime=600)
+    assert spec.subdomain == "k7m2q9xz"
+    assert spec.exposure == "http"
+    # HTTP has no host-port bindings — routing is label-driven (#319).
+    assert spec.host_ports == {}
 
 
 # --- transition guard --------------------------------------------------------

@@ -204,6 +204,37 @@ async def test_create_no_ports_uses_network_none():
     assert "ExposedPorts" not in body
 
 
+async def test_create_http_exposure_sets_caddy_labels_and_no_ports():
+    router = (
+        _Router()
+        .on("POST", "/containers/create", httpx.Response(201, json={"Id": "web1"}))
+        .on("POST", "/start", httpx.Response(204))
+    )
+    prov = DockerProvisioner(
+        _cfg(chal_base_domain="chal.example.org"), transport=router.transport()
+    )
+    await prov.create(
+        _spec(exposure="http", subdomain="k7m2q9xz", ports=[8080], host_ports={})
+    )
+    body = router.create_body()
+    hc = body["HostConfig"]
+    # On the shared bridge so the ingress can reach it; NO published host port.
+    assert hc["NetworkMode"] == "flagpost-instances"
+    assert "PortBindings" not in hc
+    assert "ExposedPorts" not in body
+    # caddy-docker-proxy labels route the per-instance subdomain to the container.
+    assert body["Labels"]["caddy"] == "k7m2q9xz.chal.example.org"
+    assert body["Labels"]["caddy.reverse_proxy"] == "{{upstreams 8080}}"
+
+
+async def test_create_http_without_a_base_domain_refuses():
+    prov = DockerProvisioner(_cfg(chal_base_domain=""))  # HTTP not configured
+    with pytest.raises(ProvisionerError):
+        prov._container_body(
+            _spec(exposure="http", subdomain="k7m2q9xz", ports=[8080], host_ports={})
+        )
+
+
 async def test_create_without_image_refuses():
     prov = DockerProvisioner(_cfg(), transport=_Router().transport())
     with pytest.raises(ProvisionerError, match="no image"):

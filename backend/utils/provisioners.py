@@ -70,6 +70,10 @@ class ProvisionSpec:
     # Container-port → host-port bindings the lifecycle service allocated from
     # the configured range (ADR-0036 §4). Empty for exposure="none".
     host_ports: dict[int, int] = field(default_factory=dict)
+    # HTTP exposure only (#319): the per-instance subdomain token allocated in the
+    # admission transaction. The backend combines it with its base domain into the
+    # routing label + the `https://<subdomain>.<base>` URL. None for TCP/none.
+    subdomain: str | None = None
     # Plaintext unique flag to inject, or None in static mode. Never stored.
     flag_plaintext: str | None = None
     # Env var the unique flag is injected under when flag_plaintext is set.

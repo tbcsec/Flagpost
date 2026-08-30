@@ -169,6 +169,7 @@ def _docker_config(settings: InstanceSettings, deployment: ChallengeDeployment):
     return DockerConfig(
         endpoint_url=settings.endpoint_url or "",
         public_host=settings.public_host or "",
+        chal_base_domain=settings.chal_base_domain or "",
         egress_denied=egress_denied,
         default_cpu=settings.default_cpu,
         default_memory_mb=settings.default_memory_mb,
@@ -212,6 +213,7 @@ def provisioner_from_settings(settings: InstanceSettings, *, transport=None) -> 
         cfg = DockerConfig(
             endpoint_url=settings.endpoint_url or "",
             public_host=settings.public_host or "",
+            chal_base_domain=settings.chal_base_domain or "",
             egress_denied=egress_denied,
             default_cpu=settings.default_cpu,
             default_memory_mb=settings.default_memory_mb,
@@ -269,24 +271,58 @@ async def _allocate_host_ports(
     return chosen
 
 
+# Crockford base32 (no i/l/o/u) — DNS-safe and unambiguous. 8 chars = 40 bits:
+# unguessable, and collision-free in practice against the UNIQUE column (#319).
+_SUBDOMAIN_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz"
+_SUBDOMAIN_LEN = 8
+
+
+async def _allocate_subdomain(db) -> str:
+    """A fresh, globally-unique HTTP routing token (#319). Generated + checked
+    inside the admission transaction (serialised by ``_lock_admission``), with a
+    retry loop as a guard and the UNIQUE column as the ultimate backstop — at 40
+    bits a retry is astronomically unlikely even with thousands of live instances."""
+    for _ in range(10):
+        token = "".join(
+            secrets.choice(_SUBDOMAIN_ALPHABET) for _ in range(_SUBDOMAIN_LEN)
+        )
+        clash = await db.scalar(
+            select(ChallengeInstance.id).where(ChallengeInstance.subdomain == token)
+        )
+        if clash is None:
+            return token
+    raise BackendNotReady("could not allocate a unique instance subdomain")
+
+
 async def _plan_endpoints(
     db,
     settings: InstanceSettings | None,
     deployment: ChallengeDeployment,
-) -> list[dict]:
-    """Connection-detail ledger written on the row at request time. For a
-    docker/TCP deployment this allocates one host port per declared container
-    port (in order) against the configured public host; other shapes populate
-    endpoints later (shared-static from its manifest at provision time) or not
-    at all (exposure=none)."""
+) -> tuple[list[dict], str | None]:
+    """Connection-detail ledger written on the row at request time, plus the HTTP
+    subdomain token (None unless exposure=http). For docker/TCP this allocates one
+    host port per declared container port (in order) against the configured public
+    host; for docker/HTTP it allocates a unique subdomain and derives the https
+    URL (#319); other shapes populate endpoints later (shared-static from its
+    manifest at provision time) or not at all (exposure=none)."""
     if deployment.backend == "docker" and deployment.exposure == "tcp":
         if settings is None:
             raise BackendNotReady("instances are not configured")
         ports = await _allocate_host_ports(db, settings, len(deployment.ports))
         return [
             {"kind": "tcp", "host": settings.public_host, "port": p} for p in ports
-        ]
-    return []
+        ], None
+    if deployment.backend == "docker" and deployment.exposure == "http":
+        if settings is None or not settings.chal_base_domain:
+            raise BackendNotReady(
+                "HTTP instancing needs a base domain — set it under "
+                "Site settings → Instances."
+            )
+        token = await _allocate_subdomain(db)
+        return [
+            {"kind": "http", "url": f"https://{token}.{settings.chal_base_domain}"}
+        ], token
+    return [], None
 
 
 # --- launch ------------------------------------------------------------------
@@ -394,7 +430,7 @@ async def launch(
             "few minutes."
         )
 
-    endpoints = await _plan_endpoints(db, settings, deployment)
+    endpoints, subdomain = await _plan_endpoints(db, settings, deployment)
     lifetime = lifetime_for(deployment, competition)
 
     instance = ChallengeInstance(
@@ -405,6 +441,7 @@ async def launch(
         team_id=team_id,
         status="requested",
         endpoints=endpoints,
+        subdomain=subdomain,
         expires_at=utcnow() + timedelta(seconds=lifetime),
     )
     db.add(instance)
@@ -445,6 +482,9 @@ def _spec_for(
         lifetime_s=lifetime,
         subject_key=subject_key(instance),
         host_ports=host_ports,
+        # HTTP exposure (#319): the token the provisioner turns into the caddy
+        # routing label; None for TCP/none (the URL is already on the row).
+        subdomain=instance.subdomain,
         # Unique-flag mode (ADR-0036 §3) injects the rendered plaintext into the
         # container once; None in shared-flag mode. Never stored on the row.
         flag_plaintext=flag_plaintext,

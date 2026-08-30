@@ -47,6 +47,14 @@ LABEL_INSTANCE = "io.flagpost.instance_id"
 LABEL_CHALLENGE = "io.flagpost.challenge_id"
 LABEL_COMPETITION = "io.flagpost.competition_id"
 
+# caddy-docker-proxy routing labels (#319, ADR-0036 §4). The label-driven ingress
+# reads these off the container to build its site block: ``caddy`` is the
+# per-instance FQDN, and ``caddy.reverse_proxy`` targets the container's own HTTP
+# port over the shared bridge (``{{upstreams <port>}}`` resolves to the
+# container's network address). TLS is the ingress's wildcard cert, not per-label.
+CADDY_LABEL_HOST = "caddy"
+CADDY_LABEL_PROXY = "caddy.reverse_proxy"
+
 # Bound outbound calls. Pulls are slow (a fresh image over the network); the
 # rest are local proxy round-trips. These are hang-catchers, not budgets.
 _TIMEOUT_QUICK = 10.0
@@ -158,6 +166,12 @@ class DockerConfig:
     # the network EXISTS and reports the egress posture; it no longer requires
     # internal.
     network: str = "flagpost-instances"
+    # Base domain for HTTP exposure (#319, ADR-0036 §4). A per-instance container
+    # gets a caddy-docker-proxy routing label ``<subdomain>.<chal_base_domain>``
+    # and endpoints() reports ``https://<subdomain>.<chal_base_domain>``. Empty
+    # when HTTP instancing isn't configured (the settings default); the lifecycle
+    # service refuses an ``exposure=http`` launch before it reaches the provisioner.
+    chal_base_domain: str = ""
     # True when the site egress policy is ``deny`` — the isolation leg then
     # reminds the operator to enforce egress with firewall rules (Docker can't,
     # given published ports). Purely advisory; it never fails Test Connection.
@@ -271,7 +285,26 @@ class DockerProvisioner(Provisioner):
         }
 
         exposed: dict[str, dict] = {}
-        if spec.exposure == "none" or not spec.host_ports:
+        caddy_labels: dict[str, str] = {}
+        if spec.exposure == "http":
+            # Label-driven ingress (#319, ADR-0036 §4): caddy-docker-proxy routes
+            # the per-instance subdomain to the container over the shared bridge —
+            # there is NO published host port. The container must be on the bridge
+            # (not NetworkMode "none") for the ingress to reach it.
+            if not spec.subdomain or not self._cfg.chal_base_domain:
+                raise ProvisionerError(
+                    "HTTP instance is missing its subdomain or base domain"
+                )
+            host_config["NetworkMode"] = self._cfg.network
+            # The container's own listening port (caddy reaches it over the
+            # network by IP:port); the first declared port, or 80 by convention.
+            http_port = spec.ports[0] if spec.ports else 80
+            fqdn = f"{spec.subdomain}.{self._cfg.chal_base_domain}"
+            caddy_labels = {
+                CADDY_LABEL_HOST: fqdn,
+                CADDY_LABEL_PROXY: f"{{{{upstreams {http_port}}}}}",
+            }
+        elif spec.exposure == "none" or not spec.host_ports:
             # No published port ⇒ no netns to publish into: full isolation.
             host_config["NetworkMode"] = "none"
         else:
@@ -293,6 +326,7 @@ class DockerProvisioner(Provisioner):
                 LABEL_INSTANCE: spec.instance_id,
                 LABEL_CHALLENGE: spec.challenge_id,
                 LABEL_COMPETITION: spec.competition_id,
+                **caddy_labels,
             },
             "HostConfig": host_config,
         }

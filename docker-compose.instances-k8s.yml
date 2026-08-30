@@ -1,0 +1,43 @@
+# Local k3s cluster for the challenge-instance kubernetes e2e (#320, ADR-0036 §1).
+#
+# Boots a single-node k3s (Kubernetes) in Docker — no host installs, no real
+# cluster — so `scripts/e2e-instances-k8s.sh` can drive the REAL
+# KubernetesProvisioner against a live API server: RBAC posture, NetworkPolicy
+# ENFORCEMENT (k3s ships an embedded kube-router controller that enforces policy
+# on the default flannel CNI), NodePort reachability, and Ingress subdomain
+# routing through k3s's built-in Traefik.
+#
+# This is a TEST harness, not a deployment topology — production runs against a
+# real cluster (see docs/CHALLENGE_INSTANCES.md → Kubernetes).
+#
+#   docker compose -p flagpost-k8s-e2e -f docker-compose.instances-k8s.yml up -d
+#
+# k3s needs `privileged` + cgroup access to run containers-in-a-container; that
+# is why this file is isolated from the app stacks and only ever used by the e2e
+# script under its own project name.
+
+services:
+  k3s:
+    image: rancher/k3s:v1.30.6-k3s1
+    # A narrow NodePort range (published below) keeps the host-port surface tiny;
+    # tls-san lets the API server cert validate when reached at 127.0.0.1.
+    command: >
+      server
+      --tls-san=127.0.0.1
+      --kube-apiserver-arg=service-node-port-range=30000-30010
+    privileged: true
+    tmpfs:
+      - /run
+      - /var/run
+    environment:
+      - K3S_KUBECONFIG_MODE=666
+    ports:
+      - "6443:6443"                    # API server
+      - "80:80"                        # Traefik ingress (http)
+      - "443:443"                      # Traefik ingress (https)
+      - "30000-30010:30000-30010"      # NodePort slice for the reachability probe
+    volumes:
+      - k3s-server:/var/lib/rancher/k3s
+
+volumes:
+  k3s-server:

@@ -123,6 +123,15 @@ _READY_ATTEMPTS = 60
 _READY_INTERVAL = 2.0
 
 
+# Every instance/probe pod runs as this dedicated **zero-rights** ServiceAccount
+# (created by k8s/instances-rbac.yaml, no RoleBinding). Naming an existing SA
+# avoids the "serviceaccount default not found" race on a freshly-created
+# namespace (the auto-created `default` SA lands a beat after the namespace),
+# and — with automountServiceAccountToken:false, so no token is ever mounted —
+# gives the pod an identity that can do nothing even if that changed.
+_INSTANCE_SA = "flagpost-instance"
+
+
 def _resource_name(instance_id: str) -> str:
     """The single name every per-instance object shares (Deployment / Service /
     Ingress / NetworkPolicy), so the row and its cluster objects map 1:1 and the
@@ -351,8 +360,10 @@ class KubernetesProvisioner(Provisioner):
         pod_spec: dict[str, Any] = {
             "containers": [container],
             "restartPolicy": "Always",  # required for a Deployment pod
-            # A challenge pod must never hold an API credential, and must not get
-            # the cluster's service host/port env vars leaked in.
+            # A zero-rights SA that the bootstrap guarantees exists (no default-SA
+            # race), and — with the token NOT auto-mounted — a challenge pod holds
+            # no API credential and gets no cluster service host/port env leaked.
+            "serviceAccountName": _INSTANCE_SA,
             "automountServiceAccountToken": False,
             "enableServiceLinks": False,
             "securityContext": {"seccompProfile": {"type": "RuntimeDefault"}},
@@ -975,6 +986,7 @@ class KubernetesProvisioner(Provisioner):
             "spec": {
                 "containers": [container],
                 "restartPolicy": "Never",
+                "serviceAccountName": _INSTANCE_SA,
                 "automountServiceAccountToken": False,
                 "enableServiceLinks": False,
                 "securityContext": {"seccompProfile": {"type": "RuntimeDefault"}},

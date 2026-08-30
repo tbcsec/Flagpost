@@ -1,0 +1,122 @@
+# Challenge-instance Kubernetes RBAC bootstrap (#320, ADR-0036 §1).
+#
+# The ONE out-of-band step for the kubernetes provisioner kind: a namespace, a
+# ServiceAccount, a *namespace-scoped* Role granting exactly the rights the
+# provisioner needs, and a RoleBinding. Least privilege by construction — the
+# token this yields is denied secrets, pods/exec, and everything cluster-scoped
+# (namespace creation, node listing), which is what makes Flagpost's
+# "Test connection" privilege-posture leg pass (a cluster-admin token fails it).
+#
+# Apply on the CHALLENGE cluster:
+#     kubectl apply -f k8s/instances-rbac.yaml
+# Then mint a token for the admin UI (Kubernetes 1.24+, no auto Secret):
+#     kubectl -n flagpost-instances create token flagpost-provisioner --duration=8760h
+# and read the API server's CA (paste into the "CA certificate" field):
+#     kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d
+#
+# Change the namespace here AND in Admin → Site settings → Instances together.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flagpost-instances
+  labels:
+    app.kubernetes.io/managed-by: flagpost
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flagpost-provisioner
+  namespace: flagpost-instances
+---
+# The identity every instance + validate-probe POD runs as. Deliberately has NO
+# RoleBinding — zero rights — and pods never mount its token
+# (automountServiceAccountToken: false). Naming it explicitly (rather than the
+# namespace's auto-created `default` SA) removes a race: this object exists the
+# moment `kubectl apply` returns, whereas `default` lands a beat after the
+# namespace, so an immediate Test connection could hit "serviceaccount default
+# not found".
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flagpost-instance
+  namespace: flagpost-instances
+  labels:
+    app.kubernetes.io/managed-by: flagpost
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: flagpost-provisioner
+  namespace: flagpost-instances
+rules:
+  # The provisioner composes a Deployment + Service (+ Ingress for http) +
+  # NetworkPolicy per instance, reads pod/deployment status, and lists by label
+  # for the orphan reaper. It never updates in place (re-provision, not patch),
+  # holds NO rights on secrets, and — critically — NO pods/exec (running a
+  # command inside a live, deliberately-vulnerable instance).
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "create", "delete"]
+  - apiGroups: [""]
+    # Pods are created directly only by the validate() probes; instances run as
+    # Deployments. get/list also back the provision-failure pod-reason detail.
+    resources: ["pods"]
+    verbs: ["get", "list", "create", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies", "ingresses"]
+    verbs: ["get", "list", "create", "delete"]
+  # SelfSubjectAccessReview (the privilege-posture leg) is always allowed to the
+  # requesting identity by the API server — it needs no rule here.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: flagpost-provisioner
+  namespace: flagpost-instances
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: flagpost-provisioner
+subjects:
+  - kind: ServiceAccount
+    name: flagpost-provisioner
+    namespace: flagpost-instances
+---
+# Namespace default-deny-egress baseline (#320 D5, slice-3 review). Each instance
+# also gets its own per-instance NetworkPolicy, but the CNI programs that
+# eventually-consistently AFTER the pod is created — a brief window where a
+# freshly-started pod could emit before its policy lands. This baseline closes
+# that window: it denies all egress except DNS from birth. NetworkPolicies are
+# additive (a pod's egress is allowed if ANY policy allows it), so an allow-mode
+# instance's own policy re-opens what it needs once programmed; a deny-mode
+# instance stays DNS-only. Requires a policy-enforcing CNI (Calico / Cilium /
+# k3s's kube-router) — the egress_enforcement validate leg checks it is enforced.
+#
+# It selects every pod EXCEPT the ephemeral ``flagpost.io/probe`` pods that
+# "Test connection" runs: the egress-enforcement leg's positive control is an
+# UNRESTRICTED probe that must reach the internet to prove the node has egress at
+# all — the baseline would block it and make the leg falsely inconclusive. Probe
+# pods are short-lived, known-good images (not adversary challenge workloads), so
+# excluding them costs no isolation; the deny-phase probe still gets its own
+# per-probe deny-all policy.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flagpost-default-deny-egress
+  namespace: flagpost-instances
+  labels:
+    app.kubernetes.io/managed-by: flagpost
+spec:
+  podSelector:
+    # Every instance pod, but not the ``flagpost.io/probe`` validate() probes.
+    matchExpressions:
+      - { key: flagpost.io/probe, operator: DoesNotExist }
+  policyTypes: ["Egress"]
+  egress:
+    - ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }

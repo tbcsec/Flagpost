@@ -270,3 +270,61 @@ Phase 2 HTTP (§4) shipped. Concrete choices made while implementing the
 
 Not in scope (deferred to Phase 3): the Kubernetes Ingress mapping of the same
 exposure shape.
+
+## Amendment: Kubernetes kind shipped (#320, 2026-08-30)
+
+Phase 3 shipped the `kubernetes` provisioner kind behind the unchanged contract
+(a new backend is a new kind, not a fork — the whole point of §1), plus ctfcli
+portability of the deployment spec and a security-hardening pass with a written
+threat model (`docs/THREAT_MODEL.md`). Concrete choices made while implementing:
+
+- **REST over httpx, no client library.** The kind talks the Kubernetes API the
+  same way the docker kind talks the Engine API — an injectable
+  `AsyncBaseTransport`, so the whole lifecycle and the staged `validate()` are
+  unit-tested against a mock transport. Zero new dependencies.
+- **One namespace, namespace-scoped RBAC — not namespace-per-instance.** A
+  ServiceAccount + namespace-scoped Role (`k8s/instances-rbac.yaml`), denied
+  secrets / pods-exec / anything cluster-scoped. Namespace-per-instance would
+  need cluster-wide rights — the opposite of the socket-proxy least-privilege
+  posture. Per-instance isolation is NetworkPolicy, not namespaces.
+- **Deployment + Service + NetworkPolicy (+ Ingress for http) per instance.** A
+  Deployment (not a bare Pod) is what makes "health checks + auto-restart" real
+  (TCP livenessProbe + ReplicaSet). TCP → NodePort from the same host-port
+  ledger as docker; HTTP → Ingress at `<token>.<chal_base_domain>` (the #319
+  subdomain scheme); the NetworkPolicy is posted *before* the Deployment to
+  minimise the pre-policy window, with a namespace default-deny-egress baseline
+  closing the rest.
+- **Effective backend = the SITE backend (D7).** A container deployment
+  (image/ports/env) is portable across docker and kubernetes, and authors never
+  chose infrastructure, so `effective_backend(settings, deployment)` routes an
+  orchestrated deployment through the site's configured kind — flipping docker →
+  kubernetes is a settings change, no re-authoring. A guard refuses the flip
+  while instances are live (their teardown re-homes with it). `shared-static`
+  stays per-deployment.
+- **Hardened pod (D6):** drop-ALL caps, no-priv-escalation, read-only rootfs,
+  `RuntimeDefault` seccomp, no auto-mounted API token, requests==limits. The
+  kind **ignores** an author `manifest` fragment — honouring one would bypass
+  every pin. Per-pod PID/fd caps have no in-manifest k8s form (kubelet
+  `--pod-max-pids`) → operator responsibility, documented, not silently claimed.
+- **NetworkPolicy egress (D5)** is the enforced upgrade over docker's
+  host-firewall documentation: deny mode = DNS-only; allow mode = everything
+  except the metadata IPs (v4 + v6) and — per family, for dual-stack — the
+  configured cluster CIDRs. Enforcement needs a policy-enforcing CNI, which the
+  new `egress_enforcement` validate leg actively proves (a deny-all probe pod
+  with a no-policy positive control, so it can't false-pass on an air-gapped
+  node).
+- **Staged validate() (D8), seven legs:** reachable, privilege-posture
+  (SelfSubjectAccessReview allow/deny matrix — a cluster-admin token fails,
+  deliberately), namespace, netpol-support, egress-enforcement, probe-run +
+  public-reachability (NodePort dial), http-ingress. The two non-API actions are
+  injectable seams reused from the docker kind.
+- **e2e harness.** `docker-compose.instances-k8s.yml` boots single-node k3s in
+  Docker; `scripts/e2e-instances-k8s.sh` applies the RBAC, mints a token, and
+  runs opt-in tests (`backend/tests_e2e/`) that drive the REAL provisioner —
+  posture, NetworkPolicy enforcement (k3s's kube-router blocks a deny-all pod),
+  NodePort reachability, and a whoami instance reached at its subdomain through
+  Traefik.
+
+This closes the last deferral from the #319 amendment. Phase 4 (optional
+admin-bot) remains future work; ADR-0036 is now fully realised across docker +
+kubernetes.

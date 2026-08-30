@@ -136,6 +136,8 @@ async def test_create_composes_a_hardened_pod():
     assert pod["securityContext"]["seccompProfile"]["type"] == "RuntimeDefault"
     assert pod["automountServiceAccountToken"] is False
     assert pod["enableServiceLinks"] is False
+    # A zero-rights, explicitly-named SA (no default-SA race), token not mounted.
+    assert pod["serviceAccountName"] == "flagpost-instance"
     # Scratch /tmp is an emptyDir, not the read-only rootfs.
     assert pod["volumes"][0]["emptyDir"]["sizeLimit"] == "64Mi"
     assert container["volumeMounts"][0]["mountPath"] == "/tmp"

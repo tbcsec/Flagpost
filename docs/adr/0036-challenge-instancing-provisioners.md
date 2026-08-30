@@ -239,3 +239,34 @@ network driver; they are a documented deploy step
 (`docs/CHALLENGE_INSTANCES.md`). Everything else in the validate contract —
 proxy privilege posture, image pull, hardened probe run, public reachability —
 was confirmed working end-to-end against real Docker.
+
+## Amendment: HTTP routing shipped (#319, 2026-08-30)
+
+Phase 2 HTTP (§4) shipped. Concrete choices made while implementing the
+"label-driven ingress (caddy-docker-proxy pattern)" the decision left open:
+
+- **Label scheme (pinned).** The docker provisioner emits exactly two
+  [lucaslorentz/caddy-docker-proxy](https://github.com/lucaslorentz/caddy-docker-proxy)
+  labels on an `exposure: http` container: `caddy = <token>.<chal_base_domain>`
+  and `caddy.reverse_proxy = {{upstreams <port>}}` (the first declared container
+  port, default 80). No host port is published and the container is attached to
+  the normal bridge so the ingress reaches it by IP; TLS is the ingress's
+  wildcard cert, not per-label.
+- **Per-instance id.** A dedicated 8-char Crockford-base32 `subdomain` token
+  (globally UNIQUE column, generate-and-retry in the admission transaction), not
+  the instance UUID — short, collision-free, and **unguessable** so a competitor
+  can't reach another subject's instance by browsing.
+- **Base domain in `InstanceSettings`** (`chal_base_domain`), not env — it's
+  host-specific operator config, gated on `manage_instance_infra`.
+- **Validate leg 6** (`http_ingress`) probes a synthetic `http-probe.<domain>`:
+  DNS resolves + `:443` answers. Injectable, like the TCP dialer.
+- **Spawn rate-limit** (§5) landed as a per-subject/per-competition launch
+  throttle (`spawn_rate_limit` over a window), event-only on trip
+  (`challenge.instance_launch_throttled`) — policy stays human (§3).
+- **e2e harness.** `docker-compose.instances-http.yml` + `sslip.io` wildcard DNS
+  + Caddy internal CA (`local_certs`) prove the routing locally with no domain or
+  real cert; `scripts/e2e-instances-http.sh` asserts a labelled container serves
+  200 over TLS at its subdomain. Confirmed working end-to-end.
+
+Not in scope (deferred to Phase 3): the Kubernetes Ingress mapping of the same
+exposure shape.

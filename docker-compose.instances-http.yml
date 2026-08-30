@@ -1,0 +1,95 @@
+# HTTP subdomain routing for challenge instances (#319, ADR-0036 §4).
+#
+# Overlay on top of docker-compose.instances.yml. Adds a label-driven ingress on
+# the instance host that watches challenge containers and routes each per-instance
+# subdomain (`https://<token>.<chal_base_domain>`) to the container over the shared
+# `flagpost-instances` network — terminating TLS with a wildcard cert. No
+# control-plane round-trip per request; the platform's own Caddy is untouched.
+#
+#   * `caddy-socket-proxy` — a SECOND least-privilege tecnativa/docker-socket-proxy,
+#     read-only + events, in front of the host daemon. It is ALL caddy-docker-proxy
+#     needs to WATCH containers and read their routing labels; it has no
+#     create/start/POST/exec rights (separate from the provisioner's proxy). Its
+#     port is published to NO host interface.
+#   * `caddy-ingress` — lucaslorentz/caddy-docker-proxy. Attaches to
+#     `flagpost-instances` (to reach the containers), publishes :80/:443, and reads
+#     each managed container's `caddy` / `caddy.reverse_proxy` labels to build its
+#     routing. Local dev issues certs from Caddy's INTERNAL CA
+#     (caddy/instances-ingress.Caddyfile → `local_certs`).
+#
+# Prerequisite — WILDCARD DNS. `*.<chal_base_domain>` must resolve to this host.
+#   * Local / dev: use sslip.io — set the base domain to `chal.127.0.0.1.sslip.io`
+#     and `<anything>.chal.127.0.0.1.sslip.io` resolves to 127.0.0.1 with no DNS
+#     server to run.
+#   * Production: a real `*.chal.<domain>` A/AAAA record at the instance host, plus
+#     a real wildcard TLS cert (delete `local_certs`; see docs/CHALLENGE_INSTANCES.md).
+#
+# Usage (local, on the dev stack):
+#   docker compose -f docker-compose.dev.yml -f docker-compose.instances.yml \
+#     -f docker-compose.instances-http.yml up -d
+# Then in Admin → Site settings → Instances: endpoint http://socket-proxy:2375,
+# base domain chal.127.0.0.1.sslip.io, enable — and run Test connection.
+
+services:
+  caddy-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    restart: unless-stopped
+    environment:
+      # --- allowed (all the ingress needs: watch + read labels) ---
+      CONTAINERS: 1   # list / inspect managed containers
+      NETWORKS: 1     # resolve the instance network
+      EVENTS: 1       # WATCH create/destroy to reconfigure live
+      PING: 1
+      VERSION: 1
+      # --- denied (pinned as documentation): the ingress never mutates ---
+      # INFO stays 0 (matching the provisioner's proxy): caddy-docker-proxy's one
+      # /info call is a non-fatal swarm-availability check, so denying it keeps
+      # host details (kernel, security-opts, swarm state) off the ingress path.
+      INFO: 0
+      POST: 0
+      EXEC: 0
+      VOLUMES: 0
+      BUILD: 0
+      SWARM: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - caddy-control
+    # Deliberately NO `ports:` — never published to a host interface.
+
+  caddy-ingress:
+    image: lucaslorentz/caddy-docker-proxy:2.9-alpine
+    restart: unless-stopped
+    environment:
+      # Watch Docker via the read-only proxy, never the raw socket.
+      DOCKER_HOST: tcp://caddy-socket-proxy:2375
+      # Only build routes from containers on the instance network.
+      CADDY_INGRESS_NETWORKS: flagpost-instances
+      # Global options (local_certs for dev; see the file's header for prod).
+      CADDY_DOCKER_CADDYFILE_PATH: /etc/caddy/base.Caddyfile
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/instances-ingress.Caddyfile:/etc/caddy/base.Caddyfile:ro
+      - caddy-ingress-data:/data
+    networks:
+      - caddy-control       # → caddy-socket-proxy
+      - flagpost-instances  # → challenge containers, by IP
+    depends_on:
+      caddy-socket-proxy:
+        condition: service_started
+
+networks:
+  # caddy-ingress ↔ caddy-socket-proxy only. Not internet-facing.
+  caddy-control:
+    driver: bridge
+  # Defined by docker-compose.instances.yml; repeated identically so this file
+  # also composes standalone. Challenge instances + the ingress share it.
+  flagpost-instances:
+    name: flagpost-instances
+    driver: bridge
+
+volumes:
+  # Persists the internal CA + issued instance certs across restarts.
+  caddy-ingress-data:

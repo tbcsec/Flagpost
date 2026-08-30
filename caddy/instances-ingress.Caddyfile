@@ -1,0 +1,24 @@
+# Base config for the challenge-instance HTTP ingress (#319, ADR-0036 §4).
+#
+# caddy-docker-proxy merges this global-options block with the per-instance site
+# blocks it generates from container labels (caddy=<sub>.<domain> +
+# caddy.reverse_proxy). The provisioner sets those labels at container create;
+# the ingress configures itself with no control-plane round-trip.
+#
+# `local_certs` makes Caddy issue every instance certificate from its own
+# INTERNAL CA instead of a public ACME CA — the zero-DNS, zero-secret path for
+# local dev + the e2e harness (paired with sslip.io wildcard DNS).
+#
+# PRODUCTION: delete `local_certs` and issue real certs via ACME DNS-01 — the
+# global option is `acme_dns <provider> …` (NOT a `tls {…}` block, which is
+# site-level and invalid here). Each instance subdomain is then issued a cert via
+# a DNS challenge, e.g.:
+#
+#   {
+#       acme_dns cloudflare {env.CF_API_TOKEN}
+#   }
+#
+# See docs/CHALLENGE_INSTANCES.md for the wildcard-DNS + provider setup.
+{
+	local_certs
+}

@@ -209,6 +209,27 @@ def _docker_config(settings: InstanceSettings, deployment: ChallengeDeployment):
     )
 
 
+def _k8s_config(settings: InstanceSettings):
+    """Build a :class:`KubernetesConfig` from site settings (#320). Imported
+    lazily so the shared-static/docker paths never drag in the k8s client."""
+    from utils.provisioner_kubernetes import KubernetesConfig
+
+    return KubernetesConfig(
+        endpoint_url=settings.endpoint_url or "",
+        token=settings.k8s_bearer_token or "",
+        namespace=settings.k8s_namespace or "flagpost-instances",
+        public_host=settings.public_host or "",
+        chal_base_domain=settings.chal_base_domain or "",
+        ca_cert=settings.k8s_ca_cert or None,
+        ingress_class=settings.k8s_ingress_class or None,
+        image_pull_secret=settings.k8s_image_pull_secret or None,
+        cluster_cidr=settings.k8s_cluster_cidr or None,
+        egress_denied=settings.egress_policy != "allow",
+        default_cpu=settings.default_cpu,
+        default_memory_mb=settings.default_memory_mb,
+    )
+
+
 def provisioner_for(
     settings: InstanceSettings | None,
     deployment: ChallengeDeployment,
@@ -223,15 +244,17 @@ def provisioner_for(
     kind = effective_backend(settings, deployment)
     if kind == "shared-static":
         return SharedStaticProvisioner(deployment.manifest)
+    if settings is None:
+        raise ProvisionerError("instances are not configured")
     if kind == "docker":
-        if settings is None:
-            raise ProvisionerError("instances are not configured")
         # Import (which registers the "docker" kind) before any registry lookup.
         from utils.provisioner_docker import DockerProvisioner
 
         return DockerProvisioner(_docker_config(settings, deployment), transport=transport)
-    # A kind the settings layer accepts (SITE_BACKENDS) but that has no runtime
-    # yet — the kubernetes provisioner lands in the next #320 slice.
+    if kind == "kubernetes":
+        from utils.provisioner_kubernetes import KubernetesProvisioner
+
+        return KubernetesProvisioner(_k8s_config(settings), transport=transport)
     raise ProvisionerError(f"the {kind!r} backend is not available yet")
 
 
@@ -254,13 +277,11 @@ def provisioner_from_settings(settings: InstanceSettings, *, transport=None) -> 
             registry_auth=settings.registry_credentials or None,
         )
         return DockerProvisioner(cfg, transport=transport)
-    # A SITE_BACKEND whose runtime hasn't shipped in this build — the
-    # kubernetes provisioner lands in a following #320 slice. Operator-facing
-    # wording (Test connection surfaces it as a leg detail), not a bare kind
-    # repr, so it reads as a build limitation, not a misconfigured endpoint.
-    raise ProvisionerError(
-        f"the {settings.backend} provisioner isn't available in this build yet"
-    )
+    if settings.backend == "kubernetes":
+        from utils.provisioner_kubernetes import KubernetesProvisioner
+
+        return KubernetesProvisioner(_k8s_config(settings), transport=transport)
+    raise ProvisionerError(f"the {settings.backend!r} backend has no site provisioner")
 
 
 # --- port allocation ---------------------------------------------------------

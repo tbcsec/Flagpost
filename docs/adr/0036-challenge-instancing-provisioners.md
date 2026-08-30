@@ -325,6 +325,7 @@ threat model (`docs/THREAT_MODEL.md`). Concrete choices made while implementing:
   NodePort reachability, and a whoami instance reached at its subdomain through
   Traefik.
 
-This closes the last deferral from the #319 amendment. Phase 4 (optional
-admin-bot) remains future work; ADR-0036 is now fully realised across docker +
-kubernetes.
+This closes the last deferral from the #319 amendment; ADR-0036 is now fully
+realised across docker + kubernetes. The admin-bot phase once sketched in #266's
+phasing is **not on the roadmap** (owner decision, 2026-08-30) — it may return
+someday, but no further instancing work is planned.

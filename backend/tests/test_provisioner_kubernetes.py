@@ -104,6 +104,7 @@ def _happy_create_router() -> _Router:
     return (
         _Router()
         .on("POST", "/deployments", httpx.Response(201, json={"metadata": {"name": "flagpost-inst-inst-1"}}))
+        .on("POST", "/networkpolicies", httpx.Response(201, json={}))
         .on("POST", "/services", httpx.Response(201, json={}))
         .on("POST", "/ingresses", httpx.Response(201, json={}))
         # GET the Deployment by name during the readiness wait → ready at once.
@@ -201,6 +202,7 @@ async def test_transient_readiness_error_is_absorbed_not_leaked():
     router = (
         _Router()
         .on("POST", "/deployments", httpx.Response(201, json={"metadata": {"name": "flagpost-inst-inst-1"}}))
+        .on("POST", "/networkpolicies", httpx.Response(201, json={}))
         .on("POST", "/services", httpx.Response(201, json={}))
         .on("GET", lambda r: "/deployments/flagpost-inst-" in r.url.path, get_deploy)
         .on("DELETE", "/", httpx.Response(200, json={}))
@@ -256,6 +258,110 @@ async def test_image_pull_secret_is_stamped_when_configured():
     assert pod["imagePullSecrets"] == [{"name": "flagpost-pull"}]
 
 
+# --- NetworkPolicy isolation (#320 D5) --------------------------------------
+
+
+def _netpol_body(router: _Router) -> dict:
+    return router.body("POST", "/networkpolicies")["spec"]
+
+
+async def test_create_always_lays_down_a_networkpolicy():
+    router = _happy_create_router()
+    prov = KubernetesProvisioner(_cfg(), transport=router.transport(), sleep=_nosleep)
+    await prov.create(_spec())
+    assert router.saw("POST", "/networkpolicies")
+    spec = _netpol_body(router)
+    assert spec["policyTypes"] == ["Ingress", "Egress"]
+    assert spec["podSelector"]["matchLabels"]["flagpost.io/instance-id"] == "inst-1"
+
+
+async def test_deny_mode_egress_is_dns_only():
+    router = _happy_create_router()
+    prov = KubernetesProvisioner(_cfg(egress_denied=True), transport=router.transport(), sleep=_nosleep)
+    await prov.create(_spec(ports=[1337], host_ports={1337: 30001}))
+    spec = _netpol_body(router)
+    # Egress: DNS (UDP+TCP 53) and nothing else — no ipBlock allowing outbound.
+    assert spec["egress"] == [
+        {"ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}]}
+    ]
+    # Ingress: the declared container port from any source.
+    assert spec["ingress"] == [{"ports": [{"protocol": "TCP", "port": 1337}]}]
+
+
+def _ipblocks_by_family(egress: list) -> dict[str, dict]:
+    blocks = next(r for r in egress if "to" in r)["to"]
+    return {b["ipBlock"]["cidr"]: b["ipBlock"] for b in blocks}
+
+
+async def test_allow_mode_egress_excepts_metadata_and_cluster_cidrs():
+    router = _happy_create_router()
+    prov = KubernetesProvisioner(
+        _cfg(egress_denied=False, cluster_cidr="10.42.0.0/16,10.43.0.0/16"),
+        transport=router.transport(),
+        sleep=_nosleep,
+    )
+    await prov.create(_spec())
+    egress = _netpol_body(router)["egress"]
+    # DNS is still carved in (kube-dns lives in the excepted cluster range).
+    assert {"ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}]} in egress
+    blocks = _ipblocks_by_family(egress)
+    # The IPv4 block excepts the metadata IP + both (IPv4) cluster ranges.
+    assert set(blocks["0.0.0.0/0"]["except"]) == {"169.254.169.254/32", "10.42.0.0/16", "10.43.0.0/16"}
+
+
+async def test_allow_mode_partitions_dual_stack_cluster_cidrs():
+    # An IPv6 cluster range must NOT be crammed into the IPv4 0.0.0.0/0 block
+    # (the apiserver rejects a cross-family except) — it belongs in the ::/0
+    # block. This is the fix for the dual-stack rejection.
+    router = _happy_create_router()
+    prov = KubernetesProvisioner(
+        _cfg(egress_denied=False, cluster_cidr="10.42.0.0/16,fd00:10:96::/112"),
+        transport=router.transport(),
+        sleep=_nosleep,
+    )
+    await prov.create(_spec())
+    blocks = _ipblocks_by_family(_netpol_body(router)["egress"])
+    assert set(blocks["0.0.0.0/0"]["except"]) == {"169.254.169.254/32", "10.42.0.0/16"}
+    assert set(blocks["::/0"]["except"]) == {"fd00:ec2::254/128", "fd00:10:96::/112"}
+
+
+async def test_allow_mode_always_blocks_both_metadata_ips():
+    # Even with no cluster_cidr, both the v4 and v6 metadata IPs are excepted and
+    # the IPv6 half is not left wide open.
+    router = _happy_create_router()
+    prov = KubernetesProvisioner(_cfg(egress_denied=False), transport=router.transport(), sleep=_nosleep)
+    await prov.create(_spec())
+    blocks = _ipblocks_by_family(_netpol_body(router)["egress"])
+    assert blocks["0.0.0.0/0"]["except"] == ["169.254.169.254/32"]
+    assert blocks["::/0"]["except"] == ["fd00:ec2::254/128"]
+
+
+async def test_networkpolicy_create_failure_aborts_before_the_pod():
+    # The security-load-bearing invariant: if the NetworkPolicy can't be created,
+    # provisioning aborts — a deliberately-vulnerable pod must NEVER run without
+    # its isolation. Since the netpol is posted first, the Deployment is never
+    # even created.
+    router = (
+        _Router()
+        .on("POST", "/networkpolicies", httpx.Response(403, json={"message": "forbidden"}))
+        .on("POST", "/deployments", httpx.Response(201, json={"metadata": {"name": "flagpost-inst-inst-1"}}))
+        .on("DELETE", "/", httpx.Response(200, json={}))
+    )
+    prov = KubernetesProvisioner(_cfg(), transport=router.transport(), sleep=_nosleep)
+    with pytest.raises(ProvisionerError, match="network policy create failed"):
+        await prov.create(_spec())
+    assert not router.saw("POST", "/deployments")
+
+
+async def test_exposure_none_networkpolicy_denies_all_ingress():
+    router = _happy_create_router()
+    prov = KubernetesProvisioner(_cfg(), transport=router.transport(), sleep=_nosleep)
+    await prov.create(_spec(exposure="none", ports=[], host_ports={}))
+    # Still isolated, and nothing may reach it (empty ingress = deny-all-in).
+    assert router.saw("POST", "/networkpolicies")
+    assert _netpol_body(router)["ingress"] == []
+
+
 # --- create: failure cleans up partial resources ----------------------------
 
 
@@ -263,6 +369,7 @@ async def test_service_create_failure_tears_down_the_deployment():
     router = (
         _Router()
         .on("POST", "/deployments", httpx.Response(201, json={"metadata": {"name": "flagpost-inst-inst-1"}}))
+        .on("POST", "/networkpolicies", httpx.Response(201, json={}))
         .on("POST", "/services", httpx.Response(409, json={"message": "nodePort 30001 already allocated"}))
         .on("DELETE", "/", httpx.Response(200, json={}))
     )
@@ -277,6 +384,7 @@ async def test_never_ready_reports_pod_reason_and_cleans_up():
     router = (
         _Router()
         .on("POST", "/deployments", httpx.Response(201, json={"metadata": {"name": "flagpost-inst-inst-1"}}))
+        .on("POST", "/networkpolicies", httpx.Response(201, json={}))
         .on("POST", "/services", httpx.Response(201, json={}))
         # Deployment never reports a ready replica.
         .on("GET", lambda r: "/deployments/flagpost-inst-" in r.url.path, httpx.Response(200, json={"status": {"readyReplicas": 0}}))

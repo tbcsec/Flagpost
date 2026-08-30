@@ -36,6 +36,7 @@ adds the create side.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import ssl
 from collections.abc import Awaitable, Callable
@@ -68,6 +69,12 @@ _TIMEOUT_QUICK = 10.0
 _TIMEOUT_LIFECYCLE = 30.0
 
 _MAX_ERROR_BODY = 500
+
+# Cloud metadata service — always blocked from instance egress (the SSRF /
+# credential-theft target every hardened runtime denies; ADR-0036 §amendment,
+# #320 D5). A host address per family so only the metadata IP itself is excepted.
+_METADATA_IP = "169.254.169.254/32"
+_METADATA_IP6 = "fd00:ec2::254/128"  # IPv6 IMDS (dual-stack clouds)
 
 # Readiness wait after the manifests are laid down: poll the Deployment until a
 # replica is Ready, so a bad image (ErrImagePull) / crash-loop fails the
@@ -360,6 +367,87 @@ class KubernetesProvisioner(Provisioner):
         }
         return base
 
+    def _partition_cidrs(self) -> tuple[list[str], list[str]]:
+        """The configured cluster CIDRs split by address family (v4, v6). k8s
+        requires every ipBlock ``except`` to be the SAME family as its ``cidr``
+        and contained within it, so a mixed dual-stack ``k8s_cluster_cidr`` must
+        be spread across a ``0.0.0.0/0`` and a ``::/0`` block — not crammed into
+        one, which the apiserver rejects."""
+        v4: list[str] = []
+        v6: list[str] = []
+        if not self._cfg.cluster_cidr:
+            return v4, v6
+        for part in self._cfg.cluster_cidr.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                (v6 if ipaddress.ip_network(part, strict=False).version == 6 else v4).append(part)
+            except ValueError:
+                continue  # the settings validator already normalised these
+        return v4, v6
+
+    def _egress_rules(self) -> list[dict[str, Any]]:
+        """Egress half of the per-instance NetworkPolicy (#320 D5) — the
+        load-bearing isolation control. DNS is always allowed (a pod needs it to
+        resolve anything, and kube-dns lives in the cluster range that ``allow``
+        mode otherwise excepts, so it is carved back in explicitly)."""
+        dns = {"ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}]}
+        if self._cfg.egress_denied:
+            # Deny mode (default): DNS only. Blocks the internet, the control
+            # plane, peer instances and the metadata IP in one stroke — and
+            # peer isolation falls out for free (a pod that can't initiate any
+            # connection can't reach a neighbour).
+            return [dns]
+        # Allow mode: everything EXCEPT the cloud metadata IP and — when the
+        # operator has configured the cluster's pod/service ranges — those
+        # ranges, so peers and the control plane stay unreachable even for an
+        # internet-enabled challenge. A block per address family so dual-stack
+        # clusters are covered (an IPv6 except under an IPv4 cidr is rejected by
+        # the apiserver) and the IPv6 half isn't silently left wide open.
+        # Without cluster_cidr set, peers are reachable in allow mode (documented
+        # residual risk, threat model).
+        v4_except, v6_except = self._partition_cidrs()
+        return [
+            dns,
+            {
+                "to": [
+                    {"ipBlock": {"cidr": "0.0.0.0/0", "except": [_METADATA_IP, *v4_except]}},
+                    {"ipBlock": {"cidr": "::/0", "except": [_METADATA_IP6, *v6_except]}},
+                ]
+            },
+        ]
+
+    def _ingress_rules(self, spec: ProvisionSpec) -> list[dict[str, Any]]:
+        """Ingress half (#320 D5): allow the declared container ports from any
+        source, so both a NodePort's DNAT'd traffic AND the in-cluster HTTP
+        ingress controller reach the pod. Peer isolation is delivered by the
+        egress rules (a peer can't initiate to us), NOT by restricting ingress
+        source here — excepting the cluster range on ingress would block the
+        ingress controller (which lives in it) and break HTTP challenges. An
+        exposure=none pod publishes nothing, so it gets an empty ingress list =
+        deny-all-in."""
+        if not spec.ports:
+            return []
+        return [{"ports": [{"protocol": "TCP", "port": p} for p in spec.ports]}]
+
+    def _networkpolicy_body(self, spec: ProvisionSpec) -> dict[str, Any]:
+        return {
+            "apiVersion": "networking.k8s.io/v1",
+            "kind": "NetworkPolicy",
+            "metadata": {
+                "name": _resource_name(spec.instance_id),
+                "namespace": self._cfg.namespace,
+                "labels": self._labels(spec),
+            },
+            "spec": {
+                "podSelector": {"matchLabels": {LABEL_INSTANCE: spec.instance_id}},
+                "policyTypes": ["Ingress", "Egress"],
+                "ingress": self._ingress_rules(spec),
+                "egress": self._egress_rules(),
+            },
+        }
+
     def _ingress_body(self, spec: ProvisionSpec) -> dict[str, Any]:
         if not spec.subdomain or not self._cfg.chal_base_domain:
             raise ProvisionerError(
@@ -416,19 +504,40 @@ class KubernetesProvisioner(Provisioner):
         # NetworkPolicy in the following slice.
         needs_service = spec.exposure in ("tcp", "http")
 
-        # Lay down Deployment → (Service) → (Ingress). Any failure — including a
-        # transient error mid-way or a never-ready pod — tears down whatever
-        # already landed via _safe_delete (total + 404-tolerant), so a failed
-        # provision never leaks objects.
-        dep = await self._request(
-            "POST", self._apps("deployments"),
-            json=self._deployment_body(spec), timeout=_TIMEOUT_LIFECYCLE,
-        )
-        if dep.status_code not in (200, 201):
-            raise ProvisionerError(
-                f"deployment create failed: {_status_detail(dep)}"
-            )
+        # Lay down NetworkPolicy → Deployment → (Service) → (Ingress). Any
+        # failure — a bad create, a transient error mid-way, or a never-ready pod
+        # — tears down whatever already landed via _safe_delete (total +
+        # 404-tolerant), so a failed provision never leaks objects. Everything is
+        # inside the try, so even a Deployment-create failure sweeps the
+        # NetworkPolicy that preceded it.
         try:
+            # Isolate the pod (egress-deny / peer + metadata block) BEFORE the
+            # Deployment object exists, so a policy-enforcing CNI programs
+            # egress-deny before the container can start emitting — every
+            # instance gets a NetworkPolicy, including exposure=none (#320 D5).
+            # (The CNI applies policy eventually-consistently, so a namespace
+            # default-deny baseline — shipped with the slice-7 bootstrap — is what
+            # fully closes the startup window; this ordering minimises it. On a
+            # CNI that doesn't enforce policy at all the object is accepted-but-
+            # inert, which the slice-4 validate() egress leg detects.)
+            netpol = await self._request(
+                "POST", self._net("networkpolicies"),
+                json=self._networkpolicy_body(spec), timeout=_TIMEOUT_LIFECYCLE,
+            )
+            if netpol.status_code not in (200, 201):
+                raise ProvisionerError(
+                    f"network policy create failed: {_status_detail(netpol)}"
+                )
+
+            dep = await self._request(
+                "POST", self._apps("deployments"),
+                json=self._deployment_body(spec), timeout=_TIMEOUT_LIFECYCLE,
+            )
+            if dep.status_code not in (200, 201):
+                raise ProvisionerError(
+                    f"deployment create failed: {_status_detail(dep)}"
+                )
+
             if needs_service:
                 svc = await self._request(
                     "POST", self._core("services"),

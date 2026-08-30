@@ -92,6 +92,53 @@ TLS-fronted `https://…`). Create the `flagpost-instances` network on the
 bridge — then apply the egress firewall rules described above on that host).
 Everything else — the admin fields, Test connection, authoring — is identical.
 
+## HTTP subdomain routing (#319, ADR-0036 §4)
+
+Web challenges are exposed over HTTPS at a **per-instance subdomain** rather than
+a raw TCP port: an instance is reached at `https://<token>.<chal_base_domain>`,
+where `<token>` is a short unguessable id minted per instance. A **label-driven
+ingress** on the instance host does the routing — the provisioner sets
+`caddy` / `caddy.reverse_proxy` labels at container-create and a
+[caddy-docker-proxy](https://github.com/lucaslorentz/caddy-docker-proxy)
+sidecar reconfigures itself from them. There is no control-plane round-trip per
+request, the behaviour is identical same-host and remote, and the platform's own
+Caddy is untouched.
+
+**Two prerequisites — you provide these, once, per host:**
+
+1. **Wildcard DNS.** `*.<chal_base_domain>` must resolve to the instance host.
+2. **Wildcard TLS cert.** A cert for `*.<chal_base_domain>` on the ingress.
+
+**Bootstrap.** Bring the ingress up alongside the socket proxy:
+
+```
+docker compose -f docker-compose.yml -f docker-compose.instances.yml \
+  -f docker-compose.instances-http.yml up -d
+```
+
+Then in **Admin → Site settings → Instances** set **HTTP base domain** to your
+`chal.<domain>` and save. `Test connection` gains an **HTTP** leg that checks the
+wildcard resolves and the ingress answers on `:443`; an `exposure: http`
+challenge can't launch until the base domain is set.
+
+**Local dev / CI-of-the-mind.** No domain or real cert needed:
+
+- **DNS** — [sslip.io](https://sslip.io): set the base domain to
+  `chal.127.0.0.1.sslip.io` and `<anything>.chal.127.0.0.1.sslip.io` resolves to
+  `127.0.0.1` with no DNS server to run.
+- **TLS** — Caddy's **internal CA** (`local_certs` in
+  `caddy/instances-ingress.Caddyfile`), so instance certs are issued locally.
+- `scripts/e2e-instances-http.sh` stands the ingress up, launches a `whoami`
+  container with the exact labels the provisioner emits, and asserts the
+  subdomain serves 200 over TLS — the end-to-end proof of the routing path.
+
+**Production.** Delete `local_certs` from `caddy/instances-ingress.Caddyfile` and
+issue real certs via **ACME DNS-01** — the global option `acme_dns <provider> …`
+(e.g. `acme_dns cloudflare {env.CF_API_TOKEN}`). Each instance subdomain is then
+issued a cert through a DNS challenge, with no inbound ACME HTTP challenge exposed
+on the ingress. (Note: `tls { dns … }` is a *site-level* directive — it is not
+valid in the global-options block, which is all the base Caddyfile is.)
+
 ## Authoring an instanced challenge
 
 On a challenge, open its deployment spec (staff, `challenge_edit`):
@@ -99,7 +146,10 @@ On a challenge, open its deployment spec (staff, `challenge_edit`):
 - **Backend**: `docker` (or `shared-static` for an always-on shared endpoint
   with no lifecycle).
 - **Image reference**: e.g. `ghcr.io/you/chal-web:latest`.
-- **Exposure / ports**: `tcp` with the container port(s) the image listens on.
+- **Exposure / ports**: `tcp` with the container port(s) the image listens on,
+  `http` for a web challenge reached over a per-instance subdomain (the first
+  port is the ingress upstream; defaults to 80 — see *HTTP subdomain routing*),
+  or `none` for a self-contained challenge with no published endpoint.
 - **Env**: non-secret environment for the container.
 - **Resource limits / lifetime / per-subject cap**: override the site defaults
   as needed.

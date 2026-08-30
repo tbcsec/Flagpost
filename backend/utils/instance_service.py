@@ -139,13 +139,18 @@ def lifetime_for(deployment: ChallengeDeployment, competition: Competition) -> i
 
 
 async def load_settings(db):
-    """Load the singleton settings with the encrypted registry credential
-    **undeferred**, so a later docker-provisioner build (often after the session
-    closes) reads a cached plaintext rather than triggering lazy IO on a
-    detached instance. Returns None when instancing was never configured."""
+    """Load the singleton settings with the encrypted secrets (the registry
+    credential and the kubernetes bearer token) **undeferred**, so a later
+    provisioner build (often after the session closes) reads a cached plaintext
+    rather than triggering lazy IO on a detached instance — a MissingGreenlet on
+    the background provision path (#320). Returns None when instancing was never
+    configured."""
     return await db.scalar(
         select(InstanceSettings)
-        .options(undefer(InstanceSettings.registry_credentials))
+        .options(
+            undefer(InstanceSettings.registry_credentials),
+            undefer(InstanceSettings.k8s_bearer_token),
+        )
         .where(InstanceSettings.id == INSTANCE_SETTINGS_ID)
     )
 
@@ -163,6 +168,26 @@ def _event_payload(instance: ChallengeInstance) -> dict:
 
 
 # --- provisioner construction (kind registry) --------------------------------
+
+
+def effective_backend(
+    settings: InstanceSettings | None, deployment: ChallengeDeployment
+) -> str:
+    """The provisioner kind a deployment actually runs on (#320, ADR-0036 §1).
+
+    ``shared-static`` is inherently per-deployment (fixed endpoints in the
+    manifest). The orchestrating kinds describe the same portable container
+    spec — image, ports, env, limits — so the **site's** configured backend
+    decides how they run: flipping a site docker → kubernetes is a settings
+    change, not a re-authoring pass (and a ``docker``-authored spec can no
+    longer build a DockerProvisioner pointed at a Kubernetes API server).
+    Falls back to the authored kind when instancing was never configured —
+    only reachable on paths that then refuse the launch anyway."""
+    if deployment.backend == "shared-static":
+        return "shared-static"
+    if settings is not None and settings.backend in SITE_BACKENDS:
+        return settings.backend
+    return deployment.backend
 
 
 def _docker_config(settings: InstanceSettings, deployment: ChallengeDeployment):
@@ -190,10 +215,12 @@ def provisioner_for(
     *,
     transport=None,
 ) -> Provisioner:
-    """Instantiate the provisioner kind a *deployment* runs on. ``shared-static``
-    is self-contained (its manifest); the orchestrating kinds need site
-    settings. ``transport`` is an httpx seam for tests (docker kind only)."""
-    kind = deployment.backend
+    """Instantiate the provisioner kind a *deployment* runs on — resolved
+    through :func:`effective_backend`, so the site's configured backend decides
+    how orchestrated deployments run. ``shared-static`` is self-contained (its
+    manifest); the orchestrating kinds need site settings. ``transport`` is an
+    httpx seam for tests."""
+    kind = effective_backend(settings, deployment)
     if kind == "shared-static":
         return SharedStaticProvisioner(deployment.manifest)
     if kind == "docker":
@@ -203,8 +230,8 @@ def provisioner_for(
         from utils.provisioner_docker import DockerProvisioner
 
         return DockerProvisioner(_docker_config(settings, deployment), transport=transport)
-    # A kind the authoring layer accepts (DEPLOYMENT_BACKENDS) but that has no
-    # runtime yet — e.g. kubernetes lands in Phase 3.
+    # A kind the settings layer accepts (SITE_BACKENDS) but that has no runtime
+    # yet — the kubernetes provisioner lands in the next #320 slice.
     raise ProvisionerError(f"the {kind!r} backend is not available yet")
 
 
@@ -227,7 +254,13 @@ def provisioner_from_settings(settings: InstanceSettings, *, transport=None) -> 
             registry_auth=settings.registry_credentials or None,
         )
         return DockerProvisioner(cfg, transport=transport)
-    raise ProvisionerError(f"the {settings.backend!r} backend has no site provisioner")
+    # A SITE_BACKEND whose runtime hasn't shipped in this build — the
+    # kubernetes provisioner lands in a following #320 slice. Operator-facing
+    # wording (Test connection surfaces it as a leg detail), not a bare kind
+    # repr, so it reads as a build limitation, not a misconfigured endpoint.
+    raise ProvisionerError(
+        f"the {settings.backend} provisioner isn't available in this build yet"
+    )
 
 
 # --- port allocation ---------------------------------------------------------
@@ -306,19 +339,22 @@ async def _plan_endpoints(
     deployment: ChallengeDeployment,
 ) -> tuple[list[dict], str | None]:
     """Connection-detail ledger written on the row at request time, plus the HTTP
-    subdomain token (None unless exposure=http). For docker/TCP this allocates one
-    host port per declared container port (in order) against the configured public
-    host; for docker/HTTP it allocates a unique subdomain and derives the https
-    URL (#319); other shapes populate endpoints later (shared-static from its
-    manifest at provision time) or not at all (exposure=none)."""
-    if deployment.backend == "docker" and deployment.exposure == "tcp":
+    subdomain token (None unless exposure=http). For an orchestrated TCP spec
+    this allocates one host port per declared container port (in order) against
+    the configured public host — a docker published port and a kubernetes
+    NodePort draw from the same range and ledger (#320); for orchestrated HTTP
+    it allocates a unique subdomain and derives the https URL (#319); other
+    shapes populate endpoints later (shared-static from its manifest at
+    provision time) or not at all (exposure=none)."""
+    kind = effective_backend(settings, deployment)
+    if kind in SITE_BACKENDS and deployment.exposure == "tcp":
         if settings is None:
             raise BackendNotReady("instances are not configured")
         ports = await _allocate_host_ports(db, settings, len(deployment.ports))
         return [
             {"kind": "tcp", "host": settings.public_host, "port": p} for p in ports
         ], None
-    if deployment.backend == "docker" and deployment.exposure == "http":
+    if kind in SITE_BACKENDS and deployment.exposure == "http":
         if settings is None or not settings.chal_base_domain:
             raise BackendNotReady(
                 "HTTP instancing needs a base domain — set it under "

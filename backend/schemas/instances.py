@@ -15,6 +15,8 @@ are ``from_attributes`` and built with ``model_validate``.
 
 from __future__ import annotations
 
+import ipaddress
+import re
 from datetime import datetime
 from typing import Any
 
@@ -143,6 +145,14 @@ class AdminInstanceOut(InstanceOut):
 
 # --- site settings + test connection -----------------------------------------
 
+# Kubernetes object-name shapes (#320). A namespace is an RFC 1123 *label*;
+# IngressClass/Secret names are RFC 1123 *subdomains* — dot-separated labels
+# (the regex is per-label; the validator caps total length at 253).
+_RFC1123_LABEL = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?")
+_RFC1123_SUBDOMAIN = re.compile(
+    r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*"
+)
+
 
 class InstanceSettingsOut(BaseModel):
     """Everything the admin infra surface reads. The registry credential is
@@ -166,6 +176,14 @@ class InstanceSettingsOut(BaseModel):
     chal_base_domain: str | None
     spawn_rate_limit: int
     spawn_rate_window_seconds: int
+    # Kubernetes kind (#320). The bearer token is never returned — only whether
+    # one is stored, the registry-credential posture.
+    k8s_namespace: str
+    k8s_bearer_token_set: bool = False
+    k8s_ca_cert: str | None
+    k8s_ingress_class: str | None
+    k8s_image_pull_secret: str | None
+    k8s_cluster_cidr: str | None
 
 
 class InstanceSettingsUpdate(BaseModel):
@@ -187,6 +205,28 @@ class InstanceSettingsUpdate(BaseModel):
     # Spawn throttle (#319): 0 disables. Window in seconds.
     spawn_rate_limit: int | None = Field(default=None, ge=0, le=100000)
     spawn_rate_window_seconds: int | None = Field(default=None, ge=1, le=86400)
+    # Kubernetes kind (#320). The bearer token is write-only: "" clears it,
+    # omitting leaves it untouched (the registry_credentials contract). The
+    # other optional fields also clear on "".
+    k8s_namespace: str | None = None
+    k8s_bearer_token: str | None = None
+    k8s_ca_cert: str | None = None
+    k8s_ingress_class: str | None = None
+    k8s_image_pull_secret: str | None = None
+    k8s_cluster_cidr: str | None = None
+
+    @field_validator("k8s_bearer_token")
+    @classmethod
+    def _strip_bearer_token(cls, v: str | None) -> str | None:
+        """Strip surrounding whitespace so a token pasted with a trailing
+        newline (the shape of ``kubectl create token …``) isn't stored broken
+        and invisible — it is write-only, so an operator can't see the mangled
+        value to diagnose it. A now-empty result clears the stored token, and
+        because the enable-invariant keys on "a token is present", a
+        whitespace-only paste no longer counts as configured."""
+        if v is None:
+            return None
+        return v.strip()
 
     @field_validator("chal_base_domain")
     @classmethod
@@ -210,6 +250,81 @@ class InstanceSettingsUpdate(BaseModel):
                 "(no scheme, path, or port)"
             )
         return v
+
+    @field_validator("k8s_namespace")
+    @classmethod
+    def _validate_namespace(cls, v: str | None) -> str | None:
+        """A Kubernetes namespace is an RFC 1123 *label* (no dots). Unlike the
+        clearable fields there is no empty form — the column is non-null with a
+        default — so "" is rejected rather than treated as "clear". Uppercase
+        is rejected, not coerced: the value names an existing cluster object,
+        and lowercasing a paste would silently point at a different one."""
+        if v is None:
+            return None
+        v = v.strip()
+        if not _RFC1123_LABEL.fullmatch(v):
+            raise ValueError(
+                "k8s_namespace must be a lowercase RFC 1123 label "
+                "(letters/digits/hyphens, at most 63 chars)"
+            )
+        return v
+
+    @field_validator("k8s_ca_cert")
+    @classmethod
+    def _validate_ca_cert(cls, v: str | None) -> str | None:
+        """"" clears. A real value must look like a PEM certificate bundle, so
+        a pasted token/kubeconfig/base64 blob fails at the boundary with a
+        message that names the fix, not at the first TLS handshake."""
+        if v is None:
+            return None
+        v = v.strip()
+        if v and "-----BEGIN CERTIFICATE-----" not in v:
+            raise ValueError(
+                "k8s_ca_cert must be a PEM certificate bundle "
+                "(-----BEGIN CERTIFICATE-----…)"
+            )
+        return v
+
+    @field_validator("k8s_ingress_class", "k8s_image_pull_secret")
+    @classmethod
+    def _validate_k8s_name(cls, v: str | None) -> str | None:
+        """"" clears. A real value must be an RFC 1123 subdomain-shaped
+        Kubernetes object name (IngressClass / Secret names both are).
+        Uppercase is rejected, not coerced — see ``_validate_namespace``."""
+        if v is None:
+            return None
+        v = v.strip()
+        if v and (len(v) > 253 or not _RFC1123_SUBDOMAIN.fullmatch(v)):
+            raise ValueError(
+                "must be a Kubernetes object name "
+                "(lowercase letters/digits/hyphens/dots, at most 253 chars)"
+            )
+        return v
+
+    @field_validator("k8s_cluster_cidr")
+    @classmethod
+    def _validate_cluster_cidr(cls, v: str | None) -> str | None:
+        """"" clears. A real value is one or more comma-separated CIDRs (a
+        cluster typically has two — the pod range and the service range, e.g.
+        "10.42.0.0/16,10.43.0.0/16"). Each part must parse; the stored form is
+        the normalised network addresses, so NetworkPolicy composition can use
+        them verbatim."""
+        if v is None:
+            return None
+        v = v.strip()
+        if not v:
+            return ""
+        normalised: list[str] = []
+        for part in v.split(","):
+            part = part.strip()
+            try:
+                normalised.append(str(ipaddress.ip_network(part, strict=False)))
+            except ValueError:
+                raise ValueError(
+                    f"k8s_cluster_cidr: {part!r} is not a CIDR — use comma-"
+                    'separated ranges like "10.42.0.0/16,10.43.0.0/16"'
+                ) from None
+        return ",".join(normalised)
 
 
 class TestConnectionLeg(BaseModel):

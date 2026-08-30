@@ -197,6 +197,47 @@ class InstanceSettings(Base, TimestampMixin):
     spawn_rate_window_seconds: Mapped[int] = mapped_column(
         Integer, nullable=False, default=60, server_default="60"
     )
+    # --- kubernetes kind (#320, ADR-0036 §1) ---------------------------------
+    # The kubernetes backend reuses ``endpoint_url`` (the API server URL),
+    # ``public_host`` (the node/LB address competitors dial for NodePort TCP)
+    # and ``chal_base_domain`` (the Ingress wildcard); these six are the
+    # kind-specific remainder. All ship inert defaults — a docker site never
+    # reads them.
+    #
+    # Namespace every per-instance resource lives in. ONE operator-configured
+    # namespace with a namespace-scoped ServiceAccount (least privilege), not
+    # namespace-per-instance (which would need cluster-scoped rights).
+    k8s_namespace: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+        default="flagpost-instances",
+        server_default="flagpost-instances",
+    )
+    # ServiceAccount bearer token the backend authenticates with. Presented to
+    # the API server, so encrypted at rest not hashed (ADR-0020), write-only
+    # over the API, dropped from backup, and deferred like
+    # ``registry_credentials`` (same rotated-credential rationale).
+    k8s_bearer_token: Mapped[str | None] = mapped_column(
+        EncryptedString, nullable=True, deferred=True
+    )
+    # PEM CA bundle that signs the API server's serving cert (from the
+    # cluster's kubeconfig). Null = the system trust store (clusters behind a
+    # real cert). Not a secret — a CA cert is public material.
+    k8s_ca_cert: Mapped[str | None] = mapped_column(String, nullable=True)
+    # ``ingressClassName`` stamped on per-instance Ingresses; null = the
+    # cluster's default IngressClass handles them.
+    k8s_ingress_class: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Name of an operator-created imagePullSecret in the namespace, referenced
+    # by per-instance pods for private challenge images — the kubernetes
+    # answer to ``registry_credentials`` (the secret itself stays in-cluster;
+    # Flagpost never reads it and holds no RBAC on secrets).
+    k8s_image_pull_secret: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Comma-separated pod/service CIDRs (e.g. "10.42.0.0/16,10.43.0.0/16").
+    # When set, per-instance NetworkPolicies except these ranges from ingress
+    # and from egress-allow mode, so peer instances and the control plane stay
+    # unreachable even for internet-enabled challenges. Optional but
+    # recommended; the threat model documents the residual risk when unset.
+    k8s_cluster_cidr: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class ChallengeDeployment(Base, CompetitionScopedMixin, TimestampMixin):

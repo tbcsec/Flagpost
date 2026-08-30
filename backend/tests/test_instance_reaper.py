@@ -188,6 +188,43 @@ async def test_plan_endpoints_allocates_for_docker_tcp_only(client):
     assert static_eps == [] and static_sub is None
 
 
+async def test_plan_endpoints_kubernetes_site_allocates_like_docker(client):
+    """#320 D7: a docker-authored spec on a kubernetes-configured site draws
+    NodePorts/subdomains from the same range and ledger — the allocation layer
+    keys on the *effective* backend, not the authored one."""
+    comp, chal, dep, uid = await _scaffold(client)
+    settings = InstanceSettings(
+        id=INSTANCE_SETTINGS_ID,
+        backend="kubernetes",
+        tcp_port_min=40000,
+        tcp_port_max=40010,
+        public_host="chal.example",
+        chal_base_domain="chal.example.org",
+    )
+    tcp_dep = ChallengeDeployment(
+        competition_id=comp,
+        challenge_id=chal,
+        backend="docker",
+        image_ref="img:latest",
+        exposure="tcp",
+        ports=[1337],
+    )
+    http_dep = ChallengeDeployment(
+        competition_id=comp,
+        challenge_id=chal,
+        backend="docker",
+        image_ref="img:latest",
+        exposure="http",
+        ports=[8080],
+    )
+    async with SessionLocal() as db:
+        tcp_eps, tcp_sub = await svc._plan_endpoints(db, settings, tcp_dep)
+        http_eps, http_sub = await svc._plan_endpoints(db, settings, http_dep)
+    assert [e["port"] for e in tcp_eps] == [40000] and tcp_sub is None
+    assert http_sub is not None and len(http_sub) == 8
+    assert http_eps == [{"kind": "http", "url": f"https://{http_sub}.chal.example.org"}]
+
+
 async def test_plan_endpoints_http_allocates_a_subdomain_url(client):
     comp, chal, dep, uid = await _scaffold(client)
     settings = InstanceSettings(

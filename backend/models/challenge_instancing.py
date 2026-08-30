@@ -180,6 +180,23 @@ class InstanceSettings(Base, TimestampMixin):
     egress_policy: Mapped[str] = mapped_column(
         String, nullable=False, default="deny", server_default="deny"
     )
+    # Base domain for HTTP-exposed instances (#319, ADR-0036 §4). A per-instance
+    # subdomain hangs off this — an instance is reachable at
+    # ``https://<token>.<chal_base_domain>`` through the label-driven ingress on
+    # the instance host. Null until an operator configures wildcard DNS + a
+    # wildcard cert for ``*.<chal_base_domain>``; ``exposure=http`` deployments
+    # can't launch and Test-connection's HTTP leg fails while it's unset. Distinct
+    # from ``public_host`` (the TCP host) so a topology can run TCP and HTTP.
+    chal_base_domain: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Spawn rate-limiting (#319, ADR-0036 §5): at most ``spawn_rate_limit``
+    # launches per subject per competition within ``spawn_rate_window_seconds``.
+    # 0 disables the throttle (the global ``max_concurrent`` ceiling still holds).
+    spawn_rate_limit: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    spawn_rate_window_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=60, server_default="60"
+    )
 
 
 class ChallengeDeployment(Base, CompetitionScopedMixin, TimestampMixin):
@@ -263,6 +280,17 @@ class ChallengeInstance(Base, CompetitionScopedMixin, TimestampMixin):
     # Backend-native identifier (container id, k8s resource name). Null until
     # provisioning reaches the backend.
     backend_handle: Mapped[str | None] = mapped_column(String, nullable=True)
+    # HTTP exposure only (#319): the per-instance subdomain token — the instance
+    # is reached at ``https://<subdomain>.<chal_base_domain>``. An 8-char random
+    # Crockford-base32 token, allocated in the admission transaction and set as
+    # the caddy-docker-proxy routing label at container-create. **Globally**
+    # unique (the FQDN is a global routing key, like a host port — intentionally
+    # not competition-scoped); NULL for TCP/none instances (a UNIQUE column admits
+    # many NULLs on both SQLite and Postgres). Unguessable so a competitor can't
+    # reach another subject's instance by browsing.
+    subdomain: Mapped[str | None] = mapped_column(
+        String, nullable=True, unique=True, index=True
+    )
     # Connection details as shown to the subject:
     # [{"kind": "tcp", "host": ..., "port": ...}, {"kind": "http", "url": ...}]
     endpoints: Mapped[list] = mapped_column(JSON, nullable=False, default=list)

@@ -125,7 +125,9 @@ function DeploymentForm({
       backend: "docker",
       image_ref: imageRef.trim(),
       exposure,
-      ports: exposure === "tcp" ? ports : [],
+      // TCP and HTTP both carry the container port(s); HTTP uses the first as the
+      // ingress upstream (defaulting to 80 when omitted). "none" carries none.
+      ports: exposure === "none" ? [] : ports,
       env: Object.fromEntries(
         env.filter(([k]) => k.trim()).map(([k, v]) => [k.trim(), v]),
       ),
@@ -187,6 +189,7 @@ function DeploymentForm({
             onChange={(e) => setExposure(e.target.value)}
           >
             <option value="tcp">{t("exposureTcp")}</option>
+            <option value="http">{t("exposureHttp")}</option>
             <option value="none">{t("exposureNone")}</option>
           </Select>
         </div>
@@ -203,8 +206,8 @@ function DeploymentForm({
         </div>
       </div>
 
-      {exposure === "tcp" && (
-        <PortsEditor value={ports} onChange={setPorts} />
+      {exposure !== "none" && (
+        <PortsEditor value={ports} onChange={setPorts} http={exposure === "http"} />
       )}
 
       <EnvEditor value={env} onChange={setEnv} />
@@ -326,9 +329,11 @@ function DeploymentForm({
 function PortsEditor({
   value,
   onChange,
+  http = false,
 }: {
   value: number[];
   onChange: (ports: number[]) => void;
+  http?: boolean;
 }) {
   const t = useTranslations("challenges.admin.deployment");
   const [draft, setDraft] = useState("");
@@ -344,6 +349,9 @@ function PortsEditor({
   return (
     <div className="grid gap-2">
       <Label>{t("ports")}</Label>
+      {http && (
+        <p className="text-xs text-muted-foreground">{t("portsHttpHint")}</p>
+      )}
       {value.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {value.map((p) => (

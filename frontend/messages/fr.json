@@ -890,7 +890,9 @@
         "couldntRemove": "Couldn't remove the deployment",
         "removeConfirmTitle": "Remove this deployment?",
         "removeConfirmDescription": "This challenge will stop offering instances. Running instances are reaped.",
-        "removeConfirmLabel": "Remove"
+        "removeConfirmLabel": "Remove",
+        "exposureHttp": "HTTP (subdomain + TLS)",
+        "portsHttpHint": "The container’s HTTP port — the first is the ingress upstream (defaults to 80)."
       },
       "readGuide": "Read the Judge guide"
     },
@@ -2601,7 +2603,12 @@
       "resultPass": "All checks passed",
       "resultFail": "Action needed",
       "legOk": "OK",
-      "legFailed": "Failed"
+      "legFailed": "Failed",
+      "chalBaseDomain": "HTTP base domain",
+      "chalBaseDomainHint": "Base domain for HTTP-exposed instances — each gets a subdomain (https://<id>.<domain>). Requires wildcard DNS + a wildcard TLS cert. Leave blank to disable HTTP.",
+      "spawnRateLimit": "Spawn rate limit",
+      "spawnRateWindow": "Rate window (seconds)",
+      "spawnRateHint": "Max launches per participant within the window, across all challenges. 0 disables the throttle."
     },
     "ai": {
       "provider": "Provider",

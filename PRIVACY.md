@@ -83,9 +83,11 @@ With checks off you'll no longer be told about new releases; watch
 - No crash or error reporting to any external service.
 - No outbound connection of any kind beyond the update check, and whatever *you*
   configure: your SMTP server, any external identity provider you set up (OIDC,
-  SAML or LDAP), any automation webhooks you create, and — if you enable the
-  optional AI assistant — the AI model endpoint you point it at. All go wherever
-  you tell them to.
+  SAML or LDAP), any automation webhooks you create, the container-runtime
+  endpoint (a Docker socket proxy, or a Kubernetes API server) if you enable the
+  optional challenge-instancing module, and — if you enable the optional AI
+  assistant — the AI model endpoint you point it at. All go wherever you tell
+  them to.
 - The **AI assistant is off by default**. When you enable it, the messages people
   send it (competitor and organiser chat, plus the competition/challenge details
   its read-only tools surface) are sent to the model endpoint you configure.

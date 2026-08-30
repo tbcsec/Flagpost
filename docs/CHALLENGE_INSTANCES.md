@@ -139,6 +139,90 @@ issued a cert through a DNS challenge, with no inbound ACME HTTP challenge expos
 on the ingress. (Note: `tls { dns … }` is a *site-level* directive — it is not
 valid in the global-options block, which is all the base Caddyfile is.)
 
+## Kubernetes (#320, ADR-0036 §1)
+
+The `kubernetes` backend is the same `Provisioner` contract over a cluster
+instead of a Docker daemon — a new *kind*, not a fork. It's the scale option:
+per-instance workloads with **enforced** NetworkPolicy isolation and in-cluster
+health checks + auto-restart. Same exposure shape as docker — TCP maps onto a
+**NodePort** Service (drawing from the same host-port range), HTTP onto an
+**Ingress** at `<token>.<chal_base_domain>` (reusing the Phase 2 subdomain
+scheme) — so switching a site from docker to kubernetes is a settings change, not
+a re-authoring pass.
+
+### Posture — namespace-scoped, least privilege
+
+Everything runs in **one operator-configured namespace** (default
+`flagpost-instances`), and Flagpost authenticates as a **ServiceAccount with a
+namespace-scoped Role** — *not* namespace-per-instance (which needs cluster-wide
+rights). The token is denied `secrets`, `pods/exec`, and everything cluster-scoped
+(namespace creation, node listing). Per-instance isolation comes from
+NetworkPolicy, not namespaces. This is the socket-proxy least-privilege posture,
+in Kubernetes terms — and a cluster-admin token deliberately **fails** the
+privilege-posture leg of Test connection.
+
+### Bootstrap
+
+On the **challenge cluster** (a sacrificial cluster, not the one running the
+control plane), apply the RBAC and mint a token:
+
+```bash
+kubectl apply -f k8s/instances-rbac.yaml
+kubectl -n flagpost-instances create token flagpost-provisioner --duration=8760h
+# API CA to paste into the "CA certificate" field:
+kubectl config view --raw --minify \
+  -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d
+```
+
+`k8s/instances-rbac.yaml` also installs a **namespace default-deny-egress
+baseline** NetworkPolicy — a belt-and-suspenders that isolates a freshly-created
+pod during the brief window before its own per-instance policy is programmed by
+the CNI (NetworkPolicies are additive, so an allow-mode instance's policy
+re-opens what it needs).
+
+Then in **Admin → Site settings → Instances**:
+
+1. Backend: **Kubernetes**.
+2. Endpoint URL: the API server, e.g. `https://10.0.0.5:6443`.
+3. Public host: the node/LB address competitors dial for NodePort challenges.
+4. Namespace, the **service-account token** (write-only, encrypted at rest), and
+   the **API server CA** from the bootstrap above.
+5. For HTTP challenges: the **HTTP base domain** (`chal.<domain>`), an **ingress
+   class** if not the cluster default, and — recommended — the **cluster CIDRs**
+   (pod/service ranges) so peers and the control plane stay unreachable even for
+   internet-enabled challenges. An **image pull secret** name covers private
+   registries (the k8s answer to the registry credential; the Secret stays in the
+   cluster, Flagpost holds no rights on it).
+6. **Test connection.** The kubernetes legs are: API reachable, **privilege
+   posture** (the SelfSubjectAccessReview allow/deny matrix), namespace operable,
+   NetworkPolicy accepted, **egress enforcement** (does the CNI actually block a
+   deny-all pod, or merely accept the policy?), NodePort public reachability, and
+   the HTTP ingress. A red leg names what to fix.
+
+> **A policy-enforcing CNI is required.** Flannel alone accepts NetworkPolicy
+> objects but does not enforce them — instances would not be isolated. Use
+> Calico, Cilium, or k3s (which ships an embedded kube-router controller). The
+> `egress_enforcement` leg exists precisely to catch the accept-but-don't-enforce
+> trap, which is otherwise invisible.
+
+### Wildcard TLS
+
+Same prerequisite as the docker HTTP path: `*.<chal_base_domain>` DNS pointing at
+the ingress, and a wildcard cert. Provide it to your ingress controller the usual
+way (a cert-manager `Certificate` + `ClusterIssuer`, or a wildcard TLS Secret
+referenced as the controller's default). Flagpost's per-instance Ingress relies
+on the controller's wildcard/default cert — it sets no per-Ingress TLS.
+
+### Local end-to-end harness
+
+No real cluster needed to prove the whole path — `scripts/e2e-instances-k8s.sh`
+boots a single-node **k3s in Docker**, applies the RBAC, mints a token, and runs
+the opt-in provisioner tests (`backend/tests_e2e/`) against it: RBAC posture,
+NetworkPolicy **enforcement** (k3s's kube-router blocks a deny-all-egress pod),
+NodePort reachability, and a whoami instance reached at its subdomain through
+k3s's Traefik (wildcard DNS via sslip.io, so no domain or cert). It's the
+end-to-end proof the MockTransport unit tests can't give.
+
 ## Authoring an instanced challenge
 
 On a challenge, open its deployment spec (staff, `challenge_edit`):

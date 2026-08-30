@@ -132,6 +132,13 @@ async def update_settings(
         settings.max_concurrent = body.max_concurrent
     if body.egress_policy is not None:
         settings.egress_policy = body.egress_policy
+    if body.chal_base_domain is not None:
+        # "" clears it; the schema has already normalised a real value.
+        settings.chal_base_domain = body.chal_base_domain or None
+    if body.spawn_rate_limit is not None:
+        settings.spawn_rate_limit = body.spawn_rate_limit
+    if body.spawn_rate_window_seconds is not None:
+        settings.spawn_rate_window_seconds = body.spawn_rate_window_seconds
     if body.enabled is not None:
         settings.enabled = body.enabled
 

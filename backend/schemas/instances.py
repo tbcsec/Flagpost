@@ -18,7 +18,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from models.challenge_instancing import (
     DEPLOYMENT_BACKENDS,
@@ -163,6 +163,9 @@ class InstanceSettingsOut(BaseModel):
     default_pids: int
     max_concurrent: int
     egress_policy: str
+    chal_base_domain: str | None
+    spawn_rate_limit: int
+    spawn_rate_window_seconds: int
 
 
 class InstanceSettingsUpdate(BaseModel):
@@ -179,6 +182,34 @@ class InstanceSettingsUpdate(BaseModel):
     default_pids: int | None = Field(default=None, ge=16, le=65536)
     max_concurrent: int | None = Field(default=None, ge=1, le=100000)
     egress_policy: str | None = None
+    # HTTP routing base domain (#319). "" clears it; omitting leaves it untouched.
+    chal_base_domain: str | None = None
+    # Spawn throttle (#319): 0 disables. Window in seconds.
+    spawn_rate_limit: int | None = Field(default=None, ge=0, le=100000)
+    spawn_rate_window_seconds: int | None = Field(default=None, ge=1, le=86400)
+
+    @field_validator("chal_base_domain")
+    @classmethod
+    def _normalise_base_domain(cls, v: str | None) -> str | None:
+        """Accept a bare, lowercased domain (``chal.example.org``) or ``""`` to
+        clear. Rejects a scheme/path/port/whitespace so an operator paste like
+        ``https://chal.example.org/`` fails at the boundary, not at launch."""
+        if v is None:
+            return None
+        v = v.strip().lower()
+        if v and (
+            any(c.isspace() for c in v)
+            or "/" in v
+            or ":" in v
+            or v.startswith(".")
+            or v.endswith(".")
+            or ".." in v
+        ):
+            raise ValueError(
+                "chal_base_domain must be a bare domain like 'chal.example.org' "
+                "(no scheme, path, or port)"
+            )
+        return v
 
 
 class TestConnectionLeg(BaseModel):

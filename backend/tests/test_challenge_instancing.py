@@ -347,6 +347,51 @@ async def test_instance_settings_singleton_defaults():
     assert row.tcp_port_max == DEFAULT_TCP_PORT_MAX
     assert row.max_concurrent == DEFAULT_MAX_CONCURRENT
     assert row.default_cpu == 1.0
+    # Phase 2 HTTP fields (#319) ship inert: no base domain, throttle off.
+    assert row.chal_base_domain is None
+    assert row.spawn_rate_limit == 0
+    assert row.spawn_rate_window_seconds == 60
+
+
+async def test_settings_roundtrip_http_and_rate_limit_fields(client):
+    admin = await admin_token(client)
+    body = {
+        "endpoint_url": "http://socket-proxy:2375",
+        "public_host": "ctf.example.org",
+        "chal_base_domain": "  CHAL.Example.ORG  ",  # normalised: strip + lower
+        "spawn_rate_limit": 5,
+        "spawn_rate_window_seconds": 120,
+    }
+    r = await client.put("/api/admin/instances/settings", json=body, headers=_auth(admin))
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["chal_base_domain"] == "chal.example.org"
+    assert out["spawn_rate_limit"] == 5
+    assert out["spawn_rate_window_seconds"] == 120
+    # "" clears the base domain.
+    cleared = await client.put(
+        "/api/admin/instances/settings",
+        json={"chal_base_domain": ""},
+        headers=_auth(admin),
+    )
+    assert cleared.json()["chal_base_domain"] is None
+
+
+async def test_settings_rejects_malformed_base_domain(client):
+    admin = await admin_token(client)
+    for bad in (
+        "https://chal.example.org",  # scheme
+        "chal.example.org/x",         # path
+        "chal.example.org:8443",      # port
+        "chal .example.org",          # whitespace
+        ".chal.example.org",          # leading dot
+    ):
+        r = await client.put(
+            "/api/admin/instances/settings",
+            json={"chal_base_domain": bad},
+            headers=_auth(admin),
+        )
+        assert r.status_code == 422, f"{bad!r} accepted ({r.status_code})"
 
 
 async def test_competition_instancing_policy_roundtrips(client):

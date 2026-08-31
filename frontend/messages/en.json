@@ -94,7 +94,26 @@
       "noCompetitors": "No competitors yet.",
       "posting": "Posting…",
       "post": "Post announcement",
-      "postedToast": "Announcement posted"
+      "postedToast": "Announcement posted",
+      "scheduleLabel": "Schedule for later",
+      "publishAtLabel": "Publish time",
+      "scheduleHint": "Stays a private draft until this time, then posts automatically.",
+      "schedule": "Schedule",
+      "scheduledToast": "Announcement scheduled"
+    },
+    "scheduled": {
+      "title": "Scheduled announcements",
+      "scheduledFor": "Goes live {date}",
+      "rescheduleLabel": "New publish time",
+      "reschedule": "Reschedule",
+      "publishNow": "Publish now",
+      "cancel": "Cancel",
+      "cancelConfirmTitle": "Cancel scheduled announcement?",
+      "cancelConfirmDescription": "It won't be published. This can't be undone.",
+      "cancelConfirm": "Cancel it",
+      "rescheduledToast": "Announcement rescheduled",
+      "publishedToast": "Announcement published",
+      "cancelledToast": "Scheduled announcement cancelled"
     }
   },
   "app": {

@@ -94,7 +94,26 @@
       "noCompetitors": "Nie ma jeszcze konkurentów.",
       "posting": "Publikowanie…",
       "post": "Ogłoszenie",
-      "postedToast": "Ogłoszenie opublikowane"
+      "postedToast": "Ogłoszenie opublikowane",
+      "scheduleLabel": "Zaplanuj na później",
+      "publishAtLabel": "Czas publikacji",
+      "scheduleHint": "Pozostaje prywatnym szkicem do tego czasu, potem publikuje się automatycznie.",
+      "schedule": "Zaplanuj",
+      "scheduledToast": "Ogłoszenie zaplanowane"
+    },
+    "scheduled": {
+      "title": "Zaplanowane ogłoszenia",
+      "scheduledFor": "Publikacja {date}",
+      "rescheduleLabel": "Nowy czas publikacji",
+      "reschedule": "Zmień termin",
+      "publishNow": "Opublikuj teraz",
+      "cancel": "Anuluj",
+      "cancelConfirmTitle": "Anulować zaplanowane ogłoszenie?",
+      "cancelConfirmDescription": "Nie zostanie opublikowane. Tej operacji nie można cofnąć.",
+      "cancelConfirm": "Anuluj je",
+      "rescheduledToast": "Zmieniono termin ogłoszenia",
+      "publishedToast": "Ogłoszenie opublikowane",
+      "cancelledToast": "Zaplanowane ogłoszenie anulowane"
     }
   },
   "app": {

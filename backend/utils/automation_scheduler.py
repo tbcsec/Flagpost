@@ -37,6 +37,7 @@ from sqlalchemy import or_, select
 
 from config import settings
 from db import ensure_aware_utc, utcnow
+from models.announcement import Announcement
 from models.automation import AutomationRule
 from models.certificate import CertificateExportJob, CertificateTemplate
 from models.competition import Competition
@@ -191,6 +192,51 @@ async def publish_scheduled_hints(db_factory, *, now: datetime | None = None) ->
     # Emit after commit so the unhide is durable before any handler runs.
     for payload in to_emit:
         await event_bus.emit("hint.published", payload)
+
+
+async def publish_scheduled_announcements(
+    db_factory, *, now: datetime | None = None
+) -> None:
+    """Publish every scheduled announcement whose ``publish_at`` has arrived
+    (#349): flip it visible and emit ``announcement.published`` — the *same* event
+    an immediate post emits, so the announcements module delivers it (WS broadcast
+    + bell notifications) identically. Idempotent — once unhidden a row no longer
+    matches. Compared in Python like the hint tick, for tz correctness across
+    SQLite/Postgres. The payload mirrors the route's exactly."""
+    now = ensure_aware_utc(now) if now is not None else utcnow()
+    to_emit: list[dict] = []
+    async with db_factory() as db:
+        announcements = (
+            (
+                await db.execute(
+                    select(Announcement).where(
+                        Announcement.hidden.is_(True),
+                        Announcement.publish_at.is_not(None),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for announcement in announcements:
+            if now >= ensure_aware_utc(announcement.publish_at):
+                announcement.hidden = False
+                to_emit.append(
+                    {
+                        "competition_id": announcement.competition_id,
+                        "announcement_id": announcement.id,
+                        "title": announcement.title,
+                        "body": announcement.body,
+                        "severity": announcement.severity,
+                        "audience_type": announcement.audience_type,
+                        "created_at": announcement.created_at.isoformat(),
+                    }
+                )
+        if to_emit:
+            await db.commit()
+    # Emit after commit so the unhide is durable before any handler runs.
+    for payload in to_emit:
+        await event_bus.emit("announcement.published", payload)
 
 
 async def release_scheduled_certificates(db_factory, *, now: datetime | None = None) -> None:
@@ -525,6 +571,9 @@ async def _loop(db_factory, interval_seconds: float) -> None:
             await emit_lifecycle_events(db_factory)
             await run_time_rules(db_factory)
             await publish_scheduled_hints(db_factory)
+            # Scheduled announcement release (#349) rides the same kernel tick as
+            # scheduled hints; a cheap no-op when nothing is due.
+            await publish_scheduled_announcements(db_factory)
             # Scheduled certificate release + bulk-export processing (#219) ride
             # the same kernel tick; both are no-ops when nothing is due/pending.
             await release_scheduled_certificates(db_factory)

@@ -115,6 +115,10 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
         "competition_id", "announcement_id", "title", "body", "severity",
         "audience_type",
     ],
+    # Edit/cancel of a still-scheduled announcement (#349) — id-only, like the
+    # instance-lifecycle events; the row is the source of truth.
+    "announcement.updated": ["competition_id", "announcement_id"],
+    "announcement.deleted": ["competition_id", "announcement_id"],
     "survey.submitted": ["competition_id", "user_id", "survey_id", "response_id"],
     "survey.opened": ["competition_id", "survey_id", "title"],
     "certificate.template_updated": ["competition_id", "certificate_template_id"],
@@ -266,6 +270,10 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     "scoreboard.frozen": "scoreboard_freeze",
     "scoreboard.unfrozen": "scoreboard_freeze",
     "announcement.published": "challenge_view",
+    # Scheduling-workflow events are staff-only (the draft was never competitor-
+    # visible), so gate their triggers on the authoring permission, not view.
+    "announcement.updated": "announcement_create",
+    "announcement.deleted": "announcement_create",
     "survey.opened": "challenge_view",
     "competition.member_joined": "challenge_view",
     # Same visibility tier as member_joined — a join-adjacent membership event.

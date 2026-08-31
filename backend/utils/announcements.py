@@ -79,12 +79,20 @@ async def list_visible_announcements(
     This is the *audience* filter, not the ``challenge_view`` access gate — the
     route applies that with ``require_permission`` (and any non-route caller
     re-applies it).
+
+    This is the *published* feed: scheduled drafts (``hidden``) are excluded for
+    everyone, staff included — they aren't live yet, and staff manage them
+    through :func:`list_scheduled_announcements` instead. That keeps the live
+    banner/feed identical for a scheduled post whether or not it has fired.
     """
     rows = list(
         (
             await db.execute(
                 select(Announcement)
-                .where(Announcement.competition_id == competition_id)
+                .where(
+                    Announcement.competition_id == competition_id,
+                    Announcement.hidden.is_(False),
+                )
                 .order_by(Announcement.created_at.desc())
             )
         )
@@ -99,6 +107,24 @@ async def list_visible_announcements(
         for a in rows
         if visible_to_user(a, user_id=user.id, team_ids=team_ids, is_staff=False)
     ]
+
+
+async def list_scheduled_announcements(
+    db: AsyncSession, competition_id: str
+) -> list[Announcement]:
+    """The pending scheduled announcements (``hidden``) for the staff management
+    view (#349), soonest-first by ``publish_at``. Staff-only — the route gates on
+    ``announcement_create``; audience isn't filtered because the author sees
+    every draft they scheduled, exactly as with the published feed."""
+    rows = await db.execute(
+        select(Announcement)
+        .where(
+            Announcement.competition_id == competition_id,
+            Announcement.hidden.is_(True),
+        )
+        .order_by(Announcement.publish_at.asc())
+    )
+    return list(rows.scalars().all())
 
 
 async def resolve_recipients(

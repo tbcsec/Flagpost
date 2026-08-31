@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 
 import { NewAnnouncementDialog } from "@/components/announcements/new-announcement-dialog";
+import { ScheduledAnnouncements } from "@/components/announcements/scheduled-announcements";
 import { NoCompetition } from "@/components/app/no-competition";
 import { SectionHeader } from "@/components/app/section-header";
 import { DashboardGrid } from "@/components/dashboard/dashboard-grid";
@@ -60,6 +61,8 @@ export default function DashboardPage() {
       />
 
       {isManager && <FirstRunGuide competitionId={competitionId} />}
+
+      {isManager && <ScheduledAnnouncements competitionId={competitionId} />}
 
       <DashboardGrid
         competitionId={competitionId}

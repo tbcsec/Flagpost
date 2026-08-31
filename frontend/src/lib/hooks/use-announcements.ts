@@ -6,12 +6,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
 import { announcementsApi } from "@/lib/api";
-import type { Announcement, AnnouncementCreate } from "@/lib/types";
+import type {
+  Announcement,
+  AnnouncementCreate,
+  AnnouncementUpdate,
+} from "@/lib/types";
 import { openRoomSocket } from "@/lib/ws";
 import { useAuthStore } from "@/stores/auth";
 
 const announcementKeys = {
   list: (competitionId: string) => ["announcements", competitionId] as const,
+  scheduled: (competitionId: string) =>
+    ["announcements", competitionId, "scheduled"] as const,
 };
 
 /** The competition's announcements: REST for the initial load, then the
@@ -71,10 +77,59 @@ export function useCreateAnnouncement(competitionId: string) {
     mutationFn: (input: AnnouncementCreate) =>
       announcementsApi.create(competitionId, input),
     // The WS frame also arrives, but invalidating keeps the poster's own view
-    // correct even if their socket is momentarily down.
-    onSuccess: () =>
+    // correct even if their socket is momentarily down. Also refresh the
+    // scheduled list — a future publish_at lands there, not in the live feed.
+    onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: announcementKeys.list(competitionId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: announcementKeys.scheduled(competitionId),
+      });
+    },
+  });
+}
+
+/** The pending scheduled drafts (#349), for the staff management list. Gated to
+ *  managers by the caller (`enabled`); the route is staff-only regardless. */
+export function useScheduledAnnouncements(
+  competitionId: string,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  const isAuthenticated = useAuthStore((s) => s.status === "authenticated");
+  return useQuery({
+    queryKey: announcementKeys.scheduled(competitionId),
+    queryFn: () => announcementsApi.listScheduled(competitionId),
+    enabled: enabled && isAuthenticated && Boolean(competitionId),
+  });
+}
+
+/** Edit / reschedule a still-scheduled announcement (#349). Publishing it (time
+ *  in the past, or cleared) also refreshes the live feed. */
+export function useUpdateAnnouncement(competitionId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: AnnouncementUpdate }) =>
+      announcementsApi.update(competitionId, id, patch),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: announcementKeys.scheduled(competitionId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: announcementKeys.list(competitionId),
+      });
+    },
+  });
+}
+
+/** Cancel a still-scheduled announcement (#349). */
+export function useDeleteAnnouncement(competitionId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => announcementsApi.remove(competitionId, id),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: announcementKeys.scheduled(competitionId),
       }),
   });
 }

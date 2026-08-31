@@ -1117,6 +1117,20 @@ export interface PublicInsights {
   };
 }
 
+/** Cumulative points-over-time for the authenticated scoreboard (#348) — the
+ *  same shape the public insights timeline carries, so the shared chart renders
+ *  both. Each series ends on that subject's board total; it honours the same
+ *  freeze + bracket scoping as the standings beside it. */
+export interface ScoreboardTimeline {
+  start: string | null;
+  end: string | null;
+  series: {
+    subject_id: string;
+    name: string;
+    points: { t: string; points: number }[];
+  }[];
+}
+
 /** A broadcast announcement (Phase 8). */
 /** Urgency ladder (#40). `critical` overrides a muted in-app notification
  *  category and doesn't auto-dismiss from the banner. */

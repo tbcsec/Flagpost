@@ -108,6 +108,7 @@ import type {
   PublicInsights,
   PublicScoreboard,
   Scoreboard,
+  ScoreboardTimeline,
   SignedUrl,
   OperationalSettings,
   OperationalSettingsUpdate,
@@ -810,6 +811,12 @@ export const scoreboardApi = {
   get: (competitionId: string, bracket?: string | null) =>
     apiFetch<Scoreboard>(
       `/api/competitions/${competitionId}/scoreboard${bracket ? `?bracket=${encodeURIComponent(bracket)}` : ""}`,
+    ),
+  // Cumulative score-over-time for the chart beside the board (#348). Same
+  // freeze + bracket scoping; refreshed via the activity room, not polled.
+  timeline: (competitionId: string, bracket?: string | null) =>
+    apiFetch<ScoreboardTimeline>(
+      `/api/competitions/${competitionId}/scoreboard/timeline${bracket ? `?bracket=${encodeURIComponent(bracket)}` : ""}`,
     ),
   // Staff freeze/unfreeze the public board (scoreboard_freeze).
   freeze: (competitionId: string) =>

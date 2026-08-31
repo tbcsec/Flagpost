@@ -37,6 +37,31 @@ describe("keysForActivity", () => {
     }
   });
 
+  it("refreshes the score-over-time chart (#348) on every point-moving event", () => {
+    // The chart is a separate ["scoreboard-timeline", cid] query fed by the
+    // activity room; each of these events shifts a series or its cutoff.
+    for (const event of [
+      "challenge.solved",
+      "challenge.hint_requested",
+      "score.adjusted",
+      "achievement.awarded",
+      "scoreboard.frozen",
+      "scoreboard.unfrozen",
+      "competition.started",
+      "competition.ended",
+    ]) {
+      expect(keysForActivity(event, CID)).toContainEqual([
+        "scoreboard-timeline",
+        CID,
+      ]);
+    }
+    // A plain wrong guess doesn't move any score, so it must NOT refetch it.
+    expect(keysForActivity("challenge.attempted", CID)).not.toContainEqual([
+      "scoreboard-timeline",
+      CID,
+    ]);
+  });
+
   it("keeps attempts off the challenge list (heaviest refetch, most frequent event)", () => {
     const keys = keysForActivity("challenge.attempted", CID);
     expect(keys).not.toContainEqual(["challenges", CID]);

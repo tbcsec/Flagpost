@@ -21,10 +21,11 @@ from auth.deps import require_permission, user_has_permission
 from db import get_db, utcnow
 from models.competition import Competition
 from models.user import User
-from schemas.scoreboard import FreezeRequest, ScoreboardOut
+from schemas.scoreboard import FreezeRequest, PointsTimeline, ScoreboardOut
 from utils.competition_status import require_started
 from utils.event_bus import event_bus
 from utils.scoreboard import cached_scoreboard, compute_scoreboard
+from utils.scoreboard_timeline import compute_timeline
 
 router = APIRouter(
     prefix="/api/competitions/{competition_id}/scoreboard", tags=["scoreboard"]
@@ -60,6 +61,33 @@ async def get_scoreboard(
     # Cached read model (#87): repeated reads collapse to one compute per window.
     return await cached_scoreboard(
         db, competition, live=allow_live, bracket=bracket or None
+    )
+
+
+@router.get("/timeline", response_model=PointsTimeline)
+async def get_scoreboard_timeline(
+    competition_id: str,
+    live: bool = False,
+    bracket: str | None = None,
+    top: int = 10,
+    current_user: User = Depends(require_permission("challenge_view")),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Cumulative points-over-time for the top ``top`` entrants (#348), the chart
+    beside the standings. Same gate, freeze, and bracket scoping as the board
+    itself, so the line chart and the table always agree: gated ``challenge_view``
+    + the #221 start gate, ``?live=true`` bypasses a freeze only for a
+    ``scoreboard_freeze`` holder, and ``?bracket=`` ranks within one division.
+    Series are bounded (top-N + downsampled) so the payload stays small for a
+    long event. Refresh rides the existing ``activity`` room ping, not a new one.
+    """
+    competition = await _get_competition(db, competition_id)
+    await require_started(db, competition, current_user.id)
+    allow_live = live and await user_has_permission(
+        db, current_user.id, "scoreboard_freeze", competition_id
+    )
+    return await compute_timeline(
+        db, competition, live=allow_live, bracket=bracket or None, top_n=top
     )
 
 

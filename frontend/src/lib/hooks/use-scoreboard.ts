@@ -12,6 +12,8 @@ import { useAuthStore } from "@/stores/auth";
 
 const scoreboardKeys = {
   detail: (competitionId: string) => ["scoreboard", competitionId] as const,
+  timeline: (competitionId: string, bracket: string | null) =>
+    ["scoreboard-timeline", competitionId, bracket] as const,
 };
 
 /** The live scoreboard: REST for the initial load, then the competition's
@@ -53,6 +55,23 @@ export function useScoreboard(competitionId: string) {
   }, [isAuthenticated, competitionId, queryClient]);
 
   return { ...query, socketStatus };
+}
+
+/** Cumulative score-over-time for the top-N entrants (#348), the chart beside
+ *  the standings. A plain query (not its own socket): it shares the shell's
+ *  `activity` room, which invalidates the `scoreboard-timeline` key on every
+ *  scoring event, so a mounted chart refetches its freeze/bracket-scoped slice
+ *  without a second WebSocket. Bracket null = the whole board. */
+export function useScoreboardTimeline(
+  competitionId: string,
+  bracket: string | null = null,
+) {
+  const isAuthenticated = useAuthStore((s) => s.status === "authenticated");
+  return useQuery({
+    queryKey: scoreboardKeys.timeline(competitionId, bracket),
+    queryFn: () => scoreboardApi.timeline(competitionId, bracket),
+    enabled: isAuthenticated && Boolean(competitionId),
+  });
 }
 
 /** Freeze/unfreeze the public scoreboard (scoreboard_freeze). The response is

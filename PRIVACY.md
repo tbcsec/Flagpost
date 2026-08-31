@@ -81,6 +81,13 @@ With checks off you'll no longer be told about new releases; watch
 - No analytics or tracking in the web interface. No third-party scripts — the
   Content-Security-Policy blocks external scripts outright.
 - No crash or error reporting to any external service.
+- The optional Prometheus **`/metrics` endpoint is off by default**, and even
+  when you enable it, it is operator-scoped — never public (a scrape needs a
+  token you set and/or must come from an IP you allowlist; enabling it with no
+  gate is refused at startup). It exposes operational numbers only — request
+  counts and latencies, WebSocket and instance counts, database-pool depth —
+  never competitor content or personal data. It is a surface *your* monitoring
+  pulls from; Flagpost sends nothing.
 - No outbound connection of any kind beyond the update check, and whatever *you*
   configure: your SMTP server, any external identity provider you set up (OIDC,
   SAML or LDAP), any automation webhooks you create, the container-runtime

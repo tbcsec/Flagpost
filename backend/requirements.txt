@@ -64,3 +64,8 @@ ldap3>=2.9.1,<3.0
 # (Pango/cairo/gdk-pixbuf) — added to the backend image in the report ops stage.
 Jinja2>=3.1.6,<4.0
 weasyprint>=69,<70
+
+# Prometheus /metrics exposition (#351). Pure-Python, no native deps or infra.
+# Imported lazily by utils/metrics (only when METRICS_ENABLED), so a disabled or
+# zero-infra stack never loads it (mirrors the lazy-import deps above).
+prometheus-client>=0.21,<1.0

@@ -8,7 +8,7 @@ remain as a liveness/connectivity check.
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
@@ -121,6 +121,16 @@ app.add_middleware(GZipMiddleware, minimum_size=1024)
 # route reads it (#3). Backstops the per-route upload guards for JSON endpoints.
 app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_request_body_bytes)
 
+# Prometheus /metrics (#351), gated + off by default. Enable the instruments and
+# wire the HTTP-timing middleware only when configured, so a disabled or
+# zero-infra stack never loads prometheus_client or pays any per-request cost.
+# The config guard has already refused to start if enabled without a gate.
+if settings.metrics_enabled:
+    from utils import metrics
+
+    metrics.enable()
+    app.add_middleware(metrics.MetricsMiddleware)
+
 
 # Auth, the real-time WebSocket endpoint, and the per-competition module
 # toggle are kernel — mounted directly (modules register the room *types* they
@@ -135,6 +145,25 @@ app.include_router(modules_router.catalog_router)
 # through the loader (§11.1). The audit-log event-bus *consumer* stays kernel
 # (register_audit_log above); the module only adds its query router.
 load_modules(app, event_bus, SessionLocal)
+
+
+@app.get("/metrics")
+async def metrics_endpoint(request: Request) -> Response:
+    # Prometheus scrape target (#351). Inert (404) unless an operator enabled it;
+    # otherwise operator-scoped, never public — gate BEFORE any work, since a
+    # scraper can't do interactive JWT (static token / IP allowlist, not
+    # require_permission). The config guard guarantees a gate is configured
+    # whenever metrics are enabled.
+    from utils import metrics
+
+    if not metrics.enabled():
+        return Response(status_code=404)
+    if not metrics.scrape_authorized(
+        request.headers.get("authorization"), request.client
+    ):
+        return Response(status_code=401, headers={"WWW-Authenticate": "Bearer"})
+    body, content_type = metrics.render()
+    return Response(content=body, media_type=content_type)
 
 
 @app.get("/api/health")

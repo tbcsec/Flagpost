@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import datetime, timedelta
 
 from sqlalchemy import or_, select
@@ -562,11 +563,13 @@ def stop() -> None:
 async def _loop(db_factory, interval_seconds: float) -> None:
     # Imported here, not at module top: retention pulls in the storage layer,
     # which the pure rule-evaluation imports above shouldn't drag along.
+    from utils import metrics
     from utils.instance_reaper import reap_instances
     from utils.retention import purge_expired_competitions
     from utils.update_check import run_check
 
     while True:
+        tick_start = time.monotonic()
         try:
             await emit_lifecycle_events(db_factory)
             await run_time_rules(db_factory)
@@ -593,8 +596,14 @@ async def _loop(db_factory, interval_seconds: float) -> None:
             # a day off its own persisted timestamps, so calling it every tick
             # costs one row read that almost always returns immediately.
             await run_check(db_factory)
+            # Refresh the instance-by-state gauge (#351) — a cheap COUNT, gated
+            # so a disabled-metrics or no-instancing stack does no query.
+            await metrics.refresh_instance_gauges(db_factory)
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 — a bad tick must not kill the loop
             logger.exception("time-rule scheduler tick failed")
+        # Record tick liveness/duration (#351): a stale last-run timestamp is how
+        # an operator's alert catches a dead scheduler. No-op until enabled.
+        metrics.record_scheduler_tick(time.monotonic() - tick_start, time.time())
         await asyncio.sleep(interval_seconds)

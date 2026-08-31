@@ -15,13 +15,14 @@ either the whole competition, or a chosen set of teams/users. Targeting is
 enforced on read *and* on delivery — see ``utils/announcements``.
 """
 
+from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import Boolean, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
 
-from db import Base, CompetitionScopedMixin, TimestampMixin
+from db import Base, CompetitionScopedMixin, TimestampMixin, UtcDateTime
 
 # Urgency ladder (#40). `critical` is the one tier that overrides a recipient's
 # in-app notification mute (utils/notifications), so it stays deliberately
@@ -61,3 +62,14 @@ class Announcement(Base, CompetitionScopedMixin, TimestampMixin):
     created_by: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    # Scheduled publish (#349), mirroring the hint publish gate (#213): a hidden
+    # announcement is a staff-only draft — invisible to competitors and never
+    # broadcast — until the scheduler flips it visible at ``publish_at`` and emits
+    # ``announcement.published``, exactly as an immediate post does. Default false
+    # keeps every existing announcement visible. ``hidden`` is also the idempotent
+    # guard the scheduler queries on, so a published row is never re-fired.
+    hidden: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    # When a scheduled announcement should go live (UTC). Null = post immediately.
+    publish_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)

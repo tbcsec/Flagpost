@@ -94,7 +94,26 @@
       "noCompetitors": "Aún no hay competidores.",
       "posting": "Publicando…",
       "post": "Publicar anuncio",
-      "postedToast": "Anuncio publicado"
+      "postedToast": "Anuncio publicado",
+      "scheduleLabel": "Programar para más tarde",
+      "publishAtLabel": "Hora de publicación",
+      "scheduleHint": "Queda como borrador privado hasta esa hora y luego se publica automáticamente.",
+      "schedule": "Programar",
+      "scheduledToast": "Anuncio programado"
+    },
+    "scheduled": {
+      "title": "Anuncios programados",
+      "scheduledFor": "Se publica {date}",
+      "rescheduleLabel": "Nueva hora de publicación",
+      "reschedule": "Reprogramar",
+      "publishNow": "Publicar ahora",
+      "cancel": "Cancelar",
+      "cancelConfirmTitle": "¿Cancelar el anuncio programado?",
+      "cancelConfirmDescription": "No se publicará. Esto no se puede deshacer.",
+      "cancelConfirm": "Cancelarlo",
+      "rescheduledToast": "Anuncio reprogramado",
+      "publishedToast": "Anuncio publicado",
+      "cancelledToast": "Anuncio programado cancelado"
     }
   },
   "app": {

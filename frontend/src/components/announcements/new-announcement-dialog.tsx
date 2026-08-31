@@ -33,6 +33,10 @@ import { toast } from "@/stores/toast";
 // surfaced inline. Whole-competition announcements are pushed live over the
 // announcements room; targeted ones reach only their recipients (#40).
 
+// datetime-local (author's local time) -> stored ISO, mirroring the hints
+// scheduled-release input.
+const fromInput = (v: string) => (v ? new Date(v).toISOString() : null);
+
 export function NewAnnouncementDialog({ competitionId }: { competitionId: string }) {
   const t = useTranslations("announcements");
   const [open, setOpen] = useState(false);
@@ -41,6 +45,9 @@ export function NewAnnouncementDialog({ competitionId }: { competitionId: string
   const [severity, setSeverity] = useState<AnnouncementSeverity>("info");
   const [audience, setAudience] = useState<AnnouncementAudience>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Scheduled publish (#349): off by default (post now); on reveals a time.
+  const [scheduled, setScheduled] = useState(false);
+  const [publishAt, setPublishAt] = useState("");
   const create = useCreateAnnouncement(competitionId);
 
   const { data: competition } = useCompetition(competitionId);
@@ -59,6 +66,8 @@ export function NewAnnouncementDialog({ competitionId }: { competitionId: string
     setSeverity("info");
     setAudience("all");
     setSelected(new Set());
+    setScheduled(false);
+    setPublishAt("");
   }
 
   function toggle(id: string) {
@@ -72,11 +81,15 @@ export function NewAnnouncementDialog({ competitionId }: { competitionId: string
 
   const needsRecipients = audience !== "all";
   const canSubmit =
-    title.trim() && body.trim() && (!needsRecipients || selected.size > 0);
+    title.trim() &&
+    body.trim() &&
+    (!needsRecipients || selected.size > 0) &&
+    (!scheduled || Boolean(publishAt));
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!canSubmit) return;
+    const willSchedule = scheduled && Boolean(publishAt);
     create.mutate(
       {
         title,
@@ -84,12 +97,15 @@ export function NewAnnouncementDialog({ competitionId }: { competitionId: string
         severity,
         audience_type: audience,
         audience_ids: audience === "all" ? [] : [...selected],
+        publish_at: willSchedule ? fromInput(publishAt) : null,
       },
       {
         onSuccess: () => {
           reset();
           setOpen(false);
-          toast(t("new.postedToast"), { variant: "success" });
+          toast(willSchedule ? t("new.scheduledToast") : t("new.postedToast"), {
+            variant: "success",
+          });
         },
       },
     );
@@ -216,6 +232,30 @@ export function NewAnnouncementDialog({ competitionId }: { competitionId: string
             </div>
           )}
 
+          <div className="grid gap-2">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={scheduled}
+                onChange={(e) => setScheduled(e.target.checked)}
+              />
+              {t("new.scheduleLabel")}
+            </label>
+            {scheduled && (
+              <>
+                <Input
+                  type="datetime-local"
+                  aria-label={t("new.publishAtLabel")}
+                  value={publishAt}
+                  onChange={(e) => setPublishAt(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("new.scheduleHint")}
+                </p>
+              </>
+            )}
+          </div>
+
           {create.isError && (
             <p role="alert" className="text-sm text-destructive">
               {(create.error as Error).message}
@@ -223,7 +263,11 @@ export function NewAnnouncementDialog({ competitionId }: { competitionId: string
           )}
           <DialogFooter>
             <Button type="submit" disabled={create.isPending || !canSubmit}>
-              {create.isPending ? t("new.posting") : t("new.post")}
+              {create.isPending
+                ? t("new.posting")
+                : scheduled && publishAt
+                  ? t("new.schedule")
+                  : t("new.post")}
             </Button>
           </DialogFooter>
         </form>

@@ -14,6 +14,7 @@ import type {
   ProviderPreset,
   Announcement,
   AnnouncementCreate,
+  AnnouncementUpdate,
   AppNotification,
   NotificationPreferences,
   AuditLogPage,
@@ -1128,10 +1129,26 @@ export const announcementsApi = {
   // Initial load only — new announcements arrive over the announcements WS room.
   list: (competitionId: string) =>
     apiFetch<Announcement[]>(`/api/competitions/${competitionId}/announcements`),
+  // Staff-only: pending scheduled drafts for the management list (#349).
+  listScheduled: (competitionId: string) =>
+    apiFetch<Announcement[]>(
+      `/api/competitions/${competitionId}/announcements/scheduled`,
+    ),
   create: (competitionId: string, input: AnnouncementCreate) =>
     apiFetch<Announcement>(`/api/competitions/${competitionId}/announcements`, {
       method: "POST",
       body: JSON.stringify(input),
+    }),
+  // Edit / reschedule a still-scheduled announcement (#349).
+  update: (competitionId: string, id: string, patch: AnnouncementUpdate) =>
+    apiFetch<Announcement>(
+      `/api/competitions/${competitionId}/announcements/${id}`,
+      { method: "PATCH", body: JSON.stringify(patch) },
+    ),
+  // Cancel a still-scheduled announcement (#349).
+  remove: (competitionId: string, id: string) =>
+    apiFetch<void>(`/api/competitions/${competitionId}/announcements/${id}`, {
+      method: "DELETE",
     }),
 };
 

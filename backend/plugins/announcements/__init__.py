@@ -57,7 +57,13 @@ def setup(app, event_bus, db_factory) -> None:
             (
                 await db.execute(
                     select(Announcement)
-                    .where(Announcement.competition_id == competition_id)
+                    .where(
+                        Announcement.competition_id == competition_id,
+                        # The live feed is published-only — a scheduled draft
+                        # (#349) must not ride the reconnect snapshot, or it would
+                        # surface before its publish_at.
+                        Announcement.hidden.is_(False),
+                    )
                     .order_by(Announcement.created_at.desc())
                     .limit(RECENT_LIMIT)
                 )

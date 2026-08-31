@@ -1150,15 +1150,30 @@ export interface Announcement {
    *  to staff — a recipient only ever receives announcements meant for them. */
   audience_ids: string[];
   created_at: string;
+  /** Scheduled-publish state (#349). On the published feed `hidden` is always
+   *  false; the staff scheduled list carries hidden rows with a `publish_at`. */
+  hidden: boolean;
+  publish_at: string | null;
 }
 
-/** What the composer sends. `audience_ids` is ignored for "all". */
+/** What the composer sends. `audience_ids` is ignored for "all". A future
+ *  `publish_at` schedules the post (#349); null/past posts it immediately. */
 export interface AnnouncementCreate {
   title: string;
   body: string;
   severity: AnnouncementSeverity;
   audience_type: AnnouncementAudience;
   audience_ids: string[];
+  publish_at?: string | null;
+}
+
+/** A partial edit of a still-scheduled announcement (#349). Content and timing
+ *  only — the audience is fixed at creation; `publish_at: null` releases it now. */
+export interface AnnouncementUpdate {
+  title?: string;
+  body?: string;
+  severity?: AnnouncementSeverity;
+  publish_at?: string | null;
 }
 
 /** A hint as a competitor sees it (Phase 9): `body` is null until this subject

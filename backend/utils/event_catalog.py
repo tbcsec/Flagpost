@@ -149,6 +149,11 @@ EVENT_TYPES: tuple[str, ...] = (
     # Post-event report finished rendering (#134, ADR-0030).
     "report.generated",
     "announcement.published",
+    # Scheduled-announcement authoring (#349): editing or cancelling a still-
+    # scheduled draft. Staff-domain (not competitor-visible — the draft never
+    # reached anyone), audited, and available as automation triggers.
+    "announcement.updated",
+    "announcement.deleted",
     "site.settings_updated",
     # Instancing infrastructure config change (#266, ADR-0036 §5) — admin-domain
     # like ai.settings_updated; carries no endpoint/credential, only who + the

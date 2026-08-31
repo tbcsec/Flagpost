@@ -37,6 +37,11 @@ vi.mock("@/components/challenges/challenge-admin", () => ({
 vi.mock("@/components/competitions/modules-panel", () => ({
   ModulesPanel: () => null,
 }));
+// The custom-fields editor (#350) has its own query hooks — stub it so this
+// form test needs no QueryClient, matching the other mocked child panels.
+vi.mock("@/components/registration/registration-fields-editor", () => ({
+  RegistrationFieldsEditor: () => null,
+}));
 vi.mock("@/components/ui/rich-text-editor", () => ({
   RichTextEditor: () => null,
 }));

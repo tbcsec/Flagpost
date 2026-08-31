@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
 import { RulesAcceptModal } from "@/components/competitions/rules-accept-modal";
+import { JoinFieldsDialog } from "@/components/registration/join-fields-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,7 +18,7 @@ import {
 import { GUIDE_PDFS } from "@/lib/guides";
 import { useAcceptRules, useFetchRules } from "@/lib/hooks/use-rules";
 import { rulesGateRejection, rulesPromptMode } from "@/lib/rules-prompt";
-import type { RichTextDoc } from "@/lib/types";
+import type { RegistrationValues, RichTextDoc } from "@/lib/types";
 import { toast } from "@/stores/toast";
 
 // A pending rules prompt (#57) in front of a join. Acceptance is recorded
@@ -46,6 +47,11 @@ export default function LobbyPage() {
   const acceptRules = useAcceptRules();
   const [code, setCode] = useState("");
   const [prompt, setPrompt] = useState<RulesPrompt | null>(null);
+  // A public competition selected for join — collect its custom fields (#350)
+  // before running the rules-gate + join flow.
+  const [joining, setJoining] = useState<{ id: string; name: string } | null>(
+    null,
+  );
 
   // Public and not archived — an archived competition is closed to new joiners.
   const publicComps = (competitions ?? []).filter(
@@ -123,15 +129,22 @@ export default function LobbyPage() {
     );
   }
 
-  async function onPublicJoin(compId: string, name: string) {
+  async function onPublicJoin(
+    compId: string,
+    name: string,
+    fieldValues: RegistrationValues = {},
+  ) {
     const fire = () =>
-      join.mutate(compId, {
-        onSuccess: () => {
-          setPrompt(null);
-          onJoined(name);
+      join.mutate(
+        { id: compId, fieldValues },
+        {
+          onSuccess: () => {
+            setPrompt(null);
+            onJoined(name);
+          },
+          onError: joinError,
         },
-        onError: joinError,
-      });
+      );
     // Pre-check the rules so the prompt appears before the join attempt; if
     // the check itself fails, fire anyway — the server gate still protects.
     const state = await fetchRules(compId).catch(() => null);
@@ -236,7 +249,7 @@ export default function LobbyPage() {
                 <Button
                   size="sm"
                   disabled={join.isPending}
-                  onClick={() => onPublicJoin(c.id, c.name)}
+                  onClick={() => setJoining({ id: c.id, name: c.name })}
                 >
                   {t("join")}
                 </Button>
@@ -248,6 +261,19 @@ export default function LobbyPage() {
           </div>
         </CardContent>
       </Card>
+
+      {joining && (
+        <JoinFieldsDialog
+          competitionId={joining.id}
+          competitionName={joining.name}
+          onCancel={() => setJoining(null)}
+          onSubmit={(fieldValues: RegistrationValues) => {
+            const target = joining;
+            setJoining(null);
+            void onPublicJoin(target.id, target.name, fieldValues);
+          }}
+        />
+      )}
     </>
   );
 }

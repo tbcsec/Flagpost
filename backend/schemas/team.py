@@ -16,6 +16,9 @@ class TeamCreate(BaseModel):
     country: str | None = Field(default=None, max_length=80)
     website: str | None = Field(default=None, max_length=200)
     approval_required: bool = False
+    # Custom registration-field answers for the team (#350), validated against
+    # the competition's fields at creation. Empty when there are no fields.
+    field_values: dict[str, object] = Field(default_factory=dict)
 
 
 class TeamUpdate(BaseModel):
@@ -26,6 +29,9 @@ class TeamUpdate(BaseModel):
     country: str | None = Field(default=None, max_length=80)
     website: str | None = Field(default=None, max_length=200)
     approval_required: bool | None = None
+    # The captain edits the team's custom registration-field answers (#350). When
+    # sent, replaces the team's answers (required fields stay enforced).
+    field_values: dict[str, object] | None = None
 
 
 class TeamApplicationOut(BaseModel):
@@ -73,6 +79,9 @@ class MyTeamOut(BaseModel):
     website: str | None = None
     approval_required: bool = False
     created_at: datetime
+    # The team's custom registration-field answers (#350), so the captain can
+    # read + edit them; empty when there are no fields.
+    field_values: dict[str, object] = Field(default_factory=dict)
 
 
 class TeamJoinResult(BaseModel):

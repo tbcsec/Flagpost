@@ -703,6 +703,8 @@ export interface MyTeam {
   website: string | null;
   approval_required: boolean;
   created_at: string;
+  /** The team's custom registration-field answers (#350). */
+  field_values: RegistrationValues;
 }
 
 /** Captain-editable team profile (PATCH). */
@@ -712,7 +714,38 @@ export interface TeamUpdate {
   country?: string | null;
   website?: string | null;
   approval_required?: boolean;
+  /** Custom registration-field answers for the team (#350). */
+  field_values?: RegistrationValues;
 }
+
+// --- Custom registration fields (#350) ---------------------------------------
+
+export type RegistrationFieldType = "text" | "textarea" | "select" | "checkbox";
+
+/** An organiser-defined field on a competition. */
+export interface RegistrationField {
+  id: string;
+  key: string;
+  label: string;
+  field_type: RegistrationFieldType;
+  options: string[];
+  required: boolean;
+  position: number;
+}
+
+/** One field definition as authored (no id — the PUT replaces the whole set). */
+export interface RegistrationFieldInput {
+  key: string;
+  label: string;
+  field_type: RegistrationFieldType;
+  options: string[];
+  required: boolean;
+  position: number;
+}
+
+/** A subject's answers: `{field_key: value}` (string for text/select, bool for
+ *  checkbox). */
+export type RegistrationValues = Record<string, string | boolean>;
 
 /** Result of joining: an open team returns it; an approval-required one is
  *  pending until the captain approves. */

@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 
+import { RegistrationFieldsEditor } from "@/components/registration/registration-fields-editor";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
 import { Input } from "@/components/ui/input";
@@ -232,6 +233,7 @@ export function CompetitionSettingsForm({
   }
 
   return (
+    <div className="space-y-4">
     <form onSubmit={onSubmit} className="space-y-4">
       {section === "general" && (
         <>
@@ -615,6 +617,10 @@ export function CompetitionSettingsForm({
         )}
       </div>
     </form>
+      {/* Custom registration fields (#350) — its own save + CSV export, so it
+          sits beside the competition PATCH form, not inside it. */}
+      <RegistrationFieldsEditor competitionId={competition.id} />
+    </div>
   );
 }
 

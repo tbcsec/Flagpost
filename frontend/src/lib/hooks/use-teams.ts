@@ -5,7 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError, teamsApi } from "@/lib/api";
-import type { MyTeam, TeamUpdate } from "@/lib/types";
+import type { MyTeam, RegistrationValues, TeamUpdate } from "@/lib/types";
 import { useAuthStore } from "@/stores/auth";
 
 // Keys carry the competition id so cache invalidation stays scoped (§8) and
@@ -57,6 +57,7 @@ export function useCreateTeam(competitionId: string) {
       country?: string | null;
       website?: string | null;
       approval_required?: boolean;
+      field_values?: RegistrationValues;
     }) => teamsApi.create(competitionId, input),
     onSuccess: invalidate,
   });

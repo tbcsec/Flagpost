@@ -82,6 +82,7 @@ def setup(app, event_bus, db_factory) -> None:
     from routers.brackets import router as brackets_router
     from routers.competitions import router
     from routers.participants import router as participants_router
+    from routers.registration_fields import router as registration_fields_router
     from routers.rules import router as rules_router
 
     app.include_router(router)
@@ -95,6 +96,10 @@ def setup(app, event_bus, db_factory) -> None:
     app.include_router(awards_router)
     # Bracket/division self-selection (both modes).
     app.include_router(brackets_router)
+    # Per-competition custom registration fields (#350): definitions + individual
+    # self-service values + the operator CSV export. Team-mode values are
+    # collected/edited through the teams module.
+    app.include_router(registration_fields_router)
 
     async def authorize_activity(db, user, competition_id: str) -> bool:
         # Same gate as the scoreboard room (§7.6): competitor access to the

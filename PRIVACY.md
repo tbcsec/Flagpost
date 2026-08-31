@@ -116,6 +116,15 @@ Everything else is yours and stays in your database. Flagpost includes a full
 so you can take it elsewhere or keep an off-site backup. Deleting a competition
 deletes its data, including stored files.
 
+If you define **custom registration fields** on a competition (affiliation,
+t-shirt size, dietary/accessibility needs, emergency contact, and the like),
+those answers are personal data that a competitor gives you directly. They are
+stored per subject in your database, **never surfaced publicly** (not on the
+scoreboard, the spectator board, or any competitor-facing view), and reach you
+only through your own authenticated export — the organiser CSV, or the field
+*definitions* in the backup. A competitor can edit their own answers. As with
+everything else here, they stay on your infrastructure.
+
 ## Questions
 
 Open an issue at https://github.com/tbcsec/Flagpost/issues. For anything

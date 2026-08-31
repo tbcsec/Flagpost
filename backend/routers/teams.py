@@ -39,6 +39,12 @@ from schemas.team import (
     TeamUpdate,
 )
 from utils.event_bus import event_bus
+from utils.registration_fields import (
+    get_values as get_registration_values,
+    list_fields as list_registration_fields,
+    set_values as set_registration_values,
+    validate_values as validate_registration_values,
+)
 from utils.rules import require_rules_accepted
 
 router = APIRouter(
@@ -98,6 +104,9 @@ async def _my_team_out(db: AsyncSession, team: Team) -> MyTeamOut:
         website=team.website,
         approval_required=team.approval_required,
         created_at=team.created_at,
+        field_values=await get_registration_values(
+            db, team.competition_id, team.id
+        ),
     )
 
 
@@ -165,6 +174,9 @@ async def update_my_team(
         )
     team = await db.get(Team, membership.team_id)
     changes = body.model_dump(exclude_unset=True)
+    # field_values isn't a Team column — pull it out and handle it separately
+    # (#350) so the profile setattr loop below only touches real columns.
+    field_values = changes.pop("field_values", None)
     if "name" in changes and changes["name"] != team.name:
         clash = await db.scalar(
             select(Team).where(
@@ -180,7 +192,16 @@ async def update_my_team(
             )
     for field, value in changes.items():
         setattr(team, field, value)
+    if field_values is not None:
+        reg_fields = await list_registration_fields(db, competition_id)
+        cleaned = validate_registration_values(reg_fields, field_values)
+        await set_registration_values(db, competition_id, team.id, cleaned)
     await db.commit()
+    if field_values is not None:
+        await event_bus.emit(
+            "registration_field.value_set",
+            {"competition_id": competition_id, "subject_id": team.id},
+        )
     return await _my_team_out(db, team)
 
 
@@ -213,6 +234,15 @@ async def create_team(
             detail="A team with that name already exists in this competition",
         )
 
+    # Custom registration fields (#350): validate + enforce required before the
+    # team exists, so a required-field miss fails cleanly with no orphan team.
+    reg_fields = await list_registration_fields(db, competition_id)
+    cleaned = (
+        validate_registration_values(reg_fields, body.field_values)
+        if reg_fields
+        else {}
+    )
+
     team = Team(
         competition_id=competition_id,
         name=body.name,
@@ -232,6 +262,8 @@ async def create_team(
         )
     )
     await ensure_participant_role(db, competition_id, current_user.id)
+    if cleaned:  # the team is the subject in team mode (§13.2)
+        await set_registration_values(db, competition_id, team.id, cleaned)
     await db.commit()
 
     await event_bus.emit(
@@ -243,6 +275,11 @@ async def create_team(
             "name": team.name,
         },
     )
+    if cleaned:
+        await event_bus.emit(
+            "registration_field.value_set",
+            {"competition_id": competition_id, "subject_id": team.id},
+        )
     return await _my_team_out(db, team)
 
 

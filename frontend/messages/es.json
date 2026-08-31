@@ -2788,5 +2788,45 @@
       "emptyTitle": "No identity providers",
       "emptyDescription": "Add an OIDC, OAuth 2.0, SAML or LDAP provider to let people sign in with an existing account instead of a Flagpost password."
     }
+  },
+  "registration": {
+    "editor": {
+      "title": "Campos de inscripción",
+      "description": "Datos adicionales que los competidores (o equipos) rellenan al entrar en esta competición — se recogen al unirse, van en tu exportación y nunca son públicos.",
+      "empty": "Aún no hay campos personalizados.",
+      "label": "Etiqueta",
+      "type": "Tipo",
+      "types": {
+        "text": "Texto corto",
+        "textarea": "Texto largo",
+        "select": "Elegir una opción",
+        "checkbox": "Casilla"
+      },
+      "options": "Opciones",
+      "optionsPlaceholder": "Separadas por comas, p. ej. S, M, L",
+      "required": "Obligatorio",
+      "up": "Subir",
+      "down": "Bajar",
+      "remove": "Quitar",
+      "add": "Añadir campo",
+      "save": "Guardar campos",
+      "saving": "Guardando…",
+      "saved": "Campos de inscripción guardados",
+      "error": "No se pudieron guardar los campos",
+      "export": "Exportar CSV"
+    },
+    "join": {
+      "title": "Unirse a {name}",
+      "description": "Esta competición pide algunos datos.",
+      "submit": "Unirse"
+    },
+    "details": {
+      "title": "Datos de inscripción",
+      "description": "Los campos personalizados del organizador para esta competición — actualiza tus respuestas cuando quieras.",
+      "save": "Guardar",
+      "saving": "Guardando…",
+      "saved": "Datos guardados",
+      "error": "No se pudo guardar"
+    }
   }
 }

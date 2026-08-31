@@ -11,12 +11,14 @@ import { MyCertificatesCard } from "@/components/profile/certificates-card";
 import { MyApiTokensCard } from "@/components/profile/api-tokens-card";
 import { EmailCard } from "@/components/profile/email-card";
 import { NotificationPreferencesCard } from "@/components/profile/notification-preferences";
+import { RegistrationDetailsCard } from "@/components/registration/registration-details-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs } from "@/components/ui/tabs";
+import { useActiveCompetition } from "@/lib/hooks/use-competitions";
 import { useSiteSettings } from "@/lib/hooks/use-site-settings";
 import { useChangePassword, useResendVerification } from "@/lib/hooks/use-users";
 import { useAuthStore } from "@/stores/auth";
@@ -177,6 +179,7 @@ function ProfileInner() {
   const searchParams = useSearchParams();
   const user = useAuthStore((s) => s.user);
   const { data: settings } = useSiteSettings();
+  const { competitionId, data: competition } = useActiveCompetition();
   const needsVerification =
     !!settings?.email_verification_enabled && !!user && !user.email_verified_at;
 
@@ -206,6 +209,11 @@ function ProfileInner() {
         <UsernameCard />
         <PasswordCard />
         <EmailCard />
+        {/* Custom registration answers for the active individual competition
+            (#350) — team answers live in the team panel. */}
+        {competitionId && competition?.participation_mode === "individual" && (
+          <RegistrationDetailsCard competitionId={competitionId} />
+        )}
       </div>
 
       <div className={tab === "notifications" ? "" : "hidden"}>

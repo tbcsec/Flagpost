@@ -42,6 +42,7 @@ from models.challenge_instancing import (
     instance_can_transition,
 )
 from models.competition import Competition
+from utils import metrics
 from utils.event_bus import event_bus
 from utils.flags import hash_static_flag, make_salt
 from utils.provisioners import (
@@ -621,7 +622,6 @@ async def provision(db_factory, instance_id: str) -> None:
         transition(instance, "provisioning")
         await db.commit()
 
-    lifetime = lifetime_for(deployment, competition)
     # Unique-flag mode (ADR-0036 §3): render a fresh per-instance flag now, inject
     # it into the container via the spec, and keep only its salted hash on the
     # row (stored in the running-transition commit below). The plaintext lives
@@ -629,13 +629,19 @@ async def provision(db_factory, instance_id: str) -> None:
     flag_salt: str | None = None
     flag_hash: str | None = None
     flag_plaintext: str | None = None
-    if deployment.flag_mode == "unique_per_instance" and deployment.flag_template:
-        flag_plaintext = render_flag_template(deployment.flag_template)
-        flag_salt = make_salt()
-        flag_hash = hash_static_flag(flag_plaintext, flag_salt, case_insensitive=False)
-    spec = _spec_for(instance, deployment, lifetime, flag_plaintext=flag_plaintext)
     handle: str | None = None
+    # Spec construction (lifetime, flag render, _spec_for) is inside the try too:
+    # a failure there is a failed provision like any other — mark it failed, emit,
+    # and count it (#351) — not an uncaught escape that leaves the row stuck.
     try:
+        lifetime = lifetime_for(deployment, competition)
+        if deployment.flag_mode == "unique_per_instance" and deployment.flag_template:
+            flag_plaintext = render_flag_template(deployment.flag_template)
+            flag_salt = make_salt()
+            flag_hash = hash_static_flag(
+                flag_plaintext, flag_salt, case_insensitive=False
+            )
+        spec = _spec_for(instance, deployment, lifetime, flag_plaintext=flag_plaintext)
         provisioner = provisioner_for(settings, deployment)
         handle = await provisioner.create(spec)
         # Prefer the backend's authoritative connection details (shared-static
@@ -643,6 +649,11 @@ async def provision(db_factory, instance_id: str) -> None:
         resolved = await provisioner.endpoints(handle)
     except Exception as exc:  # noqa: BLE001 — any backend failure is a failed provision
         logger.warning("provision of instance %s failed: %s", instance_id, exc)
+        # Bounded reason (#351): a known provisioner error keeps its class name;
+        # anything else buckets under "error" so the label set can't explode.
+        metrics.record_provision_error(
+            type(exc).__name__ if isinstance(exc, ProvisionerError) else "error"
+        )
         if handle is not None:
             await _safe_destroy(settings, deployment, handle)
         async with db_factory() as db:

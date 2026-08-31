@@ -416,6 +416,46 @@ class Settings(BaseSettings):
     # Off by default and logged loudly whenever it takes effect.
     oidc_allow_insecure_issuers: bool = False
 
+    # Prometheus /metrics (#351). Off by default — inert until an operator turns
+    # it on, matching the AI / instancing posture. When enabled the endpoint
+    # exposes operational cardinality only (counts, latencies, pool depth), never
+    # competitor PII, and is gated: a scrape must present a matching bearer token
+    # OR come from an allowlisted IP. Enabling with neither set is refused at
+    # startup (below) — /metrics must never be public.
+    metrics_enabled: bool = False
+    metrics_token: str = ""
+    # Comma-separated IPs / CIDRs allowed to scrape (e.g. "10.0.0.0/8,127.0.0.1").
+    metrics_allowed_ips: str = ""
+
+    @model_validator(mode="after")
+    def _guard_metrics_gate(self) -> "Settings":
+        if self.metrics_enabled and not (
+            self.metrics_token or self.metrics_allowed_ips.strip()
+        ):
+            raise ValueError(
+                "Refusing to start: METRICS_ENABLED is set but the /metrics "
+                "endpoint has no gate. It exposes internal operational metrics "
+                "and must never be public — set METRICS_TOKEN (a static scrape "
+                "secret) and/or METRICS_ALLOWED_IPS (an IP/CIDR allowlist)."
+            )
+        return self
+
+    @property
+    def metrics_allowed_ip_list(self) -> list:
+        """Parsed IP/CIDR allowlist for /metrics scraping (bare IPs → /32/128)."""
+        nets = []
+        for part in self.metrics_allowed_ips.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                nets.append(ipaddress.ip_network(part, strict=False))
+            except ValueError:
+                # A malformed entry is dropped, not fatal — the other gate
+                # (token) and the remaining entries still apply.
+                continue
+        return nets
+
     @model_validator(mode="after")
     def _harden_jwt_secret(self) -> "Settings":
         # Replace an unset / public-default secret with a real per-install one,

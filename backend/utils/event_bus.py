@@ -33,9 +33,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
+
+from utils import metrics
 
 logger = logging.getLogger("event_bus")
 
@@ -129,6 +132,7 @@ class EventBus:
         """
         matching = [s for s in self._subscriptions if s.matches(event_name)]
         if not matching:
+            metrics.record_event(event_name, 0.0)
             return
         for sub in matching:
             if sub.background:
@@ -136,10 +140,15 @@ class EventBus:
                 self._background_tasks.add(task)
                 task.add_done_callback(self._background_tasks.discard)
         foreground = [s for s in matching if not s.background]
+        # Time only the foreground lane (background is fire-and-forget, ADR-0012):
+        # start the clock after scheduling the background tasks. A no-op until
+        # metrics are enabled; counts every emit regardless.
+        start = time.perf_counter()
         if foreground:
             await asyncio.gather(
                 *(self._run(s, event_name, payload) for s in foreground)
             )
+        metrics.record_event(event_name, time.perf_counter() - start)
 
     async def wait_for_background(self) -> None:
         """Await every currently-scheduled background handler.

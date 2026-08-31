@@ -1478,6 +1478,23 @@ There are exactly **three** categories of outbound call, and no others:
 Nothing else phones home. Competition data, users, and submissions never leave
 the install.
 
+The optional Prometheus `/metrics` endpoint (§13.5, ADR-0037) is **not** a fourth
+category: it is an **inbound pull** surface, not an outbound call — nothing is
+sent unless the operator's own scraper reads it — and it carries operational
+cardinality only (counts, latencies, pool depth), never competitor content.
+
+### 13.5 Metrics (`/metrics`)
+
+Off by default (`METRICS_ENABLED`), inert until an operator enables it (ADR-0037).
+Kernel-level — a pure-ASGI HTTP-timing middleware plus scrape-time collectors over
+the WS manager, event bus, challenge instances, and DB pool — not a
+per-competition module. It exposes bounded-cardinality operational metrics (route
+*templates* not raw paths, room *types*, instance *states*, the fixed §3.2 event
+names) and is gated by a static scrape token and/or an IP allowlist; enabling it
+with neither is refused at startup, so it can never be public. Each worker keeps
+its own in-process registry (a scrape sees one worker); the single-worker default
+is exact, multi-worker is scrape-each-worker.
+
 ---
 
 ## 14. Suggested Repository Layout

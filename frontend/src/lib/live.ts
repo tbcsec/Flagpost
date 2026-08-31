@@ -64,6 +64,8 @@ const ACTIVITY_INVALIDATIONS: Record<string, (cid: string) => QueryKey[]> = {
     ...dashboardData(cid),
     ["analytics", cid],
     ["participants", cid],
+    // The score-over-time chart (#348) is a separate query off the same room.
+    ["scoreboard-timeline", cid],
   ],
   // Attempts (incl. failures) move staff counters only — deliberately NOT the
   // challenge list: it's the heaviest refetch, attempts are the most frequent
@@ -100,7 +102,11 @@ const ACTIVITY_INVALIDATIONS: Record<string, (cid: string) => QueryKey[]> = {
     ["admin_instances", cid],
   ],
   "challenge.rated": (cid) => [["challenge-ratings", cid], ["analytics", cid]],
-  "challenge.hint_requested": (cid) => [["analytics", cid]],
+  // A paid hint reveal deducts points, moving the score-over-time series.
+  "challenge.hint_requested": (cid) => [
+    ["analytics", cid],
+    ["scoreboard-timeline", cid],
+  ],
   "hint.released": (cid) => [["hints", cid], ["challenges", cid]],
   "category.created": (cid) => [["categories", cid], ["challenges", cid]],
   "category.deleted": (cid) => [["categories", cid], ["challenges", cid]],
@@ -110,11 +116,13 @@ const ACTIVITY_INVALIDATIONS: Record<string, (cid: string) => QueryKey[]> = {
     ["participants", cid],
     ["dashboard", cid, "me"],
     ["analytics", cid],
+    ["scoreboard-timeline", cid],
   ],
   "achievement.awarded": (cid) => [
     ["participants", cid],
     ["dashboard", cid, "me"],
     ["analytics", cid],
+    ["scoreboard-timeline", cid],
   ],
   "competition.member_joined": rosters,
   // Pause toggles, schedule edits, vocab changes — the banner goes live.
@@ -122,15 +130,16 @@ const ACTIVITY_INVALIDATIONS: Record<string, (cid: string) => QueryKey[]> = {
   // Start/Stop (#221) re-gate access: refetch the competition (its status drives
   // the gate) plus the challenge list and scoreboard so a competitor's closed
   // message flips to the live surfaces (and back) the moment a judge acts.
-  "competition.started": (cid) => [["competitions"], ["challenges", cid], ["scoreboard", cid]],
-  "competition.ended": (cid) => [["competitions"], ["challenges", cid], ["scoreboard", cid]],
+  "competition.started": (cid) => [["competitions"], ["challenges", cid], ["scoreboard", cid], ["scoreboard-timeline", cid]],
+  "competition.ended": (cid) => [["competitions"], ["challenges", cid], ["scoreboard", cid], ["scoreboard-timeline", cid]],
   "team.created": rosters,
   "team.member_joined": rosters,
   "team.member_left": rosters,
   "team.deleted": rosters,
-  // The board room updates itself; freeze only re-slants rank-derived reads.
-  "scoreboard.frozen": (cid) => [["dashboard", cid, "me"], ["participants", cid]],
-  "scoreboard.unfrozen": (cid) => [["dashboard", cid, "me"], ["participants", cid]],
+  // The board room updates itself; freeze only re-slants rank-derived reads —
+  // and shifts the score-over-time chart's cutoff (#348).
+  "scoreboard.frozen": (cid) => [["dashboard", cid, "me"], ["participants", cid], ["scoreboard-timeline", cid]],
+  "scoreboard.unfrozen": (cid) => [["dashboard", cid, "me"], ["participants", cid], ["scoreboard-timeline", cid]],
   // Module toggles re-gate the nav live (shared ["modules", id] query key).
   "module.enabled": (cid) => [["modules", cid]],
   "module.disabled": (cid) => [["modules", cid]],

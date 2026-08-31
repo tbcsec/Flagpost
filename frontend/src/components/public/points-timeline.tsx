@@ -1,7 +1,11 @@
 "use client";
 
-// The public points-over-time chart (#24): cumulative score per top entrant,
-// so a spectator can watch competitors climb and overtake each other.
+// The points-over-time chart: cumulative score per top entrant, so a viewer can
+// watch competitors climb and overtake each other. Born on the public spectator
+// board (#24); now shared verbatim by the authenticated scoreboard (#348) —
+// both feed it the same freeze- and bracket-scoped series shape, so it keeps its
+// original `scoreboard.public.timeline` i18n namespace (the copy is generic:
+// "Points over time", "Top N entrants") rather than fork a second key set.
 //
 // Hand-rolled inline SVG — Flagpost ships no chart library, matching the
 // scoreboard's bar chart and the survey histograms. Geometry lives in

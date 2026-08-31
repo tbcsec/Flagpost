@@ -27,6 +27,7 @@ def setup(app, event_bus, db_factory) -> None:
         compute_scoreboard,
         invalidate_scoreboard,
     )
+    from utils.scoreboard_timeline import invalidate_timeline
 
     app.include_router(scoreboard_router)
     # The unauthenticated spectator board for public competitions (Phase 9).
@@ -71,6 +72,10 @@ def setup(app, event_bus, db_factory) -> None:
         competition_id = payload.get("competition_id")
         if competition_id:
             invalidate_scoreboard(competition_id)
+            # The score-over-time chart (#348) is a second cached read of the
+            # same data — drop it on exactly the same events so the chart can
+            # never lag the table it sits beside.
+            invalidate_timeline(competition_id)
 
     # What moves the *scoreboard WS room*: a solve changes totals, a hint reveal
     # deducts its cost, a score adjustment (§5.3 update_score) or award adds/

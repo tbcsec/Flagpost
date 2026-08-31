@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { SectionHeader } from "@/components/app/section-header";
 import { NoCompetition } from "@/components/app/no-competition";
 import { ScoreboardCertificateCard } from "@/components/certificates/scoreboard-certificate-card";
+import { PointsTimeline } from "@/components/public/points-timeline";
 import { RankBadge } from "@/components/scoreboard/rank-badge";
 import { TopChart } from "@/components/scoreboard/top-chart";
 import { Badge } from "@/components/ui/badge";
@@ -34,7 +35,11 @@ import { useDataTable } from "@/lib/hooks/use-data-table";
 import { useAccess } from "@/lib/hooks/use-permissions";
 import { useMyTeam } from "@/lib/hooks/use-teams";
 import { useSetSubjectBracket } from "@/lib/hooks/use-brackets";
-import { useFreezeScoreboard, useScoreboard } from "@/lib/hooks/use-scoreboard";
+import {
+  useFreezeScoreboard,
+  useScoreboard,
+  useScoreboardTimeline,
+} from "@/lib/hooks/use-scoreboard";
 import type { ScoreboardEntry } from "@/lib/types";
 import { useAuthStore } from "@/stores/auth";
 import { toast } from "@/stores/toast";
@@ -61,6 +66,12 @@ export default function ScoreboardPage() {
   const [bracketFilter, setBracketFilter] = useState<string>("all");
   const canAssignBrackets = access.has("edit_competition");
   const setSubjectBracket = useSetSubjectBracket(competitionId ?? "");
+  // Score-over-time chart (#348), scoped to the same division the table shows.
+  // A separate query refreshed by the shell's activity room, not the board room.
+  const timeline = useScoreboardTimeline(
+    competitionId ?? "",
+    bracketFilter === "all" ? null : bracketFilter,
+  );
 
   async function toggleFreeze() {
     // Clarify the semantics: a freeze stops the *board* from moving publicly;
@@ -277,6 +288,17 @@ export default function ScoreboardPage() {
             <TopChart entries={top} mySubjectId={mySubjectId} isTeam={isTeam} />
           </CardContent>
         </Card>
+      )}
+
+      {/* Cumulative score-over-time (#348). Renders null until a series has a
+          positive point, so it stays out of the way on an empty board. */}
+      {timeline.data && (
+        <PointsTimeline
+          series={timeline.data.series}
+          start={timeline.data.start}
+          end={timeline.data.end}
+          frozen={frozen}
+        />
       )}
 
       {shown.length > 0 && (

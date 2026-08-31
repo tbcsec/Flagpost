@@ -25,6 +25,12 @@ vi.mock("@/lib/hooks/use-site-settings", () => ({
   useSiteSettings: () => ({ data: { email_verification_enabled: false } }),
 }));
 
+// No active competition in these tests → the registration-details card (#350)
+// never mounts, so its query hooks don't need a provider here.
+vi.mock("@/lib/hooks/use-competitions", () => ({
+  useActiveCompetition: () => ({ competitionId: null, data: null }),
+}));
+
 vi.mock("@/lib/hooks/use-users", () => ({
   useChangePassword: () => ({ mutate: vi.fn(), isPending: false, isError: false, isSuccess: false, error: null }),
   useResendVerification: () => ({ mutate: vi.fn(), isPending: false, isSuccess: false }),

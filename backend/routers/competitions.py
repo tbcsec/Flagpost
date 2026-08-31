@@ -39,6 +39,7 @@ from schemas.competition import (
     CompetitionOut,
     CompetitionUpdate,
 )
+from schemas.registration_field import EntryFieldValues
 from routers.site_settings import get_or_create_settings
 from storage import get_storage
 from storage.base import ObjectStorage
@@ -46,6 +47,11 @@ from utils.competition_clone import clone_competition
 from utils.competition_status import start_transition, stop_transition
 from utils.competitions import get_visible_competition
 from utils.event_bus import event_bus
+from utils.registration_fields import (
+    list_fields as list_registration_fields,
+    set_values as set_registration_values,
+    validate_values as validate_registration_values,
+)
 from utils.retention import delete_competition_tree
 from utils.rules import (
     accept_rules,
@@ -92,7 +98,11 @@ async def get_competition(
 
 
 async def _join(
-    db: AsyncSession, competition: Competition, user: User
+    db: AsyncSession,
+    competition: Competition,
+    user: User,
+    field_values: dict | None = None,
+    require_fields: bool = True,
 ) -> Competition:
     """Grant the Participant role (idempotently) and emit the join event once."""
     # Email verification gate (#74): join-only — an existing member is never
@@ -112,12 +122,35 @@ async def _join(
         )
     # Rules gate (#57): mandatory effective rules must be accepted first.
     await require_rules_accepted(db, competition, user)
+    # Custom registration fields (#350): validate + enforce required BEFORE the
+    # role grant, but only on a genuine new join — an idempotent re-join must not
+    # re-demand fields a member already answered (they edit via /registration-
+    # fields/me). Individual mode only; the subject is the user.
+    cleaned: dict = {}
+    if not already_member and competition.participation_mode == "individual":
+        fields = await list_registration_fields(db, competition.id)
+        if fields:
+            # ``require_fields`` is False on the invite-code path: a private
+            # competition is undisclosed until the code resolves, so its fields
+            # can't be pre-fetched to render a form — the competitor fills them
+            # (required included) afterwards via /registration-fields/me. The
+            # public path, which *can* pre-collect, enforces required at entry.
+            cleaned = validate_registration_values(
+                fields, field_values or {}, require_required=require_fields
+            )
     newly_joined = await ensure_participant_role(db, competition.id, user.id)
+    if cleaned:
+        await set_registration_values(db, competition.id, user.id, cleaned)
     await db.commit()
     if newly_joined:
         await event_bus.emit(
             "competition.member_joined",
             {"competition_id": competition.id, "user_id": user.id},
+        )
+    if cleaned:
+        await event_bus.emit(
+            "registration_field.value_set",
+            {"competition_id": competition.id, "subject_id": user.id},
         )
     return competition
 
@@ -145,17 +178,25 @@ async def join_by_code(
         doc, _display_only = await effective_rules(db, competition)
         if doc is not None:
             await accept_rules(db, competition.id, current_user.id)
-    return await _join(db, competition, current_user)
+    return await _join(
+        db,
+        competition,
+        current_user,
+        field_values=body.field_values,
+        require_fields=False,
+    )
 
 
 @router.post("/{competition_id}/join", response_model=CompetitionOut)
 async def join_competition(
     competition_id: str,
+    body: EntryFieldValues | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Competition:
     """Self-serve join for a **public** competition (from the lobby list).
-    Private competitions require the invite-code route above."""
+    Private competitions require the invite-code route above. An optional body
+    carries custom registration-field answers (#350)."""
     competition = await db.get(Competition, competition_id)
     if competition is None:
         raise HTTPException(
@@ -166,7 +207,12 @@ async def join_competition(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This competition is invite-only — join with an invite code",
         )
-    return await _join(db, competition, current_user)
+    return await _join(
+        db,
+        competition,
+        current_user,
+        field_values=body.field_values if body else None,
+    )
 
 
 @router.post("", response_model=CompetitionOut, status_code=status.HTTP_201_CREATED)

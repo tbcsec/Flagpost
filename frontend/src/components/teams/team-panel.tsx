@@ -4,6 +4,10 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { RulesAcceptModal } from "@/components/competitions/rules-accept-modal";
+import {
+  RegistrationFieldsForm,
+  missingRequired,
+} from "@/components/registration/registration-fields-form";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
 import {
@@ -34,8 +38,9 @@ import {
   useTeams,
   useUpdateMyTeam,
 } from "@/lib/hooks/use-teams";
+import { useRegistrationFields } from "@/lib/hooks/use-registration-fields";
 import { rulesPromptMode } from "@/lib/rules-prompt";
-import type { RichTextDoc } from "@/lib/types";
+import type { RegistrationValues, RichTextDoc } from "@/lib/types";
 import { useAuthStore } from "@/stores/auth";
 import { toast } from "@/stores/toast";
 
@@ -184,6 +189,10 @@ function TeamProfile({
   const [country, setCountry] = useState(team.country ?? "");
   const [website, setWebsite] = useState(team.website ?? "");
   const [approval, setApproval] = useState(team.approval_required);
+  const { data: regFields } = useRegistrationFields(competitionId);
+  const [fieldValues, setFieldValues] = useState<RegistrationValues>(
+    team.field_values ?? {},
+  );
 
   if (!amCaptain) {
     if (!team.affiliation && !team.country && !team.website) return null;
@@ -200,7 +209,8 @@ function TeamProfile({
     affiliation !== (team.affiliation ?? "") ||
     country !== (team.country ?? "") ||
     website !== (team.website ?? "") ||
-    approval !== team.approval_required;
+    approval !== team.approval_required ||
+    JSON.stringify(fieldValues) !== JSON.stringify(team.field_values ?? {});
 
   function onSave() {
     update.mutate(
@@ -209,6 +219,7 @@ function TeamProfile({
         country: country.trim() || null,
         website: website.trim() || null,
         approval_required: approval,
+        ...(regFields && regFields.length > 0 ? { field_values: fieldValues } : {}),
       },
       { onSuccess: () => toast(t("profile.savedToast"), { variant: "success" }) },
     );
@@ -246,12 +257,24 @@ function TeamProfile({
         />
         {t("requireApproval")}
       </label>
+      {regFields && regFields.length > 0 && (
+        <RegistrationFieldsForm
+          fields={regFields}
+          values={fieldValues}
+          onChange={setFieldValues}
+          idPrefix="team-edit"
+        />
+      )}
       <Button
         variant="outline"
         size="sm"
         className="w-fit"
         onClick={onSave}
-        disabled={!dirty || update.isPending}
+        disabled={
+          !dirty ||
+          update.isPending ||
+          missingRequired(regFields ?? [], fieldValues)
+        }
       >
         {update.isPending ? t("profile.saving") : t("profile.save")}
       </Button>
@@ -319,6 +342,8 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
   const [name, setName] = useState("");
   const [approvalRequired, setApprovalRequired] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
+  const { data: regFields } = useRegistrationFields(competitionId);
+  const [fieldValues, setFieldValues] = useState<RegistrationValues>({});
   const [prompt, setPrompt] = useState<{
     mode: "accept" | "display";
     rules: RichTextDoc | null;
@@ -379,7 +404,11 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
               e.preventDefault();
               gated(() =>
                 create.mutate(
-                  { name, approval_required: approvalRequired },
+                  {
+                    name,
+                    approval_required: approvalRequired,
+                    field_values: fieldValues,
+                  },
                   { onSuccess: () => toast(t("create.createdToast", { name }), { variant: "success" }) },
                 ),
               );
@@ -394,6 +423,14 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
                 required
               />
             </div>
+            {regFields && regFields.length > 0 && (
+              <RegistrationFieldsForm
+                fields={regFields}
+                values={fieldValues}
+                onChange={setFieldValues}
+                idPrefix="team-create"
+              />
+            )}
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -409,7 +446,12 @@ function JoinOrCreate({ competitionId }: { competitionId: string }) {
                 {(create.error as Error).message}
               </p>
             )}
-            <Button type="submit" disabled={create.isPending}>
+            <Button
+              type="submit"
+              disabled={
+                create.isPending || missingRequired(regFields ?? [], fieldValues)
+              }
+            >
               {create.isPending ? t("create.creating") : t("create.submit")}
             </Button>
           </form>

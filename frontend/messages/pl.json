@@ -2788,5 +2788,45 @@
       "emptyTitle": "No identity providers",
       "emptyDescription": "Add an OIDC, OAuth 2.0, SAML or LDAP provider to let people sign in with an existing account instead of a Flagpost password."
     }
+  },
+  "registration": {
+    "editor": {
+      "title": "Pola rejestracji",
+      "description": "Dodatkowe dane, które zawodnicy (lub zespoły) podają, wchodząc do tych zawodów — zbierane przy dołączaniu, w Twoim eksporcie, nigdy nie publiczne.",
+      "empty": "Brak pól niestandardowych.",
+      "label": "Etykieta",
+      "type": "Typ",
+      "types": {
+        "text": "Krótki tekst",
+        "textarea": "Długi tekst",
+        "select": "Wybierz jedno",
+        "checkbox": "Pole wyboru"
+      },
+      "options": "Opcje",
+      "optionsPlaceholder": "Oddzielone przecinkami, np. S, M, L",
+      "required": "Wymagane",
+      "up": "W górę",
+      "down": "W dół",
+      "remove": "Usuń",
+      "add": "Dodaj pole",
+      "save": "Zapisz pola",
+      "saving": "Zapisywanie…",
+      "saved": "Zapisano pola rejestracji",
+      "error": "Nie udało się zapisać pól",
+      "export": "Eksportuj CSV"
+    },
+    "join": {
+      "title": "Dołącz do {name}",
+      "description": "Te zawody proszą o kilka danych.",
+      "submit": "Dołącz"
+    },
+    "details": {
+      "title": "Dane rejestracyjne",
+      "description": "Niestandardowe pola organizatora dla tych zawodów — zaktualizuj odpowiedzi w dowolnej chwili.",
+      "save": "Zapisz",
+      "saving": "Zapisywanie…",
+      "saved": "Zapisano dane",
+      "error": "Nie udało się zapisać"
+    }
   }
 }

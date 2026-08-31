@@ -108,6 +108,9 @@ import type {
   PublicCompetition,
   PublicInsights,
   PublicScoreboard,
+  RegistrationField,
+  RegistrationFieldInput,
+  RegistrationValues,
   Scoreboard,
   ScoreboardTimeline,
   SignedUrl,
@@ -484,18 +487,58 @@ export const competitionsApi = {
     apiFetch<Competition>(`/api/competitions/${id}/stop`, { method: "POST" }),
   remove: (id: string) =>
     apiFetch<void>(`/api/competitions/${id}`, { method: "DELETE" }),
-  // Self-serve join for a public competition (from the lobby list).
-  join: (id: string) =>
-    apiFetch<Competition>(`/api/competitions/${id}/join`, { method: "POST" }),
+  // Self-serve join for a public competition (from the lobby list). Carries any
+  // custom registration-field answers (#350).
+  join: (id: string, field_values: RegistrationValues = {}) =>
+    apiFetch<Competition>(`/api/competitions/${id}/join`, {
+      method: "POST",
+      body: JSON.stringify({ field_values }),
+    }),
   // Join any competition by invite code — the only way into a private one.
   // `accept_rules` accepts the competition's rules in the same request: the
   // code path can't pre-fetch them (the id is unknown until the code resolves),
   // so a rules rejection is retried with acceptance attached.
-  joinByCode: (invite_code: string, accept_rules = false) =>
+  joinByCode: (
+    invite_code: string,
+    accept_rules = false,
+    field_values: RegistrationValues = {},
+  ) =>
     apiFetch<Competition>("/api/competitions/join", {
       method: "POST",
-      body: JSON.stringify({ invite_code, accept_rules }),
+      body: JSON.stringify({ invite_code, accept_rules, field_values }),
     }),
+};
+
+export const registrationFieldsApi = {
+  // Field definitions — any authenticated user may read (the join form needs
+  // them); only an organiser may replace the set.
+  list: (competitionId: string) =>
+    apiFetch<RegistrationField[]>(
+      `/api/competitions/${competitionId}/registration-fields`,
+    ),
+  put: (competitionId: string, fields: RegistrationFieldInput[]) =>
+    apiFetch<RegistrationField[]>(
+      `/api/competitions/${competitionId}/registration-fields`,
+      { method: "PUT", body: JSON.stringify({ fields }) },
+    ),
+  // An individual competitor's own answers.
+  getMine: (competitionId: string) =>
+    apiFetch<{ values: RegistrationValues }>(
+      `/api/competitions/${competitionId}/registration-fields/me`,
+    ),
+  putMine: (competitionId: string, values: RegistrationValues) =>
+    apiFetch<{ values: RegistrationValues }>(
+      `/api/competitions/${competitionId}/registration-fields/me`,
+      { method: "PUT", body: JSON.stringify({ values }) },
+    ),
+  // The organiser CSV export — an authenticated blob (the Bearer token can't
+  // ride a plain <a href>), downloaded via the hook.
+  exportCsv: (competitionId: string) =>
+    apiFetch<Blob>(
+      `/api/competitions/${competitionId}/registration-fields/export`,
+      {},
+      { parse: "blob" },
+    ),
 };
 
 export const rulesApi = {
@@ -523,6 +566,7 @@ export const teamsApi = {
       country?: string | null;
       website?: string | null;
       approval_required?: boolean;
+      field_values?: RegistrationValues;
     },
   ) =>
     apiFetch<MyTeam>(`/api/competitions/${competitionId}/teams`, {

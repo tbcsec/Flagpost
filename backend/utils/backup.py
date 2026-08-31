@@ -72,6 +72,7 @@ from models.audit_log import AuditLogEntry
 from models.automation import Achievement, AutomationRule
 from models.challenge import Category, Challenge
 from models.challenge_instancing import ChallengeDeployment
+from models.registration_field import RegistrationField
 from models.competition import Competition, generate_invite_code
 from models.competition_module import CompetitionModule
 from models.feedback import (
@@ -299,6 +300,24 @@ def _validate_deployment_row(row: dict) -> None:
         raise ImportError_(f"challenge_deployments {row.get('id')!r}: {err}")
 
 
+def _validate_registration_field_row(row: dict) -> None:
+    """Re-apply the field-authoring invariants (``RegistrationFieldIn``) on an
+    imported ``registration_fields`` row (#350). ``load_row`` does no content
+    validation, so without this a hand-crafted backup could persist an invalid
+    field — an unknown ``field_type`` or a ``select`` with no options — that the
+    authoring route would reject. The #324 lesson. Strict, so the raw stored
+    types are the contract; extra keys (id/timestamps/competition_id) are
+    ignored."""
+    from pydantic import ValidationError
+
+    from schemas.registration_field import RegistrationFieldIn
+
+    try:
+        RegistrationFieldIn.model_validate(row, strict=True)
+    except ValidationError as exc:
+        raise ImportError_(f"registration_fields {row.get('id')!r}: {exc}") from exc
+
+
 async def _nk_competition(db: AsyncSession, row: dict) -> str | None:
     return await db.scalar(select(Competition.id).where(Competition.name == row["name"]))
 
@@ -359,6 +378,14 @@ SPECS: tuple[Spec, ...] = (
     # Competition-owned live data (skipped wholesale when the competition exists).
     Spec("categories", Category, "competitions", id_map="category",
          remaps=(_COMP,), owned_by_competition=True),
+    # Custom registration-field DEFINITIONS ride the backup as competition config
+    # (#350), validated on import (#324). The per-subject VALUES do NOT: their
+    # ``subject_id`` is a user/team id that doesn't survive the import remap (the
+    # same reason bracket memberships are excluded), and the operator's answer
+    # export is the CSV, not the portable backup.
+    Spec("registration_fields", RegistrationField, "competitions",
+         remaps=(_COMP,), owned_by_competition=True,
+         validate_row=_validate_registration_field_row),
     Spec("challenges", Challenge, "competitions", id_map="challenge",
          remaps=(_COMP, ("category_id", "category", False)), owned_by_competition=True),
     # Deployment spec (#266/#320, ADR-0036 §5): authoring content — one per

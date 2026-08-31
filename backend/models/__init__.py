@@ -47,6 +47,7 @@ from models.identity_provider import (
 )
 from models.page import Page
 from models.password_reset import PasswordResetToken
+from models.registration_field import RegistrationField, RegistrationFieldValues
 from models.report import CompetitionReport
 from models.role import Role, RoleAssignment
 from models.rules_acceptance import RulesAcceptance
@@ -95,6 +96,8 @@ __all__ = [
     "IdentityProvider",
     "Page",
     "PasswordResetToken",
+    "RegistrationField",
+    "RegistrationFieldValues",
     "Role",
     "RoleAssignment",
     "RulesAcceptance",

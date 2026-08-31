@@ -102,6 +102,8 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "scoreboard.unfrozen": ["competition_id"],
     "competition.member_joined": ["competition_id", "user_id"],
     "competition.rules_accepted": ["competition_id", "user_id"],
+    "registration_field.updated": ["competition_id", "count"],
+    "registration_field.value_set": ["competition_id", "subject_id"],
     "competition.archived": ["competition_id"],
     "competition.unarchived": ["competition_id"],
     # `auto` distinguishes a retention purge (#26) from a manual delete.
@@ -278,6 +280,10 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     "competition.member_joined": "challenge_view",
     # Same visibility tier as member_joined — a join-adjacent membership event.
     "competition.rules_accepted": "challenge_view",
+    # Field-set edits are an organiser action; a subject setting values is
+    # join-adjacent like member_joined.
+    "registration_field.updated": "edit_competition",
+    "registration_field.value_set": "challenge_view",
     "team.created": "challenge_view",
     "team.member_joined": "challenge_view",
     "team.member_left": "challenge_view",

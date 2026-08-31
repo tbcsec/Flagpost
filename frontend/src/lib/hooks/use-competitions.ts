@@ -5,7 +5,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { competitionsApi } from "@/lib/api";
-import type { Competition, CompetitionUpdate } from "@/lib/types";
+import type {
+  Competition,
+  CompetitionUpdate,
+  RegistrationValues,
+} from "@/lib/types";
 import { useAuthStore } from "@/stores/auth";
 
 // Query keys are namespaced by domain so invalidation stays scoped (§8).
@@ -56,7 +60,14 @@ function useOnJoined() {
 export function useJoinCompetition() {
   const onJoined = useOnJoined();
   return useMutation({
-    mutationFn: (id: string) => competitionsApi.join(id),
+    // Carries custom registration-field answers (#350); empty when there are none.
+    mutationFn: ({
+      id,
+      fieldValues = {},
+    }: {
+      id: string;
+      fieldValues?: RegistrationValues;
+    }) => competitionsApi.join(id, fieldValues),
     onSuccess: onJoined,
   });
 }
@@ -70,10 +81,12 @@ export function useJoinByCode() {
     mutationFn: ({
       inviteCode,
       acceptRules = false,
+      fieldValues = {},
     }: {
       inviteCode: string;
       acceptRules?: boolean;
-    }) => competitionsApi.joinByCode(inviteCode, acceptRules),
+      fieldValues?: RegistrationValues;
+    }) => competitionsApi.joinByCode(inviteCode, acceptRules, fieldValues),
     onSuccess: onJoined,
   });
 }

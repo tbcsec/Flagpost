@@ -148,6 +148,9 @@ class CompetitionJoinRequest(BaseModel):
 
     invite_code: str = Field(min_length=1, max_length=100)
     accept_rules: bool = False
+    # Custom registration-field answers (#350), validated against the
+    # competition's fields at join. Empty for a competition with no fields.
+    field_values: dict[str, object] = Field(default_factory=dict)
 
 
 class CompetitionCloneRequest(BaseModel):

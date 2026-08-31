@@ -2788,5 +2788,45 @@
       "emptyTitle": "No identity providers",
       "emptyDescription": "Add an OIDC, OAuth 2.0, SAML or LDAP provider to let people sign in with an existing account instead of a Flagpost password."
     }
+  },
+  "registration": {
+    "editor": {
+      "title": "Champs d'inscription",
+      "description": "Informations supplémentaires que les compétiteurs (ou équipes) renseignent en entrant dans cette compétition — recueillies à l'inscription, incluses dans votre export, jamais publiques.",
+      "empty": "Aucun champ personnalisé pour l'instant.",
+      "label": "Libellé",
+      "type": "Type",
+      "types": {
+        "text": "Texte court",
+        "textarea": "Texte long",
+        "select": "Choisir une option",
+        "checkbox": "Case à cocher"
+      },
+      "options": "Choix",
+      "optionsPlaceholder": "Séparés par des virgules, ex. S, M, L",
+      "required": "Obligatoire",
+      "up": "Monter",
+      "down": "Descendre",
+      "remove": "Supprimer",
+      "add": "Ajouter un champ",
+      "save": "Enregistrer les champs",
+      "saving": "Enregistrement…",
+      "saved": "Champs d'inscription enregistrés",
+      "error": "Impossible d'enregistrer les champs",
+      "export": "Exporter en CSV"
+    },
+    "join": {
+      "title": "Rejoindre {name}",
+      "description": "Cette compétition demande quelques informations.",
+      "submit": "Rejoindre"
+    },
+    "details": {
+      "title": "Informations d'inscription",
+      "description": "Les champs personnalisés de l'organisateur pour cette compétition — modifiez vos réponses à tout moment.",
+      "save": "Enregistrer",
+      "saving": "Enregistrement…",
+      "saved": "Informations enregistrées",
+      "error": "Échec de l'enregistrement"
+    }
   }
 }

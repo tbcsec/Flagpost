@@ -2788,5 +2788,45 @@
       "emptyTitle": "No identity providers",
       "emptyDescription": "Add an OIDC, OAuth 2.0, SAML or LDAP provider to let people sign in with an existing account instead of a Flagpost password."
     }
+  },
+  "registration": {
+    "editor": {
+      "title": "Registration fields",
+      "description": "Extra details competitors (or teams) fill when they enter this competition — collected at join, in your export, never shown publicly.",
+      "empty": "No custom fields yet.",
+      "label": "Label",
+      "type": "Type",
+      "types": {
+        "text": "Short text",
+        "textarea": "Long text",
+        "select": "Choose one",
+        "checkbox": "Checkbox"
+      },
+      "options": "Choices",
+      "optionsPlaceholder": "Comma-separated, e.g. S, M, L",
+      "required": "Required",
+      "up": "Up",
+      "down": "Down",
+      "remove": "Remove",
+      "add": "Add field",
+      "save": "Save fields",
+      "saving": "Saving…",
+      "saved": "Registration fields saved",
+      "error": "Couldn't save fields",
+      "export": "Export CSV"
+    },
+    "join": {
+      "title": "Join {name}",
+      "description": "This competition asks for a few details.",
+      "submit": "Join"
+    },
+    "details": {
+      "title": "Registration details",
+      "description": "The organiser's custom fields for this competition — update your answers anytime.",
+      "save": "Save",
+      "saving": "Saving…",
+      "saved": "Details saved",
+      "error": "Couldn't save"
+    }
   }
 }

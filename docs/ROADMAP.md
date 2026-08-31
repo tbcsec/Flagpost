@@ -445,35 +445,66 @@ blocker of a copyleft licence; the Flagpost Module Exception is retired (a
 permissive licence needs none), and a `NOTICE` file is added. No functional
 changes. Releases up to v1.5.0 remain available under AGPL-3.0 as published.
 
+**v1.6.0** — on-demand challenge instances, brand themes, dashboard breadth and
+observability ([milestone](https://github.com/tbcsec/flagpost/milestone/6)).
+**Shipped** (tagged `v1.6.0`, 2026-08-31) — every issue in the milestone is
+closed:
+
+- **Challenge instancing** (#266 → #318 → #319 → #320, ADR-0036) — the
+  headline, delivered in four phases. The **Docker MVP** (#266): per-team (or
+  per-user) isolated, running instances of a challenge with live connection
+  details — an optional **`instances` module** built on a **provisioner kind
+  registry** (a new backend is a new kind, not a fork), a hardened Docker
+  provisioner over a least-privilege **socket proxy** (dropped caps,
+  `no-new-privileges`, read-only rootfs, cpu/mem/pids limits), the
+  `challenge_instance` row as a background-lane job through a
+  `requested → running → destroyed` state machine, a TCP port allocator, a
+  scheduler **reaper** (TTL / stuck / orphan GC — no new process), a staged
+  **"Test connection"** validator, and the full UI (admin infra config,
+  per-challenge deployment authoring, the competitor challenge-modal launch
+  flow, a staff ops view). Egress-deny is a host-firewall step, not a Docker
+  internal network (ADR-0036 amended after live-testing). Then the follow-on
+  phases: **unique per-instance flags + grading** (#318, ADR-0036 §3);
+  **HTTP subdomain exposure with wildcard TLS** via caddy-docker-proxy plus
+  per-subject **spawn rate-limiting** (#319); and the **Kubernetes
+  provisioner** (#320) — same lifecycle and authoring as Docker, per-instance
+  NetworkPolicy isolation with explicit egress modes, staged `validate()`
+  legs, the deployment spec carried through ctfcli and the backup, a k3s e2e
+  harness, and a threat model. Ships **inert** until an operator configures a
+  backend; deploy overlays + guide in `docs/CHALLENGE_INSTANCES.md`.
+- **Custom brand themes** (#323, ADR-0011 amended) — admin-authored full
+  colour-token packs stored as `theme_presets`, applied site-wide, portable as
+  JSON upload/download and carried in the backup (`docs/THEMING.md`).
+- **Manager dashboard breadth** — sections are added from a **catalog modal**
+  instead of eye-toggling (#330), and **seven new manager sections** shipped
+  (#332): unsolved challenges, difficulty progress, team activity, brute-force
+  watch, moderation feed, schedule & status, and instance health.
+- **Scoreboard score-over-time chart** (#348) — a top-N cumulative points
+  timeline on the authed board, downsampled server-side, refreshed live.
+- **Scheduled announcements** (#349) — write now, publish at a set time;
+  hidden until the scheduler releases them, with their own management list.
+- **Custom registration fields** (#350) — per-competition organiser-defined
+  fields (text / textarea / select / checkbox) collected at competition entry,
+  required fields enforced before the role grant, subject-editable afterwards,
+  exportable to CSV. Never shown publicly.
+- **Prometheus `/metrics`** (#351, ADR-0037) — kernel-level middleware, off by
+  default; when enabled the backend refuses to start without a bearer token or
+  IP allowlist. HTTP / event-bus / instance / infra instruments with
+  bounded-cardinality labels.
+- **Security hardening** (#322) — a review pass fixed four findings:
+  registry-credential exfiltration, a setup re-arm window, SSO login CSRF, and
+  WebSocket revocation latency.
+- Plus: the active competition persists across page reloads (#316), the
+  sidebar identity block shows the username only (#301), and routine
+  dependency updates.
+
 ### Planned
 
 Summarised from the open milestones; the milestone pages are authoritative.
 
-- **v1.6.0** — the live milestone (accumulating on `main`; not yet tagged). See
-  the [milestones page](https://github.com/tbcsec/flagpost/milestones) for the
-  full list. **Landed so far:**
-  - **Challenge instancing — Docker MVP** (#266, ADR-0036) — per-team (or
-    per-user) isolated, running instances of a challenge with live connection
-    details. An optional **`instances` module** built on a **provisioner kind
-    registry** (`docker`, `shared-static`, with `kubernetes` reserved — a new
-    backend is a new kind, not a fork): a hardened Docker provisioner over a
-    least-privilege **socket proxy** (dropped caps, `no-new-privileges`,
-    read-only rootfs, cpu/mem/pids limits, image pull-on-create), the
-    `challenge_instance` row as its own background-lane job through a
-    `requested → running → destroyed` state machine, a TCP **port allocator**,
-    and a scheduler **reaper** (TTL / stuck / orphan GC) — **no new process**.
-    A staged **"Test connection"** validator surfaces proxy/network/reachability
-    misconfig as labelled admin-UI errors. Full UI: admin infra config,
-    per-challenge deployment authoring, the competitor challenge-modal (launch /
-    live countdown / connection block / extend / stop, live over the activity
-    room), and a staff ops view (list + force-kill). Ships **inert** (off until
-    an operator configures a provisioner), per-competition toggle. Scope: shared
-    flags + TCP exposure, single-host or remote-host (the topology is a URL);
-    egress-deny is a **host-firewall** step, not a Docker internal network
-    (ADR-0036 amended after live-testing against a real daemon). Deploy overlay +
-    guide in `docs/CHALLENGE_INSTANCES.md`. Unique-per-instance flags, HTTP
-    subdomain routing + wildcard TLS, spawn rate-limiting, and the Kubernetes
-    kind are the follow-on phases.
+The next milestone hasn't been opened yet — candidates live in the
+unmilestoned backlog (e.g. first-class Attack-Defense / King-of-the-Hill
+competition modes #267, browser-delivered attacker workstations #268).
 
 **Deferred this cycle:** the **Major League Cyber integration** (#59) was triaged
 out of v1.5.0 and closed as not-planned — its SSO half is subsumed by the

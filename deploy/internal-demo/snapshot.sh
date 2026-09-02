@@ -1,50 +1,79 @@
 #!/usr/bin/env bash
 # Capture the current state of a Flagpost instance as the "baseline" that
 # restore.sh resets to. Run it once after configuring the instance to your
-# liking (branding, competitions, users, ...), and again whenever the baseline
-# should change — including after an image upgrade. See docs/INTERNAL_DEMO.md.
+# liking, and again whenever the baseline should change — including after an
+# image upgrade. See docs/INTERNAL_DEMO.md.
 #
-# Stops the stack first so the Postgres data directory is captured in a clean
-# shutdown state, tars the three data volumes, then starts the stack again.
-# Caddy's cert/config cache is deliberately not part of the baseline.
+# Only the volume-writing services (backend, minio, postgres) are stopped
+# while the volumes are tarred — Postgres is captured in a clean shutdown
+# state, and the capture is atomic: the new baseline is written to a staging
+# dir and only swapped in (previous baseline → baseline.prev) once complete.
 set -euo pipefail
+# shellcheck source-path=SCRIPTDIR
+. "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
-FLAGPOST_DIR="${FLAGPOST_DIR:-/opt/flagpost}"
-cd "$FLAGPOST_DIR"
-COMPOSE=(docker compose -f docker-compose.yml)
-BASELINE_DIR="${BASELINE_DIR:-$FLAGPOST_DIR/deploy/internal-demo/baseline}"
-VOLUMES=(postgres-data minio-data backend-data)
+acquire_lock snapshot
+resolve_project
+check_volume_coverage
+ensure_helper_image
 
-# Resolve the compose project name (honours the file's `name:` and any
-# COMPOSE_PROJECT_NAME override) so snapshot and restore always target the
-# same `<project>_<volume>` Docker volumes.
-project="$("${COMPOSE[@]}" config 2>/dev/null | sed -n 's/^name: //p' | head -n1)"
-if [ -z "$project" ]; then
-  echo "snapshot: could not resolve the compose project name" >&2
-  exit 1
-fi
+# Refuse to "capture" volumes that don't exist — `docker run -v` would silently
+# auto-create empty ones (e.g. under a drifted COMPOSE_PROJECT_NAME), and the
+# resulting empty baseline would erase the real data on the next restore.
+for vol in "${VOLUMES[@]}"; do
+  if ! docker volume inspect "${project}_${vol}" >/dev/null 2>&1; then
+    echo "snapshot: volume ${project}_${vol} does not exist — has this stack ever run" >&2
+    echo "under project '$project'? (COMPOSE_PROJECT_NAME drift?) Nothing was captured." >&2
+    exit 1
+  fi
+done
 
-# Keep exactly one previous baseline around as a fallback.
-if [ -d "$BASELINE_DIR" ] && compgen -G "$BASELINE_DIR/*.tgz" >/dev/null; then
-  rm -rf "${BASELINE_DIR}.prev"
-  mv "$BASELINE_DIR" "${BASELINE_DIR}.prev"
-fi
-mkdir -p "$BASELINE_DIR"
+STAGING="${BASELINE_DIR}.new"
+rm -rf "$STAGING"
+mkdir -p "$STAGING"
 
-"${COMPOSE[@]}" stop
+# Whatever happens past the stop, always try to bring the stack back and never
+# leave a half-written staging dir behind. The completed swap clears the trap.
+on_fail() {
+  echo "snapshot: FAILED — restarting the stack; the previous baseline is untouched" >&2
+  "${COMPOSE[@]}" up -d >/dev/null 2>&1 || true
+  rm -rf "$STAGING"
+}
+trap on_fail ERR
+
+"${COMPOSE[@]}" stop "${WRITER_SERVICES[@]}"
 
 for vol in "${VOLUMES[@]}"; do
   docker run --rm \
     -v "${project}_${vol}:/vol:ro" \
-    -v "$BASELINE_DIR:/out" \
+    -v "$STAGING:/out" \
     alpine:3 tar czf "/out/${vol}.tgz" -C /vol .
+  gzip -t "$STAGING/${vol}.tgz"
 done
 
 {
   echo "created: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "project: $project"
   "${COMPOSE[@]}" images
-} > "$BASELINE_DIR/MANIFEST"
+} > "$STAGING/MANIFEST"
+"${COMPOSE[@]}" config --images 2>/dev/null | sort > "$STAGING/IMAGES"
 
-"${COMPOSE[@]}" up -d
+# --wait gates on the backend's own compose healthcheck (migrated + serving),
+# so a snapshot that leaves the stack broken fails here, visibly, after the
+# capture — the staging dir is then discarded and the old baseline stands.
+"${COMPOSE[@]}" up -d --wait --wait-timeout 180
+
+# Capture done and the stack is healthy: disarm the recovery trap BEFORE the
+# swap, or a failed mv would send on_fail to `rm -rf "$STAGING"` and destroy
+# the fresh capture. The swap is same-directory renames, so a failure here
+# leaves the new baseline in $STAGING and the old one in place or in .prev.
+trap - ERR
+
+# Swap in the new baseline, keeping exactly one previous as a fallback.
+rm -rf "${BASELINE_DIR}.prev"
+if [ -d "$BASELINE_DIR" ]; then
+  mv "$BASELINE_DIR" "${BASELINE_DIR}.prev"
+fi
+mv "$STAGING" "$BASELINE_DIR"
+
 echo "snapshot: baseline written to $BASELINE_DIR"

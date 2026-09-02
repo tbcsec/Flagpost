@@ -41,3 +41,8 @@ Thumbs.db
 # --- built user guides ---
 docs/guides/dist/
 
+
+# Internal-demo baselines: full DB + object-store + JWT/encryption secrets
+# (see docs/INTERNAL_DEMO.md) — never commit these.
+deploy/internal-demo/baseline*/
+deploy/internal-demo/.lock

@@ -1,0 +1,10 @@
+[Unit]
+Description=Reset the Flagpost internal demo to its baseline snapshot
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Adjust to where you deployed the repo / docker-compose.yml.
+Environment=FLAGPOST_DIR=/opt/flagpost
+ExecStart=/opt/flagpost/deploy/internal-demo/restore.sh

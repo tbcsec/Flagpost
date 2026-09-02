@@ -216,7 +216,9 @@ configure for a local run.
 ## 🌐 Deploying to production
 
 The default compose *is* the production stack, so going live is mostly
-configuration in `.env` (copy `.env.example`):
+configuration in `.env` (copy `.env.example`). (Want a demo instance that
+resets to your own configured baseline on a schedule? See
+[docs/INTERNAL_DEMO.md](docs/INTERNAL_DEMO.md).)
 
 | Variable | What it does |
 |---|---|

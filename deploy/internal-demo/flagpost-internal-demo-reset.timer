@@ -1,0 +1,13 @@
+[Unit]
+Description=Reset the Flagpost internal demo on a schedule (hourly by default)
+
+[Timer]
+# Default matches the public demo: top of every hour. Change to taste, e.g.
+# nightly at 06:00 → OnCalendar=*-*-* 06:00:00
+# (Note the in-app demo banner's "resets every hour" wording is fixed — see
+# docs/INTERNAL_DEMO.md.)
+OnCalendar=*-*-* *:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

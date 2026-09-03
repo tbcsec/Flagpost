@@ -1597,7 +1597,14 @@ Keep this section honest — update as decisions are made:
   operator-chosen credentials — no known-default admin ever exists
   (`instance_needs_setup` gates the wizard and blocks public registration until
   an owner exists). The test suite still seeds `admin@example.com` / `changeme`
-  in its fixtures only.
+  in its fixtures only. An operator can instead provision that owner (and the
+  rest of a baseline) non-interactively by mounting a platform export
+  (ADR-0016) and setting `BOOTSTRAP_BACKUP_FILE`: on startup an *unconfigured*
+  instance imports it before anyone can sign in, gated on the same
+  `instance_needs_setup` state so a normal install imports exactly once and a
+  reset-on-a-schedule internal demo re-imports each clean boot (ADR-0038,
+  `docs/INTERNAL_DEMO.md`). The bootstrap path marks setup complete itself,
+  since the flag is import-immutable (#133).
 - ~~Event-dispatch model & delivery durability~~ **(resolved, ADR-0012).**
   `emit()` now runs foreground handlers awaited (the default — the audit log
   stays synchronous and lossless, tests stay deterministic) and schedules

@@ -77,9 +77,14 @@ class SiteSettingsOut(BaseModel):
     # Whether the platform-name wordmark shows beside the logo in the lockup.
     show_wordmark: bool
     # Whether this instance is running in demo mode (config-driven, not stored) —
-    # drives the "resets hourly" banner and the login-page demo credentials. The
-    # router sets it from settings.demo_mode; defaults false everywhere else.
+    # drives the "resets hourly" banner. The router sets it from
+    # settings.demo_mode; defaults false everywhere else.
     demo_mode: bool = False
+    # Whether the login page should advertise the stock demo credentials
+    # (admin/judge/participant). Demo mode AND no configured baseline file:
+    # a custom baseline (#357) replaces the canned accounts, so their card would
+    # name accounts that don't exist. Config-driven; router sets it.
+    demo_stock_credentials: bool = False
     # Archived-competition retention policy (#26). Public because the archive
     # confirm dialog (edit_competition holders, who may lack manage_site_settings)
     # must show the exact deletion date before the admin commits. Benign to

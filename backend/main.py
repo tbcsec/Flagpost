@@ -51,9 +51,20 @@ async def lifespan(app: FastAPI):
         from utils.theme_seed import seed_builtin_themes
 
         await seed_builtin_themes(session)
+        # Boot-time baseline import (#357, ADR-0038): an unconfigured instance
+        # with BOOTSTRAP_BACKUP_FILE set provisions itself from a mounted
+        # platform export before anything else. A configured-but-unusable file
+        # raises, aborting startup rather than booting empty; a no-op when unset
+        # or when an administrator already exists.
+        from utils.bootstrap import run_bootstrap_import
+
+        await run_bootstrap_import(session)
         # Demo instances seed well-known accounts + sample data (demo-only,
         # idempotent). The hourly reset is external; a fresh boot re-seeds.
-        if settings.demo_mode:
+        # Suppressed when a baseline file is configured — the custom baseline
+        # replaces the canned content (and its well-known credentials), so the
+        # two provisioning paths never mix.
+        if settings.demo_mode and not settings.bootstrap_backup_file.strip():
             from auth.demo import seed_demo_data
 
             await seed_demo_data(session)

@@ -102,10 +102,18 @@ services:
       # `false`, not empty: pydantic rejects "" as a bool, so an unset
       # DEMO_MODE would crash-loop the backend on a fresh `docker compose up`.
       DEMO_MODE: ${DEMO_MODE:-false}
+      # Boot-time baseline import (#357): path INSIDE the container to a mounted
+      # platform export. On first boot of an unconfigured instance it provisions
+      # everything from that file (owner, branding, competitions, users) instead
+      # of the setup wizard — the product-level way to run an internal demo that
+      # resets to your own baseline (docs/INTERNAL_DEMO.md). Empty = off; mount
+      # the file read-only below and point this at it.
+      BOOTSTRAP_BACKUP_FILE: ${BOOTSTRAP_BACKUP_FILE:-}
     expose:
       - "8000"          # internal only; reached via Caddy /api and /ws
     volumes:
       - backend-data:/data
+      # - ./baseline.json:/data/baseline.json:ro   # with BOOTSTRAP_BACKUP_FILE=/data/baseline.json
     healthcheck:
       # python (stdlib) rather than curl — the slim image has no curl.
       test: ["CMD-SHELL", "python -c \"import urllib.request as u,sys; sys.exit(0 if u.urlopen('http://localhost:8000/api/health').status==200 else 1)\""]

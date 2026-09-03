@@ -1301,9 +1301,13 @@ export interface SiteSettings {
   logo_url: string | null;
   // Whether the platform-name wordmark shows beside the logo in the lockup.
   show_wordmark: boolean;
-  // Demo instance (config-driven): drives the "resets hourly" banner + the
-  // login-page demo credentials.
+  // Demo instance (config-driven): drives the "resets hourly" banner.
   demo_mode: boolean;
+  // Whether the login page should advertise the stock demo credentials
+  // (admin/judge/participant). Demo mode AND no configured baseline file (#357):
+  // a custom baseline replaces the canned accounts, so their card would name
+  // accounts that don't exist.
+  demo_stock_credentials: boolean;
   // Archived-competition retention (#26) — public so the archive confirm can
   // show the exact deletion date to edit_competition holders.
   archive_auto_delete: boolean;

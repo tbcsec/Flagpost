@@ -206,7 +206,7 @@ function LoginForm() {
           )}
         </CardContent>
       </Card>
-      {brand.demo_mode && (
+      {brand.demo_stock_credentials && (
         <Card className="border-warning/40">
           <CardHeader className="space-y-1.5">
             <div className="flex items-center gap-2">

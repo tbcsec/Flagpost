@@ -26,7 +26,7 @@ import { useActivityLive } from "@/lib/hooks/use-activity";
 import { useEnabledModules } from "@/lib/hooks/use-modules";
 import { usePageNav } from "@/lib/hooks/use-pages";
 import { useAccess } from "@/lib/hooks/use-permissions";
-import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
+import { useBrandSettings } from "@/lib/hooks/use-site-settings";
 import { useLogout } from "@/lib/hooks/use-users";
 import { cn } from "@/lib/utils";
 import { useRelativeTime } from "@/lib/hooks/use-relative-time";
@@ -178,8 +178,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((s) => s.user);
   const activeCompetitionId = useAuthStore((s) => s.activeCompetitionId);
   const access = useAccess();
-  const { data: siteSettings } = useSiteSettings();
-  const brand = siteSettings ?? FALLBACK_SETTINGS;
+  const brand = useBrandSettings();
   const platformName = brand.platform_name;
   // The active competition's name, for the assistant's context chip. Shares the
   // Topbar's cached query, so this adds no request.

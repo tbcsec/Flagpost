@@ -18,14 +18,13 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
+import { useBrandSettings } from "@/lib/hooks/use-site-settings";
 import { useResetPassword } from "@/lib/hooks/use-users";
 import { toast } from "@/stores/toast";
 
 function ResetForm() {
   const t = useTranslations("auth.resetPassword");
-  const { data: settings } = useSiteSettings();
-  const brand = settings ?? FALLBACK_SETTINGS;
+  const brand = useBrandSettings();
   const params = useSearchParams();
   const router = useRouter();
   const token = params.get("token") ?? "";

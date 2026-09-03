@@ -1,9 +1,9 @@
-import { LOCALE_COOKIE, type Locale } from "./config";
+import { setCookie } from "@/lib/cookies";
 
-const ONE_YEAR_S = 60 * 60 * 24 * 365;
+import { LOCALE_COOKIE, type Locale } from "./config";
 
 /** Persist the user's explicit locale choice. The server request config reads
  *  this cookie on the next render — callers pair it with `router.refresh()`. */
 export function setStoredLocale(locale: Locale) {
-  document.cookie = `${LOCALE_COOKIE}=${locale}; path=/; max-age=${ONE_YEAR_S}; samesite=lax`;
+  setCookie(LOCALE_COOKIE, locale);
 }

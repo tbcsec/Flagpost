@@ -8,29 +8,34 @@
 //
 // First paint is handled elsewhere (#362): the root layout server-renders the
 // branding from the `fp_brand` cookie (or a cold-start backend fetch), so this
-// component deliberately applies NOTHING until the real settings fetch
-// resolves — applying the placeholder would repaint the defaults over the
-// correct server-painted theme. Once real data (or an override change)
-// arrives, it applies the resolved theme and rewrites the cookie, which is
-// what keeps the server's next paint current — including immediately after an
-// admin saves new appearance settings.
+// component applies NOTHING while the settings fetch is pending — applying the
+// fallback would repaint the defaults over the correct server-painted theme.
+// Once the fetch resolves it applies the resolved theme and rewrites the
+// cookie, which keeps the server's next paint current (including immediately
+// after an admin saves new appearance settings). If the fetch ERRORS, it
+// applies the fallback so a stale server paint converges to the shipped
+// defaults and the palette menu stays live — but never writes the cookie from
+// fallback data.
 
 import { useEffect } from "react";
 
 import { BRAND_COOKIE, brandFromSettings, serializeBrand } from "@/lib/brand";
+import { deleteCookie, setCookie } from "@/lib/cookies";
 import {
   FALLBACK_SETTINGS,
   useSiteSettings,
 } from "@/lib/hooks/use-site-settings";
+import { apiAssetPath } from "@/lib/origin";
 import { applyResolvedTheme, resolveTheme } from "@/lib/theme";
 import { useAuthStore } from "@/stores/auth";
 
 // Pre-#362 localStorage cache for the removed no-flash inline script; cleared
-// once so stale themes don't linger in storage forever.
+// so stale themes don't linger in storage. Sunset: remove this line once
+// pre-#362 clients are unlikely to return (a release or two).
 const LEGACY_THEME_CACHE_KEY = "fp:site-theme";
 
 export function ThemeApplier() {
-  const { data, isPlaceholderData } = useSiteSettings();
+  const { data, isError } = useSiteSettings();
   const paletteOverride = useAuthStore((s) => s.paletteOverride);
   const hydratePaletteOverride = useAuthStore((s) => s.hydratePaletteOverride);
 
@@ -44,44 +49,49 @@ export function ThemeApplier() {
     }
   }, [hydratePaletteOverride]);
 
-  const settings = data ?? FALLBACK_SETTINGS;
-  const ready = data !== undefined && !isPlaceholderData;
-  const palette = paletteOverride ?? settings.default_palette;
-  const accent = settings.accent;
+  // Pending (no data, no error): the server-painted branding stands untouched.
+  const settings = data ?? (isError ? FALLBACK_SETTINGS : null);
+  const palette = paletteOverride ?? settings?.default_palette;
+  const accent = settings?.accent;
   // The active custom theme (#323), when default_palette names a preset. A
   // per-user palette override to a built-in still wins (its id won't match).
-  const customTheme = settings.active_theme ?? null;
+  const customTheme = settings?.active_theme ?? null;
 
   useEffect(() => {
-    if (!ready) return; // the server-painted branding stands until real data
-    const resolved = resolveTheme({ palette, accent, customTheme });
-    applyResolvedTheme(document.documentElement, resolved);
-    // Refresh the per-browser brand cookie the server layout paints from
-    // (#362). Includes the viewer's own palette override — the cookie is
-    // per-client, so their next load first-paints their override too.
-    // logo_url is already absolutized by the query's select.
-    const cookie = serializeBrand(
-      brandFromSettings(settings, settings.logo_url, resolved),
+    if (!settings || palette === undefined || accent === undefined) return;
+    applyResolvedTheme(
+      document.documentElement,
+      resolveTheme({ palette, accent, customTheme }),
     );
-    // A cookie near the 4KB cap would be dropped or truncated by the browser;
-    // skip writing rather than persist something unparseable — the server then
-    // falls back to the cold-start fetch, which is always correct.
-    if (cookie.length <= 3800) {
-      document.cookie = `${BRAND_COOKIE}=${encodeURIComponent(cookie)}; path=/; max-age=31536000; SameSite=Lax`;
-    }
-    // `settings` is deliberately not a dependency: only fields that change the
-    // painted theme or the cookie snapshot should retrigger, and those are
-    // covered below (the cookie's name/logo fields ride along whenever the
-    // theme reapplies or real data first lands via `ready`).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, palette, accent, customTheme, settings.platform_name, settings.logo_url, settings.show_wordmark]);
+  }, [settings, palette, accent, customTheme]);
 
-  // The platform name brands the browser tab too (§9), not just the UI chrome.
-  // Runs for placeholder data as well — it matches the server-rendered title,
-  // and keeps the tab current after an admin renames without a reload.
+  // Refresh the per-browser brand cookie the server layout paints from (#362)
+  // — only from REAL data (caching the error-fallback would bake the defaults
+  // into next load's first paint). Includes the viewer's own palette override:
+  // the cookie is per-client, so their next load first-paints it too. The
+  // cookie stores the backend-relative logo path (canonical form).
   useEffect(() => {
-    if (settings.platform_name) document.title = settings.platform_name;
-  }, [settings.platform_name]);
+    if (!data) return;
+    const resolved = resolveTheme({
+      palette: paletteOverride ?? data.default_palette,
+      accent: data.accent,
+      customTheme: data.active_theme ?? null,
+    });
+    const cookie = serializeBrand(
+      brandFromSettings(data, apiAssetPath(data.logo_url), resolved),
+    );
+    if (!setCookie(BRAND_COOKIE, cookie)) {
+      // Oversized snapshot: a stale smaller cookie must not keep winning on
+      // the server, so expire it — the cold-start fetch is always correct.
+      deleteCookie(BRAND_COOKIE);
+    }
+  }, [data, paletteOverride]);
+
+  // The platform name brands the browser tab too (§9) — from real data only,
+  // so an errored fetch never stamps "Flagpost" over the server-painted title.
+  useEffect(() => {
+    if (data?.platform_name) document.title = data.platform_name;
+  }, [data?.platform_name]);
 
   return null;
 }

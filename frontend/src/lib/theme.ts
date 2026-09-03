@@ -207,7 +207,7 @@ export const THEME_TOKENS = [
   "border", "input", "ring",
 ] as const;
 
-const THEME_TOKEN_VARS = THEME_TOKENS.map((t) => `--${t}`);
+export const THEME_TOKEN_VARS = THEME_TOKENS.map((t) => `--${t}`);
 
 /** A custom theme preset's runtime shape — the active theme embedded in the
  *  public site-settings payload, or one being previewed in the editor. `tokens`
@@ -230,8 +230,9 @@ export interface ThemeChoice {
 
 /** The fully-resolved theme: palette id + mode, plus either the accent channel
  *  overrides (built-in palette) or a full `vars` token map (custom theme). This
- *  is applied to <html> *and* cached for the no-flash inline script, so both
- *  paths apply identical values with no colour math at load. */
+ *  is applied to <html> by ThemeApplier *and* carried in the `fp_brand` cookie
+ *  the server layout paints the initial HTML from (#362), so both paths apply
+ *  identical values with no colour math at load. */
 export interface AppliedTheme {
   palette: string;
   mode: PaletteMode;
@@ -274,6 +275,22 @@ export function resolveTheme({ palette, accent, customTheme }: ThemeChoice): App
   };
 }
 
+/** The inline CSS custom-properties a resolved theme sets on the root — the
+ *  single mapping shared by the client applier below and the server-rendered
+ *  `<html style>` (#362), so the two can never drift. */
+export function appliedThemeVars(t: AppliedTheme): Record<string, string> {
+  if (t.vars) return { ...t.vars };
+  if (t.primary === null || t.primary === undefined) {
+    // Default "signal": let the palette's own brand-green primary show through.
+    return {};
+  }
+  return {
+    "--primary": t.primary,
+    "--ring": t.ring ?? t.primary,
+    "--primary-foreground": t.primaryForeground ?? "0 0% 100%",
+  };
+}
+
 /** Apply a resolved theme to a root element (usually <html>). Idempotent: every
  *  managed token is cleared first, so switching between a custom theme and a
  *  built-in palette never leaves stale inline vars behind. */
@@ -282,18 +299,9 @@ export function applyResolvedTheme(root: HTMLElement, t: AppliedTheme): void {
   root.dataset.mode = t.mode;
   // Reset all managed token vars → the [data-palette] CSS block governs again.
   for (const v of THEME_TOKEN_VARS) root.style.removeProperty(v);
-  if (t.vars) {
-    // Custom theme: inject the full token pack inline (overrides the CSS block).
-    for (const [k, val] of Object.entries(t.vars)) root.style.setProperty(k, val);
-    return;
+  for (const [k, val] of Object.entries(appliedThemeVars(t))) {
+    root.style.setProperty(k, val);
   }
-  if (t.primary === null) {
-    // Default "signal": let the palette's own brand-green primary show through.
-    return;
-  }
-  root.style.setProperty("--primary", t.primary);
-  root.style.setProperty("--ring", t.ring ?? t.primary);
-  root.style.setProperty("--primary-foreground", t.primaryForeground ?? "0 0% 100%");
 }
 
 /** Resolve + apply in one step. */

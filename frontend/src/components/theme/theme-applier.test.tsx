@@ -25,54 +25,51 @@ const CUSTOM_SETTINGS = {
   show_wordmark: false,
 };
 
-function clearBrandCookie() {
-  document.cookie = `${BRAND_COOKIE}=; path=/; max-age=0`;
+function readBrandCookie(): Record<string, unknown> | null {
+  const raw = document.cookie
+    .split("; ")
+    .find((c) => c.startsWith(`${BRAND_COOKIE}=`));
+  if (!raw) return null;
+  return JSON.parse(decodeURIComponent(raw.split("=").slice(1).join("=")));
 }
 
 describe("ThemeApplier (#362)", () => {
   beforeEach(() => {
-    clearBrandCookie();
+    document.cookie = `${BRAND_COOKIE}=; path=/; max-age=0`;
     document.documentElement.dataset.palette = "server-painted";
     document.documentElement.dataset.mode = "dark";
   });
 
   it("applies the theme and writes the fp_brand cookie once real data arrives", () => {
-    mockUseSiteSettings.mockReturnValue({
-      data: CUSTOM_SETTINGS,
-      isPlaceholderData: false,
-    });
+    mockUseSiteSettings.mockReturnValue({ data: CUSTOM_SETTINGS, isError: false });
     render(<ThemeApplier />);
     expect(document.documentElement.dataset.palette).toBe("eclipse");
-    const raw = document.cookie
-      .split("; ")
-      .find((c) => c.startsWith(`${BRAND_COOKIE}=`));
-    expect(raw).toBeTruthy();
-    const brand = JSON.parse(decodeURIComponent(raw!.split("=").slice(1).join("=")));
-    expect(brand.platformName).toBe("Acme CTF");
-    expect(brand.palette).toBe("eclipse");
-    expect(brand.logoUrl).toBe("http://localhost:8000/api/site-settings/logo?v=1");
-    expect(brand.showWordmark).toBe(false);
-    expect(brand.primary).toBeTruthy(); // the custom hex accent resolved
+    const brand = readBrandCookie();
+    expect(brand).not.toBeNull();
+    expect(brand!.platformName).toBe("Acme CTF");
+    expect(brand!.palette).toBe("eclipse");
+    // The cookie stores the backend-RELATIVE logo path (canonical form).
+    expect(brand!.logoPath).toBe("/api/site-settings/logo?v=1");
+    expect(brand!.showWordmark).toBe(false);
+    expect(brand!.primary).toBeTruthy(); // the accent preset resolved
   });
 
-  it("applies nothing while data is placeholder — the server paint stands", () => {
-    mockUseSiteSettings.mockReturnValue({
-      data: { ...FALLBACK_SETTINGS },
-      isPlaceholderData: true,
-    });
+  it("applies nothing while the fetch is pending — the server paint stands", () => {
+    mockUseSiteSettings.mockReturnValue({ data: undefined, isError: false });
     render(<ThemeApplier />);
-    // Would have been rewritten to the fallback "harbor" if it applied.
     expect(document.documentElement.dataset.palette).toBe("server-painted");
-    expect(document.cookie.includes(`${BRAND_COOKIE}=`)).toBe(false);
+    expect(readBrandCookie()).toBeNull();
   });
 
-  it("applies nothing while data is undefined (fetch in flight)", () => {
-    mockUseSiteSettings.mockReturnValue({
-      data: undefined,
-      isPlaceholderData: false,
-    });
+  it("converges to the fallback theme on a fetch ERROR without caching it", () => {
+    mockUseSiteSettings.mockReturnValue({ data: undefined, isError: true });
     render(<ThemeApplier />);
-    expect(document.documentElement.dataset.palette).toBe("server-painted");
-    expect(document.cookie.includes(`${BRAND_COOKIE}=`)).toBe(false);
+    // A stale server paint must not stand forever — fall back to the defaults
+    // (and keep the palette menu responsive)…
+    expect(document.documentElement.dataset.palette).toBe(
+      FALLBACK_SETTINGS.default_palette,
+    );
+    // …but never bake the fallback into the cookie.
+    expect(readBrandCookie()).toBeNull();
   });
 });

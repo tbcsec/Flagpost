@@ -23,7 +23,7 @@ import { Label } from "@/components/ui/label";
 import dynamic from "next/dynamic";
 
 import { usePageNav } from "@/lib/hooks/use-pages";
-import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
+import { useBrandSettings } from "@/lib/hooks/use-site-settings";
 import { useAuthProviders, useLogin } from "@/lib/hooks/use-users";
 
 // Loaded on demand, deliberately: the read-only TipTap renderer costs ~126 kB
@@ -63,7 +63,6 @@ function LoginForm() {
   const t = useTranslations("auth.login");
   const router = useRouter();
   const login = useLogin();
-  const { data: settings } = useSiteSettings();
   const { data: providers } = useAuthProviders();
   const searchParams = useSearchParams();
   const ssoError = searchParams.get("error");
@@ -72,7 +71,7 @@ function LoginForm() {
       ? (ssoError as SsoErrorCode)
       : "default"
     : null;
-  const brand = settings ?? FALLBACK_SETTINGS;
+  const brand = useBrandSettings();
   // Public custom pages (#198): reachable logged-out, so the sign-in page is
   // where a visitor can discover them. While signed out the hook fetches the
   // anonymous slice, so members-only pages never appear here.

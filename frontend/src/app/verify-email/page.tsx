@@ -16,13 +16,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
+import { useBrandSettings } from "@/lib/hooks/use-site-settings";
 import { useVerifyEmail } from "@/lib/hooks/use-users";
 
 function VerifyForm() {
   const t = useTranslations("auth.verifyEmail");
-  const { data: settings } = useSiteSettings();
-  const brand = settings ?? FALLBACK_SETTINGS;
+  const brand = useBrandSettings();
   const params = useSearchParams();
   const token = params.get("token") ?? "";
   const verify = useVerifyEmail();

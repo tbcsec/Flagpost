@@ -35,6 +35,7 @@ vi.mock("@/lib/hooks/use-site-settings", async () => {
   return {
     ...actual,
     useSiteSettings: () => mockUseSiteSettings(),
+    useBrandSettings: () => mockUseSiteSettings().data ?? actual.FALLBACK_SETTINGS,
   };
 });
 

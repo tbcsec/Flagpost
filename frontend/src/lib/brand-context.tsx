@@ -1,9 +1,8 @@
 "use client";
 
 // The server-resolved branding snapshot (#362), threaded from the root layout
-// into the client tree so the very first client render matches the
-// server-painted HTML: useSiteSettings uses it as placeholder data, meaning the
-// lockup/name/title never render the Flagpost defaults on a branded instance.
+// into the client tree. Lives in lib/ (not components/) because the hook layer
+// consumes it — keeping the components→hooks dependency direction intact.
 
 import { createContext, useContext } from "react";
 

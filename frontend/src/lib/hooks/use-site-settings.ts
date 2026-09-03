@@ -6,8 +6,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { useInitialBrand } from "@/components/theme/brand-context";
 import { apiAssetUrl, siteSettingsApi } from "@/lib/api";
+import { useInitialBrand } from "@/lib/brand-context";
 import {
   DEFAULT_ACCENT,
   DEFAULT_PALETTE,
@@ -44,39 +44,44 @@ export const FALLBACK_SETTINGS: SiteSettings = {
 };
 
 /** Rewrite the backend-relative `logo_url` to the API origin so an `<img src>`
- *  resolves against the backend (which may be a different host in dev/prod).
- *  Idempotent: the brand-placeholder settings (#362) already carry an absolute
- *  URL, and `select` runs over placeholder data too. */
+ *  resolves against the backend (which may be a different host in dev/prod). */
 function absolutizeLogo(s: SiteSettings): SiteSettings {
-  if (!s.logo_url || s.logo_url.startsWith("http")) return s;
-  return { ...s, logo_url: apiAssetUrl(s.logo_url) };
+  return s.logo_url ? { ...s, logo_url: apiAssetUrl(s.logo_url) } : s;
 }
 
 /** The site theme/branding. Rarely changes, so it's cached long and served from
- *  any page (public included). Until loaded, the placeholder is the shipped
- *  defaults overlaid with the server-injected brand snapshot (#362) — cookie or
- *  cold-start fetch — so the lockup/name never paint the Flagpost defaults on a
- *  branded instance. Consumers can keep the `data ?? FALLBACK_SETTINGS` idiom;
- *  the placeholder simply makes `data` branded from the first render. */
+ *  any page (public included). `data` stays undefined until the fetch resolves —
+ *  deliberately no placeholder: a half-real settings object would corrupt
+ *  consumers that treat loaded data as authoritative (the Appearance form seeds
+ *  from it, the archive dialog words a destructive claim from it — #362 review).
+ *  Branding surfaces that need a pre-fetch value use useBrandSettings below. */
 export function useSiteSettings() {
-  const brand = useInitialBrand();
   return useQuery({
     queryKey: SITE_SETTINGS_KEY,
     queryFn: siteSettingsApi.get,
     select: absolutizeLogo,
     staleTime: 5 * 60_000,
-    placeholderData: {
+  });
+}
+
+/** Branding view for lockup/name surfaces (#362): the real settings once
+ *  loaded, else the shipped defaults overlaid with the server-injected brand
+ *  snapshot (cookie or cold-start fetch) — so a branded instance's logo, name
+ *  and wordmark are right from the very first client render, matching the
+ *  server-painted HTML. Only the BRAND fields differ from FALLBACK_SETTINGS;
+ *  operational fields (registration_open, demo_*, archive policy…) stay at the
+ *  fallback until real data lands, exactly like useSiteSettings. */
+export function useBrandSettings(): SiteSettings {
+  const { data } = useSiteSettings();
+  const brand = useInitialBrand();
+  return (
+    data ?? {
       ...FALLBACK_SETTINGS,
       platform_name: brand.platformName,
-      logo_url: brand.logoUrl,
+      logo_url: brand.logoPath ? apiAssetUrl(brand.logoPath) : null,
       show_wordmark: brand.showWordmark,
-      // The RESOLVED palette (may be the viewer's own override or a custom
-      // theme id) — display-equivalent for a placeholder. ThemeApplier never
-      // applies placeholder data (it skips until the real fetch resolves), so
-      // this can't repaint anything; the server HTML already painted it.
-      default_palette: brand.palette,
-    },
-  });
+    }
+  );
 }
 
 export function useUpdateSiteSettings() {

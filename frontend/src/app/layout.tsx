@@ -26,7 +26,10 @@ export async function generateMetadata(): Promise<Metadata> {
   const brand = await getServerBrand();
   return {
     title: brand.platformName,
-    description: "Flagpost — open-source CTF competition management platform",
+    // Branded, not hardcoded: link unfurls/search snippets on a white-labeled
+    // instance must not leak the product name (the in-app "Powered by
+    // Flagpost" footer remains the attribution surface).
+    description: `${brand.platformName} — CTF competition platform`,
   };
 }
 

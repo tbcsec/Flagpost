@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { RouteProgress } from "@/components/app/route-progress";
 import { SetupGuard } from "@/components/setup/setup-guard";
-import { BrandProvider } from "@/components/theme/brand-context";
+import { BrandProvider } from "@/lib/brand-context";
 import { SiteBackground } from "@/components/theme/site-background";
 import { ThemeApplier } from "@/components/theme/theme-applier";
 import { ConfirmProvider } from "@/components/ui/confirm";

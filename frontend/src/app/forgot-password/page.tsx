@@ -17,13 +17,12 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
+import { useBrandSettings } from "@/lib/hooks/use-site-settings";
 import { useForgotPassword } from "@/lib/hooks/use-users";
 
 export default function ForgotPasswordPage() {
   const t = useTranslations("auth.forgotPassword");
-  const { data: settings } = useSiteSettings();
-  const brand = settings ?? FALLBACK_SETTINGS;
+  const brand = useBrandSettings();
   const forgot = useForgotPassword();
   const [email, setEmail] = useState("");
 

@@ -67,6 +67,6 @@ describe("setStoredLocale", () => {
     expect(cookieWrites[0]).toContain(`${LOCALE_COOKIE}=en`);
     expect(cookieWrites[0]).toContain("path=/");
     expect(cookieWrites[0]).toContain(`max-age=${60 * 60 * 24 * 365}`);
-    expect(cookieWrites[0]).toContain("samesite=lax");
+    expect(cookieWrites[0]).toContain("SameSite=Lax");
   });
 });

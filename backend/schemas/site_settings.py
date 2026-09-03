@@ -127,6 +127,26 @@ class SiteSettingsOut(BaseModel):
     # bit, not infrastructure detail.
     username_changes_enabled: bool = True
 
+    @field_validator("demo_credentials", mode="before")
+    @classmethod
+    def _tolerate_stored_demo_credentials(cls, v: object) -> list:
+        """Read tolerance. This shape rides the **unauthenticated** login page,
+        and a malformed stored value (a hand-crafted or corrupted backup — the
+        singleton import bypasses write validation) must never 500 that front
+        door. Drop entries that don't fit the shape and cap the count rather than
+        raising; writes stay strict via SiteSettingsUpdate."""
+        if not isinstance(v, list):
+            return []
+        cleaned: list[DemoCredential] = []
+        for item in v:
+            try:
+                cleaned.append(DemoCredential.model_validate(item))
+            except Exception:  # noqa: BLE001 — any malformed entry is simply dropped
+                continue
+            if len(cleaned) >= MAX_DEMO_CREDENTIALS:
+                break
+        return cleaned
+
 
 class SiteSettingsUpdate(BaseModel):
     platform_name: str = Field(min_length=1, max_length=64)

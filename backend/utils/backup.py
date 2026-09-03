@@ -49,6 +49,14 @@ per-install key (ADR-0020), so it's dropped via ``Spec.secret_columns`` while th
 rest of the settings row (branding, rules, registration policy) still travels.
 SMTP config is install-specific and re-entered on restore — the same posture as
 the excluded OIDC provider secret.
+
+One column is deliberately *not* dropped despite carrying passwords:
+``site_settings.demo_credentials`` (#360) is a list of throwaway demo-account
+credentials, in **plaintext by necessity** (the login card fills them). It rides
+the backup on purpose — the point is that a demo baseline carries its own
+click-to-login card — and is only ever exposed on an instance running in demo
+mode. This is one more reason a backup file is sensitive (ADR-0016): a demo
+export contains those plaintext demo passwords.
 """
 
 from __future__ import annotations
@@ -250,6 +258,30 @@ async def _nk_theme(db: AsyncSession, row: dict) -> str | None:
     )
 
 
+def _validate_site_settings_row(row: dict) -> None:
+    """Enforce the ``demo_credentials`` boundary the PUT route applies, on an
+    imported ``site_settings`` row. ``load_row`` does no content validation and
+    the singleton import path bypasses the generic per-row hook, so without this
+    a hand-crafted backup could persist a malformed or oversized
+    ``demo_credentials`` list that then 500s the *unauthenticated* GET
+    /api/site-settings paint (#360 review). Mirrors ``_validate_theme_row``."""
+    from schemas.site_settings import MAX_DEMO_CREDENTIALS, DemoCredential
+
+    creds = row.get("demo_credentials")
+    if creds is None:
+        return
+    if not isinstance(creds, list) or len(creds) > MAX_DEMO_CREDENTIALS:
+        raise ImportError_(
+            f"site_settings.demo_credentials must be a list of at most "
+            f"{MAX_DEMO_CREDENTIALS} entries"
+        )
+    for entry in creds:
+        try:
+            DemoCredential.model_validate(entry)
+        except Exception as exc:  # noqa: BLE001 — surfaced as a client import error
+            raise ImportError_(f"site_settings.demo_credentials: {exc}") from exc
+
+
 def _validate_theme_row(row: dict) -> None:
     """Enforce the theme boundary the CRUD routes apply — ``validate_theme_tokens``
     / ``validate_theme_mode`` plus the reserved-id guard — on an imported
@@ -357,7 +389,8 @@ _COMP = ("competition_id", "competition", True)
 SPECS: tuple[Spec, ...] = (
     Spec("site_settings", SiteSettings, "site_settings", singleton=True,
          secret_columns=("smtp_password",),
-         immutable_columns=("setup_completed_at",)),
+         immutable_columns=("setup_completed_at",),
+         validate_row=_validate_site_settings_row),
     # Custom pages (#198, ADR-0034). Site-level, no foreign keys and no secrets,
     # so it needs nothing but a natural key: `slug` is unique and is the page's
     # address, which makes it the right identity for the additive import — a
@@ -592,6 +625,11 @@ async def import_data(
             object_data = row.pop("_object_data", None)
 
             if spec.singleton:
+                # The singleton path skips the generic validate_row call below, so
+                # apply it here — otherwise an imported site_settings row bypasses
+                # content validation entirely (#360 review).
+                if spec.validate_row is not None:
+                    spec.validate_row(row)
                 await _upsert_singleton(db, spec.model, row, spec.immutable_columns)
                 created += 1
                 continue

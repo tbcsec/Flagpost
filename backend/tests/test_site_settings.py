@@ -751,7 +751,10 @@ _STOCK = [
 ]
 
 
-async def test_admin_can_write_demo_credentials(client):
+async def test_admin_can_write_demo_credentials(client, monkeypatch):
+    from config import settings as app_settings
+
+    monkeypatch.setattr(app_settings, "demo_mode", True)  # response carries the list only in demo mode
     admin = await admin_token(client)
     resp = await client.put(
         "/api/site-settings",
@@ -790,7 +793,10 @@ async def test_demo_credentials_exposed_only_in_demo_mode(client, monkeypatch):
     assert [c["identifier"] for c in body["demo_credentials"]] == ["acme-owner", "acme-player"]
 
 
-async def test_demo_credentials_survive_a_save_that_omits_them(client):
+async def test_demo_credentials_survive_a_save_that_omits_them(client, monkeypatch):
+    from config import settings as app_settings
+
+    monkeypatch.setattr(app_settings, "demo_mode", True)  # response carries the list only in demo mode
     admin = await admin_token(client)
     await client.put(
         "/api/site-settings",
@@ -841,3 +847,69 @@ async def test_demo_seed_populates_the_credentials_card(client):
         ids = [c["identifier"] for c in site.demo_credentials]
         assert ids == ["admin", "judge", "participant"]
         assert all(c["password"] == "password" for c in site.demo_credentials)
+
+
+async def test_import_rejects_malformed_demo_credentials(client):
+    """A crafted backup with a malformed demo_credentials is refused at import —
+    the singleton path validates it — not silently persisted to later 500 the
+    public login page (#360 review)."""
+    from db import SessionLocal
+    from storage.memory import InMemoryStorage
+    from utils import backup
+
+    payload = {
+        "flagpost_export": True,
+        "schema_version": 1,
+        "data": {"site_settings": [{"id": 1, "demo_credentials": [{"label": "x"}]}]},
+    }
+    async with SessionLocal() as db:
+        try:
+            await backup.import_data(db, InMemoryStorage(), payload, ["site_settings"])
+            assert False, "expected ImportError_"
+        except backup.ImportError_:
+            pass
+
+
+async def test_public_read_tolerates_malformed_stored_demo_credentials(client, monkeypatch):
+    """Even if a malformed value reached the column, the public unauthenticated
+    read must not 500 — it drops the bad entries and keeps the front door up."""
+    from config import settings as app_settings
+    from db import SessionLocal
+    from models.site_settings import SITE_SETTINGS_ID, SiteSettings
+
+    await client.get("/api/site-settings")  # materialise the singleton
+    async with SessionLocal() as db:
+        site = await db.get(SiteSettings, SITE_SETTINGS_ID)
+        site.demo_credentials = [
+            {"label": "ok", "identifier": "u", "password": "p", "description": ""},
+            {"label": "bad-missing-fields"},
+            "not-a-dict",
+        ]
+        await db.commit()
+    monkeypatch.setattr(app_settings, "demo_mode", True)
+    resp = await client.get("/api/site-settings")
+    assert resp.status_code == 200
+    assert [c["identifier"] for c in resp.json()["demo_credentials"]] == ["u"]
+
+
+async def test_admin_response_blanks_demo_credentials_off_demo_mode(client, monkeypatch):
+    """The admin PUT response feeds the shared public cache, so it must not carry
+    plaintext demo passwords on a production instance (#360 review)."""
+    from config import settings as app_settings
+
+    admin = await admin_token(client)
+    monkeypatch.setattr(app_settings, "demo_mode", True)
+    await client.put(
+        "/api/site-settings",
+        json={"platform_name": "D", "default_palette": "harbor", "accent": "signal",
+              "demo_credentials": _STOCK},
+        headers=_auth(admin),
+    )
+    # A production (demo-off) save must not echo the stored list back.
+    monkeypatch.setattr(app_settings, "demo_mode", False)
+    resp = await client.put(
+        "/api/site-settings",
+        json={"platform_name": "D2", "default_palette": "harbor", "accent": "signal"},
+        headers=_auth(admin),
+    )
+    assert resp.json()["demo_credentials"] == []

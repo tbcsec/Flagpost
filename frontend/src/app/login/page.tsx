@@ -213,9 +213,11 @@ function LoginForm() {
           <CardContent className="grid gap-2">
             {/* Accounts are admin-authored (#360), so their labels are literal
                 data, not translated. */}
-            {brand.demo_credentials.map((account) => (
+            {brand.demo_credentials.map((account, index) => (
               <button
-                key={account.identifier}
+                // Index-keyed: identifiers aren't guaranteed unique across the
+                // admin-authored list, and the list is render-only here.
+                key={index}
                 type="button"
                 onClick={() => {
                   setIdentifier(account.identifier);

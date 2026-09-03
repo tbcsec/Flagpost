@@ -69,24 +69,42 @@ async def _resolve_active_theme(db: AsyncSession, settings: SiteSettings) -> Non
     settings.active_theme = await db.get(ThemePreset, settings.default_palette)
 
 
+def _admin_settings_out(settings: SiteSettings) -> SiteSettingsAdminOut:
+    """Build the admin response with the config-driven fields the shared
+    site-settings cache needs. Every route that feeds that cache (the PUT and
+    the logo up/download) returns this shape: annotating demo_mode /
+    email_required — and blanking demo_credentials off demo mode — keeps a save
+    from clobbering those to false in the cache (hiding the demo editor + banner)
+    or caching plaintext demo passwords into a production admin's browser."""
+    out = SiteSettingsAdminOut.model_validate(settings)
+    out.demo_mode = app_config.demo_mode
+    out.email_required = (
+        settings.email_domain_allowlist_enabled or settings.email_verification_enabled
+    )
+    if not app_config.demo_mode:
+        out.demo_credentials = []
+    return out
+
+
 @router.get("", response_model=SiteSettingsOut)
-async def read_site_settings(db: AsyncSession = Depends(get_db)) -> SiteSettings:
+async def read_site_settings(db: AsyncSession = Depends(get_db)) -> SiteSettingsOut:
     # Public: the branding is needed before authentication.
     settings = await get_or_create_settings(db)
     await _resolve_active_theme(db, settings)
-    # demo_mode is config-driven, not stored — annotate the row for serialization.
-    settings.demo_mode = app_config.demo_mode
-    # The stock credentials card shows only in demo mode AND when no custom
-    # baseline is configured — a baseline (#357) replaces the canned accounts.
-    settings.demo_stock_credentials = app_config.demo_mode and not (
-        app_config.bootstrap_backup_file.strip()
-    )
+    out = SiteSettingsOut.model_validate(settings)
+    # demo_mode is config-driven, not stored.
+    out.demo_mode = app_config.demo_mode
     # email_required mirrors the allowlist + verification flags; the domain
     # list itself stays admin-only (see OperationalSettingsOut).
-    settings.email_required = (
+    out.email_required = (
         settings.email_domain_allowlist_enabled or settings.email_verification_enabled
     )
-    return settings
+    # Demo login accounts (#360) only ever leave the server on a demo instance —
+    # a production login page never exposes them. Blanked on the response, not on
+    # the ORM column (which stays intact and rides the backup).
+    if not app_config.demo_mode:
+        out.demo_credentials = []
+    return out
 
 
 @router.put("", response_model=SiteSettingsAdminOut)
@@ -94,7 +112,7 @@ async def update_site_settings(
     body: SiteSettingsUpdate,
     current_user: User = Depends(require_permission("manage_site_settings")),
     db: AsyncSession = Depends(get_db),
-) -> SiteSettings:
+) -> SiteSettingsAdminOut:
     settings = await get_or_create_settings(db)
     settings.platform_name = body.platform_name
     settings.default_palette = body.default_palette
@@ -108,11 +126,17 @@ async def update_site_settings(
     if "login_notice" in body.model_fields_set:
         settings.login_notice = body.login_notice
     settings.show_wordmark = body.show_wordmark
+    # Demo login accounts (#360). Omitted / null = leave unchanged; an explicit
+    # list (including []) writes. Stored regardless of demo_mode — only exposed
+    # when demo_mode (public GET) — so a baseline authored anywhere carries them.
+    if body.demo_credentials is not None:
+        settings.demo_credentials = [c.model_dump() for c in body.demo_credentials]
     await db.commit()
     await db.refresh(settings)
     # Carry the active theme on the admin response so the cache the ThemeApplier
     # reads keeps it after a save (#323).
     await _resolve_active_theme(db, settings)
+    admin_out = _admin_settings_out(settings)
 
     await event_bus.emit(
         "site.settings_updated",
@@ -127,7 +151,7 @@ async def update_site_settings(
             "login_notice_set": settings.login_notice is not None,
         },
     )
-    return settings
+    return admin_out
 
 
 @router.post("/logo", response_model=SiteSettingsAdminOut)
@@ -175,7 +199,7 @@ async def upload_logo(
         "site.settings_updated",
         {"user_id": current_user.id, "section": "logo"},
     )
-    return settings
+    return _admin_settings_out(settings)
 
 
 @router.delete("/logo", response_model=SiteSettingsAdminOut)
@@ -196,7 +220,7 @@ async def delete_logo(
         "site.settings_updated",
         {"user_id": current_user.id, "section": "logo"},
     )
-    return settings
+    return _admin_settings_out(settings)
 
 
 # --- Platform export / import (Admin → Site settings, ADR-0016) --------------

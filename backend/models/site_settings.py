@@ -66,6 +66,16 @@ class SiteSettings(Base, TimestampMixin):
     # opaque shape as ``rules_text`` — stored, never interpreted server-side;
     # the read-only TipTap view renders it as a React tree (no raw HTML path).
     login_notice: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Demo login accounts (#360): a list of {label, description, identifier,
+    # password} the login page renders as click-to-sign-in buttons on a demo
+    # instance. Data-driven so a custom baseline (#357) can carry its OWN demo
+    # accounts instead of the hardcoded stock seed. Passwords are plaintext by
+    # necessity (the card fills them) and reference public throwaway accounts —
+    # only ever exposed/rendered when demo_mode is on (see routers/site_settings
+    # and the login card). Stored regardless of mode so it rides the backup.
+    demo_credentials: Mapped[list] = mapped_column(
+        JSON, nullable=False, default=list, server_default="[]"
+    )
     # --- Branding (Admin → Site settings → Appearance) ---
     # A custom organisation logo that replaces the built-in Flagpost mark in the
     # lockup (sidebar / login / register). Stored as a blob **in the DB**, not in

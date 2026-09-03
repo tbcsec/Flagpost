@@ -12,9 +12,10 @@ import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { SkeletonCards } from "@/components/ui/skeleton";
 import { FlagpostMark } from "@/components/brand/flagpost-mark";
 import { ThemeManager } from "@/components/admin/theme-manager";
+import { DemoCredentialsEditor } from "@/components/admin/demo-credentials-editor";
 import { BackgroundPreview } from "@/components/theme/site-background";
 import { richTextToPlain } from "@/lib/rich-text";
-import type { RichTextDoc } from "@/lib/types";
+import type { DemoCredential, RichTextDoc } from "@/lib/types";
 import {
   FALLBACK_SETTINGS,
   useDeleteLogo,
@@ -63,6 +64,10 @@ export function AppearancePanel({ active }: { active: boolean }) {
   const [background, setBackground] = useState(saved.background_style);
   const [notice, setNotice] = useState<RichTextDoc>(saved.login_notice ?? {});
   const [showWordmark, setShowWordmark] = useState(saved.show_wordmark);
+  // Demo login accounts (#360) — only editable on a demo instance.
+  const [demoCredentials, setDemoCredentials] = useState<DemoCredential[]>(
+    saved.demo_credentials,
+  );
 
   // Seed the form once the settings load (they arrive async).
   const seeded = useRef(false);
@@ -75,6 +80,7 @@ export function AppearancePanel({ active }: { active: boolean }) {
       setBackground(data.background_style);
       setNotice(data.login_notice ?? {});
       setShowWordmark(data.show_wordmark);
+      setDemoCredentials(data.demo_credentials);
     }
   }, [data]);
 
@@ -145,7 +151,9 @@ export function AppearancePanel({ active }: { active: boolean }) {
     accent !== saved.accent ||
     background !== saved.background_style ||
     JSON.stringify(noticeValue) !== JSON.stringify(saved.login_notice) ||
-    showWordmark !== saved.show_wordmark;
+    showWordmark !== saved.show_wordmark ||
+    (saved.demo_mode &&
+      JSON.stringify(demoCredentials) !== JSON.stringify(saved.demo_credentials));
 
   function onSave() {
     update.mutate(
@@ -156,6 +164,10 @@ export function AppearancePanel({ active }: { active: boolean }) {
         background_style: background,
         login_notice: noticeValue,
         show_wordmark: showWordmark,
+        // Only send on a demo instance — the public read blanks demo_credentials
+        // off demo mode, so sending here would clear the stored (baseline) value
+        // on a production instance. Omitted = left unchanged.
+        ...(saved.demo_mode ? { demo_credentials: demoCredentials } : {}),
       },
       {
         onSuccess: () => toast(t("appearanceSaved"), { variant: "success" }),
@@ -382,6 +394,21 @@ export function AppearancePanel({ active }: { active: boolean }) {
             </p>
             <RichTextEditor value={notice} onChange={setNotice} />
           </section>
+
+          {saved.demo_mode && (
+            <section className="grid gap-3">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("demoCredentials.heading")}
+              </h3>
+              <p className="max-w-prose text-xs text-muted-foreground">
+                {t("demoCredentials.description")}
+              </p>
+              <DemoCredentialsEditor
+                value={demoCredentials}
+                onChange={setDemoCredentials}
+              />
+            </section>
+          )}
 
           <section className="grid gap-3">
             <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("logoHeading")}</h3>

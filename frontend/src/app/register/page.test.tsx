@@ -33,7 +33,7 @@ function settings(overrides: Partial<{ email_required: boolean }> = {}) {
     logo_url: null,
     show_wordmark: true,
     demo_mode: false,
-    demo_stock_credentials: false,
+    demo_credentials: [],
     archive_auto_delete: true,
     archive_retention_days: 30,
     email_required: false,

@@ -527,21 +527,7 @@
       "demo": {
         "badge": "Demo",
         "title": "Try it instantly",
-        "description": "Click an account to fill the form above — the password is <pw>{password}</pw>. Data is public and resets every hour, on the hour.",
-        "accounts": {
-          "admin": {
-            "label": "Administrator",
-            "description": "full platform control"
-          },
-          "judge": {
-            "label": "Judge",
-            "description": "run a competition"
-          },
-          "participant": {
-            "label": "Participant",
-            "description": "solve challenges"
-          }
-        }
+        "description": "Click an account to sign in. These are public demo accounts — data resets periodically."
       },
       "pagesLabel": "Site pages"
     },
@@ -2529,7 +2515,18 @@
       "logoRemoved": "Logo removed",
       "couldntRemoveLogo": "Couldn't remove logo",
       "customThemeTag": "Custom theme",
-      "accentManagedByTheme": "This custom theme defines its own action colour, so the accent picker doesn't apply while it's selected."
+      "accentManagedByTheme": "This custom theme defines its own action colour, so the accent picker doesn't apply while it's selected.",
+      "demoCredentials": {
+        "heading": "Demo login accounts",
+        "description": "Accounts shown as one-click sign-in buttons on the login page (demo instances only). Each account must actually exist — include it in your baseline. Passwords appear in plain text, so use throwaway credentials.",
+        "empty": "No demo accounts yet.",
+        "accountLabel": "Label",
+        "identifier": "Username or email",
+        "password": "Password",
+        "descriptionField": "Description",
+        "remove": "Remove",
+        "add": "Add account"
+      }
     },
     "themes": {
       "heading": "Custom themes",

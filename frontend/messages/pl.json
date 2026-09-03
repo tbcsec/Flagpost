@@ -527,21 +527,7 @@
       "demo": {
         "badge": "Demo",
         "title": "Wypróbuj natychmiast",
-        "description": "Kliknij konto, aby wypełnić powyższy formularz — hasło to <pw>{password}</pw>. Dane są publicznie dostępne i są resetowane co godzinę, o pełnej godzinie.",
-        "accounts": {
-          "admin": {
-            "label": "Administrator",
-            "description": "pełna kontrola platformy"
-          },
-          "judge": {
-            "label": "Sędzia",
-            "description": "uruchom konkurs"
-          },
-          "participant": {
-            "label": "Uczestnik",
-            "description": "rozwiązywanie wyzwań"
-          }
-        }
+        "description": "Kliknij konto, aby się zalogować. To publiczne konta demonstracyjne — dane są okresowo resetowane."
       },
       "pagesLabel": "Site pages"
     },
@@ -2529,7 +2515,18 @@
       "logoRemoved": "Logo removed",
       "couldntRemoveLogo": "Couldn't remove logo",
       "customThemeTag": "Custom theme",
-      "accentManagedByTheme": "This custom theme defines its own action colour, so the accent picker doesn't apply while it's selected."
+      "accentManagedByTheme": "This custom theme defines its own action colour, so the accent picker doesn't apply while it's selected.",
+      "demoCredentials": {
+        "heading": "Konta demonstracyjne",
+        "description": "Konta wyświetlane jako przyciski logowania jednym kliknięciem na stronie logowania (tylko instancje demonstracyjne). Każde konto musi faktycznie istnieć — dołącz je do swojej bazy. Hasła są widoczne jako zwykły tekst, więc używaj jednorazowych poświadczeń.",
+        "empty": "Brak kont demonstracyjnych.",
+        "accountLabel": "Etykieta",
+        "identifier": "Nazwa użytkownika lub e-mail",
+        "password": "Hasło",
+        "descriptionField": "Opis",
+        "remove": "Usuń",
+        "add": "Dodaj konto"
+      }
     },
     "themes": {
       "heading": "Custom themes",

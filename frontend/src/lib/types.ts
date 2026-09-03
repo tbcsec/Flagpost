@@ -1280,6 +1280,14 @@ export interface ThemePresetUpdate {
   tokens?: Record<string, string>;
 }
 
+// One click-to-sign-in demo account on the login card (#360; demo mode only).
+export interface DemoCredential {
+  label: string;
+  description: string;
+  identifier: string;
+  password: string;
+}
+
 export interface SiteSettings {
   platform_name: string;
   default_palette: string;
@@ -1303,11 +1311,10 @@ export interface SiteSettings {
   show_wordmark: boolean;
   // Demo instance (config-driven): drives the "resets hourly" banner.
   demo_mode: boolean;
-  // Whether the login page should advertise the stock demo credentials
-  // (admin/judge/participant). Demo mode AND no configured baseline file (#357):
-  // a custom baseline replaces the canned accounts, so their card would name
-  // accounts that don't exist.
-  demo_stock_credentials: boolean;
+  // Demo login accounts (#360) the login card renders as click-to-sign-in
+  // buttons. Only populated on a demo instance (empty on a production site);
+  // data-driven so a custom baseline carries its own accounts.
+  demo_credentials: DemoCredential[];
   // Archived-competition retention (#26) — public so the archive confirm can
   // show the exact deletion date to edit_competition holders.
   archive_auto_delete: boolean;

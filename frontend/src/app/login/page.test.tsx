@@ -43,7 +43,15 @@ function params(error: string | null) {
 }
 
 function settings(
-  overrides: Partial<{ demo_mode: boolean; demo_stock_credentials: boolean }> = {},
+  overrides: Partial<{
+    demo_mode: boolean;
+    demo_credentials: {
+      label: string;
+      description: string;
+      identifier: string;
+      password: string;
+    }[];
+  }> = {},
 ) {
   return {
     platform_name: "Flagpost",
@@ -53,7 +61,7 @@ function settings(
     logo_url: null,
     show_wordmark: true,
     demo_mode: false,
-    demo_stock_credentials: false,
+    demo_credentials: [],
     login_notice: null,
     archive_auto_delete: true,
     archive_retention_days: 30,
@@ -108,36 +116,57 @@ describe("LoginPage", () => {
     );
   });
 
-  it("shows the demo accounts card only when stock credentials apply", () => {
+  it("renders the demo card from the configured accounts (#360)", () => {
     mockUseSearchParams.mockReturnValue(params(null));
     mockUseAuthProviders.mockReturnValue({ data: [] });
 
     mockUseSiteSettings.mockReturnValue({
-      data: settings({ demo_mode: true, demo_stock_credentials: true }),
+      data: settings({
+        demo_mode: true,
+        demo_credentials: [
+          {
+            label: "Acme Owner",
+            description: "full control",
+            identifier: "acme-owner",
+            password: "pw-1234",
+          },
+        ],
+      }),
     });
     const { unmount } = renderWithIntl(<LoginPage />);
     expect(screen.getByText("Try it instantly")).toBeInTheDocument();
-    expect(screen.getByText("Administrator")).toBeInTheDocument();
-    // The rich-text message interleaves the <pw> mono span mid-sentence.
-    expect(
-      screen.getByText(/resets every hour, on the hour/),
-    ).toBeInTheDocument();
+    // Account label + identifier come from the data, not hardcoded strings.
+    expect(screen.getByText("Acme Owner")).toBeInTheDocument();
+    expect(screen.getByText("acme-owner")).toBeInTheDocument();
+    // The old stock accounts are gone.
+    expect(screen.queryByText("Administrator")).not.toBeInTheDocument();
     unmount();
 
+    // No accounts configured → no card even in demo mode.
     mockUseSiteSettings.mockReturnValue({
-      data: settings({ demo_mode: false, demo_stock_credentials: false }),
+      data: settings({ demo_mode: true, demo_credentials: [] }),
     });
     renderWithIntl(<LoginPage />);
     expect(screen.queryByText("Try it instantly")).not.toBeInTheDocument();
   });
 
-  it("hides the demo card when a custom baseline replaces the stock accounts (#357)", () => {
-    // Demo mode is on (banner still shows) but a baseline is configured, so the
-    // stock credentials no longer exist — the card must not advertise them.
+  it("never renders the demo card off a demo instance (#360)", () => {
+    // The public read blanks demo_credentials off demo mode, but be defensive:
+    // even if a list arrived, demo_mode false must hide the card.
     mockUseSearchParams.mockReturnValue(params(null));
     mockUseAuthProviders.mockReturnValue({ data: [] });
     mockUseSiteSettings.mockReturnValue({
-      data: settings({ demo_mode: true, demo_stock_credentials: false }),
+      data: settings({
+        demo_mode: false,
+        demo_credentials: [
+          {
+            label: "Acme Owner",
+            description: "",
+            identifier: "acme-owner",
+            password: "pw-1234",
+          },
+        ],
+      }),
     });
     renderWithIntl(<LoginPage />);
     expect(screen.queryByText("Try it instantly")).not.toBeInTheDocument();

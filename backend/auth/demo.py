@@ -29,6 +29,7 @@ from models.challenge import Category, Challenge
 from models.competition import Competition, generate_invite_code
 from models.hint import Hint
 from models.role import Role, RoleAssignment
+from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 from models.submission import Submission
 from models.user import User
 from utils.flags import hash_static_flag, make_salt
@@ -207,6 +208,22 @@ async def seed_demo_data(db: AsyncSession) -> None:
     bob = _user("bob", "bob@demo.flagpost.io")
     db.add_all([admin, judge, participant, alice, bob])
     await db.flush()
+
+    # Populate the login card's demo accounts (#360) — data-driven, so the public
+    # demo keeps its click-to-sign-in card with no config while a custom baseline
+    # can carry its own. Only ever exposed/rendered when demo_mode is on.
+    site = await db.get(SiteSettings, SITE_SETTINGS_ID)
+    if site is None:
+        site = SiteSettings(id=SITE_SETTINGS_ID)
+        db.add(site)
+    site.demo_credentials = [
+        {"label": "Administrator", "description": "full platform control",
+         "identifier": "admin", "password": DEMO_PASSWORD},
+        {"label": "Judge", "description": "run a competition",
+         "identifier": "judge", "password": DEMO_PASSWORD},
+        {"label": "Participant", "description": "solve challenges",
+         "identifier": "participant", "password": DEMO_PASSWORD},
+    ]
 
     # --- Competition ----------------------------------------------------------
     comp = Competition(

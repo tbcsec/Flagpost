@@ -14,6 +14,7 @@ import {
 } from "@/lib/theme";
 import type {
   BackupDocument,
+  DemoCredential,
   OperationalSettingsUpdate,
   RichTextDoc,
   SiteSettings,
@@ -36,7 +37,7 @@ export const FALLBACK_SETTINGS: SiteSettings = {
   logo_url: null,
   show_wordmark: true,
   demo_mode: false,
-  demo_stock_credentials: false,
+  demo_credentials: [],
   archive_auto_delete: true,
   archive_retention_days: 30,
   email_required: false,
@@ -72,6 +73,9 @@ export function useUpdateSiteSettings() {
       // null clears the sign-in notice (#197); the form always sends it.
       login_notice: RichTextDoc | null;
       show_wordmark: boolean;
+      // Demo login accounts (#360). Omitted = leave unchanged; only sent on a
+      // demo instance (the editor is hidden otherwise).
+      demo_credentials?: DemoCredential[];
     }) => siteSettingsApi.update(input),
     // The admin response is a superset of the public shape (adds updated_at);
     // caching it directly keeps every branding field (logo_url, show_wordmark)

@@ -55,13 +55,6 @@ const SSO_ERROR_CODES = [
 ] as const;
 type SsoErrorCode = (typeof SSO_ERROR_CODES)[number] | "default";
 
-// Shown only on a demo instance (seeded by auth/demo.py). Labels/descriptions
-// come from auth.login.demo.accounts.<user>. The password is a credential, not
-// prose — it's interpolated into the demo message (never translator-visible,
-// so machine translation can't corrupt it) and must match the seed.
-const DEMO_ACCOUNTS = ["admin", "judge", "participant"] as const;
-const DEMO_PASSWORD = "password";
-
 // Split from the default export purely so useSearchParams (reading the SSO
 // `?error=` code) sits inside a Suspense boundary. Without one, Next refuses to
 // statically prerender this route — `npm run build` fails rather than degrading,
@@ -206,7 +199,7 @@ function LoginForm() {
           )}
         </CardContent>
       </Card>
-      {brand.demo_stock_credentials && (
+      {brand.demo_mode && brand.demo_credentials.length > 0 && (
         <Card className="border-warning/40">
           <CardHeader className="space-y-1.5">
             <div className="flex items-center gap-2">
@@ -215,36 +208,33 @@ function LoginForm() {
               </span>
               <CardTitle className="text-base">{t("demo.title")}</CardTitle>
             </div>
-            <CardDescription>
-              {t.rich("demo.description", {
-                password: DEMO_PASSWORD,
-                pw: (chunks) => (
-                  <span className="font-mono text-foreground">{chunks}</span>
-                ),
-              })}
-            </CardDescription>
+            <CardDescription>{t("demo.description")}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-2">
-            {DEMO_ACCOUNTS.map((user) => (
+            {/* Accounts are admin-authored (#360), so their labels are literal
+                data, not translated. */}
+            {brand.demo_credentials.map((account, index) => (
               <button
-                key={user}
+                // Index-keyed: identifiers aren't guaranteed unique across the
+                // admin-authored list, and the list is render-only here.
+                key={index}
                 type="button"
                 onClick={() => {
-                  setIdentifier(user);
-                  setPassword(DEMO_PASSWORD);
+                  setIdentifier(account.identifier);
+                  setPassword(account.password);
                 }}
                 className="group flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2 text-left transition-colors hover:border-primary/50 hover:bg-accent"
               >
                 <span className="flex flex-col">
-                  <span className="text-sm font-medium">
-                    {t(`demo.accounts.${user}.label`)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {t(`demo.accounts.${user}.description`)}
-                  </span>
+                  <span className="text-sm font-medium">{account.label}</span>
+                  {account.description && (
+                    <span className="text-xs text-muted-foreground">
+                      {account.description}
+                    </span>
+                  )}
                 </span>
                 <span className="shrink-0 rounded-md border border-border bg-background px-2 py-1 font-mono text-xs text-muted-foreground group-hover:text-foreground">
-                  {user}
+                  {account.identifier}
                 </span>
               </button>
             ))}

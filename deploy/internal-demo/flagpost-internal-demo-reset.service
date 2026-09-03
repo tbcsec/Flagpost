@@ -1,0 +1,15 @@
+[Unit]
+Description=Reset the Flagpost internal demo to its baseline snapshot
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# oneshot defaults to no start timeout: bound it so a wedged docker step fails
+# the unit (visible in journalctl; the next tick can then run) instead of
+# hanging in 'activating' forever. Comfortably above restore's 180s health wait.
+TimeoutStartSec=600
+# The ONE place to point at your checkout — the shell-wrapped ExecStart
+# expands it, so editing this line alone relocates the whole unit.
+Environment=FLAGPOST_DIR=/opt/flagpost
+ExecStart=/bin/sh -c 'exec "$FLAGPOST_DIR/deploy/internal-demo/restore.sh"'

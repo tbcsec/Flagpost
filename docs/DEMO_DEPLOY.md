@@ -3,6 +3,9 @@
 The demo runs prebuilt GHCR images behind a **Cloudflare Tunnel** (no host ports
 exposed), in **demo mode**, and resets **every hour, on the hour**.
 
+> Looking to run an **internal** demo that resets to *your own* configured
+> baseline instead of the stock seed? See [INTERNAL_DEMO.md](INTERNAL_DEMO.md).
+
 ```
 browser ──HTTPS──▶ Cloudflare ──tunnel──▶ cloudflared ─▶ caddy:80 ─▶ frontend / backend
 ```

@@ -36,6 +36,9 @@ const INTERNAL_API_URL = process.env.INTERNAL_API_URL || API_URL;
 // caching failures too, so an outage stalls one request per window, not all.
 const MEMO_TTL_MS = 30_000;
 let memo: { brand: BrandSnapshot | null; at: number } | null = null;
+// Single-flight: concurrent cookie-less requests inside the first fetch's
+// window share one in-flight promise instead of each dialing the backend.
+let inFlight: Promise<BrandSnapshot | null> | null = null;
 
 /** Defensive read of the public site-settings shape into a BrandSnapshot. */
 function brandFromPublicSettings(body: unknown): BrandSnapshot | null {
@@ -63,10 +66,7 @@ function brandFromPublicSettings(body: unknown): BrandSnapshot | null {
   );
 }
 
-async function fetchColdStartBrand(): Promise<BrandSnapshot | null> {
-  if (!INTERNAL_API_URL) return null; // same-origin deploy without the env var
-  const now = Date.now();
-  if (memo && now - memo.at < MEMO_TTL_MS) return memo.brand;
+async function doFetchColdStartBrand(): Promise<BrandSnapshot | null> {
   let brand: BrandSnapshot | null = null;
   try {
     // `no-store`: the Next data cache was observed pinning a pre-setup
@@ -82,8 +82,23 @@ async function fetchColdStartBrand(): Promise<BrandSnapshot | null> {
     // like a success so an outage doesn't stall every cookie-less request.
     console.warn("[branding] cold-start settings fetch failed:", err);
   }
-  memo = { brand, at: now };
+  memo = { brand, at: Date.now() };
   return brand;
+}
+
+function fetchColdStartBrand(): Promise<BrandSnapshot | null> {
+  if (!INTERNAL_API_URL) {
+    return Promise.resolve(null); // same-origin deploy without the env var
+  }
+  if (memo && Date.now() - memo.at < MEMO_TTL_MS) {
+    return Promise.resolve(memo.brand);
+  }
+  if (!inFlight) {
+    inFlight = doFetchColdStartBrand().finally(() => {
+      inFlight = null;
+    });
+  }
+  return inFlight;
 }
 
 /** The branding to inject into the initial HTML. Cookie first (per-browser,

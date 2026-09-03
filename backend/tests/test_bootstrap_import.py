@@ -2,9 +2,9 @@
 
 Covers the gate (unconfigured-only, idempotent across restarts), the refuse-to-
 start posture on a bad file, the owner-provisioning → setup-complete invariant,
-and the public ``demo_stock_credentials`` flag that gates the login credentials
-card. The lifespan wiring itself isn't exercised (the test transport runs no
-lifespan, per conftest) — ``run_bootstrap_import`` is driven directly.
+and the no-active-owner dead-end. The lifespan wiring itself isn't exercised (the
+test transport runs no lifespan, per conftest) — ``run_bootstrap_import`` is
+driven directly.
 """
 
 import json
@@ -241,27 +241,3 @@ async def test_no_active_owner_baseline_stays_unconfigured_and_quiet(
         assert seen == []
     finally:
         event_bus.unsubscribe_owner("_test_bootstrap_noowner")
-
-
-async def test_public_flag_demo_off(client, monkeypatch):
-    monkeypatch.setattr(app_settings, "demo_mode", False)
-    monkeypatch.setattr(app_settings, "bootstrap_backup_file", "")
-    body = (await client.get("/api/site-settings")).json()
-    assert body["demo_mode"] is False
-    assert body["demo_stock_credentials"] is False
-
-
-async def test_public_flag_demo_on_without_baseline(client, monkeypatch):
-    monkeypatch.setattr(app_settings, "demo_mode", True)
-    monkeypatch.setattr(app_settings, "bootstrap_backup_file", "")
-    body = (await client.get("/api/site-settings")).json()
-    assert body["demo_mode"] is True
-    assert body["demo_stock_credentials"] is True
-
-
-async def test_public_flag_demo_on_with_baseline_suppresses_card(client, monkeypatch):
-    monkeypatch.setattr(app_settings, "demo_mode", True)
-    monkeypatch.setattr(app_settings, "bootstrap_backup_file", "/data/baseline.json")
-    body = (await client.get("/api/site-settings")).json()
-    assert body["demo_mode"] is True
-    assert body["demo_stock_credentials"] is False

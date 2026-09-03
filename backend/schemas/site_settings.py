@@ -49,6 +49,27 @@ def _validate_domain(raw: str) -> str:
     return domain
 
 
+# Demo login accounts (#360). The list rides the public GET on a demo instance
+# and the card renders one button each, so it's bounded.
+MAX_DEMO_CREDENTIALS = 12
+
+
+class DemoCredential(BaseModel):
+    """One click-to-sign-in demo account shown on the login card (demo mode only).
+
+    The password is plaintext by necessity — the card fills it — and references a
+    public throwaway account; never exposed off a demo instance (see the router).
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    label: str = Field(min_length=1, max_length=60)
+    description: str = Field(default="", max_length=120)
+    # Username or email typed into the sign-in form (auth accepts either).
+    identifier: str = Field(min_length=1, max_length=254)
+    password: str = Field(min_length=1, max_length=128)
+
+
 class SiteSettingsOut(BaseModel):
     """Public shape — served unauthenticated so the login/register screens can
     brand themselves before there's a session, and know whether to offer sign-up."""
@@ -80,11 +101,11 @@ class SiteSettingsOut(BaseModel):
     # drives the "resets hourly" banner. The router sets it from
     # settings.demo_mode; defaults false everywhere else.
     demo_mode: bool = False
-    # Whether the login page should advertise the stock demo credentials
-    # (admin/judge/participant). Demo mode AND no configured baseline file:
-    # a custom baseline (#357) replaces the canned accounts, so their card would
-    # name accounts that don't exist. Config-driven; router sets it.
-    demo_stock_credentials: bool = False
+    # Demo login accounts (#360) the login card renders as click-to-sign-in
+    # buttons. Data-driven so a custom baseline (#357) carries its own accounts.
+    # The router populates this **only when demo_mode** — a production site never
+    # exposes it (stays empty), so a real competition login page is unaffected.
+    demo_credentials: list[DemoCredential] = []
     # Archived-competition retention policy (#26). Public because the archive
     # confirm dialog (edit_competition holders, who may lack manage_site_settings)
     # must show the exact deletion date before the admin commits. Benign to
@@ -122,6 +143,19 @@ class SiteSettingsUpdate(BaseModel):
     # so the router distinguishes the two via ``model_fields_set``).
     login_notice: dict | None = None
     show_wordmark: bool = True
+    # Demo login accounts (#360). Omitted = leave unchanged. Stored regardless of
+    # demo_mode (for baseline portability); only ever exposed/rendered on a demo
+    # instance. Per-entry lengths are bounded by DemoCredential; the count here.
+    demo_credentials: list[DemoCredential] | None = None
+
+    @field_validator("demo_credentials")
+    @classmethod
+    def _bound_demo_credentials(
+        cls, v: list[DemoCredential] | None
+    ) -> list[DemoCredential] | None:
+        if v is not None and len(v) > MAX_DEMO_CREDENTIALS:
+            raise ValueError(f"At most {MAX_DEMO_CREDENTIALS} demo accounts")
+        return v
 
     @field_validator("login_notice")
     @classmethod

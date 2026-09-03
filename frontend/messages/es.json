@@ -527,21 +527,7 @@
       "demo": {
         "badge": "Demo",
         "title": "Pruébalo instantáneamente",
-        "description": "Haz clic en una cuenta para rellenar el formulario de arriba, la contraseña es <pw>{password}</pw>. Los datos son públicos y se reinician cada hora, en la hora.",
-        "accounts": {
-          "admin": {
-            "label": "Administrador",
-            "description": "control completo de la plataforma"
-          },
-          "judge": {
-            "label": "Judge",
-            "description": "Hacer una competición"
-          },
-          "participant": {
-            "label": "Participante",
-            "description": "resolver desafíos"
-          }
-        }
+        "description": "Haz clic en una cuenta para iniciar sesión. Son cuentas de demostración públicas: los datos se restablecen periódicamente."
       },
       "pagesLabel": "Site pages"
     },
@@ -2529,7 +2515,18 @@
       "logoRemoved": "Logo removed",
       "couldntRemoveLogo": "Couldn't remove logo",
       "customThemeTag": "Custom theme",
-      "accentManagedByTheme": "This custom theme defines its own action colour, so the accent picker doesn't apply while it's selected."
+      "accentManagedByTheme": "This custom theme defines its own action colour, so the accent picker doesn't apply while it's selected.",
+      "demoCredentials": {
+        "heading": "Cuentas de demostración",
+        "description": "Cuentas que aparecen como botones de inicio de sesión con un clic en la página de acceso (solo en instancias de demostración). Cada cuenta debe existir realmente: inclúyela en tu configuración base. Las contraseñas se muestran en texto plano, así que usa credenciales desechables.",
+        "empty": "Aún no hay cuentas de demostración.",
+        "accountLabel": "Etiqueta",
+        "identifier": "Usuario o correo",
+        "password": "Contraseña",
+        "descriptionField": "Descripción",
+        "remove": "Quitar",
+        "add": "Añadir cuenta"
+      }
     },
     "themes": {
       "heading": "Custom themes",

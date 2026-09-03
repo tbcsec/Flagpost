@@ -35,7 +35,7 @@ async def test_public_read_returns_defaults_without_auth(client):
         "logo_url": None,
         "show_wordmark": True,
         "demo_mode": False,
-        "demo_stock_credentials": False,
+        "demo_credentials": [],
         "archive_auto_delete": True,
         "archive_retention_days": 30,
         "email_required": False,
@@ -73,7 +73,7 @@ async def test_admin_update_round_trips(client):
         "logo_url": None,
         "show_wordmark": True,
         "demo_mode": False,
-        "demo_stock_credentials": False,
+        "demo_credentials": [],
         "archive_auto_delete": True,
         "archive_retention_days": 30,
         "email_required": False,
@@ -741,3 +741,103 @@ async def test_login_notice_rejects_an_oversized_doc(client):
     )
     assert resp.status_code == 422
     assert "too large" in resp.text
+
+
+# --- Demo login-credentials card (#360) --------------------------------------
+
+_STOCK = [
+    {"label": "Owner", "description": "full control", "identifier": "acme-owner", "password": "pw-1234"},
+    {"label": "Player", "description": "compete", "identifier": "acme-player", "password": "pw-5678"},
+]
+
+
+async def test_admin_can_write_demo_credentials(client):
+    admin = await admin_token(client)
+    resp = await client.put(
+        "/api/site-settings",
+        json={
+            "platform_name": "Demo", "default_palette": "harbor", "accent": "signal",
+            "demo_credentials": _STOCK,
+        },
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 200, resp.text
+    got = resp.json()["demo_credentials"]
+    assert [c["identifier"] for c in got] == ["acme-owner", "acme-player"]
+    assert got[0]["password"] == "pw-1234"
+
+
+async def test_demo_credentials_exposed_only_in_demo_mode(client, monkeypatch):
+    admin = await admin_token(client)
+    await client.put(
+        "/api/site-settings",
+        json={
+            "platform_name": "Demo", "default_palette": "harbor", "accent": "signal",
+            "demo_credentials": _STOCK,
+        },
+        headers=_auth(admin),
+    )
+    from config import settings as app_settings
+
+    # Production (demo off): the public read never exposes the accounts.
+    monkeypatch.setattr(app_settings, "demo_mode", False)
+    body = (await client.get("/api/site-settings")).json()
+    assert body["demo_credentials"] == []
+
+    # Demo instance: the stored accounts are exposed for the card.
+    monkeypatch.setattr(app_settings, "demo_mode", True)
+    body = (await client.get("/api/site-settings")).json()
+    assert [c["identifier"] for c in body["demo_credentials"]] == ["acme-owner", "acme-player"]
+
+
+async def test_demo_credentials_survive_a_save_that_omits_them(client):
+    admin = await admin_token(client)
+    await client.put(
+        "/api/site-settings",
+        json={"platform_name": "D", "default_palette": "harbor", "accent": "signal",
+              "demo_credentials": _STOCK},
+        headers=_auth(admin),
+    )
+    # A later save that doesn't send the field leaves it unchanged.
+    resp = await client.put(
+        "/api/site-settings",
+        json={"platform_name": "D2", "default_palette": "harbor", "accent": "signal"},
+        headers=_auth(admin),
+    )
+    assert len(resp.json()["demo_credentials"]) == 2
+    # An explicit empty list clears it.
+    resp = await client.put(
+        "/api/site-settings",
+        json={"platform_name": "D2", "default_palette": "harbor", "accent": "signal",
+              "demo_credentials": []},
+        headers=_auth(admin),
+    )
+    assert resp.json()["demo_credentials"] == []
+
+
+async def test_demo_credentials_count_is_bounded(client):
+    admin = await admin_token(client)
+    too_many = [
+        {"label": f"a{i}", "identifier": f"u{i}", "password": "x"} for i in range(13)
+    ]
+    resp = await client.put(
+        "/api/site-settings",
+        json={"platform_name": "D", "default_palette": "harbor", "accent": "signal",
+              "demo_credentials": too_many},
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 422
+
+
+async def test_demo_seed_populates_the_credentials_card(client):
+    from db import SessionLocal
+    from auth.demo import seed_demo_data
+    from models.site_settings import SITE_SETTINGS_ID, SiteSettings
+
+    async with SessionLocal() as db:
+        await seed_demo_data(db)
+    async with SessionLocal() as db:
+        site = await db.get(SiteSettings, SITE_SETTINGS_ID)
+        ids = [c["identifier"] for c in site.demo_credentials]
+        assert ids == ["admin", "judge", "participant"]
+        assert all(c["password"] == "password" for c in site.demo_credentials)

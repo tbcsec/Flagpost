@@ -183,3 +183,9 @@ use the snapshot approach above.
 - The activity simulator (`docker-compose.demo.yml`'s `simulator` service)
   only understands the stock demo seed and is demo-guarded — it doesn't apply
   to internal demos.
+- **The login page's click-to-sign-in demo card is configurable** (#360): if you
+  do run an internal demo with `DEMO_MODE=true` (accepting the stock-admin caveat
+  above), author its accounts in Site Settings → Appearance → *Demo login
+  accounts*. They must reference accounts that actually exist in your baseline,
+  and they ride the baseline like everything else — so the card shows *your*
+  accounts, not the stock ones. The list is only exposed/rendered in demo mode.

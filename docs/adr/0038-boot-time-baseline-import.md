@@ -118,3 +118,34 @@ which has a real actor.
   needs a bootstrapped admin token to exist first — the chicken-and-egg the
   setup gate exists to avoid — and re-implements at the ops layer what a
   startup hook does in one place.
+
+## Amendment (#360): the demo credentials card became data-driven
+
+The original decision (#6 above) gated the login-page demo-credentials card on a
+derived `demo_stock_credentials` boolean (`demo_mode AND not
+bootstrap_backup_file`) and rendered it from **hardcoded** stock accounts
+(`admin`/`judge`/`participant`, password `password`). That meant a custom
+baseline could never *have* a credentials card — the accounts it would advertise
+didn't exist — so the card was simply suppressed whenever a baseline was set.
+
+#360 replaces that with a **data-driven** list: a `site_settings.demo_credentials`
+column (`[{label, description, identifier, password}]`) the card renders one
+button each from. It supersedes the `demo_stock_credentials` flag:
+
+- The public `GET /api/site-settings` exposes `demo_credentials` **only when
+  `demo_mode`** (empty on a production site — a real competition login page is
+  unaffected). The card shows when `demo_mode AND demo_credentials` is non-empty.
+- The stock demo seed populates the list, so the public demo keeps its card with
+  no config, and the frontend hardcoding is retired.
+- The admin editor for the list lives in Site Settings → Appearance and renders
+  **only in demo mode**; the value is stored regardless of mode so it rides the
+  backup and restores wherever the baseline next boots *as a demo*.
+- **Passwords are plaintext by necessity** — the card fills them — and reference
+  public throwaway accounts on a demo instance. This is the same exposure the old
+  hardcoded `DEMO_PASSWORD="password"` already had, moved from the JS bundle into
+  the (demo-gated) DB. On a production instance the value is never exposed,
+  rendered, or editable.
+
+Net effect for this ADR's feature: a custom baseline (this ADR) now carries its
+*own* click-to-login card, closing the gap the `demo_stock_credentials`
+suppression left open.

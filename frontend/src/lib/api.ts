@@ -10,6 +10,7 @@ import { useAuthStore } from "@/stores/auth";
 import type {
   AuthProvider,
   AuthProviderPublic,
+  DemoCredential,
   RichTextDoc,
   ProviderPreset,
   Announcement,
@@ -1101,6 +1102,8 @@ export const siteSettingsApi = {
     // backend's omit-leaves-unchanged case never applies from this client (#197).
     login_notice: RichTextDoc | null;
     show_wordmark: boolean;
+    // Demo login accounts (#360). Omitted = leave unchanged.
+    demo_credentials?: DemoCredential[];
   }) =>
     apiFetch<SiteSettingsAdmin>("/api/site-settings", {
       method: "PUT",

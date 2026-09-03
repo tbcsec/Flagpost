@@ -527,21 +527,7 @@
       "demo": {
         "badge": "Démo",
         "title": "Essayez-le instantanément",
-        "description": "Cliquez sur un compte pour remplir le formulaire ci-dessus — le mot de passe est <pw>{password}</pw>. Les données sont publiques et réinitialisées chaque heure, à l'heure.",
-        "accounts": {
-          "admin": {
-            "label": "Administrateur",
-            "description": "Contrôle complet de la plateforme"
-          },
-          "judge": {
-            "label": "Juge",
-            "description": "exécuter une compétition"
-          },
-          "participant": {
-            "label": "Participant",
-            "description": "résoudre les défis"
-          }
-        }
+        "description": "Cliquez sur un compte pour vous connecter. Ce sont des comptes de démonstration publics : les données sont réinitialisées périodiquement."
       },
       "pagesLabel": "Site pages"
     },
@@ -2529,7 +2515,18 @@
       "logoRemoved": "Logo removed",
       "couldntRemoveLogo": "Couldn't remove logo",
       "customThemeTag": "Custom theme",
-      "accentManagedByTheme": "This custom theme defines its own action colour, so the accent picker doesn't apply while it's selected."
+      "accentManagedByTheme": "This custom theme defines its own action colour, so the accent picker doesn't apply while it's selected.",
+      "demoCredentials": {
+        "heading": "Comptes de démonstration",
+        "description": "Comptes affichés en boutons de connexion en un clic sur la page de connexion (instances de démonstration uniquement). Chaque compte doit réellement exister — incluez-le dans votre référentiel. Les mots de passe apparaissent en clair, utilisez donc des identifiants jetables.",
+        "empty": "Aucun compte de démonstration.",
+        "accountLabel": "Libellé",
+        "identifier": "Identifiant ou e-mail",
+        "password": "Mot de passe",
+        "descriptionField": "Description",
+        "remove": "Retirer",
+        "add": "Ajouter un compte"
+      }
     },
     "themes": {
       "heading": "Custom themes",

@@ -5,10 +5,12 @@ import { useEffect, useRef, useState } from "react";
 
 import { RouteProgress } from "@/components/app/route-progress";
 import { SetupGuard } from "@/components/setup/setup-guard";
+import { BrandProvider } from "@/components/theme/brand-context";
 import { SiteBackground } from "@/components/theme/site-background";
 import { ThemeApplier } from "@/components/theme/theme-applier";
 import { ConfirmProvider } from "@/components/ui/confirm";
 import { Toaster } from "@/components/ui/toaster";
+import type { BrandSnapshot } from "@/lib/brand";
 import { authApi } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth";
 
@@ -42,17 +44,27 @@ function SessionRestorer() {
   return null;
 }
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({
+  children,
+  initialBrand,
+}: {
+  children: React.ReactNode;
+  /** The server-resolved branding (#362) — seeds useSiteSettings' placeholder
+   *  so the first client render matches the server-painted HTML. */
+  initialBrand: BrandSnapshot;
+}) {
   const [queryClient] = useState(makeQueryClient);
   return (
     <QueryClientProvider client={queryClient}>
-      <SessionRestorer />
-      <ThemeApplier />
-      <SiteBackground />
-      <SetupGuard />
-      <RouteProgress />
-      <ConfirmProvider>{children}</ConfirmProvider>
-      <Toaster />
+      <BrandProvider value={initialBrand}>
+        <SessionRestorer />
+        <ThemeApplier />
+        <SiteBackground />
+        <SetupGuard />
+        <RouteProgress />
+        <ConfirmProvider>{children}</ConfirmProvider>
+        <Toaster />
+      </BrandProvider>
     </QueryClientProvider>
   );
 }

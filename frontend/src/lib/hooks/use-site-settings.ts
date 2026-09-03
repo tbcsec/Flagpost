@@ -6,6 +6,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useInitialBrand } from "@/components/theme/brand-context";
 import { apiAssetUrl, siteSettingsApi } from "@/lib/api";
 import {
   DEFAULT_ACCENT,
@@ -22,9 +23,6 @@ import type {
 import { useAuthStore } from "@/stores/auth";
 
 const SITE_SETTINGS_KEY = ["site-settings"] as const;
-// localStorage cache so the no-flash inline script (see layout) can apply the
-// last-known theme before the query resolves on a fresh load.
-export const SITE_THEME_CACHE_KEY = "fp:site-theme";
 
 export const FALLBACK_SETTINGS: SiteSettings = {
   platform_name: DEFAULT_PLATFORM_NAME,
@@ -46,19 +44,38 @@ export const FALLBACK_SETTINGS: SiteSettings = {
 };
 
 /** Rewrite the backend-relative `logo_url` to the API origin so an `<img src>`
- *  resolves against the backend (which may be a different host in dev/prod). */
+ *  resolves against the backend (which may be a different host in dev/prod).
+ *  Idempotent: the brand-placeholder settings (#362) already carry an absolute
+ *  URL, and `select` runs over placeholder data too. */
 function absolutizeLogo(s: SiteSettings): SiteSettings {
-  return s.logo_url ? { ...s, logo_url: apiAssetUrl(s.logo_url) } : s;
+  if (!s.logo_url || s.logo_url.startsWith("http")) return s;
+  return { ...s, logo_url: apiAssetUrl(s.logo_url) };
 }
 
 /** The site theme/branding. Rarely changes, so it's cached long and served from
- *  any page (public included). Falls back to the shipped defaults until loaded. */
+ *  any page (public included). Until loaded, the placeholder is the shipped
+ *  defaults overlaid with the server-injected brand snapshot (#362) — cookie or
+ *  cold-start fetch — so the lockup/name never paint the Flagpost defaults on a
+ *  branded instance. Consumers can keep the `data ?? FALLBACK_SETTINGS` idiom;
+ *  the placeholder simply makes `data` branded from the first render. */
 export function useSiteSettings() {
+  const brand = useInitialBrand();
   return useQuery({
     queryKey: SITE_SETTINGS_KEY,
     queryFn: siteSettingsApi.get,
     select: absolutizeLogo,
     staleTime: 5 * 60_000,
+    placeholderData: {
+      ...FALLBACK_SETTINGS,
+      platform_name: brand.platformName,
+      logo_url: brand.logoUrl,
+      show_wordmark: brand.showWordmark,
+      // The RESOLVED palette (may be the viewer's own override or a custom
+      // theme id) — display-equivalent for a placeholder. ThemeApplier never
+      // applies placeholder data (it skips until the real fetch resolves), so
+      // this can't repaint anything; the server HTML already painted it.
+      default_palette: brand.palette,
+    },
   });
 }
 

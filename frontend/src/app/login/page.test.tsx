@@ -42,7 +42,9 @@ function params(error: string | null) {
   return { get: (key: string) => (key === "error" ? error : null) };
 }
 
-function settings(overrides: Partial<{ demo_mode: boolean }> = {}) {
+function settings(
+  overrides: Partial<{ demo_mode: boolean; demo_stock_credentials: boolean }> = {},
+) {
   return {
     platform_name: "Flagpost",
     default_palette: "harbor",
@@ -51,6 +53,7 @@ function settings(overrides: Partial<{ demo_mode: boolean }> = {}) {
     logo_url: null,
     show_wordmark: true,
     demo_mode: false,
+    demo_stock_credentials: false,
     login_notice: null,
     archive_auto_delete: true,
     archive_retention_days: 30,
@@ -105,11 +108,13 @@ describe("LoginPage", () => {
     );
   });
 
-  it("shows the demo accounts card only in demo mode", () => {
+  it("shows the demo accounts card only when stock credentials apply", () => {
     mockUseSearchParams.mockReturnValue(params(null));
     mockUseAuthProviders.mockReturnValue({ data: [] });
 
-    mockUseSiteSettings.mockReturnValue({ data: settings({ demo_mode: true }) });
+    mockUseSiteSettings.mockReturnValue({
+      data: settings({ demo_mode: true, demo_stock_credentials: true }),
+    });
     const { unmount } = renderWithIntl(<LoginPage />);
     expect(screen.getByText("Try it instantly")).toBeInTheDocument();
     expect(screen.getByText("Administrator")).toBeInTheDocument();
@@ -119,7 +124,21 @@ describe("LoginPage", () => {
     ).toBeInTheDocument();
     unmount();
 
-    mockUseSiteSettings.mockReturnValue({ data: settings({ demo_mode: false }) });
+    mockUseSiteSettings.mockReturnValue({
+      data: settings({ demo_mode: false, demo_stock_credentials: false }),
+    });
+    renderWithIntl(<LoginPage />);
+    expect(screen.queryByText("Try it instantly")).not.toBeInTheDocument();
+  });
+
+  it("hides the demo card when a custom baseline replaces the stock accounts (#357)", () => {
+    // Demo mode is on (banner still shows) but a baseline is configured, so the
+    // stock credentials no longer exist — the card must not advertise them.
+    mockUseSearchParams.mockReturnValue(params(null));
+    mockUseAuthProviders.mockReturnValue({ data: [] });
+    mockUseSiteSettings.mockReturnValue({
+      data: settings({ demo_mode: true, demo_stock_credentials: false }),
+    });
     renderWithIntl(<LoginPage />);
     expect(screen.queryByText("Try it instantly")).not.toBeInTheDocument();
   });

@@ -373,6 +373,16 @@ class Settings(BaseSettings):
     # MUST stay false for any real deployment — it seeds well-known credentials.
     demo_mode: bool = False
 
+    # Boot-time baseline import (#357, ADR-0038). Path to a mounted platform
+    # export (ADR-0016): on startup, an *unconfigured* instance (no active
+    # administrator) imports it instead of coming up empty — provisioning the
+    # owner, branding, competitions and users declaratively. A normal install
+    # imports exactly once; a reset-on-a-schedule internal demo re-imports on
+    # every clean boot (see docs/INTERNAL_DEMO.md). Empty = off. A set-but-
+    # unreadable/invalid file aborts startup rather than booting empty. When
+    # set, the demo seed is suppressed — the baseline replaces the canned data.
+    bootstrap_backup_file: str = ""
+
     # The browser-facing origin this install is served on, e.g.
     # "https://ctf.example.com". Only needed for OIDC (#58): the redirect_uri
     # sent to an IdP must match the one registered there *exactly*, and it can't

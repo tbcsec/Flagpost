@@ -107,6 +107,58 @@ trade-off is cosmetic: no demo banner or credentials card. If you want an
 in-app hint, put it in an announcement or a custom page — those ride the
 baseline like everything else.
 
+## Option B: boot-time baseline import (#357)
+
+The snapshot approach above is an ops recipe — it copies raw volumes, so it
+carries *everything*, including the SSO and SMTP secrets that never leave the
+database in portable form. If you don't need those in the baseline, there's a
+first-class product path that needs no snapshot scripts at all:
+
+1. Stand up the instance (on a **fresh, unconfigured** volume — see the caveat
+   below) and configure it in the UI, exactly as in step 2.
+2. **Admin → Site settings → Export** a backup to a JSON file.
+3. Mount that file into the backend and point `BOOTSTRAP_BACKUP_FILE` at it by
+   uncommenting the two lines `docker-compose.yml` already carries for this — an
+   added read-only mount alongside the existing `backend-data:/data` volume, and
+   the env var:
+
+   ```yaml
+   services:
+     backend:
+       environment:
+         BOOTSTRAP_BACKUP_FILE: /data/baseline.json
+       volumes:
+         - backend-data:/data                       # keep — DB/secret persistence
+         - ./baseline.json:/data/baseline.json:ro   # add — the mounted baseline
+   ```
+
+4. The reset stays the plain `docker compose down -v && up -d` the public demo
+   uses. On each fresh boot the *unconfigured* instance imports the file before
+   anyone can sign in — provisioning the owner, branding, competitions and
+   users — instead of the setup wizard.
+
+The import runs **only while the instance is unconfigured** (no active
+administrator), so a non-demo install imports it once and is then a normal
+instance — which makes this a handy way to provision *any* new deployment
+declaratively, not just a demo. (It stays a no-op on later boots *provided the
+baseline carries an active owner*; a partial export with no active administrator
+leaves the instance on the setup wizard and re-imports every boot — the backend
+logs a warning saying so.) A set-but-unreadable or invalid file makes the
+backend refuse to start rather than boot empty (ADR-0038).
+
+> **Start from a clean volume.** The import only *adds* — it never removes
+> accounts. If you point `BOOTSTRAP_BACKUP_FILE` at an instance that already has
+> an administrator (e.g. one previously booted with `DEMO_MODE=true`, which
+> seeds the stock `admin`/`password` account), the import is skipped and that
+> pre-existing account **survives** — while the login credentials card that
+> would have disclosed it is now hidden. Always bootstrap onto a fresh
+> `down -v` volume.
+
+What this path does **not** carry, by the export's design (ADR-0016 / ADR-0020):
+identity providers and the SMTP password (configure them post-boot), and
+invite codes are regenerated on each import. When you need those preserved too,
+use the snapshot approach above.
+
 ## Notes / limits
 
 - **What "reset" means for logged-in users:** unexpired access tokens keep

@@ -71,3 +71,4 @@ Status is one of:
 | [0035](0035-relicense-apache-2.0.md) | Relicense from AGPL-3.0 to Apache 2.0; module exception retired | Accepted |
 | [0036](0036-challenge-instancing-provisioners.md) | Challenge instancing — provisioner kinds, background-lane lifecycle, hashed unique flags | Accepted |
 | [0037](0037-metrics-endpoint-gating.md) | Prometheus `/metrics` — kernel middleware, off by default, gated by token/allowlist | Accepted |
+| [0038](0038-boot-time-baseline-import.md) | Boot-time baseline import — provision an unconfigured instance from a mounted platform export | Accepted |

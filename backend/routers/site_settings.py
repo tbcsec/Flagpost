@@ -76,6 +76,11 @@ async def read_site_settings(db: AsyncSession = Depends(get_db)) -> SiteSettings
     await _resolve_active_theme(db, settings)
     # demo_mode is config-driven, not stored — annotate the row for serialization.
     settings.demo_mode = app_config.demo_mode
+    # The stock credentials card shows only in demo mode AND when no custom
+    # baseline is configured — a baseline (#357) replaces the canned accounts.
+    settings.demo_stock_credentials = app_config.demo_mode and not (
+        app_config.bootstrap_backup_file.strip()
+    )
     # email_required mirrors the allowlist + verification flags; the domain
     # list itself stays admin-only (see OperationalSettingsOut).
     settings.email_required = (

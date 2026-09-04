@@ -231,19 +231,21 @@ async def submission_browser_export(
         ["created_at", "challenge_id", "user_id", "team_id", "correctness", "value", "points_awarded"]
     )
     for row in rows:
-        # csv_safe every cell (GHSA-352q / F7): these columns are ids/enums/numbers
-        # today (csv_safe is a pass-through for those), but wrapping uniformly keeps
-        # the guard in place if a free-text column (a submitted value, a username) is
-        # ever added to this export.
+        # csv_safe every cell (GHSA-352q / F7). The `value` column is the
+        # submitted flag string — fully competitor-controlled free text, so a
+        # guess of `=cmd|' /C calc'!A0` would execute when an organiser opens the
+        # dispute export; that is the real F7 vector. The id/enum/number columns
+        # are pass-throughs but wrapped for uniformity so a future free-text
+        # column can't reopen the hole.
         writer.writerow(
             [
                 row.created_at.isoformat(),
                 csv_safe(row.challenge_id),
                 csv_safe(row.user_id),
                 csv_safe(row.team_id or ""),
-                _correctness_of(row).value,
-                row.value,
-                row.points_awarded,
+                csv_safe(_correctness_of(row).value),
+                csv_safe(row.value),
+                csv_safe(row.points_awarded),
             ]
         )
 

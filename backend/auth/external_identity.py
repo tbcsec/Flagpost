@@ -166,12 +166,29 @@ async def resolve_identity(
     )
 
     # 2. First contact — attach to an existing local account, but only on an
-    #    email this provider is trusted to assert.
+    #    email this provider is trusted to assert AND that the local account has
+    #    itself PROVEN (GHSA-42m4). Local registration accepts any address with
+    #    no ownership proof and the account is live immediately, so linking on the
+    #    address alone lets an attacker pre-register victim@corp (unverified) and
+    #    have the victim's real SSO login land in the attacker's account. An
+    #    unverified match falls through to JIT provisioning (a fresh account)
+    #    instead. Admin-created accounts are stamped verified at creation, so they
+    #    still link.
     existing: User | None = None
     if email_trusted:
-        existing = await db.scalar(
+        match = await db.scalar(
             select(User).where(func.lower(User.email) == email.strip().lower())
         )
+        if match is not None and match.email_verified_at is None:
+            # A local account holds this email but never PROVED ownership of it.
+            # Linking would hand an attacker who pre-registered the victim's
+            # address the victim's SSO login (the pre-hijack), and JIT-creating a
+            # second account would collide on the unique email — so refuse. The
+            # admin resolves the unverified squatter, or the user verifies their
+            # email first. Admin-created accounts are stamped verified, so the
+            # legitimate "link my existing account" path is unaffected.
+            raise IdentityRejected("email_unverified_conflict")
+        existing = match
     if existing is not None:
         db.add(
             UserExternalIdentity(

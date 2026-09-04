@@ -387,6 +387,17 @@ async def test_second_login_reuses_the_same_account(client, idp):
     assert len(identities) == 1
 
 
+async def _verify_local_email(user_id: str) -> None:
+    """Stamp a local account's email verified — trusted-email SSO linking only
+    attaches to a PROVEN local account (GHSA-42m4)."""
+    import datetime
+
+    async with SessionLocal() as session:
+        u = await session.get(User, user_id)
+        u.email_verified_at = datetime.datetime.now(datetime.timezone.utc)
+        await session.commit()
+
+
 async def test_links_to_existing_account_on_verified_email(client, idp):
     admin = await admin_token(client)
     await _create_provider(client, admin)
@@ -399,6 +410,7 @@ async def test_links_to_existing_account_on_verified_email(client, idp):
         },
     )
     local_id = reg.json()["user"]["id"]
+    await _verify_local_email(local_id)
 
     state, _ = await _begin_login(client, idp)
     await client.get(
@@ -766,6 +778,7 @@ async def test_sso_allowlist_does_not_block_linking_to_a_pre_existing_account(cl
     )
     assert reg.status_code == 201, reg.text
     prior = await _user_by_email("prior@gmail.com")
+    await _verify_local_email(prior.id)
 
     await _create_provider(client, admin)
     await _set_site_policy(allowlist=["example.com"])  # gmail.com NOT allowed
@@ -881,6 +894,7 @@ async def test_closed_authoritative_provider_links_by_email(client, idp):
         },
     )
     existing_id = reg.json()["user"]["id"]
+    await _verify_local_email(existing_id)
 
     await _create_provider(
         client, admin, posture="closed", email_is_authoritative=True

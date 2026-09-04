@@ -23,11 +23,18 @@ async def _register(client, email, name=None) -> str:
     return resp.json()["access_token"]
 
 
-async def _make_competition(client, mode="team") -> str:
+async def _make_competition(client, mode="team", visibility="public") -> str:
+    # Public by default: self-serve create_team is only allowed for a competition
+    # the caller can already see (GHSA-4mmf). A private competition is exercised
+    # explicitly by the access-control tests below.
     token = await admin_token(client)
     resp = await client.post(
         "/api/competitions",
-        json={"name": f"Comp-{mode}", "participation_mode": mode},
+        json={
+            "name": f"Comp-{mode}",
+            "participation_mode": mode,
+            "visibility": visibility,
+        },
         headers=_auth(token),
     )
     return resp.json()["id"]
@@ -249,7 +256,7 @@ async def test_joining_a_team_grants_participant_access(client):
 
 async def test_max_team_size_blocks_join_when_full(client):
     admin = await admin_token(client)
-    comp = (await client.post("/api/competitions", json={"name": "Capped", "participation_mode": "team", "max_team_size": 2}, headers=_auth(admin))).json()["id"]
+    comp = (await client.post("/api/competitions", json={"name": "Capped", "participation_mode": "team", "max_team_size": 2, "visibility": "public"}, headers=_auth(admin))).json()["id"]
     cap = await _register(client, "cap@example.com", "Cap")
     team = (await client.post(f"/api/competitions/{comp}/teams", json={"name": "Duo"}, headers=_auth(cap))).json()
     code = team["invite_code"]
@@ -314,3 +321,63 @@ async def test_only_captain_reviews_requests(client):
     await client.post(f"/api/competitions/{comp}/teams", json={"name": "T", "approval_required": True}, headers=_auth(cap))
     outsider = await _register(client, "out@example.com")
     assert (await client.get(f"/api/competitions/{comp}/teams/me/requests", headers=_auth(outsider))).status_code == 403
+
+
+async def _make_private_competition(client) -> dict:
+    """Return the full create response (id + invite_code, visible to the creator)
+    for a private team competition."""
+    token = await admin_token(client)
+    resp = await client.post(
+        "/api/competitions",
+        json={"name": "Private", "participation_mode": "team", "visibility": "private"},
+        headers=_auth(token),
+    )
+    return resp.json()
+
+
+async def test_create_team_on_private_competition_blocks_non_member(client):
+    """GHSA-4mmf: a private competition must not be enterable by POSTing a team
+    with just its id — before the fix this granted Participant + full competitor
+    access without the invite code. It now 404s (existence undisclosed), and the
+    roster listing does too."""
+    comp = await _make_private_competition(client)
+    stranger = await _register(client, "stranger@example.com", "Stranger")
+
+    resp = await client.post(
+        f"/api/competitions/{comp['id']}/teams",
+        json={"name": "Intruder"},
+        headers=_auth(stranger),
+    )
+    assert resp.status_code == 404
+
+    listing = await client.get(
+        f"/api/competitions/{comp['id']}/teams", headers=_auth(stranger)
+    )
+    assert listing.status_code == 404
+
+
+async def test_create_team_on_private_competition_allowed_after_joining_by_code(client):
+    """The legitimate flow the gate preserves: a competitor who joined the private
+    competition with its invite code may then create a team and see the roster."""
+    comp = await _make_private_competition(client)
+    member = await _register(client, "member@example.com", "Member")
+
+    joined = await client.post(
+        "/api/competitions/join",
+        json={"invite_code": comp["invite_code"]},
+        headers=_auth(member),
+    )
+    assert joined.status_code == 200
+
+    created = await client.post(
+        f"/api/competitions/{comp['id']}/teams",
+        json={"name": "Legit"},
+        headers=_auth(member),
+    )
+    assert created.status_code == 201
+
+    listing = await client.get(
+        f"/api/competitions/{comp['id']}/teams", headers=_auth(member)
+    )
+    assert listing.status_code == 200
+    assert len(listing.json()) == 1

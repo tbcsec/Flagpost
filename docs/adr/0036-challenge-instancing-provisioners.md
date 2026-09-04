@@ -1,6 +1,7 @@
 # ADR-0036: Challenge instancing — provisioner contract, lifecycle, and flag semantics
 
-**Status:** Accepted (amended 2026-08-27 — see "Amendment: egress model")
+**Status:** Accepted (amended through 2026-09-04 — see the Amendment sections:
+egress model, HTTP routing, Kubernetes kind, Docker per-instance networks)
 **Date:** 2026-08-27
 **Architecture reference:** `ARCHITECTURE.md` §3 (events), §5 (automation), §7
 (RBAC), §11 (modules). The instancing section itself is added to
@@ -329,3 +330,38 @@ This closes the last deferral from the #319 amendment; ADR-0036 is now fully
 realised across docker + kubernetes. The admin-bot phase once sketched in #266's
 phasing is **not on the roadmap** (owner decision, 2026-08-30) — it may return
 someday, but no further instancing work is planned.
+
+## Amendment: Docker per-instance networks (GHSA-vgrr, 2026-09-04)
+
+The egress amendment above settled that a **normal bridge** is required (an
+`internal` one can't publish a port) and that egress-deny is host-firewall-owned.
+It left **peer isolation** — one team's exploited box reaching another's — resting
+on that same host firewall, because every instance shared the one
+`flagpost-instances` bridge and so could reach every other by container IP. A pwn
+challenge hands the competitor a shell, so this was the live lateral-movement
+path the Kubernetes kind already closed with a per-instance NetworkPolicy.
+
+**Decision:** on Docker, a published-port (TCP) or `none` instance gets its **own**
+bridge, `flagpost-net-<instance_id>`, instead of the shared one. Peers land on
+different bridges with no route between them — the same default-deny-between-peers
+posture the k8s NetworkPolicy gives, achieved with the network driver rather than
+a policy object. Reachability is unchanged: a TCP instance is still reached
+through its *published host port* (a normal bridge NATs it), never over the
+shared network, so nothing about the exposure story changes. The bridge is
+labelled managed + instance, created before the container and removed with it in
+`destroy`; a bridge orphaned by a crash-then-AutoRemove is swept by the reaper
+under the same two-tick guard as orphan containers (so a network momentarily
+empty between its create and its container attaching is never mistaken for an
+orphan). No new socket-proxy scope: `NETWORKS` + `POST` — already required for the
+`network_isolation` leg and container create — cover network create/inspect/
+remove, and the probe `validate()` leg now exercises the whole path.
+
+**Scope / accepted residual:** `exposure=http` instances stay on the shared
+`flagpost-instances` bridge, because the caddy-docker-proxy ingress must share a
+network to reach them by IP (the #319 routing amendment). Isolating HTTP peers
+too means connecting the ingress to each per-instance bridge — an **opt-in**
+follow-up, since it needs the operator's ingress container named and
+`CADDY_INGRESS_NETWORKS` widened, and it can't be verified without a live caddy.
+It is lower-risk than the TCP case (an HTTP competitor drives the app through a
+browser, not a shell) and is recorded in `docs/THREAT_MODEL.md` → Residual risks.
+Kubernetes is unaffected — its NetworkPolicy already covers every exposure.

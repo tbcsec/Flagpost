@@ -55,6 +55,20 @@ LABEL_COMPETITION = "io.flagpost.competition_id"
 CADDY_LABEL_HOST = "caddy"
 CADDY_LABEL_PROXY = "caddy.reverse_proxy"
 
+# Per-instance network isolation (GHSA-vgrr). A published-port (TCP) instance
+# gets its OWN throwaway bridge named ``flagpost-net-<instance_id>`` instead of
+# sharing the single flat ``flagpost-instances`` bridge, so a competitor who gets
+# code execution in their own box cannot reach a neighbour's over the Docker
+# network — the peer sits on a different bridge with no route to it. Reachability
+# is unchanged: a TCP instance is still reached through its *published host port*
+# (a normal bridge NATs it in), never over the shared network. `none` has no
+# network at all. HTTP instances stay on the shared bridge because the
+# caddy-docker-proxy ingress must share a network to reach them by IP (ADR-0036
+# amendment) — isolating those too is an opt-in follow-up (connect the ingress to
+# each per-instance net). The bridge carries the managed + instance labels so the
+# reaper's orphan sweep can remove one whose container died without teardown.
+_INSTANCE_NET_PREFIX = "flagpost-net-"
+
 # Bound outbound calls. Pulls are slow (a fresh image over the network); the
 # rest are local proxy round-trips. These are hang-catchers, not budgets.
 _TIMEOUT_QUICK = 10.0
@@ -278,6 +292,73 @@ class DockerProvisioner(Provisioner):
                     f"request to the container runtime failed: {exc}"
                 ) from exc
 
+    # --- per-instance network isolation (GHSA-vgrr) --------------------------
+
+    def _instance_network_name(self, instance_id: str) -> str:
+        return f"{_INSTANCE_NET_PREFIX}{instance_id}"
+
+    def _needs_instance_network(self, spec: ProvisionSpec) -> bool:
+        """True for a published-port (TCP) instance — the only exposure that gets
+        its own bridge. HTTP rides the shared caddy bridge; `none` has no network.
+        Mirrors exactly the branch in :meth:`_container_body` that sets a
+        per-instance ``NetworkMode``, so the two never drift."""
+        return spec.exposure not in ("http", "none") and bool(spec.host_ports)
+
+    async def _ensure_network(self, name: str, instance_id: str) -> None:
+        """Create the per-instance bridge if absent (idempotent). A **normal**
+        bridge, never ``internal`` — Docker can't publish a TCP port from an
+        internal network (ADR-0036 amendment). Labelled so the orphan sweep can
+        find a dangling one."""
+        resp = await self._request(
+            "POST",
+            "/networks/create",
+            json={
+                "Name": name,
+                "Driver": "bridge",
+                "CheckDuplicate": True,
+                "Internal": False,
+                "Attachable": False,
+                "Labels": {LABEL_MANAGED: "true", LABEL_INSTANCE: instance_id},
+            },
+            timeout=_TIMEOUT_QUICK,
+        )
+        # 201 created; 409 already exists (idempotent re-provision) — both fine.
+        if resp.status_code not in (201, 409):
+            raise ProvisionerError(
+                f"instance network create failed: {_daemon_detail(resp)}"
+            )
+
+    async def _instance_networks_of(self, handle: str) -> list[str]:
+        """The per-instance bridges a container is attached to — read by
+        inspecting it, so teardown can remove them *after* the container is gone
+        (once removed, they can no longer be looked up by container). Only our
+        ``flagpost-net-*`` bridges match; the shared bridge and `none` never do."""
+        resp = await self._request(
+            "GET", f"/containers/{handle}/json", timeout=_TIMEOUT_QUICK
+        )
+        if resp.status_code != 200:
+            return []
+        nets = ((resp.json().get("NetworkSettings") or {}).get("Networks")) or {}
+        return [name for name in nets if name.startswith(_INSTANCE_NET_PREFIX)]
+
+    async def _remove_network(self, name: str) -> None:
+        """Best-effort per-instance network removal. A bridge that briefly
+        outlives its container is harmless (nothing can be on it) and the orphan
+        sweep retries, so a failure here only logs — it never fails a teardown."""
+        try:
+            resp = await self._request(
+                "DELETE", f"/networks/{name}", timeout=_TIMEOUT_QUICK
+            )
+        except ProvisionerError as exc:
+            logger.warning("instance network cleanup failed (%s): %s", name, exc)
+            return
+        # 204 removed; 404 already gone. 403/409 (still attached, or a proxy that
+        # denies DELETE /networks) is logged — a stray empty bridge isn't a breach.
+        if resp.status_code not in (204, 404):
+            logger.warning(
+                "instance network %s not removed: %s", name, _daemon_detail(resp)
+            )
+
     # --- lifecycle -----------------------------------------------------------
 
     def _container_body(self, spec: ProvisionSpec) -> dict[str, Any]:
@@ -339,7 +420,11 @@ class DockerProvisioner(Provisioner):
             # No published port ⇒ no netns to publish into: full isolation.
             host_config["NetworkMode"] = "none"
         else:
-            host_config["NetworkMode"] = self._cfg.network
+            # TCP: the container's OWN per-instance bridge (GHSA-vgrr), so a
+            # neighbour on a different bridge has no route to it. Competitors
+            # still reach it via the published host port below (a normal bridge
+            # NATs it). create() ensures this network exists before the container.
+            host_config["NetworkMode"] = self._instance_network_name(spec.instance_id)
             bindings: dict[str, list[dict[str, str]]] = {}
             for container_port, host_port in spec.host_ports.items():
                 key = f"{container_port}/tcp"
@@ -375,6 +460,14 @@ class DockerProvisioner(Provisioner):
         pulled, detail = await self._pull_image(spec.image_ref)
         if not pulled:
             raise ProvisionerError(f"image pull failed: {detail}")
+
+        # A published-port (TCP) instance gets its own bridge first, so the
+        # container attaches to it at create time (GHSA-vgrr). A failed start
+        # tears the container down via _safe_destroy, which also removes the net.
+        if self._needs_instance_network(spec):
+            await self._ensure_network(
+                self._instance_network_name(spec.instance_id), spec.instance_id
+            )
 
         name = f"flagpost-inst-{spec.instance_id}"
         created = await self._request(
@@ -449,6 +542,10 @@ class DockerProvisioner(Provisioner):
             )
 
     async def destroy(self, handle: str) -> None:
+        # Read the container's per-instance bridge(s) BEFORE removing it — once
+        # the container is gone they can't be found by container id (the orphan
+        # sweep is the backstop for a container that AutoRemoved out from under us).
+        networks = await self._instance_networks_of(handle)
         resp = await self._request(
             "DELETE",
             f"/containers/{handle}",
@@ -457,9 +554,13 @@ class DockerProvisioner(Provisioner):
         )
         # 204 = removed. 404 = already gone (AutoRemove race / double reap) —
         # idempotent no-op, not an error (the contract requires this).
-        if resp.status_code in (204, 404):
-            return
-        raise ProvisionerError(f"container remove failed: {_daemon_detail(resp)}")
+        if resp.status_code not in (204, 404):
+            raise ProvisionerError(f"container remove failed: {_daemon_detail(resp)}")
+        # Tear down the now-empty per-instance bridge(s). Best-effort: a cleanup
+        # failure logs and leaves a harmless empty net for the sweep, never
+        # raising (the container — the thing that mattered — is already gone).
+        for name in networks:
+            await self._remove_network(name)
 
     async def list(self) -> list[str]:
         resp = await self._request(
@@ -476,6 +577,41 @@ class DockerProvisioner(Provisioner):
                 f"listing instances failed: {_daemon_detail(resp)}"
             )
         return [c["Id"] for c in resp.json()]
+
+    async def list_orphan_networks(self) -> set[str]:
+        """Managed per-instance bridges with no attached container — candidates
+        for the reaper's orphan sweep (a bridge whose container AutoRemoved after
+        crashing, so ``destroy`` never saw it). The reaper applies a two-tick rule
+        on top, so a network briefly empty between its create and its container's
+        attach is never mistaken for an orphan."""
+        resp = await self._request(
+            "GET",
+            "/networks",
+            params={"filters": json.dumps({"label": [f"{LABEL_MANAGED}=true"]})},
+            timeout=_TIMEOUT_QUICK,
+        )
+        if resp.status_code != 200:
+            raise ProvisionerError(
+                f"listing instance networks failed: {_daemon_detail(resp)}"
+            )
+        orphans: set[str] = set()
+        for net in resp.json():
+            name = net.get("Name", "")
+            net_id = net.get("Id")
+            if not name.startswith(_INSTANCE_NET_PREFIX) or not net_id:
+                continue
+            # The list payload doesn't reliably populate attached containers;
+            # inspect to be sure a bridge is truly empty before flagging it.
+            detail = await self._request(
+                "GET", f"/networks/{net_id}", timeout=_TIMEOUT_QUICK
+            )
+            if detail.status_code == 200 and not (detail.json().get("Containers") or {}):
+                orphans.add(name)
+        return orphans
+
+    async def remove_network(self, name: str) -> None:
+        """Remove a per-instance bridge by name (reaper orphan sweep)."""
+        await self._remove_network(name)
 
     # --- validate() — the staged "Test connection" (ADR-0036 §1) -------------
 
@@ -725,6 +861,19 @@ class DockerProvisioner(Provisioner):
         body = self._container_body(spec)
         body["Cmd"] = self._cfg.probe_cmd
 
+        # The probe is exposure=tcp, so it drives the REAL per-instance-bridge
+        # path (GHSA-vgrr): this leg now also proves create/attach/publish/remove
+        # of a per-instance network works through the proxy (NETWORKS+POST) at
+        # Test-Connection time, not first on event day.
+        probe_net = self._instance_network_name(spec.instance_id)
+        try:
+            await self._ensure_network(probe_net, spec.instance_id)
+        except ProvisionerError as exc:
+            legs.append(
+                CheckResult("probe_run", False, f"instance network create failed: {exc}")
+            )
+            return legs
+
         created = await self._request(
             "POST", "/containers/create",
             params={"name": "flagpost-probe"}, json=body, timeout=_TIMEOUT_LIFECYCLE,
@@ -733,6 +882,7 @@ class DockerProvisioner(Provisioner):
             legs.append(
                 CheckResult("probe_run", False, f"create failed: {_daemon_detail(created)}")
             )
+            await self._remove_network(probe_net)
             return legs
         handle = created.json()["Id"]
         try:
@@ -770,4 +920,8 @@ class DockerProvisioner(Provisioner):
             )
         finally:
             await self._safe_destroy(handle)
+            # The single-shot probe often AutoRemoves before _safe_destroy runs
+            # (so destroy can't see its net), so tear the bridge down explicitly
+            # too — idempotent (a 404 is a no-op) if destroy already got it.
+            await self._remove_network(probe_net)
         return legs

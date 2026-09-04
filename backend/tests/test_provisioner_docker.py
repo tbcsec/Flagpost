@@ -81,6 +81,13 @@ class _Router:
                     200,
                     content=b'{"status":"Status: Downloaded newer image"}\n',
                 )
+            # Per-instance network calls succeed by default (GHSA-vgrr): a TCP
+            # create makes its own bridge and destroy removes it. Tests that
+            # assert the specifics add explicit routes, which win by matching first.
+            if request.method == "POST" and request.url.path.endswith("/networks/create"):
+                return httpx.Response(201, json={"Id": "net-default"})
+            if request.method == "DELETE" and "/networks/" in request.url.path:
+                return httpx.Response(204)
             return httpx.Response(500, json={"message": f"unrouted {request.method} {request.url.path}"})
 
         return httpx.MockTransport(handler)
@@ -90,6 +97,12 @@ class _Router:
             if r.method == "POST" and r.url.path.endswith("/containers/create"):
                 return json.loads(r.content)
         raise AssertionError("no create request captured")
+
+    def network_create_body(self) -> dict:
+        for r in self.requests:
+            if r.method == "POST" and r.url.path.endswith("/networks/create"):
+                return json.loads(r.content)
+        raise AssertionError("no network create request captured")
 
     def saw(self, method: str, contains: str) -> bool:
         return any(
@@ -126,8 +139,9 @@ async def test_create_composes_a_hardened_payload():
     assert hc["Memory"] == 256 * 1024 * 1024
     assert hc["NanoCpus"] == 1_000_000_000
     assert hc["PidsLimit"] == 256
-    # Exposure: attached to the isolated network, port published on bind_ip.
-    assert hc["NetworkMode"] == "flagpost-instances"
+    # Exposure: attached to its OWN per-instance bridge (GHSA-vgrr), port
+    # published on bind_ip — a neighbour on another bridge has no route to it.
+    assert hc["NetworkMode"] == "flagpost-net-inst-1"
     assert hc["PortBindings"] == {"1337/tcp": [{"HostIp": "0.0.0.0", "HostPort": "30001"}]}
     assert body["ExposedPorts"] == {"1337/tcp": {}}
     # Flag injected in-memory as env; author env preserved.
@@ -255,6 +269,134 @@ async def test_create_cleans_up_when_start_fails():
     assert router.saw("DELETE", "/containers/orphan")
 
 
+# --- per-instance network isolation (GHSA-vgrr) ------------------------------
+
+
+async def test_tcp_create_provisions_a_per_instance_bridge():
+    router = (
+        _Router()
+        .on("POST", "/networks/create", httpx.Response(201, json={"Id": "net-a"}))
+        .on("POST", "/containers/create", httpx.Response(201, json={"Id": "c1"}))
+        .on("POST", "/start", httpx.Response(204))
+    )
+    prov = DockerProvisioner(_cfg(), transport=router.transport())
+    await prov.create(_spec())
+
+    # A dedicated normal bridge, named for the instance, labelled managed —
+    # created BEFORE the container so it can attach at create time.
+    net = router.network_create_body()
+    assert net["Name"] == "flagpost-net-inst-1"
+    assert net["Driver"] == "bridge"
+    assert net["Internal"] is False  # an internal net can't publish a TCP port
+    assert net["Labels"][LABEL_MANAGED] == "true"
+    assert net["Labels"]["io.flagpost.instance_id"] == "inst-1"
+    paths = [(r.method, r.url.path) for r in router.requests]
+    net_i = paths.index(("POST", "/networks/create"))
+    create_i = next(i for i, p in enumerate(paths) if p[1].endswith("/containers/create"))
+    assert net_i < create_i
+    # The container attaches to that per-instance bridge, not the shared one.
+    assert router.create_body()["HostConfig"]["NetworkMode"] == "flagpost-net-inst-1"
+
+
+async def test_http_create_stays_on_the_shared_bridge():
+    # HTTP rides the shared caddy bridge (the ingress must share a net to reach
+    # it), so NO per-instance network is created for it.
+    router = (
+        _Router()
+        .on("POST", "/containers/create", httpx.Response(201, json={"Id": "web1"}))
+        .on("POST", "/start", httpx.Response(204))
+    )
+    prov = DockerProvisioner(
+        _cfg(chal_base_domain="chal.example.org"), transport=router.transport()
+    )
+    await prov.create(
+        _spec(exposure="http", subdomain="k7m2q9xz", ports=[8080], host_ports={})
+    )
+    assert router.create_body()["HostConfig"]["NetworkMode"] == "flagpost-instances"
+    assert not router.saw("POST", "/networks/create")
+
+
+async def test_none_create_makes_no_network():
+    router = (
+        _Router()
+        .on("POST", "/containers/create", httpx.Response(201, json={"Id": "x"}))
+        .on("POST", "/start", httpx.Response(204))
+    )
+    prov = DockerProvisioner(_cfg(), transport=router.transport())
+    await prov.create(_spec(exposure="none", host_ports={}, ports=[]))
+    assert router.create_body()["HostConfig"]["NetworkMode"] == "none"
+    assert not router.saw("POST", "/networks/create")
+
+
+async def test_destroy_removes_the_per_instance_bridge():
+    inspect = {"NetworkSettings": {"Networks": {"flagpost-net-inst-1": {}}}}
+    router = (
+        _Router()
+        .on("GET", "/containers/c1/json", httpx.Response(200, json=inspect))
+        .on("DELETE", "/containers/c1", httpx.Response(204))
+        .on("DELETE", "/networks/flagpost-net-inst-1", httpx.Response(204))
+    )
+    prov = DockerProvisioner(_cfg(), transport=router.transport())
+    await prov.destroy("c1")
+    # Container removed, THEN its bridge (read off the container before removal).
+    assert router.saw("DELETE", "/containers/c1")
+    assert router.saw("DELETE", "/networks/flagpost-net-inst-1")
+    paths = [(r.method, r.url.path) for r in router.requests]
+    assert paths.index(("DELETE", "/containers/c1")) < paths.index(
+        ("DELETE", "/networks/flagpost-net-inst-1")
+    )
+
+
+async def test_destroy_leaves_the_shared_bridge_alone():
+    # A container on the shared bridge (an HTTP instance) must NOT trigger a
+    # network removal — only per-instance flagpost-net-* bridges are ours to drop.
+    inspect = {"NetworkSettings": {"Networks": {"flagpost-instances": {}}}}
+    router = (
+        _Router()
+        .on("GET", "/containers/web1/json", httpx.Response(200, json=inspect))
+        .on("DELETE", "/containers/web1", httpx.Response(204))
+    )
+    prov = DockerProvisioner(_cfg(), transport=router.transport())
+    await prov.destroy("web1")
+    assert not router.saw("DELETE", "/networks/")
+
+
+async def test_destroy_survives_a_network_cleanup_failure():
+    # The container is gone (what matters); a failed net delete only logs, so
+    # destroy still returns cleanly and never leaves the instance "half-torn".
+    inspect = {"NetworkSettings": {"Networks": {"flagpost-net-inst-1": {}}}}
+    router = (
+        _Router()
+        .on("GET", "/containers/c1/json", httpx.Response(200, json=inspect))
+        .on("DELETE", "/containers/c1", httpx.Response(204))
+        .on("DELETE", "/networks/flagpost-net-inst-1", httpx.Response(500, json={"message": "boom"}))
+    )
+    prov = DockerProvisioner(_cfg(), transport=router.transport())
+    await prov.destroy("c1")  # no raise despite the 500 on network removal
+
+
+async def test_list_orphan_networks_finds_only_empty_managed_bridges():
+    listing = [
+        {"Name": "flagpost-net-a", "Id": "na"},      # managed, empty -> orphan
+        {"Name": "flagpost-net-b", "Id": "nb"},      # managed, still has a container
+        {"Name": "flagpost-instances", "Id": "ns"},  # shared, not per-instance
+    ]
+    router = (
+        _Router()
+        .on("GET", "/networks/na", httpx.Response(200, json={"Containers": {}}))
+        .on("GET", "/networks/nb", httpx.Response(200, json={"Containers": {"c": {}}}))
+        .on("GET", "/networks", httpx.Response(200, json=listing))
+    )
+    prov = DockerProvisioner(_cfg(), transport=router.transport())
+    assert await prov.list_orphan_networks() == {"flagpost-net-a"}
+    # The listing is scoped to managed networks by the label filter.
+    listreq = next(
+        r for r in router.requests
+        if r.method == "GET" and r.url.path.endswith("/networks")
+    )
+    assert LABEL_MANAGED in listreq.url.params["filters"]
+
+
 # --- status / endpoints / destroy / list ------------------------------------
 
 
@@ -350,6 +492,20 @@ async def test_validate_all_green():
     assert router.saw("DELETE", "/containers/probe1")
     # The reachability leg dialed the daemon-assigned port on the public host.
     assert "39999" in legs[-1].detail
+
+
+async def test_validate_probe_exercises_the_per_instance_network_path():
+    # The probe is exposure=tcp, so Test-connection now proves the whole
+    # per-instance-bridge path works through the proxy (NETWORKS+POST): a bridge
+    # is created for the probe and torn down with it (GHSA-vgrr).
+    router = _healthy_router()
+    prov = DockerProvisioner(
+        _cfg(), transport=router.transport(), tcp_probe=lambda host, port: _true()
+    )
+    legs = await prov.validate()
+    assert all(leg.ok for leg in legs)
+    assert router.saw("POST", "/networks/create")
+    assert router.saw("DELETE", "/networks/flagpost-net-probe")
 
 
 async def test_validate_adds_http_leg_probing_the_wildcard_when_configured():

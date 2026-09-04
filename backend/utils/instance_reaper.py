@@ -9,10 +9,12 @@ does four bounded jobs, each a cheap no-op when nothing is due:
    after it was created means the background task died; mark it ``failed``.
 3. **Expiring retry** — a row left ``expiring`` by a destroy that failed is
    retried (``teardown`` is idempotent).
-4. **Orphan GC** — backend containers with no live row are destroyed. Guarded
-   by a *two-tick* rule: a container is only reaped if it looked orphaned on
-   the previous pass too, so the brief window between ``create()`` returning
-   and the row recording its handle can't cause a live instance to be killed.
+4. **Orphan GC** — backend containers with no live row are destroyed, then
+   per-instance networks with no container (docker; GHSA-vgrr) are removed.
+   Both are guarded by a *two-tick* rule: an object is only reaped if it looked
+   orphaned on the previous pass too, so the brief window between ``create()``
+   returning and the row recording its handle (or the container attaching to a
+   just-created network) can't cause a live instance to be killed.
 
 Comparisons are done in Python (``ensure_aware_utc``) to sidestep SQLite's
 text-datetime ordering, matching ``emit_lifecycle_events`` / retention.
@@ -47,6 +49,12 @@ REAP_BATCH = 25
 # process). The two-tick rule reaps only handles present in both this pass and
 # the last, closing the create()→commit-handle race.
 _orphan_seen: set[str] = set()
+
+# Same idea for per-instance networks (docker; GHSA-vgrr): a bridge whose
+# container crashed+AutoRemoved before teardown saw it. The two-tick rule keeps
+# the sweep from deleting a network in the sliver between its create and its
+# container attaching (when it is legitimately, momentarily, empty).
+_orphan_networks_seen: set[str] = set()
 
 
 async def reap_instances(db_factory, *, now: datetime | None = None) -> None:
@@ -135,7 +143,7 @@ async def reap_instances(db_factory, *, now: datetime | None = None) -> None:
 
 
 async def _reap_orphans(db_factory) -> None:
-    global _orphan_seen
+    global _orphan_seen, _orphan_networks_seen
     async with db_factory() as db:
         settings = await load_settings(db)
         if (
@@ -144,6 +152,7 @@ async def _reap_orphans(db_factory) -> None:
             or settings.backend not in SITE_BACKENDS
         ):
             _orphan_seen = set()
+            _orphan_networks_seen = set()
             return
         live_handles = set(
             (
@@ -175,3 +184,21 @@ async def _reap_orphans(db_factory) -> None:
             logger.info("reaped orphan container %s (no live instance row)", handle)
         except Exception as exc:  # noqa: BLE001
             logger.warning("failed to reap orphan container %s: %s", handle, exc)
+
+    # Orphan per-instance networks (docker; GHSA-vgrr). `destroy` removes a
+    # network with its container, so this only catches the tail: a bridge whose
+    # container AutoRemoved after crashing. No-op on backends that don't create
+    # per-instance networks (the base returns an empty set). Same two-tick guard.
+    try:
+        orphan_nets = await provisioner.list_orphan_networks()
+    except Exception as exc:  # noqa: BLE001 — a listing failure just skips this pass
+        logger.warning("orphan reap could not list instance networks: %s", exc)
+        return
+    confirmed_nets = orphan_nets & _orphan_networks_seen
+    _orphan_networks_seen = orphan_nets
+    for name in list(confirmed_nets)[:REAP_BATCH]:
+        try:
+            await provisioner.remove_network(name)
+            logger.info("reaped orphan instance network %s (no container)", name)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("failed to reap orphan network %s: %s", name, exc)

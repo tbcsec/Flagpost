@@ -18,15 +18,14 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
+import { useBrandSettings } from "@/lib/hooks/use-site-settings";
 import { useRegister } from "@/lib/hooks/use-users";
 
 export default function RegisterPage() {
   const t = useTranslations("auth.register");
   const router = useRouter();
   const register = useRegister();
-  const { data: settings } = useSiteSettings();
-  const brand = settings ?? FALLBACK_SETTINGS;
+  const brand = useBrandSettings();
   const platformName = brand.platform_name;
   const registrationOpen = brand.registration_open;
   const emailRequired = brand.email_required;

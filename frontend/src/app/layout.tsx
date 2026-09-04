@@ -12,40 +12,58 @@ import "@fontsource/space-grotesk/500.css";
 import "@fontsource/space-grotesk/600.css";
 import "@fontsource/space-grotesk/700.css";
 
+import { brandStyleVars } from "@/lib/brand";
+import { getServerBrand } from "@/lib/server/branding";
+
 import { Providers } from "./providers";
 import "./globals.css";
 
-export const metadata: Metadata = {
-  title: "Flagpost",
-  description: "Flagpost — open-source CTF competition management platform",
-};
-
-// `data-palette` selects the design-system palette (§9); Harbor is the shipped
-// default. The token layer in globals.css drives all colour. The real theme (the
-// admin's site default + the user's palette override + the accent) is applied by
-// <ThemeApplier>; the inline script below repaints from the last-known cached
-// theme *before* first paint so a non-default theme doesn't flash the default.
-const NO_FLASH = `(function(){try{var r=localStorage.getItem('fp:site-theme');if(!r)return;var t=JSON.parse(r),e=document.documentElement,s=e.style;if(t.palette)e.setAttribute('data-palette',t.palette);if(t.mode)e.setAttribute('data-mode',t.mode);if(t.vars){for(var k in t.vars)s.setProperty(k,t.vars[k]);}else if(t.primary){s.setProperty('--primary',t.primary);s.setProperty('--ring',t.ring||t.primary);s.setProperty('--primary-foreground',t.primaryForeground||'0 0% 100%');}}catch(e){}})();`;
+// The tab title is branding too (§9) — serving the platform name from the
+// first response beats the old static "Flagpost" that a client effect
+// overwrote only after the settings fetch. getServerBrand is request-cached,
+// so this shares its work with the layout below.
+export async function generateMetadata(): Promise<Metadata> {
+  const brand = await getServerBrand();
+  return {
+    title: brand.platformName,
+    // Branded, not hardcoded: link unfurls/search snippets on a white-labeled
+    // instance must not leak the product name (the in-app "Powered by
+    // Flagpost" footer remains the attribution surface).
+    description: `${brand.platformName} — CTF competition platform`,
+  };
+}
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   // Cookie-resolved locale (ADR-0029, src/i18n/request.ts). Reading it makes
   // every route render per-request — inherent to a cookie-based locale, and
   // fine for an app that was never meaningfully static (auth-gated, client-heavy).
-  const [locale, messages] = await Promise.all([getLocale(), getMessages()]);
+  //
+  // Branding rides the same per-request render (#362): the `fp_brand` cookie
+  // (kept warm by ThemeApplier, including the viewer's own palette override) —
+  // or a cold-start backend fetch — is resolved server-side and painted into
+  // the initial HTML, so a rebranded instance never flashes the defaults.
+  const [locale, messages, brand] = await Promise.all([
+    getLocale(),
+    getMessages(),
+    getServerBrand(),
+  ]);
   return (
-    // The NO_FLASH script below intentionally rewrites the palette/mode/accent on
-    // <html> *before* hydration from the cached theme, so the server-rendered
-    // defaults here won't match the client's first paint. That's expected — so
-    // suppress the (one-level) hydration warning on this element, the standard
-    // pattern for a pre-hydration theme script.
-    <html lang={locale} data-palette="harbor" data-mode="dark" suppressHydrationWarning>
+    // suppressHydrationWarning stays (one level): browser extensions commonly
+    // mutate <html> attributes before hydration, and ThemeApplier re-applies
+    // the theme post-hydration — the standard pattern for a themed root.
+    <html
+      lang={locale}
+      data-palette={brand.palette}
+      data-mode={brand.mode}
+      style={brandStyleVars(brand)}
+      suppressHydrationWarning
+    >
       <body className="min-h-screen bg-background text-foreground antialiased">
-        <script dangerouslySetInnerHTML={{ __html: NO_FLASH }} />
         {/* Serializes the full catalog into every response — fine at today's
             size; switch to a per-namespace pick when extraction grows the
             catalog (ADR-0029, consequences). */}
         <NextIntlClientProvider locale={locale} messages={messages}>
-          <Providers>{children}</Providers>
+          <Providers initialBrand={brand}>{children}</Providers>
         </NextIntlClientProvider>
       </body>
     </html>

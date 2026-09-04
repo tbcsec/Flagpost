@@ -47,6 +47,14 @@ services:
         # uses to reach the API (the Caddy front door).
         NEXT_PUBLIC_API_URL: ${PUBLIC_ORIGIN:-http://localhost:8080}
     restart: unless-stopped
+    environment:
+      # Where the Next SERVER reaches the backend (runtime, not baked): the
+      # cold-start branding fetch (#362) that paints custom logo/name/colors on
+      # a visitor's very first request, before any brand cookie exists. The
+      # browser-facing origin is useless for this — it points at Caddy/localhost
+      # from inside the container. Unset/unreachable degrades gracefully to the
+      # shipped default branding.
+      INTERNAL_API_URL: http://backend:8000
     expose:
       - "3000"          # internal only; Caddy is the public entrypoint
     depends_on:

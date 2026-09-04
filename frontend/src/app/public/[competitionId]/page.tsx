@@ -23,7 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
+import { useBrandSettings } from "@/lib/hooks/use-site-settings";
 import {
   usePublicActivity,
   usePublicInsights,
@@ -81,8 +81,7 @@ function PublicScoreboardContent({
   // Recent-solves feed drives venue mode's first-blood splash; only polled while
   // venue mode is on, so the static page adds no extra request load.
   const { data: activity } = usePublicActivity(competitionId, { enabled: venue });
-  const { data: settings } = useSiteSettings();
-  const brand = settings ?? FALLBACK_SETTINGS;
+  const brand = useBrandSettings();
 
   const enterVenue = () => {
     router.replace(`${pathname}?venue=1`);

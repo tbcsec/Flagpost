@@ -10,7 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { RichTextView } from "@/components/ui/rich-text-view";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePage } from "@/lib/hooks/use-pages";
-import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
+import { useBrandSettings } from "@/lib/hooks/use-site-settings";
 import { useAuthStore } from "@/stores/auth";
 import type { PageContent } from "@/lib/types";
 
@@ -85,8 +85,7 @@ export default function CustomPage() {
   const params = useParams<{ slug: string }>();
   const slug = typeof params?.slug === "string" ? params.slug : "";
   const status = useAuthStore((s) => s.status);
-  const { data: settings } = useSiteSettings();
-  const brand = settings ?? FALLBACK_SETTINGS;
+  const brand = useBrandSettings();
 
   // Wait for the session to resolve before choosing chrome, or an authenticated
   // reader sees the signed-out layout flash before the sidebar appears.

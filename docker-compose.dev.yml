@@ -94,6 +94,9 @@ services:
       # Consumed in the browser, so it must resolve from the host, not the
       # compose network — hence localhost, not the `backend` service name.
       NEXT_PUBLIC_API_URL: http://localhost:8000
+      # Consumed by the Next SERVER (cold-start branding fetch, #362) — the
+      # opposite: it must resolve from inside the compose network.
+      INTERNAL_API_URL: http://backend:8000
     ports:
       - "3000:3000"
     volumes:

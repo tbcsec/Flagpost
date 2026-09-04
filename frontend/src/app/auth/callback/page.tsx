@@ -16,15 +16,14 @@ import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRestoreSession } from "@/lib/hooks/use-users";
-import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
+import { useBrandSettings } from "@/lib/hooks/use-site-settings";
 
 function CallbackInner() {
   const t = useTranslations("auth.callback");
   const router = useRouter();
   const params = useSearchParams();
   const restore = useRestoreSession();
-  const { data: settings } = useSiteSettings();
-  const brand = settings ?? FALLBACK_SETTINGS;
+  const brand = useBrandSettings();
   // React 18 StrictMode double-invokes effects in dev; the refresh call rotates
   // the session, so guard against running it twice.
   const started = useRef(false);

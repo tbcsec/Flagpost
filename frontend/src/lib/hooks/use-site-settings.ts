@@ -7,6 +7,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiAssetUrl, siteSettingsApi } from "@/lib/api";
+import { useInitialBrand } from "@/lib/brand-context";
 import {
   DEFAULT_ACCENT,
   DEFAULT_PALETTE,
@@ -22,9 +23,6 @@ import type {
 import { useAuthStore } from "@/stores/auth";
 
 const SITE_SETTINGS_KEY = ["site-settings"] as const;
-// localStorage cache so the no-flash inline script (see layout) can apply the
-// last-known theme before the query resolves on a fresh load.
-export const SITE_THEME_CACHE_KEY = "fp:site-theme";
 
 export const FALLBACK_SETTINGS: SiteSettings = {
   platform_name: DEFAULT_PLATFORM_NAME,
@@ -52,7 +50,11 @@ function absolutizeLogo(s: SiteSettings): SiteSettings {
 }
 
 /** The site theme/branding. Rarely changes, so it's cached long and served from
- *  any page (public included). Falls back to the shipped defaults until loaded. */
+ *  any page (public included). `data` stays undefined until the fetch resolves —
+ *  deliberately no placeholder: a half-real settings object would corrupt
+ *  consumers that treat loaded data as authoritative (the Appearance form seeds
+ *  from it, the archive dialog words a destructive claim from it — #362 review).
+ *  Branding surfaces that need a pre-fetch value use useBrandSettings below. */
 export function useSiteSettings() {
   return useQuery({
     queryKey: SITE_SETTINGS_KEY,
@@ -60,6 +62,26 @@ export function useSiteSettings() {
     select: absolutizeLogo,
     staleTime: 5 * 60_000,
   });
+}
+
+/** Branding view for lockup/name surfaces (#362): the real settings once
+ *  loaded, else the shipped defaults overlaid with the server-injected brand
+ *  snapshot (cookie or cold-start fetch) — so a branded instance's logo, name
+ *  and wordmark are right from the very first client render, matching the
+ *  server-painted HTML. Only the BRAND fields differ from FALLBACK_SETTINGS;
+ *  operational fields (registration_open, demo_*, archive policy…) stay at the
+ *  fallback until real data lands, exactly like useSiteSettings. */
+export function useBrandSettings(): SiteSettings {
+  const { data } = useSiteSettings();
+  const brand = useInitialBrand();
+  return (
+    data ?? {
+      ...FALLBACK_SETTINGS,
+      platform_name: brand.platformName,
+      logo_url: brand.logoPath ? apiAssetUrl(brand.logoPath) : null,
+      show_wordmark: brand.showWordmark,
+    }
+  );
 }
 
 export function useUpdateSiteSettings() {

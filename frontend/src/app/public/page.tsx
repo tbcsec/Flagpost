@@ -8,7 +8,7 @@ import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { FALLBACK_SETTINGS, useSiteSettings } from "@/lib/hooks/use-site-settings";
+import { useBrandSettings } from "@/lib/hooks/use-site-settings";
 import { usePublicCompetitions } from "@/lib/hooks/use-public-scoreboard";
 
 // The public directory (no login): competitions that opted into a public
@@ -16,8 +16,7 @@ import { usePublicCompetitions } from "@/lib/hooks/use-public-scoreboard";
 export default function PublicDirectoryPage() {
   const t = useTranslations("scoreboard.public");
   const { data, isLoading } = usePublicCompetitions();
-  const { data: settings } = useSiteSettings();
-  const brand = settings ?? FALLBACK_SETTINGS;
+  const brand = useBrandSettings();
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-3xl flex-col gap-6 px-4 py-8">

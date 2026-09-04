@@ -47,6 +47,10 @@ services:
     image: ghcr.io/tbcsec/flagpost-frontend:demo
     pull_policy: always
     restart: unless-stopped
+    environment:
+      # Runtime (not baked): lets the Next server fetch branding for a
+      # visitor's very first request (#362) from inside the compose network.
+      INTERNAL_API_URL: http://backend:8000
     expose:
       - "3000"
     depends_on:

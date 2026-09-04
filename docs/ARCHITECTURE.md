@@ -989,10 +989,18 @@ This makes a few features possible without touching component code:
   the active palette, rather than a class scattered through every component —
   so a new dark palette needn't be enumerated in the variant.
 
-No flash on load: the resolved theme (palette + mode + any accent channels) is
-cached in `localStorage`, and a tiny inline script in the document head applies
-it before first paint; a `ThemeApplier` mounted above every page (public
-included) then reconciles it with the live site-settings read.
+No flash on load (#362): the resolved branding — palette + mode + accent
+channels, plus the logo path, platform name and wordmark flag — is cached in a
+server-readable `fp_brand` cookie (`frontend/src/lib/brand.ts`, strictly
+validated on read: it is an unauthenticated input to the server render). The
+root layout resolves it per request — cookie first, else a cold-start backend
+fetch via the server-only `INTERNAL_API_URL` (memoized ~30s), else the shipped
+defaults — and paints it into the initial HTML (`<html
+data-palette/data-mode/style>`, the `<title>`), so even a first-ever visit
+renders custom branding on frame one. A `ThemeApplier` mounted above every page
+(public included) reconciles with the live site-settings read once it resolves
+and rewrites the cookie; branding surfaces (lockup/name) read
+`useBrandSettings`, which serves the server snapshot until real data lands.
 
 Component library (shadcn/ui-style primitives) sits on top of this token
 layer, not the other way around — components should reference

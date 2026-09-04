@@ -434,6 +434,62 @@ async def test_personal_rule_crud_needs_no_permission_but_is_notify_self_only(cl
     assert resp.status_code == 404
 
 
+async def test_personal_rule_cannot_subscribe_to_a_staff_only_trigger(client):
+    """GHSA-x8v4: a competitor can't point a personal rule at a staff-only event
+    (challenge.flag_shared_detected → view_submissions) even though they'd be its
+    subject — that would turn covert anti-cheat detection into a self oracle."""
+    comp = await _competition(client)
+    ada = await _participant(client, comp, "ada@example.com")
+
+    blocked = await client.post(
+        "/api/automations/personal",
+        json=_notify_rule(
+            trigger="challenge.flag_shared_detected", target="self", competition_id=comp
+        ),
+        headers=_auth(ada),
+    )
+    assert blocked.status_code == 403
+
+    # A trigger they CAN observe (their own solves) is still allowed.
+    ok = await client.post(
+        "/api/automations/personal",
+        json=_notify_rule(
+            trigger="challenge.solved", target="self", competition_id=comp
+        ),
+        headers=_auth(ada),
+    )
+    assert ok.status_code == 201
+
+
+async def test_competition_scoped_grant_does_not_list_global_rule_configs(client):
+    """GHSA-x8v4: list_rules must not OR global org rules into a competition
+    listing for a competition-scoped automation_view holder (a Judge) — that
+    exposed global rules' full action configs (webhook URLs/headers, email
+    templates). get_rule already required a global grant for a global rule."""
+    comp = await _competition(client)
+    admin = await admin_token(client)
+    judge = await _judge(client, comp, "judge@example.com")
+
+    await _create_rule(
+        client,
+        admin,
+        name="Global secret",
+        actions=[{"type": "webhook", "url": "https://hooks.example.com/secret"}],
+    )
+    await _create_rule(client, judge, comp, name="Comp rule")
+
+    judge_listed = (
+        await client.get(f"/api/automations?competition_id={comp}", headers=_auth(judge))
+    ).json()
+    assert {r["name"] for r in judge_listed} == {"Comp rule"}  # global NOT surfaced
+
+    # Admin (global grant) still sees the global rule alongside the comp rule.
+    admin_listed = (
+        await client.get(f"/api/automations?competition_id={comp}", headers=_auth(admin))
+    ).json()
+    assert {r["name"] for r in admin_listed} == {"Global secret", "Comp rule"}
+
+
 async def test_personal_rule_fires_only_for_its_owner(client):
     comp = await _competition(client)
     chal = await _challenge(client, comp)

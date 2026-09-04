@@ -499,6 +499,7 @@ async def change_password(
     body: ChangePasswordRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> Response:
     """Change the current user's password.
 
@@ -514,12 +515,29 @@ async def change_password(
     administrator setting the password, a ban — and a holder can revoke any of
     their own tokens from /profile at any time.
     """
-    if not verify_password(body.current_password, current_user.password_hash):
+    # Throttle before the password check — an unthrottled password-taking
+    # endpoint is a brute-force oracle for anyone holding a stolen session, and
+    # was the one such endpoint left unthrottled (change-username/change-email
+    # already do this). 5/300s per user (GHSA-vv68).
+    if not await rate_limiter.hit(
+        f"change-password:{current_user.id}", limit=5, window_seconds=300
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many attempts — please wait a few minutes and try again",
+        )
+    # averify/ahash on the bounded hashing pool (#207), not the event loop:
+    # change-password ran argon2 synchronously at production cost (64 MiB, t=3),
+    # so concurrent calls from any authenticated user could stall the default
+    # single-worker deployment (GHSA-vv68).
+    if not await averify_password(
+        body.current_password, current_user.password_hash
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect",
         )
-    current_user.password_hash = hash_password(body.new_password)
+    current_user.password_hash = await ahash_password(body.new_password)
 
     sessions = (
         await db.execute(

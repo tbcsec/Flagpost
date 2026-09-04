@@ -175,6 +175,33 @@ async def test_change_password_updates_credential_and_revokes_sessions(client):
     assert new.status_code == 200
 
 
+async def test_change_password_is_throttled(client):
+    """GHSA-vv68: change-password is a password-taking endpoint, so it's rate
+    limited (5/300s) like change-username/change-email — a stolen session can't
+    brute-force the current password through it. The throttle fires BEFORE the
+    password check (a correct guess on the 6th try still 429s), so it's not an
+    oracle."""
+    login = await client.post(
+        "/api/auth/login",
+        json={"email": DEFAULT_ADMIN_EMAIL, "password": DEFAULT_ADMIN_PASSWORD},
+    )
+    auth = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    for _ in range(5):
+        r = await client.post(
+            "/api/auth/change-password",
+            json={"current_password": "wrong", "new_password": "irrelevant-123"},
+            headers=auth,
+        )
+        assert r.status_code == 400
+    blocked = await client.post(
+        "/api/auth/change-password",
+        json={"current_password": DEFAULT_ADMIN_PASSWORD, "new_password": "irrelevant-123"},
+        headers=auth,
+    )
+    assert blocked.status_code == 429
+
+
 async def test_registration_emits_user_registered_event(client):
     await _register(client, "evented@example.com")
     async with SessionLocal() as session:

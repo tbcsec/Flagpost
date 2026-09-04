@@ -55,13 +55,26 @@ of this; it cannot verify firewall rules. The privilege-posture leg proves the
 endpoint is a restricted socket **proxy**, never a raw `/var/run/docker.sock`
 (the app can't hold host-root through a mounted socket).
 
+The same firewall must drop **inter-instance** traffic on the bridge. Docker's
+default `icc=true` lets any container on the shared bridge open a connection to
+any other, so a competitor who exploits their own instance (the intended
+pwn/web solve) can reach a neighbour's on the same bridge by IP:port — which
+also sidesteps the unguessable-subdomain control on HTTP instances (GHSA-vgrr).
+`icc=false` would block this but breaks the shared Caddy ingress, so peer
+isolation on the docker backend is the operator's firewall rule (or a
+per-challenge network), **not** the default bridge — unlike the kubernetes
+backend, which enforces it in-cluster. Treat the shared bridge as a shared LAN.
+
 ### Kubernetes
 Isolation is **enforced in-cluster** by a per-instance NetworkPolicy (the upgrade
 over docker's documentation-only egress):
 
 - **deny mode** (default) — egress is DNS-only; the internet, control plane,
   peers, and metadata IP are all blocked at once. Peer isolation is free: a pod
-  that can't initiate any connection can't reach a neighbour.
+  that can't initiate any connection can't reach a neighbour. The DNS rule is
+  scoped to the cluster DNS pods (`k8s-app=kube-dns` in `kube-system`), not any
+  host on port 53 — otherwise "DNS-only" would itself be a full outbound channel
+  (DNS tunnelling / a reverse shell to `attacker:53`) (GHSA-vgrr).
 - **allow mode** — egress everywhere *except* the metadata IPs (both families)
   and, when `k8s_cluster_cidr` is configured, the cluster's pod/service ranges —
   so peers and the control plane stay unreachable even for an
@@ -80,6 +93,10 @@ no-policy positive control, so an air-gapped node can't produce a false pass).
   operator must run Calico/Cilium/kube-router. *Detected, not prevented.*
 - **`k8s_cluster_cidr` unset in allow mode** → peers/control plane reachable by
   IP for internet-enabled challenges. Recommended in the UI; documented here.
+- **Docker inter-instance reachability** → the shared bridge does not isolate
+  peers; the operator's host firewall must drop bridge-internal traffic (or run
+  per-challenge networks). The kubernetes backend enforces this in-cluster; the
+  docker backend does not (GHSA-vgrr). *Operator-owned.*
 - **Kubernetes PID/fd exhaustion** → a fork bomb can pressure the node. Operator
   sets a kubelet `--pod-max-pids`. *(Docker pins this; k8s can't in-manifest.)*
 - **The socket proxy / API can't inspect payloads** → isolation rests on the

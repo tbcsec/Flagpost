@@ -275,3 +275,35 @@ async def test_forgot_password_matches_email_case_insensitively(client, monkeypa
     )
     assert resp.status_code == 204
     assert len(sent) == 1
+
+
+async def test_refresh_token_reuse_revokes_the_family(client, monkeypatch):
+    """GHSA-vv68 / RFC 9700 §4.14.2: replaying a revoked (already-rotated) refresh
+    token is treated as theft — the whole login family is revoked, killing the
+    live descendant chain, not just the replayed token. (Grace disabled so the
+    immediate replay counts as reuse rather than a benign double-submit.)"""
+    from routers import auth as auth_router
+
+    monkeypatch.setattr(auth_router, "_REFRESH_REUSE_GRACE_SECONDS", -1)
+
+    reg = await client.post(
+        "/api/auth/register",
+        json={"display_name": "reuse", "email": "reuse@example.com", "password": "password123"},
+    )
+    assert reg.status_code == 201
+    token_a = client.cookies.get("refresh_token")
+    assert token_a
+
+    # Legit rotation A -> B; the client's cookie is now B.
+    r1 = await client.post("/api/auth/refresh")
+    assert r1.status_code == 200
+    token_b = client.cookies.get("refresh_token")
+    assert token_b and token_b != token_a
+
+    # An attacker replays the revoked token A -> reuse detected -> family revoked.
+    replay = await client.post("/api/auth/refresh", cookies={"refresh_token": token_a})
+    assert replay.status_code == 401
+
+    # The live chain B is now dead too — the whole family was revoked.
+    r2 = await client.post("/api/auth/refresh")  # client still holds B
+    assert r2.status_code == 401

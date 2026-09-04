@@ -20,7 +20,7 @@ from fastapi import (
     Response,
     status,
 )
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import get_current_user
@@ -145,14 +145,31 @@ async def _throttle(
         )
 
 
-async def _issue_session(db: AsyncSession, user: User, response: Response) -> str:
-    """Create a refresh session, set the httpOnly cookie, return an access token."""
+# Grace for a benign double-submit of a just-rotated refresh token (a client
+# racing two refreshes on one cookie, or retrying after a lost response): only a
+# revoked token replayed *later* than this is treated as genuine theft and
+# revokes the family, so a race can't spuriously log a user out (GHSA-vv68).
+_REFRESH_REUSE_GRACE_SECONDS = 10
+
+
+async def _issue_session(
+    db: AsyncSession,
+    user: User,
+    response: Response,
+    *,
+    family_id: str | None = None,
+) -> str:
+    """Create a refresh session, set the httpOnly cookie, return an access token.
+
+    ``family_id`` is inherited on rotation (refresh) and minted fresh on a new
+    login, so a whole login lineage is one reuse-detection family (RFC 9700)."""
     raw_refresh = generate_refresh_token()
     db.add(
         RefreshSession(
             user_id=user.id,
             token_hash=hash_refresh_token(raw_refresh),
             expires_at=refresh_expiry(),
+            family_id=family_id or secrets.token_hex(16),
         )
     )
     await db.commit()
@@ -445,19 +462,53 @@ async def refresh(
             RefreshSession.token_hash == hash_refresh_token(raw)
         )
     )
-    if (
-        session is None
-        or session.revoked_at is not None
-        or ensure_aware_utc(session.expires_at) <= utcnow()
-    ):
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+    if session.revoked_at is not None:
+        # Reuse detection (RFC 9700 §4.14.2, GHSA-vv68): a *revoked* token being
+        # replayed is the canonical theft signal — the legitimate client rotated
+        # to a successor, so re-presenting the old one means two parties hold
+        # this lineage's tokens. Revoke the whole family so the thief's descendant
+        # chain dies too (the real user simply re-logs in), and log it. A benign
+        # double-submit within the grace window is spared, so a refresh race
+        # can't spuriously evict a user.
+        revoked_age = (utcnow() - ensure_aware_utc(session.revoked_at)).total_seconds()
+        if (
+            session.family_id is not None
+            and revoked_age > _REFRESH_REUSE_GRACE_SECONDS
+        ):
+            await db.execute(
+                update(RefreshSession)
+                .where(
+                    RefreshSession.family_id == session.family_id,
+                    RefreshSession.revoked_at.is_(None),
+                )
+                .values(revoked_at=utcnow())
+            )
+            await db.commit()
+            logger.warning(
+                "refresh-token reuse detected for user %s (family %s) — family revoked",
+                session.user_id,
+                session.family_id,
+            )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+    if ensure_aware_utc(session.expires_at) <= utcnow():
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token",
         )
 
-    # Rotate: revoke the presented session and issue a fresh one, so a stolen
-    # refresh token is usable at most until the next legitimate refresh.
+    # Rotate: revoke the presented session and issue a fresh one INHERITING the
+    # family, so the whole lineage stays traceable for reuse detection and a
+    # stolen token is usable at most until the next legitimate refresh.
     session.revoked_at = utcnow()
+    family_id = session.family_id
     user = await db.get(User, session.user_id)
     await db.commit()
 
@@ -469,7 +520,7 @@ async def refresh(
             detail="This account has been disabled",
         )
 
-    access_token = await _issue_session(db, user, response)
+    access_token = await _issue_session(db, user, response, family_id=family_id)
     return TokenResponse(access_token=access_token, user=UserOut.model_validate(user))
 
 

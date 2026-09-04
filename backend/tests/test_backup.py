@@ -538,3 +538,31 @@ async def test_pages_restore_after_deletion(client):
     async with SessionLocal() as db:
         row = await db.scalar(select(Page).where(Page.slug == "sponsors"))
         assert row is not None and row.title == "Sponsors"
+
+
+async def test_backup_import_rejects_a_malformed_page(client):
+    """GHSA-4wrj: a crafted backup page that skips the authoring invariants — a
+    bad slug, a disallowed visibility, a blank title — is refused at import, so a
+    site-settings delegate can't publish an unvalidated public page."""
+    storage = InMemoryStorage()
+
+    def _doc(page):
+        return {
+            "flagpost_export": True,
+            "schema_version": backup.SCHEMA_VERSION,
+            "data": {"pages": [page]},
+        }
+
+    base = {
+        "id": "page-x", "slug": "notice", "title": "T", "content": None,
+        "visibility": "public", "draft": False,
+    }
+    bad_rows = [
+        {**base, "slug": "a"},                 # too short / bad format
+        {**base, "visibility": "everyone"},    # not an allowed visibility
+        {**base, "title": "   "},              # blank title
+    ]
+    for bad in bad_rows:
+        async with SessionLocal() as db:
+            with pytest.raises(backup.ImportError_):
+                await backup.import_data(db, storage, _doc(bad), ["site_settings"])

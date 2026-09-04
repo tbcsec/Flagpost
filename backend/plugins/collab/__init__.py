@@ -26,6 +26,11 @@ import logging
 # A collaborative note is prose, not a data dump; cap the persisted blob so a
 # client can't push an unbounded payload into the store.
 MAX_STATE_BYTES = 1_048_576  # 1 MiB
+# Cap the relayed note_update frame too (F8): it's a dumb fan-out to every other
+# room member, so an unbounded string is an amplified sink. The value is a base64
+# string, so the ceiling is the persist cap expanded by base64's 4:3 growth — a
+# single Y.js update never legitimately exceeds a full-state snapshot.
+_MAX_UPDATE_B64 = (MAX_STATE_BYTES * 4) // 3 + 4
 
 logger = logging.getLogger("collab")
 
@@ -49,7 +54,12 @@ def setup(app, event_bus, db_factory) -> None:
         kind = frame.get("type")
         if kind == "note_update":
             update = frame.get("update")
-            if isinstance(update, str):
+            # Size-cap the relayed frame (F8): note_update is a dumb fan-out to
+            # every other room member (and, multi-worker, across the pub/sub
+            # relay), so an unbounded string is an amplified memory/bandwidth
+            # sink. A single Y.js update never approaches a full-state snapshot,
+            # so the persist cap (base64-expanded) is a generous ceiling.
+            if isinstance(update, str) and len(update) <= _MAX_UPDATE_B64:
                 # Relay only — no DB, no decode. Exclude the sender so a client
                 # never receives an echo of its own update (§4.2).
                 await manager.broadcast(

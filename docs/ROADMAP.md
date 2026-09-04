@@ -549,4 +549,7 @@ status so the reasoning isn't lost.
   underlying `competition_id` scoping is in Tier 0 by necessity, but the
   cross-site rollup views, global-organiser role, and multi-site
   reporting are a distinct feature for a later release once there's a
-  concrete multi-site event to build it against.
+  concrete multi-site event to build it against. *Carve-out:* the
+  **cross-competition skills web** (#364, ADR-0039) is a sanctioned,
+  narrowly-scoped consolidation read (a per-user skill profile + an
+  Administrator matrix), not the general rollup/global-organiser feature.

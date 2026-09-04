@@ -72,3 +72,4 @@ Status is one of:
 | [0036](0036-challenge-instancing-provisioners.md) | Challenge instancing — provisioner kinds, background-lane lifecycle, hashed unique flags | Accepted |
 | [0037](0037-metrics-endpoint-gating.md) | Prometheus `/metrics` — kernel middleware, off by default, gated by token/allowlist | Accepted |
 | [0038](0038-boot-time-baseline-import.md) | Boot-time baseline import — provision an unconfigured instance from a mounted platform export | Accepted |
+| [0039](0039-cross-competition-skills-web.md) | Cross-competition skills web — the first participant-facing consolidation view | Accepted |

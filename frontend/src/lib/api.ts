@@ -654,7 +654,13 @@ export const apiTokensApi = {
   revoke: (id: string) => apiFetch<void>(`/api/api-tokens/${id}`, { method: "DELETE" }),
   // Self-service (any authenticated user, own account only). The create body
   // carries no user id: the holder is always the caller.
-  create: (input: { description: string; expires_in_days: number }) =>
+  create: (input: {
+    description: string;
+    expires_in_days: number;
+    // Step-up re-auth (GHSA-vv68): the current password proves it's really you,
+    // not just a held session, minting a long-lived credential.
+    current_password: string;
+  }) =>
     apiFetch<ApiTokenCreated>("/api/api-tokens", {
       method: "POST",
       body: JSON.stringify(input),

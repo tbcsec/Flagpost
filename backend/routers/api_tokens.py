@@ -26,10 +26,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import get_current_user, require_permission
-from auth.security import generate_api_token, hash_api_token
+from auth.security import averify_password, generate_api_token, hash_api_token
 from db import get_db, utcnow
 from models.api_token import ApiToken
 from models.user import User
+from ratelimit import get_rate_limiter
+from ratelimit.base import RateLimiter
 from schemas.api_token import ApiTokenCreate, ApiTokenCreated, ApiTokenOut
 from utils.event_bus import event_bus
 
@@ -79,12 +81,29 @@ async def create_token(
     body: ApiTokenCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> ApiTokenCreated:
     """Mint a token for **your own** account.
 
     No permission required: every account may issue credentials for itself, and
-    can issue them for nobody else.
+    can issue them for nobody else. Requires the current password (step-up
+    re-auth, GHSA-vv68): a stolen session alone can't silently mint a long-lived
+    credential that would outlive the victim's password change.
     """
+    # Throttle before the password check — the mint endpoint takes a password,
+    # so unthrottled it would be a brute-force oracle for a stolen session.
+    if not await rate_limiter.hit(
+        f"api-token-create:{current_user.id}", limit=5, window_seconds=300
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many attempts — please wait a few minutes and try again",
+        )
+    if not await averify_password(body.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
     try:
         expires_at = utcnow() + timedelta(days=body.expires_in_days)
     except OverflowError:

@@ -18,6 +18,11 @@ class ApiTokenCreate(BaseModel):
     # No upper bound (owner call, issue #75) — any self-chosen duration is
     # acceptable. The router guards the datetime arithmetic against overflow.
     expires_in_days: int = Field(gt=0)
+    # Step-up re-auth (GHSA-vv68): minting a long-lived credential requires
+    # proving the current password, so a stolen *session* alone can't silently
+    # issue one that survives a password change. SSO-only accounts must set a
+    # local password (via reset) to mint tokens.
+    current_password: str = Field(min_length=1)
 
 
 class ApiTokenOut(BaseModel):

@@ -26,7 +26,7 @@ import { useActivityLive } from "@/lib/hooks/use-activity";
 import { useEnabledModules } from "@/lib/hooks/use-modules";
 import { usePageNav } from "@/lib/hooks/use-pages";
 import { useAccess } from "@/lib/hooks/use-permissions";
-import { useBrandSettings, useSiteSettings } from "@/lib/hooks/use-site-settings";
+import { useBrandSettings } from "@/lib/hooks/use-site-settings";
 import { useLogout } from "@/lib/hooks/use-users";
 import { cn } from "@/lib/utils";
 import { useRelativeTime } from "@/lib/hooks/use-relative-time";
@@ -131,7 +131,6 @@ const COMP_NAV: {
 
 type AdminNavKey =
   | "dashboard"
-  | "skills"
   | "competitions"
   | "users"
   | "roles"
@@ -142,9 +141,6 @@ type AdminNavKey =
 
 const ADMIN_SUBNAV: { href: string; key: AdminNavKey }[] = [
   { href: "/admin/dashboard", key: "dashboard" },
-  // Cross-competition skills matrix (#364) — another view_global_analytics read,
-  // filtered out below when the site-wide skills web is off.
-  { href: "/admin/skills", key: "skills" },
   { href: "/admin/competitions", key: "competitions" },
   { href: "/admin/users", key: "users" },
   { href: "/admin/roles", key: "roles" },
@@ -184,11 +180,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const access = useAccess();
   const brand = useBrandSettings();
   const platformName = brand.platform_name;
-  // Hide the admin Skills matrix link when the site-wide skills web is off (#364).
-  const skillsEnabled = useSiteSettings().data?.skills_enabled ?? false;
-  const adminSubnav = ADMIN_SUBNAV.filter(
-    (item) => item.key !== "skills" || skillsEnabled,
-  );
   // The active competition's name, for the assistant's context chip. Shares the
   // Topbar's cached query, so this adds no request.
   const { data: allCompetitions } = useCompetitions();
@@ -405,7 +396,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </button>
               {navExpanded &&
                 adminOpen &&
-                adminSubnav.map((item) => (
+                ADMIN_SUBNAV.map((item) => (
                   <Link key={item.href} href={item.href} className={subNavItem(isActive(item.href))}>
                     {t(`adminNav.${item.key}`)}
                   </Link>

@@ -130,9 +130,9 @@ derives a per-user profile of solves-by-category that spans **every competition*
 on the instance — the one place a competitor's data is aggregated across events
 rather than kept per-competition. It is computed on demand from submissions you
 already hold (nothing new is stored beyond a cache, and nothing is sent
-anywhere). A competitor sees only their **own** web; the cross-user matrix is
-visible only to a site Administrator. It can be turned off instance-wide
-(`skills_enabled`). Other-user and public skill profiles are not built.
+anywhere). A competitor sees only their **own** web — there is no admin or
+cross-user view. It can be turned off instance-wide (`skills_enabled`).
+Other-user and public skill profiles are not built.
 
 ## Questions
 

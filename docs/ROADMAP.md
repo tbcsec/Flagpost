@@ -551,5 +551,6 @@ status so the reasoning isn't lost.
   reporting are a distinct feature for a later release once there's a
   concrete multi-site event to build it against. *Carve-out:* the
   **cross-competition skills web** (#364, ADR-0039) is a sanctioned,
-  narrowly-scoped consolidation read (a per-user skill profile + an
-  Administrator matrix), not the general rollup/global-organiser feature.
+  narrowly-scoped consolidation read (a per-user, self-scoped skill profile —
+  the admin matrix was dropped, ADR-0039 amendment), not the general
+  rollup/global-organiser feature.

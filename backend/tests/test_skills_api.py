@@ -115,59 +115,13 @@ async def test_my_skills_web_spans_competitions(client):
     assert body["competitions_played"] == 2
 
 
-# --- admin matrix ------------------------------------------------------------
-
-
-async def test_admin_matrix_requires_global_analytics(client):
-    admin = await admin_token(client)
-    comp = await _competition(client, admin)
-    cat = await _category(client, admin, comp, "Web")
-    chal = await _challenge(client, admin, comp, flag="flag{a}", category_id=cat)
-    ada, _ = await _register(client, "ada")
-    await _join(client, ada, comp)
-    await _solve(client, ada, comp, chal, "flag{a}")
-
-    # A participant has no view_global_analytics → 403.
-    forbidden = await client.get("/api/admin/skills", headers=_auth(ada))
-    assert forbidden.status_code == 403
-
-    matrix = (await client.get("/api/admin/skills", headers=_auth(admin))).json()
-    assert matrix["skills"] == ["web"]
-    names = {u["display_name"]: u for u in matrix["users"]}
-    assert names["ada"]["scores"] == {"web": 1}
-    assert names["ada"]["total"] == 1
-
-
-async def test_admin_matrix_paginates_over_users(client):
-    admin = await admin_token(client)
-    comp = await _competition(client, admin)
-    cat = await _category(client, admin, comp, "Web")
-    chal = await _challenge(client, admin, comp, flag="flag{a}", category_id=cat)
-    for i in range(3):
-        token, _ = await _register(client, f"p{i}")
-        await _join(client, token, comp)
-        await _solve(client, token, comp, chal, "flag{a}")
-
-    first = (await client.get("/api/admin/skills?limit=2&offset=0", headers=_auth(admin))).json()
-    assert first["total_users"] == 3
-    assert len(first["users"]) == 2
-    second = (await client.get("/api/admin/skills?limit=2&offset=2", headers=_auth(admin))).json()
-    assert len(second["users"]) == 1
-    # No overlap between the pages.
-    ids = {u["user_id"] for u in first["users"]} | {u["user_id"] for u in second["users"]}
-    assert len(ids) == 3
-
-
 # --- site-wide off switch ----------------------------------------------------
 
 
-async def test_both_reads_404_when_skills_disabled(client):
-    admin = await admin_token(client)
+async def test_self_read_404_when_skills_disabled(client):
     ada, _ = await _register(client, "ada")
     await _set_skills_enabled(False)
-
     assert (await client.get("/api/me/skills", headers=_auth(ada))).status_code == 404
-    assert (await client.get("/api/admin/skills", headers=_auth(admin))).status_code == 404
 
 
 async def test_a_solve_invalidates_the_cached_web(client):

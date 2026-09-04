@@ -305,8 +305,9 @@ than quietly building a scoped-down version:
 - Multi-competition tenancy *consolidation views* — `competition_id`
   scoping is required from Tier 0; cross-site rollups are not. **Carve-out:**
   the cross-competition **skills web** (#364, ADR-0039) is a sanctioned,
-  narrowly-scoped consolidation read (per-user skill profile + Administrator
-  matrix); a general rollup/global-organiser role stays deferred.
+  narrowly-scoped consolidation read (a per-user, self-scoped skill profile — the
+  admin matrix was dropped, ADR-0039 amendment); a general rollup/global-organiser
+  role stays deferred.
 - Per-competition / white-label theming — site-wide only for now
   (ADR-0011); the per-competition variant may return later.
 

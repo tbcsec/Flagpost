@@ -1,6 +1,6 @@
 # ADR-0039: Cross-competition skills web — the first participant-facing consolidation view
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-09-04 — admin matrix dropped; self view only)
 **Date:** 2026-09-04
 **Architecture reference:** `ARCHITECTURE.md` §6.3 (tenancy scoping — the
 sanctioned cross-competition reads). Implements #364.
@@ -121,3 +121,18 @@ Build a cross-competition skills web as a new optional `skills` module.
 - **Extend the `analytics` module.** Rejected: analytics is competition-scoped and
   per-competition-toggled; a site-wide cross-competition read needs its own home
   and its own optionality.
+
+## Amendment: admin matrix dropped for now (2026-09-04)
+
+Decision #4 above shipped **two** reads: the self view (`/api/me/skills`) and an
+Administrator users×skills **matrix** (`/api/admin/skills`, `view_global_analytics`).
+On review the owner decided **against the admin matrix for now** and it has been
+removed — the endpoint, the `compute_skill_matrix` read model, the `/admin/skills`
+page and its nav entry. The feature ships as the **participant self view only**.
+
+This narrows, but does not change, the ADR's core: the skills web is still a
+sanctioned cross-competition read, just a purely **self-scoped** one (the route
+shape is the authorization, exactly like `/api/me/certificates`) — so it no longer
+even touches `view_global_analytics`. #364 asked for an admin view; that part is
+deliberately deferred (owner decision), and the read model keeps the per-user
+shape that a matrix would rebuild on, so re-adding it later is additive.

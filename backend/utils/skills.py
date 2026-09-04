@@ -8,11 +8,9 @@ competition-scoped: it is the platform's first participant-facing consolidation
 read (ADR-0039), so the cache can't key by ``competition_id`` and instead drops
 wholesale on any solve.
 
-Two shapes, from the same aggregation:
-
-- :func:`compute_user_skills` — one user's web (the ``/api/me/skills`` self read).
-- :func:`compute_skill_matrix` — every user × skill (the admin matrix); the router
-  paginates the returned ``users`` list, the shared ``skills`` axis rides along.
+:func:`compute_user_skills` builds one user's web (the ``/api/me/skills`` self
+read). (An admin users×skills matrix was part of the original #364 ask but is
+dropped for now — owner decision, ADR-0039 amendment.)
 
 Category names are folded to the skill key **in Python** (:func:`normalize_skill`),
 not in SQL, so SQLite (tests) and Postgres (prod) agree — the ADR-0006 parity
@@ -31,7 +29,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import settings
 from models.challenge import Category, Challenge
 from models.submission import Submission
-from models.user import User
 
 # The awarded-solve predicate, shared with the scoreboard: a first correct solve,
 # never a duplicate re-submit. Each awarded row is unique per (challenge, subject)
@@ -103,43 +100,6 @@ async def compute_user_skills(db: AsyncSession, user_id: str) -> dict[str, Any]:
     }
 
 
-async def compute_skill_matrix(db: AsyncSession) -> dict[str, Any]:
-    """Every user × skill: ``{skills: [...axis...], users: [{user_id, display_name,
-    scores, total}]}``. Computed whole (all users, all skills) so one cache entry
-    serves every page; the router slices ``users`` for pagination while the shared
-    ``skills`` axis rides along. Users sorted by total descending, then name."""
-    rows = (
-        await db.execute(
-            select(
-                Submission.user_id,
-                User.display_name,
-                Category.name,
-                func.count(func.distinct(Submission.challenge_id)),
-            )
-            .join(Challenge, Challenge.id == Submission.challenge_id)
-            .join(Category, Category.id == Challenge.category_id)
-            .join(User, User.id == Submission.user_id)
-            .where(*_AWARDED)
-            .group_by(Submission.user_id, User.display_name, Category.name)
-        )
-    ).all()
-
-    axis: set[str] = set()
-    users: dict[str, dict[str, Any]] = {}
-    for user_id, display_name, name, count in rows:
-        key = normalize_skill(name)
-        axis.add(key)
-        row = users.setdefault(
-            user_id,
-            {"user_id": user_id, "display_name": display_name, "scores": {}},
-        )
-        row["scores"][key] = row["scores"].get(key, 0) + int(count or 0) * solve_weight()
-
-    user_list = [{**row, "total": sum(row["scores"].values())} for row in users.values()]
-    user_list.sort(key=lambda u: (-u["total"], (u["display_name"] or "").lower()))
-    return {"skills": sorted(axis), "users": user_list}
-
-
 # --- Cached read model (ADR-0039) --------------------------------------------
 #
 # Process-global TTL cache (single process, ADR-0005), mirroring the scoreboard/
@@ -160,10 +120,6 @@ def invalidate_skills() -> None:
 
 async def cached_user_skills(db: AsyncSession, user_id: str) -> dict[str, Any]:
     return await _cached(f"user:{user_id}", compute_user_skills, db, user_id)
-
-
-async def cached_skill_matrix(db: AsyncSession) -> dict[str, Any]:
-    return await _cached("matrix", compute_skill_matrix, db)
 
 
 async def _cached(key: str, compute, db: AsyncSession, *args: Any) -> dict[str, Any]:

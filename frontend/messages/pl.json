@@ -156,8 +156,7 @@
       "events": "Dziennik zdarzeń",
       "automations": "Automatyzacja",
       "siteSettings": "Ustawienia witryny",
-      "pages": "Pages",
-      "skills": "Skills"
+      "pages": "Pages"
     },
     "notifications": {
       "title": "Powiadomienia",
@@ -2794,20 +2793,6 @@
       "deleteConfirm": "Delete",
       "emptyTitle": "No identity providers",
       "emptyDescription": "Add an OIDC, OAuth 2.0, SAML or LDAP provider to let people sign in with an existing account instead of a Flagpost password."
-    },
-    "skills": {
-      "title": "Admin — Skills",
-      "subtitle": "Global — the skills matrix across every competitor and competition",
-      "noAccessTitle": "No access",
-      "noAccessDescription": "You need the view-global-analytics permission to see the skills matrix.",
-      "emptyTitle": "No skill data yet",
-      "emptyDescription": "Once competitors solve categorised challenges, their skills appear here — accumulated across every competition.",
-      "cardTitle": "{count, plural, one {# competitor} other {# competitors}}",
-      "colUser": "Competitor",
-      "colTotal": "Total",
-      "range": "{from}–{to} of {total}",
-      "prev": "Previous",
-      "next": "Next"
     }
   },
   "registration": {

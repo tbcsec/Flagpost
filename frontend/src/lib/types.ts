@@ -1907,18 +1907,3 @@ export interface UserSkills {
   total: number;
   competitions_played: number;
 }
-
-export interface SkillMatrixUser {
-  user_id: string;
-  display_name: string;
-  scores: Record<string, number>; // skill name -> cumulative score (missing = 0)
-  total: number;
-}
-
-export interface SkillMatrix {
-  skills: string[]; // the shared axis (columns)
-  users: SkillMatrixUser[];
-  total_users: number;
-  limit: number;
-  offset: number;
-}

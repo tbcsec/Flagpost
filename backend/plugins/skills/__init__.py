@@ -12,10 +12,9 @@ from __future__ import annotations
 
 
 def setup(app, event_bus, db_factory) -> None:
-    from routers.skills import admin_router, me_router
+    from routers.skills import me_router
 
     app.include_router(me_router)
-    app.include_router(admin_router)
 
     # A new solve or category change moves the web, so drop the cross-competition
     # cache on those events (foreground, like the scoring plugin's board

@@ -323,6 +323,13 @@ async def test_authoritative_provider_links_by_email(client):
         json={"display_name": "prior", "email": "ada@example.com", "password": "password123"},
     )
     existing_id = reg.json()["user"]["id"]
+    # Trusted-email linking only attaches to a PROVEN local account (GHSA-42m4):
+    # verify the email so this models the legitimate "link my existing account"
+    # case (admin-created accounts are stamped verified for the same reason).
+    async with SessionLocal() as db:
+        u = await db.get(User, existing_id)
+        u.email_verified_at = datetime.datetime.now(datetime.timezone.utc)
+        await db.commit()
     await _create_provider(client, admin, email_is_authoritative=True)
     relay, rid = await _begin_login(client)
     resp = await _acs(client, relay, make_saml_response(rid, email="ada@example.com"))
@@ -336,7 +343,46 @@ async def test_authoritative_provider_links_by_email(client):
         assert identity is not None and identity.user_id == existing_id
 
 
+async def test_authoritative_provider_refuses_unverified_local_account(client):
+    """GHSA-42m4: trusted-email linking must NOT attach to a local account that
+    never verified its email — the account pre-hijack (attacker pre-registers the
+    victim's address, the victim's SSO would otherwise land in the attacker's
+    account). The login is refused, and nothing is linked."""
+    admin = await admin_token(client)
+    await client.post(
+        "/api/auth/register",
+        json={"display_name": "squatter", "email": "victim@example.com", "password": "password123"},
+    )
+    await _create_provider(client, admin, email_is_authoritative=True)
+    relay, rid = await _begin_login(client)
+    resp = await _acs(client, relay, make_saml_response(rid, email="victim@example.com"))
+    assert "error=email_unverified_conflict" in resp.headers["location"]
+    async with SessionLocal() as db:
+        identity = await db.scalar(
+            select(UserExternalIdentity).where(
+                UserExternalIdentity.subject == "saml-user-1"
+            )
+        )
+        assert identity is None
+
+
 # --- the security battery (the point of the feature) -------------------------
+
+
+async def test_acs_rejects_cross_browser_response(client):
+    """GHSA-42m4 (F3): a validly-signed SAMLResponse presented by a browser that
+    did NOT initiate the login — no state-binding cookie — is refused, so an
+    attacker can't complete the IdP login as themselves and POST the captured
+    response into a victim's browser to fixate their own session."""
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+    relay, rid = await _begin_login(client)
+    # Drop the httpOnly cookie the login set on this browser — the victim's
+    # browser never had it.
+    client.cookies.clear()
+    resp = await _acs(client, relay, make_saml_response(rid, email="ada@example.com"))
+    assert "error=invalid_state" in resp.headers["location"]
+    assert await _user_by_email("ada@example.com") is None
 
 
 async def test_unsigned_assertion_is_rejected(client):

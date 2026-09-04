@@ -35,7 +35,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import settings
 from db import ensure_aware_utc, get_db, utcnow
 from models.identity_provider import AuthLoginState, IdentityProvider
-from routers.auth import _issue_session
+from routers.auth import (
+    _issue_session,
+    clear_sso_state_cookie,
+    set_sso_state_cookie,
+    sso_state_cookie_matches,
+)
 from routers.oidc import _frontend_base, _safe_return_to
 from schemas.auth_providers import SamlConfig, provider_config_or_none
 from utils import saml as saml_utils
@@ -167,7 +172,12 @@ async def saml_login(
         )
     )
     await db.commit()
-    return RedirectResponse(redirect_url, status_code=status.HTTP_302_FOUND)
+    redirect = RedirectResponse(redirect_url, status_code=status.HTTP_302_FOUND)
+    # F3 browser-binding (GHSA-42m4): bind the login to THIS browser, so a
+    # captured SAMLResponse+RelayState can't be POSTed into a victim's browser at
+    # the ACS to fixate the attacker's session. Parity with OIDC/OAuth2.
+    set_sso_state_cookie(redirect, state, int(_STATE_TTL.total_seconds()))
+    return redirect
 
 
 @router.post("/{slug}/acs", name="saml_acs")
@@ -183,6 +193,17 @@ async def saml_acs(
     if not saml_response or not relay_state:
         return _fail("ACS missing SAMLResponse or RelayState", "invalid_response")
     relay_state = str(relay_state)
+
+    # F3 browser-binding (GHSA-42m4): the browser presenting this response must
+    # carry the httpOnly cookie set when IT began the login — the OIDC/OAuth2
+    # parity the SAML ACS was missing. Single-use RelayState + InResponseTo stop
+    # replay, not cross-browser session fixation (an attacker who completes the
+    # IdP login as themselves, captures the still-valid SAMLResponse+RelayState,
+    # and feeds it to a victim's browser).
+    if not sso_state_cookie_matches(request, relay_state):
+        return _fail(
+            "SAML ACS state-cookie mismatch (cross-browser)", "invalid_state"
+        )
 
     # Consume the state row first: single-use, so a replayed POST finds nothing.
     # This is the CSRF check — a response we didn't initiate has no matching row.
@@ -282,6 +303,9 @@ async def saml_acs(
         return _fail(f"user {user.id} is banned", "account_disabled")
 
     await _issue_session(db, user, response)
+    # Login done — retire the state-binding cookie (carried across on the redirect
+    # below alongside the refresh cookie).
+    clear_sso_state_cookie(response)
 
     destination = login_state.return_to or "/"
     redirect = RedirectResponse(

@@ -45,6 +45,7 @@ from schemas.feedback import (
     SurveySummary,
     SurveyUpdate,
 )
+from utils.csv_safe import csv_safe
 from utils.event_bus import event_bus
 from utils.feedback import (
     RATING_MAX as _RATING_MAX,
@@ -481,16 +482,19 @@ async def export_responses_csv(
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)
+    # csv_safe every cell (GHSA-352q): respondent display names, emails and
+    # free-text survey answers are user-controlled, and organisers open this in a
+    # spreadsheet — a leading =/+/-/@ would execute (DDE / =HYPERLINK exfil).
     writer.writerow(
-        ["respondent", "email", "submitted_at", *[q.prompt for q in questions]]
+        ["respondent", "email", "submitted_at", *[csv_safe(q.prompt) for q in questions]]
     )
     for response, display_name, email in responses:
         writer.writerow(
             [
-                display_name,
-                email,
+                csv_safe(display_name),
+                csv_safe(email),
                 response.created_at.isoformat(),
-                *[answers.get((response.id, q.id), "") for q in questions],
+                *[csv_safe(answers.get((response.id, q.id), "")) for q in questions],
             ]
         )
 

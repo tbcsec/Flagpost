@@ -11,7 +11,15 @@ import asyncio
 import logging
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,7 +40,7 @@ from auth.security import (
 )
 from config import settings
 from auth.membership import effective_permissions
-from db import ensure_aware_utc, get_db, utcnow
+from db import SessionLocal, ensure_aware_utc, get_db, utcnow
 from models.email_verification import EmailVerificationToken
 from models.identity_provider import IdentityProvider
 from models.password_reset import PasswordResetToken
@@ -412,6 +420,12 @@ async def login(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This account has been disabled. Contact an administrator.",
         )
+    # A successful login clears the identifier's throttle bucket (GHSA-vv68): an
+    # attacker filling a known user's per-identifier login bucket with junk can't
+    # lock them out, because their correct password gets through in any freed slot
+    # and resets the count. Failed attempts still accrue, so brute-force stays
+    # throttled; the key matches _throttle's lowercasing.
+    await rate_limiter.reset(f"login:{body.identifier}".lower())
     access_token = await _issue_session(db, user, response)
     return TokenResponse(access_token=access_token, user=UserOut.model_validate(user))
 
@@ -793,9 +807,46 @@ async def change_email(
     return UserOut.model_validate(current_user)
 
 
+async def _deliver_password_reset(user_id: str, email: str) -> None:
+    """Mint the reset token and mail the link, off the response path (GHSA-vv68).
+
+    Runs as a background task with its own session, so the account-exists branch
+    of forgot-password does NOT do the INSERT + commit + SMTP round-trip inline —
+    that made the response time a user-enumeration oracle (the miss branch is a
+    bare SELECT). Failures are logged, never surfaced (the caller already 204'd).
+    """
+    import secrets
+    from datetime import timedelta
+
+    try:
+        raw = secrets.token_urlsafe(32)
+        async with SessionLocal() as db:
+            db.add(
+                PasswordResetToken(
+                    user_id=user_id,
+                    token_hash=_hash_token(raw),
+                    expires_at=utcnow() + timedelta(hours=1),
+                )
+            )
+            await db.commit()
+        origins = settings.cors_origin_list
+        base = origins[0] if origins else ""
+        link = f"{base}/reset-password?token={raw}"
+        await mailer.send_email(
+            [email],
+            "Reset your password",
+            f"Someone requested a password reset for your account.\n\n"
+            f"Use this link within the next hour to choose a new password:\n{link}\n\n"
+            f"If you didn't request this, you can ignore this email.",
+        )
+    except Exception:
+        logger.exception("forgot-password delivery failed for user %s", user_id)
+
+
 @router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT)
 async def forgot_password(
     body: ForgotPasswordRequest,
+    background: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     rate_limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> Response:
@@ -812,9 +863,6 @@ async def forgot_password(
         limit=settings.auth_email_rate_limit,
         window=settings.auth_email_rate_window_seconds,
     )
-    import secrets
-    from datetime import timedelta
-
     # Match the email case-insensitively, like login/registration do (§7.7,
     # auth/identity) — otherwise a differently-cased address silently gets no
     # reset email (and the neutral 204 hides that from the user).
@@ -822,25 +870,10 @@ async def forgot_password(
         select(User).where(func.lower(User.email) == str(body.email).strip().lower())
     )
     if user is not None and user.is_active:
-        raw = secrets.token_urlsafe(32)
-        db.add(
-            PasswordResetToken(
-                user_id=user.id,
-                token_hash=_hash_token(raw),
-                expires_at=utcnow() + timedelta(hours=1),
-            )
-        )
-        await db.commit()
-        origins = settings.cors_origin_list
-        base = origins[0] if origins else ""
-        link = f"{base}/reset-password?token={raw}"
-        await mailer.send_email(
-            [str(body.email)],
-            "Reset your password",
-            f"Someone requested a password reset for your account.\n\n"
-            f"Use this link within the next hour to choose a new password:\n{link}\n\n"
-            f"If you didn't request this, you can ignore this email.",
-        )
+        # Schedule the token-mint + mail send off the response path (GHSA-vv68):
+        # both branches now return 204 after the same bare SELECT, so the
+        # response time no longer discloses whether the account exists.
+        background.add_task(_deliver_password_reset, user.id, str(body.email))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

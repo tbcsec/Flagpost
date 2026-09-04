@@ -23,6 +23,11 @@ class InMemoryRateLimiter:
         while bucket and bucket[0] <= cutoff:
             bucket.popleft()
         if len(bucket) >= limit:
+            # Rejected: do NOT append (this double already avoided counting
+            # rejected hits — the parity the Redis impl now matches, GHSA-vv68).
             return False
         bucket.append(now)
         return True
+
+    async def reset(self, key: str) -> None:
+        self._hits.pop(key, None)

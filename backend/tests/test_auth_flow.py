@@ -175,6 +175,33 @@ async def test_change_password_updates_credential_and_revokes_sessions(client):
     assert new.status_code == 200
 
 
+async def test_change_password_is_throttled(client):
+    """GHSA-vv68: change-password is a password-taking endpoint, so it's rate
+    limited (5/300s) like change-username/change-email — a stolen session can't
+    brute-force the current password through it. The throttle fires BEFORE the
+    password check (a correct guess on the 6th try still 429s), so it's not an
+    oracle."""
+    login = await client.post(
+        "/api/auth/login",
+        json={"email": DEFAULT_ADMIN_EMAIL, "password": DEFAULT_ADMIN_PASSWORD},
+    )
+    auth = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    for _ in range(5):
+        r = await client.post(
+            "/api/auth/change-password",
+            json={"current_password": "wrong", "new_password": "irrelevant-123"},
+            headers=auth,
+        )
+        assert r.status_code == 400
+    blocked = await client.post(
+        "/api/auth/change-password",
+        json={"current_password": DEFAULT_ADMIN_PASSWORD, "new_password": "irrelevant-123"},
+        headers=auth,
+    )
+    assert blocked.status_code == 429
+
+
 async def test_registration_emits_user_registered_event(client):
     await _register(client, "evented@example.com")
     async with SessionLocal() as session:
@@ -248,3 +275,35 @@ async def test_forgot_password_matches_email_case_insensitively(client, monkeypa
     )
     assert resp.status_code == 204
     assert len(sent) == 1
+
+
+async def test_refresh_token_reuse_revokes_the_family(client, monkeypatch):
+    """GHSA-vv68 / RFC 9700 §4.14.2: replaying a revoked (already-rotated) refresh
+    token is treated as theft — the whole login family is revoked, killing the
+    live descendant chain, not just the replayed token. (Grace disabled so the
+    immediate replay counts as reuse rather than a benign double-submit.)"""
+    from routers import auth as auth_router
+
+    monkeypatch.setattr(auth_router, "_REFRESH_REUSE_GRACE_SECONDS", -1)
+
+    reg = await client.post(
+        "/api/auth/register",
+        json={"display_name": "reuse", "email": "reuse@example.com", "password": "password123"},
+    )
+    assert reg.status_code == 201
+    token_a = client.cookies.get("refresh_token")
+    assert token_a
+
+    # Legit rotation A -> B; the client's cookie is now B.
+    r1 = await client.post("/api/auth/refresh")
+    assert r1.status_code == 200
+    token_b = client.cookies.get("refresh_token")
+    assert token_b and token_b != token_a
+
+    # An attacker replays the revoked token A -> reuse detected -> family revoked.
+    replay = await client.post("/api/auth/refresh", cookies={"refresh_token": token_a})
+    assert replay.status_code == 401
+
+    # The live chain B is now dead too — the whole family was revoked.
+    r2 = await client.post("/api/auth/refresh")  # client still holds B
+    assert r2.status_code == 401

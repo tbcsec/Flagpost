@@ -43,11 +43,23 @@ async def _login(client, identifier: str, password: str) -> str:
     return resp.json()["access_token"]
 
 
-async def _mint(client, actor: str, *, description="Test token", expires_in_days=30):
-    """Mint a token for whoever ``actor`` is — the only kind of mint there is."""
+async def _mint(
+    client,
+    actor: str,
+    *,
+    description="Test token",
+    expires_in_days=30,
+    password="password123",
+):
+    """Mint a token for whoever ``actor`` is — the only kind of mint there is.
+    Minting now requires the current password (step-up, GHSA-vv68)."""
     resp = await client.post(
         "/api/api-tokens",
-        json={"description": description, "expires_in_days": expires_in_days},
+        json={
+            "description": description,
+            "expires_in_days": expires_in_days,
+            "current_password": password,
+        },
         headers=_auth(actor),
     )
     assert resp.status_code == 201, resp.text
@@ -85,6 +97,7 @@ async def test_admin_cannot_mint_a_token_for_another_user(client):
             "user_id": victim["user"]["id"],  # ignored — no such field exists
             "description": "escalation attempt",
             "expires_in_days": 30,
+            "current_password": "changeme",  # the seeded admin's password
         },
         headers=_auth(admin),
     )
@@ -377,3 +390,24 @@ async def test_non_admin_cannot_revoke_someone_elses_token(client):
         f"/api/api-tokens/{created['id']}", headers=_auth(b_token)
     )
     assert resp.status_code == 403, resp.text
+
+
+async def test_mint_requires_the_current_password(client):
+    """GHSA-vv68: minting a token requires proving the current password, so a
+    stolen session alone can't silently issue a long-lived credential."""
+    reg = await _register(client, name="StepUp")
+    token = await _login(client, reg["user"]["display_name"], "password123")
+
+    bad = await client.post(
+        "/api/api-tokens",
+        json={"description": "x", "expires_in_days": 30, "current_password": "wrong"},
+        headers=_auth(token),
+    )
+    assert bad.status_code == 400
+
+    ok = await client.post(
+        "/api/api-tokens",
+        json={"description": "x", "expires_in_days": 30, "current_password": "password123"},
+        headers=_auth(token),
+    )
+    assert ok.status_code == 201

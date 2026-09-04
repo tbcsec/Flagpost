@@ -11,8 +11,16 @@ import asyncio
 import logging
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from sqlalchemy import func, select
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import get_current_user
@@ -32,7 +40,7 @@ from auth.security import (
 )
 from config import settings
 from auth.membership import effective_permissions
-from db import ensure_aware_utc, get_db, utcnow
+from db import SessionLocal, ensure_aware_utc, get_db, utcnow
 from models.email_verification import EmailVerificationToken
 from models.identity_provider import IdentityProvider
 from models.password_reset import PasswordResetToken
@@ -137,14 +145,31 @@ async def _throttle(
         )
 
 
-async def _issue_session(db: AsyncSession, user: User, response: Response) -> str:
-    """Create a refresh session, set the httpOnly cookie, return an access token."""
+# Grace for a benign double-submit of a just-rotated refresh token (a client
+# racing two refreshes on one cookie, or retrying after a lost response): only a
+# revoked token replayed *later* than this is treated as genuine theft and
+# revokes the family, so a race can't spuriously log a user out (GHSA-vv68).
+_REFRESH_REUSE_GRACE_SECONDS = 10
+
+
+async def _issue_session(
+    db: AsyncSession,
+    user: User,
+    response: Response,
+    *,
+    family_id: str | None = None,
+) -> str:
+    """Create a refresh session, set the httpOnly cookie, return an access token.
+
+    ``family_id`` is inherited on rotation (refresh) and minted fresh on a new
+    login, so a whole login lineage is one reuse-detection family (RFC 9700)."""
     raw_refresh = generate_refresh_token()
     db.add(
         RefreshSession(
             user_id=user.id,
             token_hash=hash_refresh_token(raw_refresh),
             expires_at=refresh_expiry(),
+            family_id=family_id or secrets.token_hex(16),
         )
     )
     await db.commit()
@@ -412,6 +437,12 @@ async def login(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This account has been disabled. Contact an administrator.",
         )
+    # A successful login clears the identifier's throttle bucket (GHSA-vv68): an
+    # attacker filling a known user's per-identifier login bucket with junk can't
+    # lock them out, because their correct password gets through in any freed slot
+    # and resets the count. Failed attempts still accrue, so brute-force stays
+    # throttled; the key matches _throttle's lowercasing.
+    await rate_limiter.reset(f"login:{body.identifier}".lower())
     access_token = await _issue_session(db, user, response)
     return TokenResponse(access_token=access_token, user=UserOut.model_validate(user))
 
@@ -431,19 +462,53 @@ async def refresh(
             RefreshSession.token_hash == hash_refresh_token(raw)
         )
     )
-    if (
-        session is None
-        or session.revoked_at is not None
-        or ensure_aware_utc(session.expires_at) <= utcnow()
-    ):
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+    if session.revoked_at is not None:
+        # Reuse detection (RFC 9700 §4.14.2, GHSA-vv68): a *revoked* token being
+        # replayed is the canonical theft signal — the legitimate client rotated
+        # to a successor, so re-presenting the old one means two parties hold
+        # this lineage's tokens. Revoke the whole family so the thief's descendant
+        # chain dies too (the real user simply re-logs in), and log it. A benign
+        # double-submit within the grace window is spared, so a refresh race
+        # can't spuriously evict a user.
+        revoked_age = (utcnow() - ensure_aware_utc(session.revoked_at)).total_seconds()
+        if (
+            session.family_id is not None
+            and revoked_age > _REFRESH_REUSE_GRACE_SECONDS
+        ):
+            await db.execute(
+                update(RefreshSession)
+                .where(
+                    RefreshSession.family_id == session.family_id,
+                    RefreshSession.revoked_at.is_(None),
+                )
+                .values(revoked_at=utcnow())
+            )
+            await db.commit()
+            logger.warning(
+                "refresh-token reuse detected for user %s (family %s) — family revoked",
+                session.user_id,
+                session.family_id,
+            )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+    if ensure_aware_utc(session.expires_at) <= utcnow():
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token",
         )
 
-    # Rotate: revoke the presented session and issue a fresh one, so a stolen
-    # refresh token is usable at most until the next legitimate refresh.
+    # Rotate: revoke the presented session and issue a fresh one INHERITING the
+    # family, so the whole lineage stays traceable for reuse detection and a
+    # stolen token is usable at most until the next legitimate refresh.
     session.revoked_at = utcnow()
+    family_id = session.family_id
     user = await db.get(User, session.user_id)
     await db.commit()
 
@@ -455,7 +520,7 @@ async def refresh(
             detail="This account has been disabled",
         )
 
-    access_token = await _issue_session(db, user, response)
+    access_token = await _issue_session(db, user, response, family_id=family_id)
     return TokenResponse(access_token=access_token, user=UserOut.model_validate(user))
 
 
@@ -499,6 +564,7 @@ async def change_password(
     body: ChangePasswordRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> Response:
     """Change the current user's password.
 
@@ -514,12 +580,29 @@ async def change_password(
     administrator setting the password, a ban — and a holder can revoke any of
     their own tokens from /profile at any time.
     """
-    if not verify_password(body.current_password, current_user.password_hash):
+    # Throttle before the password check — an unthrottled password-taking
+    # endpoint is a brute-force oracle for anyone holding a stolen session, and
+    # was the one such endpoint left unthrottled (change-username/change-email
+    # already do this). 5/300s per user (GHSA-vv68).
+    if not await rate_limiter.hit(
+        f"change-password:{current_user.id}", limit=5, window_seconds=300
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many attempts — please wait a few minutes and try again",
+        )
+    # averify/ahash on the bounded hashing pool (#207), not the event loop:
+    # change-password ran argon2 synchronously at production cost (64 MiB, t=3),
+    # so concurrent calls from any authenticated user could stall the default
+    # single-worker deployment (GHSA-vv68).
+    if not await averify_password(
+        body.current_password, current_user.password_hash
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect",
         )
-    current_user.password_hash = hash_password(body.new_password)
+    current_user.password_hash = await ahash_password(body.new_password)
 
     sessions = (
         await db.execute(
@@ -775,9 +858,46 @@ async def change_email(
     return UserOut.model_validate(current_user)
 
 
+async def _deliver_password_reset(user_id: str, email: str) -> None:
+    """Mint the reset token and mail the link, off the response path (GHSA-vv68).
+
+    Runs as a background task with its own session, so the account-exists branch
+    of forgot-password does NOT do the INSERT + commit + SMTP round-trip inline —
+    that made the response time a user-enumeration oracle (the miss branch is a
+    bare SELECT). Failures are logged, never surfaced (the caller already 204'd).
+    """
+    import secrets
+    from datetime import timedelta
+
+    try:
+        raw = secrets.token_urlsafe(32)
+        async with SessionLocal() as db:
+            db.add(
+                PasswordResetToken(
+                    user_id=user_id,
+                    token_hash=_hash_token(raw),
+                    expires_at=utcnow() + timedelta(hours=1),
+                )
+            )
+            await db.commit()
+        origins = settings.cors_origin_list
+        base = origins[0] if origins else ""
+        link = f"{base}/reset-password?token={raw}"
+        await mailer.send_email(
+            [email],
+            "Reset your password",
+            f"Someone requested a password reset for your account.\n\n"
+            f"Use this link within the next hour to choose a new password:\n{link}\n\n"
+            f"If you didn't request this, you can ignore this email.",
+        )
+    except Exception:
+        logger.exception("forgot-password delivery failed for user %s", user_id)
+
+
 @router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT)
 async def forgot_password(
     body: ForgotPasswordRequest,
+    background: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     rate_limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> Response:
@@ -794,9 +914,6 @@ async def forgot_password(
         limit=settings.auth_email_rate_limit,
         window=settings.auth_email_rate_window_seconds,
     )
-    import secrets
-    from datetime import timedelta
-
     # Match the email case-insensitively, like login/registration do (§7.7,
     # auth/identity) — otherwise a differently-cased address silently gets no
     # reset email (and the neutral 204 hides that from the user).
@@ -804,25 +921,10 @@ async def forgot_password(
         select(User).where(func.lower(User.email) == str(body.email).strip().lower())
     )
     if user is not None and user.is_active:
-        raw = secrets.token_urlsafe(32)
-        db.add(
-            PasswordResetToken(
-                user_id=user.id,
-                token_hash=_hash_token(raw),
-                expires_at=utcnow() + timedelta(hours=1),
-            )
-        )
-        await db.commit()
-        origins = settings.cors_origin_list
-        base = origins[0] if origins else ""
-        link = f"{base}/reset-password?token={raw}"
-        await mailer.send_email(
-            [str(body.email)],
-            "Reset your password",
-            f"Someone requested a password reset for your account.\n\n"
-            f"Use this link within the next hour to choose a new password:\n{link}\n\n"
-            f"If you didn't request this, you can ignore this email.",
-        )
+        # Schedule the token-mint + mail send off the response path (GHSA-vv68):
+        # both branches now return 204 after the same bare SELECT, so the
+        # response time no longer discloses whether the account exists.
+        background.add_task(_deliver_password_reset, user.id, str(body.email))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

@@ -200,15 +200,20 @@ async def _execute_webhook(db, rule, event_name, payload, config) -> None:
     import httpx
 
     url = config["url"]
-    # §5.4: SSRF check on every call (DNS may have changed since rule save).
+    # §5.4: SSRF check on every call (DNS may have changed since rule save), and
+    # pin the connection to the validated IP so a rebinding DNS can't swap in an
+    # internal address between the check and the connect (GHSA-r7rp / ADR-0013).
     try:
-        await webhook_security.validate_webhook_url(url)
+        target = await webhook_security.resolve_pinned_target(url)
     except webhook_security.WebhookSecurityError as exc:
         logger.warning("webhook: rule %s refused unsafe target: %s", rule.id, exc)
         return
 
-    # §5.4: strip caller-uncontrollable headers from the admin header set.
+    # §5.4: strip caller-uncontrollable headers from the admin header set, then
+    # set Host ourselves — the connection targets an IP, so the origin needs the
+    # real hostname to route (and it must not be admin-forgeable).
     headers = webhook_security.sanitize_headers(config.get("headers"))
+    headers["Host"] = target.host_header
 
     # A body_template (admin-authored) has its competitor-controlled values
     # escaped + defanged for the declared content type (§5.4); without one we
@@ -229,10 +234,17 @@ async def _execute_webhook(db, rule, event_name, payload, config) -> None:
         }
 
     # follow_redirects stays off (httpx default) so a 302 can't bounce the
-    # request past the SSRF check to an internal target (§5.4).
+    # request past the SSRF check to an internal target (§5.4). We connect to the
+    # pinned IP URL with the original hostname as TLS SNI, and stream the
+    # response so its body is never buffered — a hostile target that streams an
+    # endless body (timeout is per-read, so it never fires while bytes flow)
+    # can't exhaust worker memory. Only the status line is consumed (GHSA-r7rp).
     async with httpx.AsyncClient(timeout=5.0, follow_redirects=False) as client:
-        response = await client.post(url, **request_kwargs)
-    logger.info("webhook: rule %s POST %s -> %s", rule.id, url, response.status_code)
+        async with client.stream(
+            "POST", target.url, extensions=target.extensions, **request_kwargs
+        ) as response:
+            status_code = response.status_code
+    logger.info("webhook: rule %s POST %s -> %s", rule.id, url, status_code)
 
 
 # --- release_hint (§5.3): unlock a hint for the event's subject, free --------

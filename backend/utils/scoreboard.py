@@ -156,8 +156,12 @@ async def _awarded_by_subject(
     already correct because dynamic solves are re-valued in place on each solve.
     Frozen (``as_of`` set): recompute in Python as of the cutoff, so a dynamic
     challenge is valued by its solve count *at freeze time* and only pre-cutoff
-    solvers count. Only runs while a board is frozen (end-game), so the extra
-    work is fine."""
+    solvers count. The recompute mirrors the live award exactly — each solve is
+    worth ``challenge_value(count) − that solve's mc_penalty`` floored at 0 — so
+    a multiple-choice solver who guessed wrong before solving keeps that penalty
+    across the freeze instead of being handed the un-penalised worth (the submit
+    path stores the penalty per row for precisely this; #148). Only runs while a
+    board is frozen (end-game), so the extra work is fine."""
     subj_col = Submission.team_id if team_mode else Submission.user_id
     scope = (
         Submission.team_id.isnot(None)
@@ -188,13 +192,16 @@ async def _awarded_by_subject(
     # solve count as of then (the CTFd freeze semantics for dynamic scoring).
     rows = (
         await db.execute(
-            select(Submission.challenge_id, subj_col, Submission.created_at).where(
-                *base, Submission.created_at <= as_of
-            )
+            select(
+                Submission.challenge_id,
+                subj_col,
+                Submission.created_at,
+                Submission.mc_penalty,
+            ).where(*base, Submission.created_at <= as_of)
         )
     ).all()
     counts: dict[str, int] = {}
-    for chid, _subj, _ts in rows:
+    for chid, _subj, _ts, _pen in rows:
         counts[chid] = counts.get(chid, 0) + 1
     challenges = {
         c.id: c
@@ -205,9 +212,14 @@ async def _awarded_by_subject(
         ).scalars()
     }
     totals: dict[str, tuple[int, object]] = {}
-    for chid, subj, ts in rows:
+    for chid, subj, ts, mc_penalty in rows:
         ch = challenges.get(chid)
-        value = challenge_value(ch, counts[chid]) if ch is not None else 0
+        gross = challenge_value(ch, counts[chid]) if ch is not None else 0
+        # Net the solve exactly as the live board does: the submit path re-values
+        # every solver to ``challenge_value(count) − their own mc_penalty`` (floored
+        # at 0), so the frozen recompute must subtract that stored per-solve penalty
+        # too. It is 0 for every non-penalised solve, leaving them unchanged.
+        value = max(0, gross - (mc_penalty or 0))
         pts, last = totals.get(subj, (0, ts))
         totals[subj] = (pts + value, ts if last is None or ts > last else last)
     return totals

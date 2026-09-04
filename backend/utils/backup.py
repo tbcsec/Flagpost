@@ -350,6 +350,32 @@ def _validate_registration_field_row(row: dict) -> None:
         raise ImportError_(f"registration_fields {row.get('id')!r}: {exc}") from exc
 
 
+def _validate_automation_rule_row(row: dict) -> None:
+    """Re-apply the rule-authoring invariant (``schemas.automation.RuleCreate``)
+    on an imported ``automation_rules`` row (GHSA-x8v4). ``load_row`` does no
+    content validation, so without this a crafted backup could persist arbitrary
+    ``trigger_type``/``actions`` JSON the visual builder's schema would reject —
+    an unknown trigger, or an action with no valid ``type`` — which the engine
+    would then execute (score tampering, forged announcements, webhook exfil of
+    event payloads). The #323/#324 class. The import route's section gate
+    additionally bounds *who* may import the automations section at all."""
+    from pydantic import ValidationError
+
+    from schemas.automation import RuleCreate
+
+    try:
+        RuleCreate.model_validate(
+            {
+                "name": row.get("name"),
+                "trigger_type": row.get("trigger_type"),
+                "conditions": row.get("conditions") or [],
+                "actions": row.get("actions") or [],
+            }
+        )
+    except ValidationError as exc:
+        raise ImportError_(f"automation_rules {row.get('id')!r}: {exc}") from exc
+
+
 async def _nk_competition(db: AsyncSession, row: dict) -> str | None:
     return await db.scalar(select(Competition.id).where(Competition.name == row["name"]))
 
@@ -494,7 +520,8 @@ SPECS: tuple[Spec, ...] = (
                  ("competition_id", "competition", True)), natural_key=_nk_assignment),
     Spec("automation_rules", AutomationRule, "automations", id_map="automation_rule",
          remaps=(("competition_id", "competition", True), ("owner_user_id", "user", True)),
-         natural_key=_nk_automation),
+         natural_key=_nk_automation,
+         validate_row=_validate_automation_rule_row),
     Spec("audit_log", AuditLogEntry, "audit_log", natural_key=_nk_audit, keep_id=True),
 )
 

@@ -186,6 +186,15 @@ async def create_personal_rule(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"
             )
+    # Trigger authorization applies to personal rules too (GHSA-x8v4): the
+    # notify-self action restriction bounds the *effect*, but not which events a
+    # rule may fire on. Without this a competitor could subscribe a personal rule
+    # to a staff-only trigger whose subject is themselves — e.g.
+    # challenge.flag_shared_detected (view_submissions) — turning covert
+    # anti-cheat detection into a self-service oracle.
+    await _authorize_trigger(
+        db, current_user, body.trigger_type, body.competition_id
+    )
     rule = AutomationRule(
         owner_user_id=current_user.id,
         competition_id=body.competition_id,
@@ -217,6 +226,11 @@ async def update_personal_rule(
     db: AsyncSession = Depends(get_db),
 ) -> RuleOut:
     rule = await _own_personal_rule(db, rule_id, current_user)
+    # Re-authorize against the (possibly changed) trigger — you can't switch a
+    # personal rule onto a staff-only event either (GHSA-x8v4).
+    await _authorize_trigger(
+        db, current_user, body.trigger_type, body.competition_id
+    )
     for key, value in _dump_rule_fields(body).items():
         setattr(rule, key, value)
     rule.competition_id = body.competition_id
@@ -252,10 +266,18 @@ async def list_rules(
     stmt = select(AutomationRule).where(AutomationRule.owner_user_id.is_(None))
     if competition_id is not None:
         await _require_module_enabled(db, competition_id)
-        stmt = stmt.where(
-            (AutomationRule.competition_id == competition_id)
-            | (AutomationRule.competition_id.is_(None))
-        )
+        # Surface global org rules only to a caller who could read them directly:
+        # get_rule requires a GLOBAL automation_view for a global rule, so a
+        # competition-scoped grant (a Judge) must not read global rules' full
+        # action configs — webhook URLs/headers, email templates — by ORing them
+        # into a competition listing (GHSA-x8v4).
+        if await user_has_permission(db, current_user.id, "automation_view", None):
+            stmt = stmt.where(
+                (AutomationRule.competition_id == competition_id)
+                | (AutomationRule.competition_id.is_(None))
+            )
+        else:
+            stmt = stmt.where(AutomationRule.competition_id == competition_id)
     else:
         stmt = stmt.where(AutomationRule.competition_id.is_(None))
     rules = (

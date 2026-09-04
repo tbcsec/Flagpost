@@ -68,4 +68,4 @@ weasyprint>=69,<70
 # Prometheus /metrics exposition (#351). Pure-Python, no native deps or infra.
 # Imported lazily by utils/metrics (only when METRICS_ENABLED), so a disabled or
 # zero-infra stack never loads it (mirrors the lazy-import deps above).
-prometheus-client>=0.21,<1.0
+prometheus-client>=0.26.0,<1.0

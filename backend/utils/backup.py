@@ -350,6 +350,32 @@ def _validate_registration_field_row(row: dict) -> None:
         raise ImportError_(f"registration_fields {row.get('id')!r}: {exc}") from exc
 
 
+def _validate_page_row(row: dict) -> None:
+    """Re-apply the page-authoring invariants (``schemas.page.PageCreate``) on an
+    imported ``pages`` row (GHSA-4wrj). ``load_row`` does no content validation,
+    so without this a crafted backup could publish a page — ``visibility:public``,
+    ``draft:false`` — that skips the slug regex, the reserved-slug list, and the
+    rich-text size/shape cap the authoring route enforces, landing on the
+    unauthenticated ``GET /api/pages/{slug}``. The #323/#324 class. Validates the
+    content subset (``PageCreate`` forbids extra keys, so id/timestamps/
+    competition_id are dropped first)."""
+    from pydantic import ValidationError
+
+    from schemas.page import PageCreate
+
+    fields = {
+        key: row[key]
+        for key in (
+            "slug", "title", "content", "icon", "nav_order", "visibility", "draft"
+        )
+        if key in row
+    }
+    try:
+        PageCreate.model_validate(fields)
+    except ValidationError as exc:
+        raise ImportError_(f"pages {row.get('slug')!r}: {exc}") from exc
+
+
 async def _nk_competition(db: AsyncSession, row: dict) -> str | None:
     return await db.scalar(select(Competition.id).where(Competition.name == row["name"]))
 
@@ -396,7 +422,8 @@ SPECS: tuple[Spec, ...] = (
     # address, which makes it the right identity for the additive import — a
     # restore onto an install that already has /p/about leaves that page alone
     # rather than creating a second one that can't have the URL.
-    Spec("pages", Page, "site_settings", id_map="page", natural_key=_nk_page),
+    Spec("pages", Page, "site_settings", id_map="page", natural_key=_nk_page,
+         validate_row=_validate_page_row),
     # Custom brand themes (#323) — portable branding. keep_id: the slug id is what
     # default_palette points at, so it must survive the round-trip. created_by is
     # install-local authorship (a user id that may not exist on the target), so

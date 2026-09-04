@@ -31,6 +31,7 @@ from auth.deps import require_permission
 from db import get_db
 from models.ticket import TicketMessage
 from models.ticket_attachment import TicketAttachment
+from utils.uploads import read_upload_capped
 from models.user import User
 from routers.tickets import _load_visible_ticket
 from schemas.ticket import TicketAttachmentOut
@@ -134,15 +135,14 @@ async def upload_ticket_attachment(
             detail="You can only attach to your own message",
         )
 
-    data = await file.read()
+    # Bounded read (F6): read at most the cap so the peak allocation is the cap,
+    # not the request size — this was the one upload route still doing an
+    # unbounded file.read() before the length check. read_upload_capped raises
+    # 413 the moment it crosses the cap.
+    data = await read_upload_capped(file, MAX_TICKET_ATTACHMENT_BYTES)
     if len(data) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Empty file"
-        )
-    if len(data) > MAX_TICKET_ATTACHMENT_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            detail="Image exceeds the 2.5 MB limit",
         )
     # Derive the type from the bytes; the client's Content-Type is discarded.
     content_type = sniff_image_type(data)

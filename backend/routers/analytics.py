@@ -37,6 +37,7 @@ from schemas.analytics import (
 )
 from schemas.submission import SubmissionCorrectness, SubmissionOut, SubmissionPage
 from utils.analytics import challenge_analytics, subject_count, team_analytics
+from utils.csv_safe import csv_safe
 
 router = APIRouter(
     prefix="/api/competitions/{competition_id}/analytics", tags=["analytics"]
@@ -230,12 +231,16 @@ async def submission_browser_export(
         ["created_at", "challenge_id", "user_id", "team_id", "correctness", "value", "points_awarded"]
     )
     for row in rows:
+        # csv_safe every cell (GHSA-352q / F7): these columns are ids/enums/numbers
+        # today (csv_safe is a pass-through for those), but wrapping uniformly keeps
+        # the guard in place if a free-text column (a submitted value, a username) is
+        # ever added to this export.
         writer.writerow(
             [
                 row.created_at.isoformat(),
-                row.challenge_id,
-                row.user_id,
-                row.team_id or "",
+                csv_safe(row.challenge_id),
+                csv_safe(row.user_id),
+                csv_safe(row.team_id or ""),
                 _correctness_of(row).value,
                 row.value,
                 row.points_awarded,

@@ -274,6 +274,35 @@ async def test_export_csv_is_organiser_only_and_carries_values(client):
     assert "ada" in body and "M" in body
 
 
+async def test_export_neutralises_csv_formula_injection(client):
+    """GHSA-352q: a competitor-controlled free-text answer that a spreadsheet
+    would evaluate as a formula is prefixed with an apostrophe in the export, so
+    opening the roster in Excel/LibreOffice can't execute it."""
+    import csv as _csv
+
+    comp = await _competition(client, "individual")
+    admin = await admin_token(client)
+    await _define(client, comp, [_DIET], admin)
+    token, _ = await _register(client, "mallory")
+    await client.post(
+        f"/api/competitions/{comp}/join",
+        json={"field_values": {"diet": "=1+1"}},
+        headers=_auth(token),
+    )
+
+    export = await client.get(
+        f"/api/competitions/{comp}/registration-fields/export", headers=_auth(admin)
+    )
+    assert export.status_code == 200
+    body = export.text
+    assert "'=1+1" in body  # neutralised
+    # No cell in the file begins with a bare formula lead.
+    rows = list(_csv.reader(body.splitlines()))
+    assert not any(
+        cell[:1] in "=+-@" for row in rows for cell in row if cell
+    )
+
+
 # --- validator unit -----------------------------------------------------------
 
 

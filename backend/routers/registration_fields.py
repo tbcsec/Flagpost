@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth.deps import get_current_user, require_permission
 from db import get_db
 from utils.competitions import get_visible_competition
+from utils.csv_safe import csv_safe
 from models.competition import Competition
 from models.registration_field import RegistrationFieldValues
 from models.role import Role, RoleAssignment
@@ -192,11 +193,17 @@ async def export_values(
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)
-    writer.writerow([subject_label] + [field.label for field in fields])
+    # csv_safe every cell (GHSA-352q): subject names and free-text answers are
+    # competitor-controlled, field labels are organiser-controlled, and this file
+    # is opened in a spreadsheet by an organiser — a leading =/+/-/@ would execute.
+    writer.writerow(
+        [csv_safe(subject_label)] + [csv_safe(field.label) for field in fields]
+    )
     for subject_id, name in sorted(rows, key=lambda r: (r[1] or "").lower()):
         answers = values_by_subject.get(subject_id, {})
         writer.writerow(
-            [name] + [_cell(answers.get(field.key)) for field in fields]
+            [csv_safe(name)]
+            + [csv_safe(answers.get(field.key)) for field in fields]
         )
 
     return Response(
@@ -208,11 +215,3 @@ async def export_values(
             )
         },
     )
-
-
-def _cell(value: object) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, bool):
-        return "yes" if value else "no"
-    return str(value)

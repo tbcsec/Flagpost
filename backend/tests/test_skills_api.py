@@ -170,6 +170,27 @@ async def test_both_reads_404_when_skills_disabled(client):
     assert (await client.get("/api/admin/skills", headers=_auth(admin))).status_code == 404
 
 
+async def test_a_solve_invalidates_the_cached_web(client):
+    # The web is a cached read; a solve must drop it so it never lags the scoring
+    # event (the module subscribes invalidate_skills to challenge.solved).
+    settings.skills_cache_seconds = 30  # cache ON; the autouse fixture restores after
+    admin = await admin_token(client)
+    comp = await _competition(client, admin)
+    cat = await _category(client, admin, comp, "Web")
+    chal = await _challenge(client, admin, comp, flag="flag{a}", category_id=cat)
+    ada, _ = await _register(client, "ada")
+    await _join(client, ada, comp)
+
+    # Prime the cache while ada has nothing.
+    primed = (await client.get("/api/me/skills", headers=_auth(ada))).json()
+    assert primed["total"] == 0
+    r = await _solve(client, ada, comp, chal, "flag{a}")
+    assert r.json()["correct"] is True
+    # The next read reflects the solve — the cache was dropped, not waited out.
+    after = (await client.get("/api/me/skills", headers=_auth(ada))).json()
+    assert after["skills"] == [{"skill": "web", "score": 1}]
+
+
 async def test_operational_settings_round_trips_skills_enabled(client):
     admin = await admin_token(client)
     # Default on, surfaced on both the admin operational read and the public read.

@@ -40,6 +40,13 @@ describe("buildRadar", () => {
     expect(Math.hypot(first.pointX - g.cx, first.pointY - g.cy)).toBeCloseTo(g.radius);
     const crypto = g.axes[2];
     expect(Math.hypot(crypto.pointX - g.cx, crypto.pointY - g.cy)).toBeLessThan(g.radius);
+    // The viewBox is padded horizontally (negative min-x, wider than tall) so the
+    // outward-anchored edge labels have room and don't clip; the plot stays centred.
+    const [minX, minY, w, h] = g.viewBox.split(" ").map(Number);
+    expect(minX).toBeLessThan(0);
+    expect(minY).toBe(0);
+    expect(w).toBeGreaterThan(h);
+    expect(minX + w / 2).toBeCloseTo(g.cx); // plot centre stays centred
   });
 
   it("emits a data polygon and concentric grid rings", () => {

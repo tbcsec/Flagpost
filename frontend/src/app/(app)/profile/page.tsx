@@ -38,7 +38,7 @@ type Tab = "account" | "notifications" | "tokens" | "certificates" | "skills";
 // Labels resolve through `t("tabs.<value>")` at render (the module-level array
 // can't call the hook) — the value doubles as the message key. The "skills" tab
 // only shows when the site-wide skills web is enabled (#364), filtered below.
-const TAB_VALUES: Tab[] = ["account", "notifications", "tokens", "certificates", "skills"];
+const TAB_VALUES: Tab[] = ["account", "notifications", "skills", "tokens", "certificates"];
 
 /** The tab named in `?tab=`, or the first one for a stale/absent value. */
 function resolveTab(requested: string | null): Tab {

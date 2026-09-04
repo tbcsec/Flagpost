@@ -18,9 +18,9 @@ export function SkillsRadar({ skills }: { skills: SkillDatum[] }) {
 
   return (
     <svg
-      viewBox={`0 0 ${g.size} ${g.size}`}
+      viewBox={g.viewBox}
       width="100%"
-      className="mx-auto h-auto w-full max-w-[24em]"
+      className="mx-auto h-auto w-full max-w-[26em]"
       role="img"
       aria-label={t("radarAria", { count: skills.length })}
     >

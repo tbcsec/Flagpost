@@ -34,6 +34,9 @@ export interface RadarGeometry {
   axes: RadarAxis[];
   polygon: string; // "x,y x,y …" — the data web
   rings: string[]; // concentric gridline polygons, innermost first
+  // viewBox with horizontal padding so the left/right axis labels (anchored
+  // outward past the ring) don't clip at the edge. The plot stays centred.
+  viewBox: string;
 }
 
 const DEFAULT_SIZE = 320;
@@ -105,7 +108,12 @@ export function buildRadar(
     );
   }
 
-  return { size, cx, cy, radius, maxScore, axes, polygon, rings };
+  // Reserve horizontal room for the outward-anchored left/right labels; the plot
+  // centre (cx = size/2) stays the centre of this wider box.
+  const padX = Math.round(size * 0.18);
+  const viewBox = `${-padX} 0 ${size + 2 * padX} ${size}`;
+
+  return { size, cx, cy, radius, maxScore, axes, polygon, rings, viewBox };
 }
 
 function round(n: number): number {

@@ -8,6 +8,7 @@ import { SectionHeader } from "@/components/app/section-header";
 import { AvatarCard } from "@/components/profile/avatar-card";
 import { UsernameCard } from "@/components/profile/username-card";
 import { MyCertificatesCard } from "@/components/profile/certificates-card";
+import { MySkillsCard } from "@/components/profile/skills-card";
 import { MyApiTokensCard } from "@/components/profile/api-tokens-card";
 import { EmailCard } from "@/components/profile/email-card";
 import { NotificationPreferencesCard } from "@/components/profile/notification-preferences";
@@ -32,11 +33,12 @@ import { toast } from "@/stores/toast";
 // precedent: a half-typed password or an in-progress email edit survives a look
 // at another tab. The display name is still read-only — renaming has no endpoint
 // yet, and it's the primary login identifier (ADR-0015).
-type Tab = "account" | "notifications" | "tokens" | "certificates";
+type Tab = "account" | "notifications" | "tokens" | "certificates" | "skills";
 
 // Labels resolve through `t("tabs.<value>")` at render (the module-level array
-// can't call the hook) — the value doubles as the message key.
-const TAB_VALUES: Tab[] = ["account", "notifications", "tokens", "certificates"];
+// can't call the hook) — the value doubles as the message key. The "skills" tab
+// only shows when the site-wide skills web is enabled (#364), filtered below.
+const TAB_VALUES: Tab[] = ["account", "notifications", "tokens", "certificates", "skills"];
 
 /** The tab named in `?tab=`, or the first one for a stale/absent value. */
 function resolveTab(requested: string | null): Tab {
@@ -183,7 +185,12 @@ function ProfileInner() {
   const needsVerification =
     !!settings?.email_verification_enabled && !!user && !user.email_verified_at;
 
-  const tab = resolveTab(searchParams.get("tab"));
+  // The skills web is a site-wide feature (#364); hide its tab when it's off, and
+  // don't honour a stale `?tab=skills` deep link in that case.
+  const skillsEnabled = settings?.skills_enabled ?? false;
+  const visibleTabs = TAB_VALUES.filter((v) => v !== "skills" || skillsEnabled);
+  const requestedTab = resolveTab(searchParams.get("tab"));
+  const tab = visibleTabs.includes(requestedTab) ? requestedTab : "account";
 
   function setTab(next: Tab) {
     // push, not replace: the URL is the state, so Back undoes a tab switch.
@@ -198,7 +205,7 @@ function ProfileInner() {
       <SectionHeader title={t("title")} subtitle={t("subtitle")} />
 
       <Tabs
-        tabs={TAB_VALUES.map((value) => ({ value, label: t(`tabs.${value}`) }))}
+        tabs={visibleTabs.map((value) => ({ value, label: t(`tabs.${value}`) }))}
         value={tab}
         onValueChange={(v) => setTab(v as Tab)}
       />
@@ -227,6 +234,12 @@ function ProfileInner() {
       <div className={tab === "certificates" ? "" : "hidden"}>
         <MyCertificatesCard />
       </div>
+
+      {skillsEnabled && (
+        <div className={tab === "skills" ? "" : "hidden"}>
+          <MySkillsCard />
+        </div>
+      )}
     </>
   );
 }

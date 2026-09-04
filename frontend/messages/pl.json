@@ -156,7 +156,8 @@
       "events": "Dziennik zdarzeń",
       "automations": "Automatyzacja",
       "siteSettings": "Ustawienia witryny",
-      "pages": "Pages"
+      "pages": "Pages",
+      "skills": "Skills"
     },
     "notifications": {
       "title": "Powiadomienia",
@@ -1116,7 +1117,8 @@
       "account": "Konto",
       "notifications": "Powiadomienia",
       "tokens": "Tokeny API",
-      "certificates": "Certyfikaty"
+      "certificates": "Certyfikaty",
+      "skills": "Skills"
     },
     "verify": {
       "title": "Potwierdź swój adres e-mail",
@@ -1267,6 +1269,14 @@
       "cooldown": "You've changed your username recently — you can change it again on {date}.",
       "updatedToast": "You're now {name}",
       "failed": "Couldn't change your username"
+    },
+    "skills": {
+      "title": "Your skills",
+      "description": "The categories you've solved in, built up across every competition you've played.",
+      "summary": "{total, plural, =0 {No solves yet} one {# solve} other {# solves}} across {competitions, plural, one {# competition} other {# competitions}}.",
+      "emptyTitle": "No skills yet",
+      "emptyDescription": "Solve challenges in a competition and the categories you tackle will grow your skills web here — across every event you take part in.",
+      "loadError": "Couldn't load your skills."
     }
   },
   "teams": {
@@ -2784,6 +2794,20 @@
       "deleteConfirm": "Delete",
       "emptyTitle": "No identity providers",
       "emptyDescription": "Add an OIDC, OAuth 2.0, SAML or LDAP provider to let people sign in with an existing account instead of a Flagpost password."
+    },
+    "skills": {
+      "title": "Admin — Skills",
+      "subtitle": "Global — the skills matrix across every competitor and competition",
+      "noAccessTitle": "No access",
+      "noAccessDescription": "You need the view-global-analytics permission to see the skills matrix.",
+      "emptyTitle": "No skill data yet",
+      "emptyDescription": "Once competitors solve categorised challenges, their skills appear here — accumulated across every competition.",
+      "cardTitle": "{count, plural, one {# competitor} other {# competitors}}",
+      "colUser": "Competitor",
+      "colTotal": "Total",
+      "range": "{from}–{to} of {total}",
+      "prev": "Previous",
+      "next": "Next"
     }
   },
   "registration": {
@@ -2825,5 +2849,8 @@
       "saved": "Zapisano dane",
       "error": "Nie udało się zapisać"
     }
+  },
+  "skills": {
+    "radarAria": "Skills web across {count, plural, one {# category} other {# categories}}"
   }
 }

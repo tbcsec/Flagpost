@@ -2,6 +2,8 @@
 bounded timeout, room authorization, the join snapshot, and the live
 challenge.solved → scoreboard broadcast path end to end."""
 
+import pytest
+
 from config import settings
 from tests.conftest import admin_token
 from tests.ws_client import WsTestClient
@@ -234,3 +236,51 @@ async def test_keepalive_ping_gets_a_pong_on_a_broadcast_only_room(client):
         # And the connection is still live: pings keep working.
         await ws.send_json({"type": "ping"})
         assert (await ws.receive_json())["type"] == "pong"
+
+
+@pytest.mark.competition_lifecycle
+async def test_scoreboard_room_rejects_competitor_before_start(client):
+    """GHSA-r7j2: the #221 gate — REST 403s a not_started board for competitors,
+    so the WS scoreboard room must reject them too (staff exempt)."""
+    admin = await admin_token(client)
+    comp = (
+        await client.post(
+            "/api/competitions",
+            json={"name": "Pre", "participation_mode": "team", "visibility": "public"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    token = await _joined_participant(client, comp, "early@example.com", "Early")
+
+    async with WsTestClient(main.app, f"/ws/scoreboard/{comp}") as ws:
+        await ws.send_json({"token": token})
+        assert await ws.expect_close() == 4403
+
+    # Staff can still watch the board before it opens.
+    async with WsTestClient(main.app, f"/ws/scoreboard/{comp}") as ws:
+        await ws.send_json({"token": admin})
+        assert (await ws.receive_json())["type"] == "auth_ok"
+
+
+async def test_challenge_presence_room_hides_draft_from_competitors(client):
+    """GHSA-r7j2: a draft challenge 404s on REST for competitors, so its presence
+    room must reject them rather than confirm the hidden challenge exists."""
+    comp, published = await _competition_with_challenge(client)
+    admin = await admin_token(client)
+    draft = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges",
+            json={"title": "Secret", "points": 100, "flag": "flag{d}"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    token = await _joined_participant(client, comp, "peek@example.com", "Peek")
+
+    async with WsTestClient(main.app, f"/ws/challenge/{draft}") as ws:
+        await ws.send_json({"token": token})
+        assert await ws.expect_close() == 4403
+
+    # The published challenge's presence room accepts the competitor.
+    async with WsTestClient(main.app, f"/ws/challenge/{published}") as ws:
+        await ws.send_json({"token": token})
+        assert (await ws.receive_json())["type"] == "auth_ok"

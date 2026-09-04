@@ -101,15 +101,23 @@ def setup(app, event_bus, db_factory) -> None:
     # collected/edited through the teams module.
     app.include_router(registration_fields_router)
 
+    from utils.competition_status import has_started
+
     async def authorize_activity(db, user, competition_id: str) -> bool:
-        # Same gate as the scoreboard room (§7.6): competitor access to the
-        # competition, and the competition must exist so a global admin token
-        # can't park sockets in rooms for made-up ids.
-        if await db.get(Competition, competition_id) is None:
+        # Same gate as the scoreboard room + REST (§7.6, #221 gate — GHSA-r7j2):
+        # competitor access, the competition exists, AND it has started. The
+        # activity feed is a results surface, so a not_started competition's staff
+        # test-solve pings must not reach a competitor's socket. Staff exempt.
+        competition = await db.get(Competition, competition_id)
+        if competition is None:
             return False
-        return await user_has_permission(
+        if not await user_has_permission(
             db, user.id, "challenge_view", competition_id
-        )
+        ):
+            return False
+        if has_started(competition):
+            return True
+        return await user_has_permission(db, user.id, "challenge_edit", competition_id)
 
     # Broadcast-only, no snapshot: REST is the initial load, the room only
     # tells clients *when* to reload.
@@ -135,28 +143,33 @@ def setup(app, event_bus, db_factory) -> None:
         #   unreleased challenge's count to those who 404 on it), and
         # - the board not being *actively* frozen (solve_count is per-viewer
         #   then — clients fall back to refetching their own frozen slice).
-        if event_name == "challenge.solved" and challenge_id:
+        # Freeze containment (GHSA-r7j2): while the board is actively frozen, a
+        # scoring-movement ping — even the bare id-only ping — leaks that some
+        # team just scored at time T, exactly what the freeze conceals on the
+        # REST path via visible_solve_cutoff ("one unfiltered path defeats the
+        # whole feature"). Suppress the whole ping for these events until
+        # unfreeze; staff read the REST board (unfrozen for them) as the live view.
+        if event_name in ("challenge.solved", "score.adjusted", "achievement.awarded"):
             async with db_factory() as db:
                 competition = await db.get(Competition, competition_id)
-                challenge = await db.get(Challenge, challenge_id)
-                visible = (
-                    challenge is not None
-                    and challenge.state == "published"
-                    and (
-                        challenge.release_at is None
-                        or ensure_aware_utc(challenge.release_at) <= utcnow()
+                if competition is not None and freeze_cutoff(competition) is not None:
+                    return False
+                if event_name == "challenge.solved" and challenge_id:
+                    challenge = await db.get(Challenge, challenge_id)
+                    visible = (
+                        challenge is not None
+                        and challenge.state == "published"
+                        and (
+                            challenge.release_at is None
+                            or ensure_aware_utc(challenge.release_at) <= utcnow()
+                        )
                     )
-                )
-                if (
-                    competition is not None
-                    and visible
-                    and freeze_cutoff(competition) is None
-                ):
-                    count = (await solve_counts(db, competition_id)).get(challenge_id, 0)
-                    frame["solve_count"] = count
-                    frame["value"] = challenge_value(challenge, count)
-                    if team_id:
-                        frame["team_id"] = team_id
+                    if competition is not None and visible:
+                        count = (await solve_counts(db, competition_id)).get(challenge_id, 0)
+                        frame["solve_count"] = count
+                        frame["value"] = challenge_value(challenge, count)
+                        if team_id:
+                            frame["team_id"] = team_id
         await manager.broadcast("activity", competition_id, frame)
         return True
 

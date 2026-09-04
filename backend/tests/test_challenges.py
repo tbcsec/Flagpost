@@ -2,9 +2,11 @@
 
 import json
 
+import pytest
 from sqlalchemy import select
 
 from db import SessionLocal
+from models.attachment import Attachment
 from models.audit_log import AuditLogEntry
 from models.challenge import Challenge
 from models.role import Role, RoleAssignment
@@ -714,3 +716,65 @@ async def test_connection_info_withheld_from_a_teamless_viewer_in_team_mode(clie
         )
     ).json()
     assert detail["connection_info"] is None
+
+
+async def test_ctfcli_import_bounds_decompressed_member_size():
+    """GHSA-wvjv: a zip member is read through a bounded reader that never pulls
+    more than the cap, so a zip bomb (tiny compressed, enormous decompressed)
+    can't force a huge allocation."""
+    import io
+    import zipfile
+
+    from utils.challenge_yaml import _MemberTooLarge, _read_member
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("big.bin", b"\x00" * (2 * 1024 * 1024))  # 2 MiB, ~nothing compressed
+    zf = zipfile.ZipFile(io.BytesIO(buf.getvalue()))
+
+    with pytest.raises(_MemberTooLarge):
+        _read_member(zf, "big.bin", 1024)  # cap below the member → refused (no giant alloc)
+    # A cap above the real size returns the whole member.
+    assert len(_read_member(zf, "big.bin", 4 * 1024 * 1024)) == 2 * 1024 * 1024
+
+
+async def test_ctfcli_import_sanitises_traversal_attachment_filename(client):
+    """GHSA-wvjv: a bundled filename is sanitised on import, so a traversal name
+    (..\\..\\evil.bat) can't ride verbatim into the challenge-export zip as a path."""
+    import io
+    import zipfile
+
+    import yaml
+
+    admin = await admin_token(client)
+    comp = await _make_competition(client)
+    evil = "..\\..\\evil.bat"
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr(
+            "welcome/challenge.yml",
+            yaml.safe_dump({
+                "name": "Welcome", "category": "misc", "description": "hi",
+                "value": 50, "flags": ["flag{hi}"], "files": [evil],
+            }),
+        )
+        zf.writestr(f"welcome/{evil}", b"payload")
+
+    imp = await client.post(
+        f"/api/competitions/{comp}/challenges/import",
+        files={"file": ("challenges.zip", buf.getvalue(), "application/zip")},
+        headers=_auth(admin),
+    )
+    assert imp.status_code == 200, imp.text
+    assert imp.json()["created"] == 1
+
+    async with SessionLocal() as session:
+        att = (
+            await session.scalars(
+                select(Attachment).where(Attachment.competition_id == comp)
+            )
+        ).first()
+    assert att is not None
+    # No path separator survives, so the export can't emit a traversal entry.
+    assert "\\" not in att.filename and "/" not in att.filename

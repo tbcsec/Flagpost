@@ -42,6 +42,35 @@ from models.hint import Hint
 from storage.base import ObjectStorage
 from utils.flags import hash_static_flag, make_salt
 from utils.richtext import doc_to_text
+from utils.uploads import safe_filename
+
+
+# --- zip-bomb containment (GHSA-wvjv) ----------------------------------------
+# zf.read() decompresses a whole member into memory trusting its declared size,
+# so a small DEFLATE bundle (~1000:1) can force a multi-GB allocation and OOM
+# the backend. Read every member through a bounded reader that never pulls more
+# than the cap, and hold the whole import under an aggregate ceiling.
+_MAX_MANIFEST_BYTES = 1 * 1024 * 1024        # a challenge.yml is tiny
+_MAX_MEMBER_BYTES = 50 * 1024 * 1024         # per bundled file — parity with the upload route's cap
+_MAX_TOTAL_DECOMPRESSED = 512 * 1024 * 1024  # aggregate across the whole import
+
+
+class _MemberTooLarge(Exception):
+    """A single zip member exceeded its decompressed cap (skip that member)."""
+
+
+def _read_member(zf: "zipfile.ZipFile", name: str, cap: int) -> bytes:
+    """Read a zip member without trusting its header-declared size: read at most
+    ``cap + 1`` bytes, so a zip bomb can't force a huge allocation. Raises
+    :class:`_MemberTooLarge` if the member is larger than ``cap``. ``KeyError``
+    (member absent) propagates to the caller, as ``zf.read`` did."""
+    with zf.open(name) as handle:
+        blob = handle.read(cap + 1)
+    if len(blob) > cap:
+        raise _MemberTooLarge(
+            f"{name}: exceeds {cap // (1024 * 1024)} MB decompressed"
+        )
+    return blob
 
 
 # --- TipTap ⇄ plain text -----------------------------------------------------
@@ -331,6 +360,10 @@ async def import_challenges(
     created = 0
     skipped = 0
     errors: list[str] = []
+    # Running total of decompressed bytes across the whole import (GHSA-wvjv):
+    # even with every member individually capped, a bundle of many bomb members
+    # could still exhaust memory in aggregate, so the total is bounded too.
+    total_bytes = 0
     # Remember prerequisite titles to resolve after all challenges exist.
     pending_prereqs: list[tuple[str, list[str]]] = []  # (challenge_id, titles)
     title_to_id: dict[str, str] = {}
@@ -340,7 +373,17 @@ async def import_challenges(
             continue
         folder = name.rsplit("/", 1)[0] if "/" in name else ""
         try:
-            spec = yaml.safe_load(zf.read(name)) or {}
+            raw = _read_member(zf, name, _MAX_MANIFEST_BYTES)
+        except _MemberTooLarge as exc:
+            errors.append(str(exc))
+            continue
+        total_bytes += len(raw)
+        if total_bytes > _MAX_TOTAL_DECOMPRESSED:
+            raise ValueError(
+                "Import exceeds the maximum total decompressed size"
+            )
+        try:
+            spec = yaml.safe_load(raw) or {}
         except yaml.YAMLError as exc:
             errors.append(f"{name}: {exc}")
             continue
@@ -436,17 +479,28 @@ async def import_challenges(
         for fname in spec.get("files") or []:
             path = f"{folder}/{fname}" if folder else fname
             try:
-                blob = zf.read(path)
+                blob = _read_member(zf, path, _MAX_MEMBER_BYTES)
             except KeyError:
                 errors.append(f"{title}: file {fname} not in zip")
                 continue
-            key = f"{competition.id}/{challenge.id}/{uuid4().hex}_{fname}"
+            except _MemberTooLarge as exc:
+                errors.append(f"{title}: {exc}")
+                continue
+            total_bytes += len(blob)
+            if total_bytes > _MAX_TOTAL_DECOMPRESSED:
+                raise ValueError(
+                    "Import exceeds the maximum total decompressed size"
+                )
+            # Sanitise the bundled filename (GHSA-wvjv): stored verbatim it would
+            # ride a traversal name (..\..\evil.bat) into the challenge-export zip.
+            safe = safe_filename(fname)
+            key = f"{competition.id}/{challenge.id}/{uuid4().hex}_{safe}"
             storage.put(key, blob, "application/octet-stream")
             db.add(
                 Attachment(
                     competition_id=competition.id,
                     challenge_id=challenge.id,
-                    filename=fname,
+                    filename=safe,
                     object_key=key,
                     content_type="application/octet-stream",
                     size_bytes=len(blob),

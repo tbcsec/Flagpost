@@ -11,9 +11,22 @@ not this helper.)
 
 from __future__ import annotations
 
+from pathlib import PurePosixPath
+
 from fastapi import HTTPException, UploadFile, status
 
 _CHUNK = 1 << 20  # 1 MiB
+
+
+def safe_filename(filename: str | None, *, default: str = "file") -> str:
+    """Reduce a client- or import-supplied filename to a safe leaf: drop any
+    directory components and neutralise backslashes, so it can't smuggle a path
+    (``../``) or a Windows separator into a stored name or an export archive
+    entry. Mirrors the attachment routes' ``_safe_name`` — used by the ctfcli
+    import, which stores the bundled filename verbatim otherwise (a name like
+    ``..\\..\\evil.bat`` would then ride into the challenge-export zip)."""
+    name = PurePosixPath(filename or default).name or default
+    return name.replace("\\", "_")
 
 
 async def read_upload_capped(file: UploadFile, max_bytes: int) -> bytes:

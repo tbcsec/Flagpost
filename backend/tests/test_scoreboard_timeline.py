@@ -181,6 +181,53 @@ async def test_freeze_hides_later_movement_but_staff_can_bypass(client):
     assert ada_live[-1]["points"] == 300
 
 
+async def test_frozen_timeline_reflects_multiple_choice_penalty(client):
+    """Regression (GHSA-r7j2): the frozen series recomputes each solve as of the
+    cutoff and must net the stored wrong-guess penalty, like the board it sits
+    beside. The absolute value matters here — before the fix the board *and* the
+    timeline both dropped the penalty, so a board-agreement check alone passed
+    while both were wrong; only pinning the number (100, not the gross 200)
+    catches it."""
+    admin = await admin_token(client)
+    # Unlimited guesses (the default is 2) so the two wrong tries don't lock the
+    # solver out before the correct answer.
+    comp = await _competition(client, mc_penalty_pct=25, mc_guess_limit=None)
+    cid = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges",
+            json={
+                "title": "MC",
+                "flag_type": "multiple_choice",
+                "choices": ["London", "Paris", "Berlin", "Madrid"],
+                "flag": "Paris",
+                "points": 200,
+            },
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    await client.post(
+        f"/api/competitions/{comp}/challenges/{cid}/publish", headers=_auth(admin)
+    )
+
+    ada, ada_id = await _player(client, comp, "ada")
+    # Two wrong guesses (25% of 200 each) then the correct answer → 200 - 100 = 100.
+    for wrong in ("London", "Berlin"):
+        await _submit(client, comp, cid, ada, wrong)
+    await _submit(client, comp, cid, ada, "Paris")
+
+    await client.post(
+        f"/api/competitions/{comp}/scoreboard/freeze", json={}, headers=_auth(admin)
+    )
+
+    frozen = (await _timeline(client, comp, ada)).json()
+    assert frozen["series"][0]["subject_id"] == ada_id  # sole scorer, top of the board
+    ada_points = frozen["series"][0]["points"]
+    assert ada_points[-1]["points"] == 100  # penalty kept across the freeze, not 200
+    # Still ends exactly on the frozen board total (the standing invariant).
+    board = await _board_points(client, comp, ada)
+    assert board[ada_id] == 100 == ada_points[-1]["points"]
+
+
 async def test_timeline_requires_authentication(client):
     comp = await _competition(client)
     resp = await client.get(f"/api/competitions/{comp}/scoreboard/timeline")

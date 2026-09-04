@@ -65,7 +65,8 @@ carries no admin-built message for a value to break out of.
     resolves again to connect — a rebind in that window isn't caught. Closing
     it needs pinning the connection to the validated IP (custom transport);
     deferred as a deeper hardening. The per-call check already removes the
-    much larger rule-save-only hole.
+    much larger rule-save-only hole. *(Closed in v1.7.0 — see the amendment
+    below.)*
     - **No destination rate-limiting / coalescing / runaway-loop specifics** —
     that's the still-open §15 question (a rule can legitimately fire thousands
     of times on a large event, so a naive cap is wrong). The engine's
@@ -73,3 +74,29 @@ carries no admin-built message for a value to break out of.
     destination volume.
 - Forecloses nothing: connection pinning and the §15 rate scheme are additive
   on top of this module.
+
+## Amendment — v1.7.0 (GHSA-r7rp): TOCTOU + response-body DoS closed
+
+A follow-up security review re-weighted two items above from "accepted residual"
+to "fix now", because the webhook author is not only a site Administrator: the
+competition-scoped **Judge** role holds `automation_create`, so the trust
+assumption behind deferring these was narrower than ADR-0013 first stated.
+
+1. **Resolve-then-connect TOCTOU — now closed.** `webhook_security
+   .resolve_pinned_target()` resolves + SSRF-checks the host once and returns a
+   target whose URL is the **validated IP**; the fire path connects to that IP
+   instead of re-resolving, so a DNS-rebinding host can't swap in an internal
+   address between the check and the connect. The original hostname is carried
+   in the `Host` header and (for https) the TLS SNI/`sni_hostname` extension, so
+   origin routing and certificate verification are unchanged. Implemented
+   without a custom transport (the option this ADR anticipated) — a URL rewrite
+   plus the `sni_hostname` request extension was sufficient and lighter.
+2. **Unbounded response body — now bounded.** `_execute_webhook` streams the
+   response (`client.stream`) and consumes only the status line; the body is
+   never buffered. `httpx`'s `timeout` is per-read, so a hostile target that
+   dribbles an endless chunked body previously grew worker memory without ever
+   tripping the timeout. Only the status is logged, so nothing is lost.
+
+Still residual: destination rate-limiting / coalescing (the §15 question) — a
+rule may legitimately fire thousands of times on a large event, so a naive cap
+is still wrong. Unchanged by this amendment.

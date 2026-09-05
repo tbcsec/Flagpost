@@ -298,10 +298,14 @@ Explicitly deferred past MVP (`docs/ROADMAP.md`, "Explicitly Deferred"
 section). If a task seems to need one of these, flag it and ask rather
 than quietly building a scoped-down version:
 
-- Plugin marketplace / third-party modules — the module *mechanism* is
-  used for required-core features starting in Tier 0, but the
-  marketplace path (listing/discovery + untrusted-code sandboxing) stays
-  closed.
+- Plugin marketplace / third-party modules — **now in progress for v1.7.0**
+  (ADR-0040, epic #385, spec in `docs/MODULES.md`): a tiered trust model
+  (content packs → declarative → signed code) over an open registry protocol
+  with code-based import. Build it *per that design*, not ad hoc. The module
+  *mechanism* was always used for required-core features; this opens it to
+  registry-distributed modules. **Still off-limits:** sandboxing genuinely
+  *untrusted* code (Tier 3, ARCHITECTURE §15) — the tiers are built so nothing
+  shipping now needs it.
 - Multi-competition tenancy *consolidation views* — `competition_id`
   scoping is required from Tier 0; cross-site rollups are not. **Carve-out:**
   the cross-competition **skills web** (#364, ADR-0039) is a sanctioned,

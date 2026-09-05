@@ -536,15 +536,16 @@ status so the reasoning isn't lost.
   — the non-redirect seam ADR-0021 deliberately left room for. External auth is
   now OIDC + SAML + LDAP under one `IdentityProvider` model; a fourth protocol is
   a new `kind`, not a new subsystem.
-- **Plugin marketplace & third-party modules** (Architecture §11) — the
-  marketplace listing/discovery experience and the isolation story for
-  untrusted third-party modules (Architecture §15). The manifest-driven
-  module *mechanism* itself (§11.1) still matters early — the required-core
-  features in Tier 1 (Challenges, Scoring, Hints, Support Tickets,
-  Announcements per §11.3) can be organized through that same registration
-  path for consistency, even though they're not user-toggleable. What's
-  deferred here is opening that path to marketplace-distributed, untrusted
-  code, not the module mechanism as a whole.
+- **Plugin marketplace & third-party modules** (Architecture §11) —
+  **partially lifted: in progress for v1.7.0** (ADR-0040, epic #385). The design
+  that unblocked it is a **tiered trust model** (content packs → declarative
+  modules → signed code modules) over an **open, mirrorable registry protocol**
+  with code-based import, so the low-risk tiers ship without waiting on the
+  hardest problem. The manifest-driven module *mechanism* (§11.1) was always in
+  use for the required-core features; what this lifts is opening that path to
+  registry-distributed modules. **Still deferred:** the isolation story for
+  genuinely *untrusted* third-party code (Tier 3, Architecture §15) — the tiering
+  is deliberately structured so nothing shipping now depends on it.
 - **Multi-competition tenancy consolidation** (Architecture §6) — the
   underlying `competition_id` scoping is in Tier 0 by necessity, but the
   cross-site rollup views, global-organiser role, and multi-site

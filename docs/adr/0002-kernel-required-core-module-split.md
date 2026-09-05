@@ -4,6 +4,11 @@
 **Date:** 2026-07-17
 **Architecture reference:** `ARCHITECTURE.md` §11.3
 
+> Refined by ADR-0040 (module SDK, import & marketplace), which defines the
+> trust tiers, registry protocol, and install model for the *marketplace*
+> modules this ADR anticipates — without changing the kernel / required-core /
+> optional split decided here.
+
 ## Context
 
 `VISION.md` calls for an Obsidian-inspired plugin ecosystem where most

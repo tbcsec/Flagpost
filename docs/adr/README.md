@@ -73,3 +73,4 @@ Status is one of:
 | [0037](0037-metrics-endpoint-gating.md) | Prometheus `/metrics` — kernel middleware, off by default, gated by token/allowlist | Accepted |
 | [0038](0038-boot-time-baseline-import.md) | Boot-time baseline import — provision an unconfigured instance from a mounted platform export | Accepted |
 | [0039](0039-cross-competition-skills-web.md) | Cross-competition skills web — the first participant-facing consolidation view | Accepted |
+| [0040](0040-module-sdk-and-marketplace.md) | Module SDK, import & marketplace — tiered trust over an open registry protocol | Accepted |

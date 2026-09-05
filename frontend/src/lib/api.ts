@@ -139,6 +139,7 @@ import type {
   CertificateAvailability,
   CertificateManifest,
   MyCertificate,
+  UserSkills,
 } from "@/lib/types";
 
 // Origin resolution lives in lib/origin.ts (a leaf module shared with server
@@ -1451,6 +1452,12 @@ export const analyticsApi = {
     apiFetch<TeamAnalyticsReport>(
       `/api/competitions/${competitionId}/analytics/teams`,
     ),
+};
+
+// Cross-competition skills web (#364, ADR-0039): the caller's own web, site-wide
+// (not nested under a competition) because a user's web spans every event.
+export const skillsApi = {
+  mine: () => apiFetch<UserSkills>("/api/me/skills"),
 };
 
 export const notificationsApi = {

@@ -125,6 +125,15 @@ only through your own authenticated export — the organiser CSV, or the field
 *definitions* in the backup. A competitor can edit their own answers. As with
 everything else here, they stay on your infrastructure.
 
+The **skills web** ([ADR-0039](https://github.com/tbcsec/Flagpost/blob/main/docs/adr/0039-cross-competition-skills-web.md))
+derives a per-user profile of solves-by-category that spans **every competition**
+on the instance — the one place a competitor's data is aggregated across events
+rather than kept per-competition. It is computed on demand from submissions you
+already hold (nothing new is stored beyond a cache, and nothing is sent
+anywhere). A competitor sees only their **own** web — there is no admin or
+cross-user view. It can be turned off instance-wide (`skills_enabled`).
+Other-user and public skill profiles are not built.
+
 ## Questions
 
 Open an issue at https://github.com/tbcsec/Flagpost/issues. For anything

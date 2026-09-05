@@ -1116,7 +1116,16 @@
       "account": "Account",
       "notifications": "Notifications",
       "tokens": "API tokens",
-      "certificates": "Certificates"
+      "certificates": "Certificates",
+      "skills": "Skills"
+    },
+    "skills": {
+      "title": "Your skills",
+      "description": "The categories you've solved in, built up across every competition you've played.",
+      "summary": "{total, plural, =0 {No solves yet} one {# solve} other {# solves}} across {competitions, plural, one {# competition} other {# competitions}}.",
+      "emptyTitle": "No skills yet",
+      "emptyDescription": "Solve challenges in a competition and the categories you tackle will grow your skills web here — across every event you take part in.",
+      "loadError": "Couldn't load your skills."
     },
     "avatar": {
       "title": "Profile picture",
@@ -1374,6 +1383,9 @@
       "successToast": "{count, plural, one {Awarded # competitor} other {Awarded # competitors}}",
       "errorToast": "Couldn't create award"
     }
+  },
+  "skills": {
+    "radarAria": "Skills web across {count, plural, one {# category} other {# categories}}"
   },
   "certificates": {
     "viewInProfile": "View in profile",

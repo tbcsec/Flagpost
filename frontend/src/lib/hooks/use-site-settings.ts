@@ -34,6 +34,7 @@ export const FALLBACK_SETTINGS: SiteSettings = {
   registration_open: true,
   logo_url: null,
   show_wordmark: true,
+  skills_enabled: true,
   demo_mode: false,
   demo_credentials: [],
   archive_auto_delete: true,

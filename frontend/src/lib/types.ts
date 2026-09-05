@@ -1309,6 +1309,9 @@ export interface SiteSettings {
   logo_url: string | null;
   // Whether the platform-name wordmark shows beside the logo in the lockup.
   show_wordmark: boolean;
+  // Whether the cross-competition skills web is on site-wide (#364), for gating
+  // the Skills nav/tab.
+  skills_enabled: boolean;
   // Demo instance (config-driven): drives the "resets hourly" banner.
   demo_mode: boolean;
   // Demo login accounts (#360) the login card renders as click-to-sign-in
@@ -1891,4 +1894,16 @@ export interface PageWrite {
   nav_order: number;
   visibility: PageVisibility;
   draft: boolean;
+}
+
+// Cross-competition skills web (#364, ADR-0039).
+export interface SkillScore {
+  skill: string;
+  score: number;
+}
+
+export interface UserSkills {
+  skills: SkillScore[];
+  total: number;
+  competitions_played: number;
 }

@@ -1,0 +1,19 @@
+id: skills
+name: Skills
+version: 1.0.0
+description: "A cross-competition, HackTheBox-style skills web: each competitor's per-category solves accumulate across every event, shown as a personal radar and an admin matrix."
+# Required-core, NOT one of the six per-competition-toggleable optionals: the web
+# spans every competition (ADR-0039), so it can't be a `competition_modules`
+# toggle. Its routes are always mounted; the FEATURE is switched site-wide by
+# `site_settings.skills_enabled` (checked in the router guard), which is where an
+# operator turns it off.
+required_core: true
+provides:
+  routes: true
+  # Slice 5 subscribes invalidate_skills to solve/category events.
+  event_listeners: true
+dependencies:
+  - competitions
+  - challenges
+  - scoring
+  - users

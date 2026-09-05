@@ -77,3 +77,42 @@ class MarketplaceSettingsUpdate(BaseModel):
         if v is not None and not v.startswith(("http://", "https://")):
             raise ValueError("registry_url must be an http(s) URL")
         return v
+
+
+# --- code resolution + install (#389 Slice B) -------------------------------
+
+# An import code is a short handle, not a secret for free content. Constrained so
+# it can't traverse the registry URL path (it's interpolated into /resolve/{code}).
+_CODE_PATTERN = r"^[A-Za-z0-9._-]{1,64}$"
+
+
+class ResolveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: str = Field(pattern=_CODE_PATTERN)
+
+
+class InstallRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: str = Field(pattern=_CODE_PATTERN)
+    # Target competition for a challenge pack; omitted for site-wide (theme) packs.
+    competition_id: str | None = None
+
+
+class ResolveOut(BaseModel):
+    """What the confirmation/trust screen renders for a resolved code. The trust
+    fields are the registry's claims (display hints) — the instance re-verifies the
+    signature locally at install time (docs/MODULES.md §5.2)."""
+
+    id: str
+    name: str
+    version: str
+    kind: str
+    pack_type: str | None = None
+    trust_tier: str | None = None
+    publisher: dict = Field(default_factory=dict)
+    requires_flagpost: dict = Field(default_factory=dict)
+    capabilities: list = Field(default_factory=list)
+    signature_present: bool
+    # Whether this instance can install it via this pipeline today — packs only
+    # (module install is #388/#391).
+    installable: bool

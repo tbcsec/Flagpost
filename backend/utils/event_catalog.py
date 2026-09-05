@@ -176,6 +176,11 @@ EVENT_TYPES: tuple[str, ...] = (
     # Platform administration (Admin → Site settings). Not competition events, so
     # they're excluded from automation triggers below.
     "platform.imported",
+    # A content pack was installed (#387, ADR-0040) — packaged challenges or
+    # brand themes, through the existing importers. Platform-admin, like
+    # platform.imported: a single bulk event, not a per-row flood, and not an
+    # automation trigger.
+    "platform.content_pack_installed",
 )
 
 TRIGGERABLE_EVENTS: tuple[str, ...] = tuple(

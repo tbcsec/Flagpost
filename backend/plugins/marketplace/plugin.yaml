@@ -1,0 +1,16 @@
+id: marketplace
+name: Marketplace
+version: 1.0.0
+description: "Install content packs (and, later, modules) from a registry. Tier 0 content-pack import first (ADR-0040, #387)."
+# Required-core: the marketplace surface loads on every install. The registry
+# settings + a site enable flag arrive with the import client (#389); v1 mounts
+# only content-pack install, gated by the install_content_pack permission.
+required_core: true
+provides:
+  routes: true
+# Reuses the existing importers: challenges (ctfcli import), site_settings (theme
+# presets), and the Competition model.
+dependencies:
+  - competitions
+  - challenges
+  - site_settings

@@ -116,6 +116,12 @@ def _resolve_jwt_secret(configured: str) -> str:
 # build rather than months of quietly wrong data.
 SOURCE_BUILD_VERSION = "1.6.0-src"
 
+# The marketplace project **root** ed25519 public key (base64 raw), an
+# always-trusted signer for the official/verified/signed trust policies (#389,
+# ADR-0040). Empty until an official signing key is minted; operators can add
+# their own trusted keys via the marketplace settings regardless.
+MARKETPLACE_ROOT_PUBLIC_KEY = os.environ.get("MARKETPLACE_ROOT_PUBLIC_KEY", "")
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

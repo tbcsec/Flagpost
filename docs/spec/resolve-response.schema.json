@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flagpost.io/spec/resolve-response.schema.json",
+  "title": "Flagpost import-code resolution response",
+  "description": "The body returned by GET {marketplace_url}/resolve/{code}. It carries everything the instance needs to render the install confirmation/trust screen and then fetch + verify the artifact (draft: ADR-0040, docs/MODULES.md §5.2). The code is a LOOKUP KEY, never the trust boundary — the instance MUST independently re-verify signature, digest, and compatibility locally before installing, and MUST NOT trust the `compatible`/`trust` booleans here as anything more than a display hint.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "code", "resolved", "publisher", "artifact", "signature", "requires_flagpost", "trust"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "code": {
+      "description": "The code that was resolved, echoed back.",
+      "type": "string"
+    },
+    "resolved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "version", "kind"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "$ref": "#/$defs/semver" },
+        "kind": { "type": "string", "enum": ["pack", "module"] },
+        "trust_tier": { "type": "string", "enum": ["declarative", "code"] },
+        "pack_type": {
+          "type": "string",
+          "enum": ["challenges", "theme", "translations", "automation-recipes"]
+        },
+        "summary": { "type": "string", "maxLength": 500 }
+      }
+    },
+    "publisher": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "url": { "type": "string", "format": "uri" },
+        "verified": { "type": "boolean", "default": false }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "digest"],
+      "properties": {
+        "url": { "type": "string", "format": "uri" },
+        "digest": { "$ref": "#/$defs/digest" },
+        "size": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "key_id", "value"],
+      "properties": {
+        "algorithm": { "type": "string", "enum": ["ed25519", "sigstore"] },
+        "key_id": { "type": "string" },
+        "value": { "type": "string" }
+      }
+    },
+    "requires_flagpost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min"],
+      "properties": {
+        "min": { "$ref": "#/$defs/semver" },
+        "max": { "$ref": "#/$defs/semver" }
+      }
+    },
+    "capabilities": {
+      "description": "Capabilities the module requests — rendered as the consent list. Authoritative copy lives in the signed artifact's manifest; the instance re-reads it after download and refuses if the download asks for more than was consented to.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "permissions": {
+      "description": "RBAC permission keys the module would add on install (code tier) — shown for consent.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "compatible": {
+      "description": "The registry's view of whether this artifact fits the requesting instance's version (if the instance sent one). A DISPLAY HINT ONLY — the instance re-checks requires_flagpost against its own version.",
+      "type": "boolean"
+    },
+    "trust": {
+      "description": "The registry's assertions about provenance — all DISPLAY HINTS. The instance re-derives real trust by verifying the signature against its own policy/keystore.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["signed"],
+      "properties": {
+        "signed": { "type": "boolean" },
+        "signed_by": { "type": "string" },
+        "verified_publisher": { "type": "boolean", "default": false },
+        "official": {
+          "description": "Signed by the Flagpost project root key (first-party).",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "commerce": {
+      "description": "Present when the artifact is paid or entitlement-gated. The entitlement is checked at DOWNLOAD time and thereafter verified OFFLINE — there is no runtime license phone-home (docs/MODULES.md §7).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["paid", "entitlement_required"],
+      "properties": {
+        "paid": { "type": "boolean" },
+        "entitlement_required": { "type": "boolean" },
+        "entitlement_present": {
+          "description": "Whether the resolution was made with a valid entitlement (e.g. the code was itself a purchase token, or an account entitlement was presented). If false and entitlement_required is true, the instance shows obtain_url instead of an install button.",
+          "type": "boolean",
+          "default": false
+        },
+        "obtain_url": {
+          "description": "Where a human buys/obtains the entitlement (opened in the operator's browser, never called by the server).",
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "expires_at": {
+      "description": "RFC 3339 time after which this resolution (and any short-lived signed artifact URL in it) is stale and must be re-resolved.",
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    }
+  }
+}

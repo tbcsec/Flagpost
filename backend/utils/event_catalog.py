@@ -181,6 +181,10 @@ EVENT_TYPES: tuple[str, ...] = (
     # platform.imported: a single bulk event, not a per-row flood, and not an
     # automation trigger.
     "platform.content_pack_installed",
+    # Marketplace registry/trust config changed (#389, ADR-0040) — the registry
+    # URL, trust policy, trusted keys, or enable flag. Platform-admin, like the
+    # rest of this group: audited, not an automation trigger.
+    "platform.marketplace_settings_updated",
 )
 
 TRIGGERABLE_EVENTS: tuple[str, ...] = tuple(

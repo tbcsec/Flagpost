@@ -162,6 +162,13 @@ PERMISSIONS: tuple[Permission, ...] = (
     Permission("instance_view", "Challenge Instances", Scope.COMPETITION),
     # Kill or extend any subject's instance (staff moderation).
     Permission("instance_manage", "Challenge Instances", Scope.COMPETITION),
+    # Marketplace / content packs (#387, ADR-0040). Install a content pack —
+    # packaged challenges (into a competition) or brand themes (site-wide) —
+    # through the existing importers. Global + Administrator-only among the
+    # built-in roles: a pack is a bulk authoring op across the whole install or
+    # into a chosen competition, comparable to a platform import, so it sits
+    # above the per-competition challenge_create grant rather than folding in.
+    Permission("install_content_pack", "Marketplace", Scope.GLOBAL),
 )
 
 PERMISSIONS_BY_KEY: dict[str, Permission] = {p.key: p for p in PERMISSIONS}

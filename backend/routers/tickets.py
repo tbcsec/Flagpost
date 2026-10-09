@@ -29,6 +29,14 @@ from models.competition import Competition
 from models.team import TeamMembership
 from models.ticket import Ticket, TicketMessage
 from models.user import User
+from ratelimit import get_rate_limiter
+from ratelimit.base import RateLimiter
+
+# Ticket creation is otherwise uncapped, and each ticket unlocks fresh
+# attachment storage, so an unbounded create loop is a storage-exhaustion vector
+# (GHSA-4wrj). A per-user cap generous enough never to bother a real reporter.
+_TICKET_CREATE_LIMIT = 20
+_TICKET_CREATE_WINDOW_S = 600  # 20 new tickets / 10 min / user
 from schemas.ticket import (
     TicketAssign,
     TicketCreate,
@@ -82,9 +90,21 @@ async def create_ticket(
     body: TicketCreate,
     current_user: User = Depends(require_permission("ticket_respond")),
     db: AsyncSession = Depends(get_db),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> TicketDetail:
     if await db.get(Competition, competition_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found")
+    # Per-user ticket-creation throttle (GHSA-4wrj): bounds the storage-growth
+    # loop (each ticket unlocks another 5 attachment slots).
+    if not await rate_limiter.hit(
+        f"ticket-create:{current_user.id}",
+        limit=_TICKET_CREATE_LIMIT,
+        window_seconds=_TICKET_CREATE_WINDOW_S,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many tickets opened — please wait before opening another",
+        )
     if body.challenge_id is not None:
         challenge = await db.scalar(
             select(Challenge).where(

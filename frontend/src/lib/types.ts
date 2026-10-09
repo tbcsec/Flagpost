@@ -1309,6 +1309,9 @@ export interface SiteSettings {
   logo_url: string | null;
   // Whether the platform-name wordmark shows beside the logo in the lockup.
   show_wordmark: boolean;
+  // Whether the cross-competition skills web is on site-wide (#364), for gating
+  // the Skills nav/tab.
+  skills_enabled: boolean;
   // Demo instance (config-driven): drives the "resets hourly" banner.
   demo_mode: boolean;
   // Demo login accounts (#360) the login card renders as click-to-sign-in
@@ -1891,4 +1894,66 @@ export interface PageWrite {
   nav_order: number;
   visibility: PageVisibility;
   draft: boolean;
+}
+
+// Cross-competition skills web (#364, ADR-0039).
+export interface SkillScore {
+  skill: string;
+  score: number;
+}
+
+export interface UserSkills {
+  skills: SkillScore[];
+  total: number;
+  competitions_played: number;
+}
+
+// --- Marketplace (module import, #389, ADR-0040) ----------------------------
+
+export interface MarketplaceTrustedKey {
+  key_id: string;
+  public_key: string; // base64 raw ed25519
+  verified: boolean;
+  label?: string | null;
+}
+
+export interface MarketplaceSettings {
+  enabled: boolean;
+  registry_url: string;
+  trust_policy: string; // official | verified | signed | any
+  max_trust_tier: string; // pack | declarative | code
+  trusted_keys: MarketplaceTrustedKey[];
+}
+
+export interface MarketplaceSettingsUpdate {
+  enabled?: boolean;
+  registry_url?: string;
+  trust_policy?: string;
+  max_trust_tier?: string;
+  trusted_keys?: MarketplaceTrustedKey[];
+}
+
+/** The confirmation payload for a resolved import code. The trust fields are the
+ *  registry's claims; the instance re-verifies the signature at install. */
+export interface MarketplaceResolveResult {
+  id: string;
+  name: string;
+  version: string;
+  kind: string; // pack | module
+  pack_type?: string | null;
+  trust_tier?: string | null;
+  publisher: Record<string, unknown>;
+  requires_flagpost: Record<string, unknown>;
+  capabilities: string[];
+  signature_present: boolean;
+  installable: boolean;
+}
+
+export interface ContentPackInstallResult {
+  id: string;
+  name: string;
+  version: string;
+  pack_type: string;
+  target: string; // a competition id, or "site"
+  result: Record<string, unknown>;
 }

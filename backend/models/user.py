@@ -123,3 +123,9 @@ class RefreshSession(Base, TimestampMixin):
     revoked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Reuse-detection family (GHSA-vv68 / RFC 9700 §4.14.2): every session in one
+    # login lineage shares a family_id — minted at login, inherited on each
+    # rotation. Replaying an already-revoked token reveals theft, so the whole
+    # family is revoked. Nullable: sessions minted before this column existed have
+    # no family and simply don't participate until they next rotate.
+    family_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)

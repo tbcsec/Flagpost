@@ -119,3 +119,35 @@ async def test_token_redemption_endpoints_are_throttled(client):
         for _ in range(settings.auth_rate_limit + 2)
     ]
     assert 429 in verify, verify
+
+
+async def test_successful_login_resets_the_identifier_throttle(client, monkeypatch):
+    """GHSA-vv68: a successful login clears the identifier's bucket, so an
+    attacker filling a known user's login bucket with wrong guesses can't lock
+    the real user out — a correct password in any freed slot resets the count.
+    Failed attempts still accrue, so brute-force stays throttled."""
+    monkeypatch.setattr(settings, "auth_rate_limit", 3)
+    reg = await client.post(
+        "/api/auth/register",
+        json={"display_name": "throttletgt", "email": "tt@example.com", "password": "correct-horse"},
+    )
+    assert reg.status_code == 201  # register uses its own bucket, not login's
+
+    # Two wrong guesses — the login bucket sits at 2/3.
+    for _ in range(2):
+        r = await client.post(
+            "/api/auth/login", json={"identifier": "tt@example.com", "password": "wrong"}
+        )
+        assert r.status_code == 401
+    # A correct login (the 3rd, still allowed) resets the bucket.
+    ok = await client.post(
+        "/api/auth/login", json={"identifier": "tt@example.com", "password": "correct-horse"}
+    )
+    assert ok.status_code == 200
+    # Bucket cleared → three more wrong guesses are allowed (401); without the
+    # reset the very next attempt would already be 429.
+    for _ in range(3):
+        r = await client.post(
+            "/api/auth/login", json={"identifier": "tt@example.com", "password": "wrong"}
+        )
+        assert r.status_code == 401, r.text

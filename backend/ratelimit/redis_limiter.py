@@ -42,11 +42,22 @@ class RedisRateLimiter:
         now = time.time()
         cutoff = now - window_seconds
         redis_key = f"ratelimit:{key}"
+        # Unique member so identical-timestamp hits don't collapse into one.
+        member = f"{now}:{uuid4().hex}"
         pipe = self._redis.pipeline()
         pipe.zremrangebyscore(redis_key, 0, cutoff)
-        # Unique member so identical-timestamp hits don't collapse into one.
-        pipe.zadd(redis_key, {f"{now}:{uuid4().hex}": now})
+        pipe.zadd(redis_key, {member: now})
         pipe.zcard(redis_key)
         pipe.expire(redis_key, window_seconds)
         _, _, count, _ = await pipe.execute()
-        return count <= limit
+        if count > limit:
+            # Rejected: drop the member we just added so this attempt doesn't
+            # extend the window (GHSA-vv68). Without this, a sustained flood on a
+            # full key keeps it full forever — the login-lockout amplifier — and
+            # it diverged from the in-memory double, which never counted rejects.
+            await self._redis.zrem(redis_key, member)
+            return False
+        return True
+
+    async def reset(self, key: str) -> None:
+        await self._redis.delete(f"ratelimit:{key}")

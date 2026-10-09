@@ -20,5 +20,15 @@ from typing import Protocol
 class RateLimiter(Protocol):
     async def hit(self, key: str, *, limit: int, window_seconds: int) -> bool:
         """Record one hit for ``key``; return True if allowed, False if the
-        trailing-window count now exceeds ``limit`` (the caller should reject)."""
+        trailing-window count now exceeds ``limit`` (the caller should reject).
+
+        A **rejected** hit must not extend the window — otherwise a sustained
+        flood on an already-full key keeps it full indefinitely (the login-
+        lockout half of GHSA-vv68)."""
+        ...
+
+    async def reset(self, key: str) -> None:
+        """Clear ``key``'s window. Used after a *successful* login so an
+        attacker's failed-attempt flood can't lock the legitimate user out of
+        their own account (GHSA-vv68)."""
         ...

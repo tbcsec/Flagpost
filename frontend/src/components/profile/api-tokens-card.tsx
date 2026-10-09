@@ -168,11 +168,16 @@ function CreateTokenDialog({
   // starts from a clean form.
   const [description, setDescription] = useState("");
   const [expiresInDays, setExpiresInDays] = useState("90");
+  const [currentPassword, setCurrentPassword] = useState("");
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     create.mutate(
-      { description: description.trim(), expires_in_days: Number(expiresInDays) || 90 },
+      {
+        description: description.trim(),
+        expires_in_days: Number(expiresInDays) || 90,
+        current_password: currentPassword,
+      },
       {
         onSuccess: (token) => {
           onOpenChange(false);
@@ -217,11 +222,27 @@ function CreateTokenDialog({
               required
             />
           </div>
+          <div className="grid gap-2">
+            <Label htmlFor="token-password">{tr("passwordLabel")}</Label>
+            <Input
+              id="token-password"
+              type="password"
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder={tr("passwordPlaceholder")}
+              required
+            />
+            <p className="text-xs text-muted-foreground">{tr("passwordHint")}</p>
+          </div>
           {create.error && (
             <p role="alert" className="text-sm text-destructive">{(create.error as Error).message}</p>
           )}
           <DialogFooter>
-            <Button type="submit" disabled={create.isPending || !description.trim()}>
+            <Button
+              type="submit"
+              disabled={create.isPending || !description.trim() || !currentPassword}
+            >
               {create.isPending ? tr("creating") : tr("createSubmit")}
             </Button>
           </DialogFooter>

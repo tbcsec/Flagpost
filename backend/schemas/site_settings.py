@@ -97,6 +97,10 @@ class SiteSettingsOut(BaseModel):
     logo_url: str | None
     # Whether the platform-name wordmark shows beside the logo in the lockup.
     show_wordmark: bool
+    # Whether the cross-competition skills web is on site-wide (#364, ADR-0039).
+    # Public so the app shell can gate the Skills nav/tab without a probe request.
+    # Defaults true so a client reading an older payload still shows the feature.
+    skills_enabled: bool = True
     # Whether this instance is running in demo mode (config-driven, not stored) —
     # drives the "resets hourly" banner. The router sets it from
     # settings.demo_mode; defaults false everywhere else.
@@ -214,6 +218,8 @@ class OperationalSettingsOut(BaseModel):
     registration_open: bool
     # Self-service rename toggle (#298); admin rename is never gated by it.
     username_changes_enabled: bool
+    # Cross-competition skills web on/off, site-wide (#364, ADR-0039).
+    skills_enabled: bool
     smtp_host: str | None
     smtp_port: int
     smtp_username: str | None
@@ -267,6 +273,10 @@ class OperationalSettingsUpdate(BaseModel):
     # object, and a `= True` default would let a scripted client that tweaks
     # SMTP and omits this field silently re-enable renames an admin turned off.
     username_changes_enabled: bool | None = None
+    # Cross-competition skills web (#364). **Omitted / null = leave unchanged**,
+    # the update_checks_enabled pattern — this PUT replaces the whole object, so a
+    # `= True` default would let a client tweaking SMTP silently re-enable it.
+    skills_enabled: bool | None = None
     smtp_host: str | None = Field(default=None, max_length=255)
     smtp_port: int = Field(default=587, ge=1, le=65535)
     smtp_username: str | None = Field(default=None, max_length=255)

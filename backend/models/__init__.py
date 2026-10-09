@@ -38,6 +38,7 @@ from models.feedback import (
     SurveyResponse,
 )
 from models.hint import Hint, HintReveal
+from models.marketplace import MarketplaceSettings
 from models.mc_guess_reset import MCGuessReset
 from models.notification import Notification
 from models.identity_provider import (

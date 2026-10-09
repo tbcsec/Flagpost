@@ -109,6 +109,13 @@ class SiteSettings(Base, TimestampMixin):
     username_changes_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="1"
     )
+    # Site-wide switch for the cross-competition skills web (#364, ADR-0039). On
+    # by default. Off makes both skills reads 404 (the router guard) and hides the
+    # UI. It's a *site* flag, not a per-competition module toggle, because the web
+    # spans every competition — hence a SiteSettings column, not competition_modules.
+    skills_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="1"
+    )
     # Outbound SMTP for the send_email automation action (§5.3). When smtp_host
     # is set these override the env config; unset = fall back to env (or, if that
     # too is unset, email is a logged no-op).

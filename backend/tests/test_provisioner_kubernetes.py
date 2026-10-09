@@ -278,21 +278,35 @@ async def test_create_always_lays_down_a_networkpolicy():
     assert spec["podSelector"]["matchLabels"]["flagpost.io/instance-id"] == "inst-1"
 
 
+# DNS egress is scoped to the cluster DNS pods, not any host on port 53 (GHSA-vgrr).
+_DNS_EGRESS = {
+    "to": [
+        {
+            "namespaceSelector": {
+                "matchLabels": {"kubernetes.io/metadata.name": "kube-system"}
+            },
+            "podSelector": {"matchLabels": {"k8s-app": "kube-dns"}},
+        }
+    ],
+    "ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}],
+}
+
+
 async def test_deny_mode_egress_is_dns_only():
     router = _happy_create_router()
     prov = KubernetesProvisioner(_cfg(egress_denied=True), transport=router.transport(), sleep=_nosleep)
     await prov.create(_spec(ports=[1337], host_ports={1337: 30001}))
     spec = _netpol_body(router)
-    # Egress: DNS (UDP+TCP 53) and nothing else — no ipBlock allowing outbound.
-    assert spec["egress"] == [
-        {"ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}]}
-    ]
+    # Egress: DNS to kube-dns only — no ipBlock, and no egress-to-any on port 53.
+    assert spec["egress"] == [_DNS_EGRESS]
     # Ingress: the declared container port from any source.
     assert spec["ingress"] == [{"ports": [{"protocol": "TCP", "port": 1337}]}]
 
 
 def _ipblocks_by_family(egress: list) -> dict[str, dict]:
-    blocks = next(r for r in egress if "to" in r)["to"]
+    # The DNS rule now also has a "to" (a pod/namespace selector), so pick the
+    # rule whose "to" carries ipBlocks, not the DNS rule.
+    blocks = next(r for r in egress if r.get("to") and "ipBlock" in r["to"][0])["to"]
     return {b["ipBlock"]["cidr"]: b["ipBlock"] for b in blocks}
 
 
@@ -305,8 +319,8 @@ async def test_allow_mode_egress_excepts_metadata_and_cluster_cidrs():
     )
     await prov.create(_spec())
     egress = _netpol_body(router)["egress"]
-    # DNS is still carved in (kube-dns lives in the excepted cluster range).
-    assert {"ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}]} in egress
+    # DNS is still carved in (scoped to kube-dns).
+    assert _DNS_EGRESS in egress
     blocks = _ipblocks_by_family(egress)
     # The IPv4 block excepts the metadata IP + both (IPv4) cluster ranges.
     assert set(blocks["0.0.0.0/0"]["except"]) == {"169.254.169.254/32", "10.42.0.0/16", "10.43.0.0/16"}

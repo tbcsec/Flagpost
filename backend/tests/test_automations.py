@@ -802,10 +802,24 @@ class _FakeResponse:
     status_code = 200
 
 
+class _FakeStream:
+    """Async-context-manager stand-in for httpx's streaming response."""
+
+    def __init__(self, url, kwargs):
+        _FakeHttpxClient.calls.append({"url": url, **kwargs})
+
+    async def __aenter__(self):
+        return _FakeResponse()
+
+    async def __aexit__(self, *exc):
+        return False
+
+
 class _FakeHttpxClient:
     """Captures webhook POSTs so tests can assert without a real request.
-    Accepts whatever kwargs _execute_webhook passes (follow_redirects, json,
-    content, headers)."""
+    _execute_webhook streams the response (GHSA-r7rp), so we mirror
+    ``client.stream("POST", url, **kwargs)`` and record the kwargs
+    (follow_redirects, json, content, headers, extensions)."""
 
     calls: list[dict] = []
 
@@ -818,25 +832,31 @@ class _FakeHttpxClient:
     async def __aexit__(self, *exc):
         return False
 
-    async def post(self, url, **kwargs):
-        _FakeHttpxClient.calls.append({"url": url, **kwargs})
-        return _FakeResponse()
+    def stream(self, method, url, **kwargs):
+        return _FakeStream(url, kwargs)
 
 
 def _fake_webhook(monkeypatch):
-    """Fake httpx + skip the SSRF resolver (its own tests cover that), so a
+    """Fake httpx + skip the SSRF resolver/pinner (its own tests cover that), so a
     webhook test is hermetic and about payload/headers, not DNS."""
     import httpx
+
+    from urllib.parse import urlsplit
 
     from utils import webhook_security
 
     _FakeHttpxClient.calls = []
     monkeypatch.setattr(httpx, "AsyncClient", _FakeHttpxClient)
 
-    async def _ok(url):
-        return None
+    async def _pin(url):
+        # Keep the URL as-is (real pinning to an IP is exercised in
+        # test_webhook_security); carry the original host for Host/SNI.
+        host = urlsplit(url).hostname
+        return webhook_security.PinnedTarget(
+            url=url, host_header=host, sni_hostname=host
+        )
 
-    monkeypatch.setattr(webhook_security, "validate_webhook_url", _ok)
+    monkeypatch.setattr(webhook_security, "resolve_pinned_target", _pin)
     return _FakeHttpxClient.calls
 
 
@@ -868,7 +888,9 @@ async def test_webhook_action_posts_structured_event_and_strips_headers(client, 
     assert calls[0]["url"] == "https://hooks.example.com/x"
     assert calls[0]["json"]["event"] == "challenge.solved"
     assert calls[0]["json"]["payload"]["challenge_id"] == chal
-    assert calls[0]["headers"] == {"X-Token": "abc"}
+    # X-Token kept, Authorization/X-Forwarded-For stripped; Host is set by us to
+    # the target hostname (the connection is pinned to an IP — GHSA-r7rp).
+    assert calls[0]["headers"] == {"X-Token": "abc", "Host": "hooks.example.com"}
 
 
 async def test_webhook_template_body_escapes_and_defangs_adversarial_values(client, monkeypatch):

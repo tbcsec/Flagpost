@@ -32,7 +32,7 @@ async def _competition_with_challenge(client) -> tuple[str, str]:
     comp = (
         await client.post(
             "/api/competitions",
-            json={"name": "CTF", "participation_mode": "team"},
+            json={"name": "CTF", "participation_mode": "team", "visibility": "public"},
             headers=_auth(admin),
         )
     ).json()["id"]
@@ -157,7 +157,7 @@ async def test_solve_delta_carries_decayed_value_for_dynamic(client):
     comp = (
         await client.post(
             "/api/competitions",
-            json={"name": "Dyn", "participation_mode": "team"},
+            json={"name": "Dyn", "participation_mode": "team", "visibility": "public"},
             headers=_auth(admin),
         )
     ).json()["id"]

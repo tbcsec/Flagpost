@@ -32,6 +32,33 @@ from models.challenge_instancing import (
 # --- deployment authoring ----------------------------------------------------
 
 
+# Resource-containment bounds (GHSA-vgrr). A challenge author must not be able
+# to disable the operator's fork-bomb/OOM guards: Docker reads a 0 cpu/memory/
+# pids as UNLIMITED, so 0 (and negative) is rejected here — absent means "use the
+# operator default", never unlimited. Upper bounds mirror the settings caps.
+_RESOURCE_MAX: dict[str, float] = {"cpu": 64, "memory_mb": 131072, "pids": 65536}
+# One host port is allocated per declared port; without a cap a single deployment
+# could claim the whole ephemeral host-port range and starve every other launch.
+_MAX_PORTS = 16
+
+
+def _validate_resource_limits(limits: dict[str, Any] | None) -> str | None:
+    if not limits:
+        return None
+    for key in ("cpu", "memory_mb", "pids"):
+        if key not in limits:
+            continue
+        value = limits[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+            return (
+                f"resource_limits.{key} must be a positive number "
+                "(omit it to use the operator default; 0 would mean unlimited)"
+            )
+        if value > _RESOURCE_MAX[key]:
+            return f"resource_limits.{key} exceeds the maximum {int(_RESOURCE_MAX[key])}"
+    return None
+
+
 class DeploymentUpdate(BaseModel):
     """Upsert the one deployment spec on a challenge (staff authoring)."""
 
@@ -63,6 +90,11 @@ class DeploymentUpdate(BaseModel):
             return "tcp exposure needs at least one container port"
         if any(not (0 < p < 65536) for p in self.ports):
             return "ports must be in 1..65535"
+        if len(self.ports) > _MAX_PORTS:
+            return f"at most {_MAX_PORTS} ports may be exposed"
+        limits_error = _validate_resource_limits(self.resource_limits)
+        if limits_error:
+            return limits_error
         if self.flag_mode == "unique_per_instance":
             if not self.flag_template:
                 return "unique_per_instance flag mode needs a flag_template"

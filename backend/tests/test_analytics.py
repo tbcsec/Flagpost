@@ -253,3 +253,26 @@ async def test_analytics_module_can_be_disabled(client):
     assert (
         await client.get(f"/api/competitions/{comp}/analytics/challenges", headers=_auth(admin))
     ).status_code == 200
+
+
+async def test_submissions_export_neutralises_csv_formula_injection(client):
+    """GHSA-352q / F7: the `value` column is the submitted flag string — fully
+    competitor-controlled — so a guess a spreadsheet would evaluate as a formula
+    is escaped in the dispute export an organiser opens."""
+    import csv as _csv
+
+    comp = await _competition(client)
+    chal = await _challenge(client, comp, "C", 100, "flag{real}")
+    mallory = await _participant(client, comp, "mallory@example.com")
+    payload = "=cmd|' /C calc'!A0"
+    await _submit(client, comp, chal, mallory, payload)  # wrong guess, recorded
+
+    judge = await _judge(client, comp, "judge@example.com")
+    export = await client.get(
+        f"/api/competitions/{comp}/analytics/submissions/export", headers=_auth(judge)
+    )
+    assert export.status_code == 200
+    body = export.text
+    assert "'=cmd" in body  # the submitted-flag cell is neutralised
+    rows = list(_csv.reader(body.splitlines()))
+    assert not any(cell[:1] in "=+-@" for row in rows for cell in row if cell)

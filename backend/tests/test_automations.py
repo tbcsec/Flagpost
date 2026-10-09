@@ -434,6 +434,62 @@ async def test_personal_rule_crud_needs_no_permission_but_is_notify_self_only(cl
     assert resp.status_code == 404
 
 
+async def test_personal_rule_cannot_subscribe_to_a_staff_only_trigger(client):
+    """GHSA-x8v4: a competitor can't point a personal rule at a staff-only event
+    (challenge.flag_shared_detected → view_submissions) even though they'd be its
+    subject — that would turn covert anti-cheat detection into a self oracle."""
+    comp = await _competition(client)
+    ada = await _participant(client, comp, "ada@example.com")
+
+    blocked = await client.post(
+        "/api/automations/personal",
+        json=_notify_rule(
+            trigger="challenge.flag_shared_detected", target="self", competition_id=comp
+        ),
+        headers=_auth(ada),
+    )
+    assert blocked.status_code == 403
+
+    # A trigger they CAN observe (their own solves) is still allowed.
+    ok = await client.post(
+        "/api/automations/personal",
+        json=_notify_rule(
+            trigger="challenge.solved", target="self", competition_id=comp
+        ),
+        headers=_auth(ada),
+    )
+    assert ok.status_code == 201
+
+
+async def test_competition_scoped_grant_does_not_list_global_rule_configs(client):
+    """GHSA-x8v4: list_rules must not OR global org rules into a competition
+    listing for a competition-scoped automation_view holder (a Judge) — that
+    exposed global rules' full action configs (webhook URLs/headers, email
+    templates). get_rule already required a global grant for a global rule."""
+    comp = await _competition(client)
+    admin = await admin_token(client)
+    judge = await _judge(client, comp, "judge@example.com")
+
+    await _create_rule(
+        client,
+        admin,
+        name="Global secret",
+        actions=[{"type": "webhook", "url": "https://hooks.example.com/secret"}],
+    )
+    await _create_rule(client, judge, comp, name="Comp rule")
+
+    judge_listed = (
+        await client.get(f"/api/automations?competition_id={comp}", headers=_auth(judge))
+    ).json()
+    assert {r["name"] for r in judge_listed} == {"Comp rule"}  # global NOT surfaced
+
+    # Admin (global grant) still sees the global rule alongside the comp rule.
+    admin_listed = (
+        await client.get(f"/api/automations?competition_id={comp}", headers=_auth(admin))
+    ).json()
+    assert {r["name"] for r in admin_listed} == {"Global secret", "Comp rule"}
+
+
 async def test_personal_rule_fires_only_for_its_owner(client):
     comp = await _competition(client)
     chal = await _challenge(client, comp)
@@ -802,10 +858,24 @@ class _FakeResponse:
     status_code = 200
 
 
+class _FakeStream:
+    """Async-context-manager stand-in for httpx's streaming response."""
+
+    def __init__(self, url, kwargs):
+        _FakeHttpxClient.calls.append({"url": url, **kwargs})
+
+    async def __aenter__(self):
+        return _FakeResponse()
+
+    async def __aexit__(self, *exc):
+        return False
+
+
 class _FakeHttpxClient:
     """Captures webhook POSTs so tests can assert without a real request.
-    Accepts whatever kwargs _execute_webhook passes (follow_redirects, json,
-    content, headers)."""
+    _execute_webhook streams the response (GHSA-r7rp), so we mirror
+    ``client.stream("POST", url, **kwargs)`` and record the kwargs
+    (follow_redirects, json, content, headers, extensions)."""
 
     calls: list[dict] = []
 
@@ -818,25 +888,31 @@ class _FakeHttpxClient:
     async def __aexit__(self, *exc):
         return False
 
-    async def post(self, url, **kwargs):
-        _FakeHttpxClient.calls.append({"url": url, **kwargs})
-        return _FakeResponse()
+    def stream(self, method, url, **kwargs):
+        return _FakeStream(url, kwargs)
 
 
 def _fake_webhook(monkeypatch):
-    """Fake httpx + skip the SSRF resolver (its own tests cover that), so a
+    """Fake httpx + skip the SSRF resolver/pinner (its own tests cover that), so a
     webhook test is hermetic and about payload/headers, not DNS."""
     import httpx
+
+    from urllib.parse import urlsplit
 
     from utils import webhook_security
 
     _FakeHttpxClient.calls = []
     monkeypatch.setattr(httpx, "AsyncClient", _FakeHttpxClient)
 
-    async def _ok(url):
-        return None
+    async def _pin(url):
+        # Keep the URL as-is (real pinning to an IP is exercised in
+        # test_webhook_security); carry the original host for Host/SNI.
+        host = urlsplit(url).hostname
+        return webhook_security.PinnedTarget(
+            url=url, host_header=host, sni_hostname=host
+        )
 
-    monkeypatch.setattr(webhook_security, "validate_webhook_url", _ok)
+    monkeypatch.setattr(webhook_security, "resolve_pinned_target", _pin)
     return _FakeHttpxClient.calls
 
 
@@ -868,7 +944,9 @@ async def test_webhook_action_posts_structured_event_and_strips_headers(client, 
     assert calls[0]["url"] == "https://hooks.example.com/x"
     assert calls[0]["json"]["event"] == "challenge.solved"
     assert calls[0]["json"]["payload"]["challenge_id"] == chal
-    assert calls[0]["headers"] == {"X-Token": "abc"}
+    # X-Token kept, Authorization/X-Forwarded-For stripped; Host is set by us to
+    # the target hostname (the connection is pinned to an IP — GHSA-r7rp).
+    assert calls[0]["headers"] == {"X-Token": "abc", "Host": "hooks.example.com"}
 
 
 async def test_webhook_template_body_escapes_and_defangs_adversarial_values(client, monkeypatch):

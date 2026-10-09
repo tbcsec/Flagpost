@@ -645,3 +645,26 @@ async def test_competition_instancing_policy_roundtrips(client):
         headers=_auth(token),
     )
     assert bad.status_code == 422
+
+
+def test_deployment_rejects_unlimited_resource_limits_and_too_many_ports():
+    """GHSA-vgrr: a challenge author can't zero out the operator's containment
+    (Docker treats 0 cpu/memory/pids as UNLIMITED) or claim the whole host-port
+    range with one deployment."""
+    from schemas.instances import DeploymentUpdate
+
+    def _upd(**over):
+        base = dict(backend="docker", image_ref="img:1", exposure="tcp", ports=[1337])
+        base.update(over)
+        return DeploymentUpdate(**base)
+
+    assert _upd().validate_shape() is None  # valid baseline
+    # 0 / negative on any guard is rejected (would mean unlimited).
+    assert "resource_limits.cpu" in _upd(resource_limits={"cpu": 0}).validate_shape()
+    assert "resource_limits.memory_mb" in _upd(resource_limits={"memory_mb": -1}).validate_shape()
+    assert "resource_limits.pids" in _upd(resource_limits={"pids": 0}).validate_shape()
+    # Sane values pass; absurd ones are capped.
+    assert _upd(resource_limits={"cpu": 2, "memory_mb": 512, "pids": 256}).validate_shape() is None
+    assert "exceeds" in _upd(resource_limits={"memory_mb": 10**9}).validate_shape()
+    # A deployment can't declare a huge number of ports.
+    assert "at most" in _upd(ports=list(range(30000, 30030))).validate_shape()

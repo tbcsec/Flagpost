@@ -15,6 +15,7 @@ from utils.webhook_security import (
     defang_chat_tokens,
     escape_for_content_type,
     render_webhook_body,
+    resolve_pinned_target,
     sanitize_headers,
     validate_webhook_url,
 )
@@ -84,6 +85,55 @@ async def test_ssrf_refuses_unresolvable_host(monkeypatch):
     monkeypatch.setattr(webhook_security, "_resolve_host", _boom)
     with pytest.raises(WebhookSecurityError):
         await validate_webhook_url("http://whatever.example/x")
+
+
+# --- connection pinning (GHSA-r7rp / ADR-0013 amendment) ----------------------
+
+
+async def test_pin_targets_validated_ip_and_preserves_host_and_sni(monkeypatch):
+    async def _resolves_to(host, port):
+        return ["93.184.216.34"]  # a public address
+
+    monkeypatch.setattr(webhook_security, "_resolve_host", _resolves_to)
+    t = await resolve_pinned_target("https://hooks.example.com/path?a=1")
+    # Connects to the checked IP, not whatever a second lookup might answer.
+    assert t.url == "https://93.184.216.34:443/path?a=1"
+    # Origin routing + TLS verification still use the real hostname.
+    assert t.host_header == "hooks.example.com"
+    assert t.sni_hostname == "hooks.example.com"
+    assert t.extensions == {"sni_hostname": "hooks.example.com"}
+
+
+async def test_pin_keeps_nondefault_port_in_host_header_and_no_sni_for_http(monkeypatch):
+    async def _resolves_to(host, port):
+        return ["93.184.216.34"]
+
+    monkeypatch.setattr(webhook_security, "_resolve_host", _resolves_to)
+    t = await resolve_pinned_target("http://hooks.example.com:8080/x")
+    assert t.url == "http://93.184.216.34:8080/x"
+    assert t.host_header == "hooks.example.com:8080"
+    assert t.sni_hostname is None  # plain http carries no SNI
+    assert t.extensions == {}
+
+
+async def test_pin_brackets_ipv6(monkeypatch):
+    async def _v6(host, port):
+        return ["2606:4700:4700::1111"]
+
+    monkeypatch.setattr(webhook_security, "_resolve_host", _v6)
+    t = await resolve_pinned_target("https://dns.example/x")
+    assert t.url == "https://[2606:4700:4700::1111]:443/x"
+
+
+async def test_pin_refuses_dns_rebinding_set(monkeypatch):
+    # A name resolving to one public and one internal address (the rebinding
+    # set) is refused outright — pinning can only ever hand back a checked IP.
+    async def _mixed(host, port):
+        return ["1.1.1.1", "169.254.169.254"]
+
+    monkeypatch.setattr(webhook_security, "_resolve_host", _mixed)
+    with pytest.raises(WebhookSecurityError):
+        await resolve_pinned_target("https://rebind.example/x")
 
 
 # --- header stripping (§5.4) --------------------------------------------------

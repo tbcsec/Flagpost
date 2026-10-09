@@ -33,7 +33,7 @@ async def _competition_with_challenge(client) -> tuple[str, str]:
     comp = (
         await client.post(
             "/api/competitions",
-            json={"name": "CTF", "participation_mode": "team"},
+            json={"name": "CTF", "participation_mode": "team", "visibility": "public"},
             headers=_auth(admin),
         )
     ).json()["id"]

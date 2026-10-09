@@ -460,3 +460,51 @@ async def test_reaper_leaves_fresh_pending_alone(client):
         row = await db.get(ChallengeInstance, instance_id)
     # Created just now — well under the stuck threshold, so untouched.
     assert row.status == "provisioning"
+
+
+class _NetSweepProv:
+    """A provisioner double for the orphan-network sweep: no orphan containers,
+    one perpetually-orphaned per-instance network, recording removals."""
+
+    def __init__(self) -> None:
+        self.removed: list[str] = []
+
+    async def list(self) -> list[str]:
+        return []
+
+    async def list_orphan_networks(self) -> set[str]:
+        return {"flagpost-net-ghost"}
+
+    async def remove_network(self, name: str) -> None:
+        self.removed.append(name)
+
+
+async def test_reaper_two_tick_orphan_network_sweep(client, monkeypatch):
+    # GHSA-vgrr: a per-instance bridge whose container AutoRemoved after crashing
+    # is swept — but only under the same two-tick guard as orphan containers, so
+    # a network momentarily empty between its create and its container attaching
+    # is never mistaken for an orphan and deleted out from under a live launch.
+    import utils.instance_reaper as reaper
+
+    async with SessionLocal() as db:
+        db.add(
+            InstanceSettings(
+                id=INSTANCE_SETTINGS_ID, backend="docker", enabled=True,
+                public_host="chal.example",
+            )
+        )
+        await db.commit()
+
+    fake = _NetSweepProv()
+    monkeypatch.setattr(svc, "provisioner_from_settings", lambda settings, **kw: fake)
+    # Deterministic start regardless of any prior test's orphan state.
+    reaper._orphan_seen = set()
+    reaper._orphan_networks_seen = set()
+
+    # Tick 1 only *records* the orphan network (seen once) — nothing removed yet.
+    await reap_instances(SessionLocal)
+    assert fake.removed == []
+
+    # Tick 2: still orphaned on the second consecutive pass ⇒ removed now.
+    await reap_instances(SessionLocal)
+    assert fake.removed == ["flagpost-net-ghost"]

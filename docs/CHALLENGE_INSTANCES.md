@@ -55,16 +55,30 @@ This adds:
   `internal: true`: Docker can't publish a TCP port from a container that's only
   on an internal network, so an internal network would break TCP challenges.
   Egress-deny is therefore a **host-firewall** job (see below), not the Docker
-  internal flag.
+  internal flag. This bridge carries `exposure=http` instances (the ingress
+  reaches them here) and the Test-connection probe; **TCP/`none` instances do
+  not use it** — see the next point.
+
+> **Peer isolation is automatic (GHSA-vgrr).** Each published-port (TCP) or
+> `none` instance is launched on its **own** throwaway bridge,
+> `flagpost-net-<instance_id>`, created and destroyed by Flagpost — so a
+> competitor who pops their own box can't reach a neighbour's over the Docker
+> network. You don't create these; the app does (it needs only the `NETWORKS` +
+> `POST` proxy scope already listed above). `exposure=http` instances stay on the
+> shared `flagpost-instances` bridge, so HTTP peers are *not* isolated from each
+> other yet (a documented residual — see `docs/THREAT_MODEL.md`).
 
 > **Egress control (do this for a real event).** A normal bridge lets instances
-> reach the internet and the host by default. Block outbound from the
-> `flagpost-instances` subnet with host firewall rules — drop forwarded traffic
-> from that subnet except to the ports competitors need, and always block the
-> cloud metadata IP `169.254.169.254`. Keep the control plane
-> (Postgres/Redis/MinIO/API) off any address the instance subnet can reach. The
-> `network_isolation` leg of Test connection reminds you of this; it can't verify
-> your firewall rules for you.
+> reach the internet and the host by default. Block outbound from the instance
+> bridges with host firewall rules — note this now means **every** instance
+> bridge, not just `flagpost-instances`: the per-instance `flagpost-net-*`
+> bridges each get their own subnet from Docker's address pool. Rather than chase
+> individual subnets, pin Docker's `default-address-pools` (in
+> `/etc/docker/daemon.json`) to a known range and drop forwarded traffic from
+> that whole range except the ports competitors need, and always block the cloud
+> metadata IP `169.254.169.254`. Keep the control plane (Postgres/Redis/MinIO/API)
+> off any address the instance subnets can reach. The `network_isolation` leg of
+> Test connection reminds you of this; it can't verify your firewall rules for you.
 
 Then in **Admin → Site settings → Instances**:
 

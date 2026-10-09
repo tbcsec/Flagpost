@@ -446,6 +446,62 @@ async def test_dynamic_mc_penalty_preserves_each_subject_on_revalue(client):
     assert awarded[c] == max(0, base3 - pen_c)
 
 
+async def test_frozen_board_keeps_multiple_choice_penalty(client):
+    """Regression (GHSA-r7j2): the frozen scoreboard recomputes each solve's
+    worth as of the cutoff and must net the stored wrong-guess penalty exactly
+    like the live board. Static scoring keeps ``challenge_value`` constant, so a
+    penalty is the only thing that can reduce a frozen solve — before the fix the
+    frozen recompute dropped it and handed a penalised solver the full value they
+    never earned."""
+    admin = await admin_token(client)
+    comp = await _mc_competition(client, admin, limit=None, penalty=25)
+    cid = await _mc_challenge(client, admin, comp, points=200)
+    submit = f"/api/competitions/{comp}/challenges/{cid}/submit"
+
+    # Clean solver keeps the full 200; the other guesses wrong twice first, each
+    # docking 25% of 200 (=50), so their award nets to 100.
+    clean, clean_id = await _register(client, "clean@example.com")
+    await _assign_participant(clean_id, comp)
+    assert (
+        await client.post(submit, json={"flag": "Paris"}, headers=_auth(clean))
+    ).json()["points_awarded"] == 200
+
+    dinged, dinged_id = await _register(client, "dinged@example.com")
+    await _assign_participant(dinged_id, comp)
+    for wrong in ("London", "Berlin"):
+        await client.post(submit, json={"flag": wrong}, headers=_auth(dinged))
+    assert (
+        await client.post(submit, json={"flag": "Paris"}, headers=_auth(dinged))
+    ).json()["points_awarded"] == 100
+
+    # Freeze after both solves — both are pre-cutoff, so both count on the board.
+    fr = await client.post(
+        f"/api/competitions/{comp}/scoreboard/freeze", json={}, headers=_auth(admin)
+    )
+    assert fr.status_code == 200
+
+    # The frozen board a player sees must still reflect the penalty: 200 vs 100,
+    # not 200 vs 200 (the pre-fix bug returned the gross value to the penalised
+    # solver once the board froze).
+    board = (
+        await client.get(f"/api/competitions/{comp}/scoreboard", headers=_auth(clean))
+    ).json()
+    assert board["frozen"] is True
+    points = {e["name"]: e["points"] for e in board["entries"]}
+    assert points["clean"] == 200
+    assert points["dinged"] == 100
+
+    # And the frozen board agrees with the live staff view — the freeze must not
+    # change the *values*, only which solves are visible.
+    live = (
+        await client.get(
+            f"/api/competitions/{comp}/scoreboard?live=true", headers=_auth(admin)
+        )
+    ).json()
+    assert live["frozen"] is False
+    assert {e["name"]: e["points"] for e in live["entries"]} == points
+
+
 async def test_incorrect_guess_returns_live_subject_value(client):
     admin = await admin_token(client)
     comp = await _mc_competition(client, admin, limit=None, penalty=25)

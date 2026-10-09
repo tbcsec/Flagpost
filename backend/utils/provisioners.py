@@ -138,6 +138,20 @@ class Provisioner(ABC):
         skipped when an earlier one fails, but every returned leg must carry
         actionable ``detail``."""
 
+    # Per-instance network isolation cleanup (GHSA-vgrr). Only the docker kind
+    # creates a network object per instance, so the orphan-network sweep is a
+    # backend capability, not part of the core contract: the default is "no such
+    # networks", which the reaper reads as nothing to sweep. A backend that does
+    # (docker) overrides both.
+    async def list_orphan_networks(self) -> set[str]:
+        """Names of backend-managed per-instance networks with no attached
+        workload — orphans the reaper may remove. Default: none."""
+        return set()
+
+    async def remove_network(self, name: str) -> None:
+        """Remove a backend-managed per-instance network by name. Default no-op."""
+        return None
+
 
 # --- kind registry -----------------------------------------------------------
 

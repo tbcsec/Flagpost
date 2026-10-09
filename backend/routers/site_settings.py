@@ -419,6 +419,7 @@ def _operational_out(
     return OperationalSettingsOut(
         registration_open=settings.registration_open,
         username_changes_enabled=settings.username_changes_enabled,
+        skills_enabled=settings.skills_enabled,
         smtp_host=settings.smtp_host,
         smtp_port=settings.smtp_port,
         smtp_username=settings.smtp_username,
@@ -473,6 +474,8 @@ async def update_operational_settings(
     # Omitted = unchanged (#298), the update_checks_enabled pattern below.
     if body.username_changes_enabled is not None:
         settings.username_changes_enabled = body.username_changes_enabled
+    if body.skills_enabled is not None:
+        settings.skills_enabled = body.skills_enabled
     settings.smtp_host = body.smtp_host or None
     settings.smtp_port = body.smtp_port
     settings.smtp_username = body.smtp_username or None

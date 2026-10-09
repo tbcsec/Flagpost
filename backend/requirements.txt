@@ -23,7 +23,7 @@ pyyaml>=6.0.3,<7.0
 # Regex flag matching under a hard timeout (ADR-0018) — stdlib `re` can't be
 # interrupted and holds the GIL, so a catastrophic staff-authored pattern could
 # stall the whole event loop. `regex` releases the GIL and honours `timeout=`.
-regex>=2026.7.19,<2027.0
+regex>=2026.9.3,<2027.0
 
 # Object storage — MinIO/S3 for challenge files (§13.3); multipart for uploads
 minio>=7.2.20,<8.0

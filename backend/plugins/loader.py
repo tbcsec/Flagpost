@@ -32,6 +32,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
+from pydantic import ValidationError
+
+from plugins.manifest import ManifestModel
 
 logger = logging.getLogger("module_loader")
 
@@ -55,6 +58,13 @@ class ModuleManifest:
     provides_routes: bool = False
     provides_event_listeners: bool = False
     dependencies: list[str] = field(default_factory=list)
+    # Manifest v2 (ADR-0040, plugins/manifest.py). Legacy in-box manifests are
+    # v1 and omit these: kind defaults to "module" and trust_tier stays None
+    # (first-party kernel-trusted code). A registry-distributed module carries
+    # both, plus the capabilities it requested for the install-consent screen.
+    kind: str = "module"
+    trust_tier: str | None = None
+    capabilities: list[str] = field(default_factory=list)
 
     @property
     def enabled(self) -> bool:
@@ -65,22 +75,46 @@ class ModuleManifest:
         return True
 
 
+def _summarize_validation_error(exc: ValidationError) -> str:
+    """Flatten a Pydantic error into a one-line ``field: message; …`` summary."""
+    parts = []
+    for err in exc.errors():
+        loc = ".".join(str(p) for p in err["loc"]) or "(manifest)"
+        parts.append(f"{loc}: {err['msg']}")
+    return "; ".join(parts)
+
+
 def parse_manifest(data: dict, *, source: str = "<dict>") -> ModuleManifest:
-    """Build a manifest from parsed YAML, validating required fields."""
+    """Validate a parsed ``plugin.yaml`` (manifest v2, ADR-0040) into the loader's
+    runtime :class:`ModuleManifest`.
+
+    Fails closed: a malformed manifest raises :class:`ModuleError` with a concise,
+    source-prefixed message rather than loading a half-formed module. In-box v1
+    manifests (no ``manifest_version``/``kind``/``trust_tier``) validate leniently
+    as first-party code — see ``plugins/manifest.py`` and
+    ``docs/spec/module-manifest.schema.json``.
+    """
+    if not isinstance(data, dict):
+        raise ModuleError(f"{source}: manifest is not a mapping")
     try:
-        provides = data.get("provides") or {}
-        return ModuleManifest(
-            id=data["id"],
-            name=data["name"],
-            version=str(data["version"]),
-            description=str(data.get("description", "")),
-            required_core=bool(data.get("required_core", False)),
-            provides_routes=bool(provides.get("routes", False)),
-            provides_event_listeners=bool(provides.get("event_listeners", False)),
-            dependencies=list(data.get("dependencies") or []),
-        )
-    except KeyError as exc:
-        raise ModuleError(f"{source}: manifest missing required field {exc}") from exc
+        model = ManifestModel.model_validate(data)
+    except ValidationError as exc:
+        raise ModuleError(
+            f"{source}: invalid manifest: {_summarize_validation_error(exc)}"
+        ) from exc
+    return ModuleManifest(
+        id=model.id,
+        name=model.name,
+        version=model.version,
+        description=model.description,
+        required_core=model.required_core,
+        provides_routes=model.provides.routes,
+        provides_event_listeners=model.provides.event_listeners,
+        dependencies=list(model.dependencies),
+        kind=model.effective_kind.value,
+        trust_tier=model.trust_tier.value if model.trust_tier else None,
+        capabilities=[c.value for c in model.capabilities],
+    )
 
 
 def resolve_load_order(manifests: list[ModuleManifest]) -> list[ModuleManifest]:

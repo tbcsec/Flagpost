@@ -116,6 +116,12 @@ def _resolve_jwt_secret(configured: str) -> str:
 # build rather than months of quietly wrong data.
 SOURCE_BUILD_VERSION = "1.6.0-src"
 
+# The marketplace project **root** ed25519 public key (base64 raw), an
+# always-trusted signer for the official/verified/signed trust policies (#389,
+# ADR-0040). Empty until an official signing key is minted; operators can add
+# their own trusted keys via the marketplace settings regardless.
+MARKETPLACE_ROOT_PUBLIC_KEY = os.environ.get("MARKETPLACE_ROOT_PUBLIC_KEY", "")
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -252,6 +258,11 @@ class Settings(BaseSettings):
     # solve); still enough to collapse concurrent spectators onto one query.
     # 0 disables it (the tests do).
     public_activity_cache_seconds: float = 5.0
+    # TTL for the cross-competition skills web (#364, ADR-0039). It scans every
+    # competition, so it can't key the cache by competition_id (unlike the
+    # boards) and drops wholesale on any solve — this TTL bounds the recompute for
+    # read-heavy pages. 0 disables it (the tests do, to observe a solve at once).
+    skills_cache_seconds: float = 30.0
 
     # --- Real-time layer (§4.1) ---
     # How long a fresh WebSocket connection has to send its first-frame auth

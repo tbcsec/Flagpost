@@ -328,6 +328,15 @@ async def test_authoritative_provider_links_by_email(client, directory):
     )
     assert reg.status_code == 201
     local_id = reg.json()["user"]["id"]
+    # Trusted-email linking only attaches to a PROVEN local account (GHSA-42m4);
+    # verify the email so this models the legitimate "link my existing account"
+    # case (admin-created accounts are stamped verified for the same reason).
+    import datetime
+
+    async with SessionLocal() as db:
+        u = await db.get(User, local_id)
+        u.email_verified_at = datetime.datetime.now(datetime.timezone.utc)
+        await db.commit()
 
     resp = await _login(client, "ada", ADA_PASSWORD)
     assert resp.status_code == 200

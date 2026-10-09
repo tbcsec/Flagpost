@@ -196,10 +196,11 @@ async def test_solve_delta_carries_decayed_value_for_dynamic(client):
         assert 100 <= second["value"] < 500  # decayed after the first solve, floored
 
 
-async def test_solve_delta_omitted_under_freeze(client):
-    """#188: under a freeze the visible solve_count is per-viewer (staff live vs
-    competitor frozen), which one broadcast can't serve — so the delta is
-    omitted and clients fall back to refetching their own frozen slice."""
+async def test_solve_ping_suppressed_under_freeze(client):
+    """GHSA-r7j2: under a freeze the challenge.solved ping is suppressed
+    ENTIRELY — even the bare id-only ping leaks that a team just solved at time
+    T, which the freeze conceals on the REST path. The attempt ping (no score
+    movement) still flows."""
     comp, chal = await _competition_with_challenge(client)
     admin = await admin_token(client)
     watcher = await _joined_participant(client, comp, "fw@example.com", "FW")
@@ -219,12 +220,14 @@ async def test_solve_delta_omitted_under_freeze(client):
             headers=_auth(actor),
         )
         assert (await ws.receive_json())["event"] == "challenge.attempted"
-        second = await ws.receive_json()
-        assert second == {
-            "type": "activity",
-            "event": "challenge.solved",
-            "challenge_id": chal,
-        }
+        # No challenge.solved ping arrives while frozen — drain until the socket
+        # goes quiet and assert none was a solve.
+        try:
+            while True:
+                frame = await asyncio.wait_for(ws.receive_json(), timeout=1.0)
+                assert frame.get("event") != "challenge.solved", frame
+        except (asyncio.TimeoutError, TimeoutError):
+            pass  # quiet → suppression confirmed
 
 
 async def test_solve_delta_omitted_for_a_hidden_challenge(client):

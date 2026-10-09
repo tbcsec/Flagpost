@@ -139,6 +139,11 @@ import type {
   CertificateAvailability,
   CertificateManifest,
   MyCertificate,
+  UserSkills,
+  MarketplaceSettings,
+  MarketplaceSettingsUpdate,
+  MarketplaceResolveResult,
+  ContentPackInstallResult,
 } from "@/lib/types";
 
 // Origin resolution lives in lib/origin.ts (a leaf module shared with server
@@ -1453,6 +1458,12 @@ export const analyticsApi = {
     ),
 };
 
+// Cross-competition skills web (#364, ADR-0039): the caller's own web, site-wide
+// (not nested under a competition) because a user's web spans every event.
+export const skillsApi = {
+  mine: () => apiFetch<UserSkills>("/api/me/skills"),
+};
+
 export const notificationsApi = {
   // The current user's own notification center (§4.4) — site-wide, not nested
   // under a competition, since a user's notifications span every competition.
@@ -1672,4 +1683,25 @@ export const certificateAssetsApi = {
       {},
       { auth: false },
     ),
+};
+
+// Marketplace (module import, #389, ADR-0040) — registry/trust config + the
+// code-based resolve/install pipeline. Admin-only.
+export const marketplaceApi = {
+  getSettings: () => apiFetch<MarketplaceSettings>("/api/marketplace/settings"),
+  updateSettings: (input: MarketplaceSettingsUpdate) =>
+    apiFetch<MarketplaceSettings>("/api/marketplace/settings", {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  resolve: (code: string) =>
+    apiFetch<MarketplaceResolveResult>("/api/marketplace/resolve", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
+  install: (input: { code: string; competition_id?: string | null }) =>
+    apiFetch<ContentPackInstallResult>("/api/marketplace/install", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
 };

@@ -389,6 +389,59 @@ async def test_import_export_roles_users_sections_require_dedicated_grants(clien
     assert ok.status_code == 200, ok.text
 
 
+async def test_automations_section_requires_automation_create_grant(client):
+    """GHSA-x8v4: a manage_site_settings-only delegate cannot import/export the
+    automations section — that path let a delegate plant executable rules
+    (webhook exfil, score tampering) it holds no automation grant for."""
+    token, uid = await _register(client, "autodelegate")
+    await _grant_global_role(uid, "Auto delegate", ["manage_site_settings"])
+    auth = {"Authorization": f"Bearer {token}"}
+    payload = {"flagpost_export": True, "schema_version": backup.SCHEMA_VERSION, "data": {}}
+
+    imp = await client.post(
+        "/api/site-settings/import",
+        json={"sections": ["automations"], "payload": payload},
+        headers=auth,
+    )
+    assert imp.status_code == 403, imp.text
+    exp = await client.post(
+        "/api/site-settings/export", json={"sections": ["automations"]}, headers=auth
+    )
+    assert exp.status_code == 403, exp.text
+
+
+async def test_backup_import_rejects_a_malformed_automation_rule(client):
+    """GHSA-x8v4: a crafted backup with an automation rule the visual builder
+    would reject (unknown trigger, or an action with no valid type/config) is
+    refused at import — load_row does no content validation, so the Spec's
+    validate_row must repeat the RuleCreate invariant, or the engine would then
+    execute arbitrary imported actions."""
+    storage = InMemoryStorage()
+
+    def _doc(rule):
+        return {
+            "flagpost_export": True,
+            "schema_version": backup.SCHEMA_VERSION,
+            "data": {"automation_rules": [rule]},
+        }
+
+    base = {
+        "id": "rule-x", "competition_id": None, "owner_user_id": None,
+        "name": "R", "trigger_type": "challenge.solved", "conditions": [],
+        "actions": [{"type": "notify", "target": "role", "role_name": "Judge", "title": "hi"}],
+        "is_enabled": True,
+    }
+    bad_rows = [
+        {**base, "trigger_type": "not.a.real.event"},   # unknown trigger
+        {**base, "actions": [{"type": "nonsense"}]},     # unknown action type
+        {**base, "actions": [{"type": "webhook"}]},      # webhook missing url
+    ]
+    for bad in bad_rows:
+        async with SessionLocal() as db:
+            with pytest.raises(backup.ImportError_):
+                await backup.import_data(db, storage, _doc(bad), ["automations"])
+
+
 async def test_import_cannot_grant_permissions_the_actor_lacks(client):
     """Defense-in-depth: even holding manage_roles, an import can't create a role
     carrying permissions beyond the actor's own global set (grant containment)."""

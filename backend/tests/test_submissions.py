@@ -34,7 +34,7 @@ async def _make_competition(client, mode: str = "team") -> str:
     token = await admin_token(client)
     resp = await client.post(
         "/api/competitions",
-        json={"name": "CTF", "participation_mode": mode},
+        json={"name": "CTF", "participation_mode": mode, "visibility": "public"},
         headers=_auth(token),
     )
     return resp.json()["id"]

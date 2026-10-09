@@ -37,6 +37,7 @@ from schemas.analytics import (
 )
 from schemas.submission import SubmissionCorrectness, SubmissionOut, SubmissionPage
 from utils.analytics import challenge_analytics, subject_count, team_analytics
+from utils.csv_safe import csv_safe
 
 router = APIRouter(
     prefix="/api/competitions/{competition_id}/analytics", tags=["analytics"]
@@ -230,15 +231,21 @@ async def submission_browser_export(
         ["created_at", "challenge_id", "user_id", "team_id", "correctness", "value", "points_awarded"]
     )
     for row in rows:
+        # csv_safe every cell (GHSA-352q / F7). The `value` column is the
+        # submitted flag string — fully competitor-controlled free text, so a
+        # guess of `=cmd|' /C calc'!A0` would execute when an organiser opens the
+        # dispute export; that is the real F7 vector. The id/enum/number columns
+        # are pass-throughs but wrapped for uniformity so a future free-text
+        # column can't reopen the hole.
         writer.writerow(
             [
                 row.created_at.isoformat(),
-                row.challenge_id,
-                row.user_id,
-                row.team_id or "",
-                _correctness_of(row).value,
-                row.value,
-                row.points_awarded,
+                csv_safe(row.challenge_id),
+                csv_safe(row.user_id),
+                csv_safe(row.team_id or ""),
+                csv_safe(_correctness_of(row).value),
+                csv_safe(row.value),
+                csv_safe(row.points_awarded),
             ]
         )
 

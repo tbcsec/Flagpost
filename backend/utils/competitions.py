@@ -15,6 +15,7 @@ its context demands.
 
 from __future__ import annotations
 
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.membership import has_global_role, member_competition_ids
@@ -44,6 +45,35 @@ async def can_see_competition(
     if await has_global_role(db, user.id):
         return True
     return competition.id in await member_competition_ids(db, user.id)
+
+
+async def assert_email_verified_to_join(
+    db: AsyncSession, competition: Competition, user: User
+) -> None:
+    """The #74 email-verification join gate, shared by every self-serve entry
+    that grants the Participant role — competition join (``routers.competitions
+    ._join``), ``create_team``, and ``join_team``.
+
+    Join-only: an existing member is never re-gated (an idempotent re-join must
+    not start failing if the setting flips on mid-event), and admin-created
+    accounts are exempt because they're stamped verified at creation. Kept here
+    so the team entry points can't silently diverge from ``_join`` again — the
+    divergence that let ``create_team`` skip this gate entirely (GHSA-4mmf).
+    """
+    if competition.id in await member_competition_ids(db, user.id):
+        return
+    # Lazy import: the settings accessor lives in a router, and utils/ must not
+    # import routers at module load (the dependency runs the other way).
+    from routers.site_settings import get_or_create_settings
+
+    site = await get_or_create_settings(db)
+    if site.email_verification_enabled and (
+        user.email is None or user.email_verified_at is None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Verify your email address before joining a competition",
+        )
 
 
 async def get_visible_competition(

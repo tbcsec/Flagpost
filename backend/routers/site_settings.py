@@ -240,10 +240,12 @@ async def backup_sections(
 async def _require_section_permissions(
     db: AsyncSession, user: User, sections: list[str]
 ) -> None:
-    """The roles and users sections carry the RBAC graph and account rows, so
-    reading or writing them requires the dedicated global grants — not just
-    manage_site_settings. Without this gate, a site-settings delegate could
-    import a global Administrator role assignment and self-escalate (the import
+    """The roles, users and automations sections carry the RBAC graph, account
+    rows, and executable automation rules, so reading or writing them requires
+    the dedicated global grants — not just manage_site_settings. Without this
+    gate, a site-settings delegate could import a global Administrator role
+    assignment and self-escalate, or plant executable automation rules (webhook
+    exfil, score tampering) they hold no automation permission for (the import
     path has no equivalent of the role editor's grant containment)."""
     if "roles" in sections and not await user_has_permission(
         db, user.id, "manage_roles", None
@@ -258,6 +260,17 @@ async def _require_section_permissions(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="The users section requires the Manage users permission",
+        )
+    # Automation rules are executable and carry outbound targets (webhook
+    # URLs/headers, email templates); importing them is a create, so require the
+    # global automation grant — the same containment the interactive route's
+    # automation_create + _authorize_trigger provide (GHSA-x8v4).
+    if "automations" in sections and not await user_has_permission(
+        db, user.id, "automation_create", None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The automations section requires the Create automations permission",
         )
 
 
@@ -419,6 +432,7 @@ def _operational_out(
     return OperationalSettingsOut(
         registration_open=settings.registration_open,
         username_changes_enabled=settings.username_changes_enabled,
+        skills_enabled=settings.skills_enabled,
         smtp_host=settings.smtp_host,
         smtp_port=settings.smtp_port,
         smtp_username=settings.smtp_username,
@@ -473,6 +487,8 @@ async def update_operational_settings(
     # Omitted = unchanged (#298), the update_checks_enabled pattern below.
     if body.username_changes_enabled is not None:
         settings.username_changes_enabled = body.username_changes_enabled
+    if body.skills_enabled is not None:
+        settings.skills_enabled = body.skills_enabled
     settings.smtp_host = body.smtp_host or None
     settings.smtp_port = body.smtp_port
     settings.smtp_username = body.smtp_username or None

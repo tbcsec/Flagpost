@@ -54,17 +54,19 @@ mechanism that already solves your problem. It names *where* things live; the
 authority on *how* they work is `docs/ARCHITECTURE.md` and the code.
 
 **Backend** is a small kernel (auth/RBAC, the Competition tenancy root, the
-event bus, the module loader) plus **23 modules** in `backend/plugins/`, each a
+event bus, the module loader) plus **24 modules** in `backend/plugins/`, each a
 `plugin.yaml` manifest + a `setup()` that mounts routers and subscribes
 listeners (§11.1). Exactly **six are optional** — per-competition toggleable
 via `competition_modules`: **`automations`**, **`feedback`**, **`analytics`**,
 **`certificates`**, **`reports`**, and **`ai`** (this last one additionally ships *inert*
-behind a site master switch — see the AI bullet below). The other seventeen are
-required-core and always on:
+behind a site master switch — see the AI bullet below). The other eighteen are
+required-core (always loaded):
 `announcements`, `audit_log`,
 `challenges`, `collab`, `competitions`, `dashboard`, `hints`, `notifications`,
-`pages`, `roles`, `scoring`, `setup`, `site_settings`, `sso`, `teams`,
-`tickets`, `users`.
+`pages`, `roles`, `scoring`, `setup`, `site_settings`, `skills`, `sso`, `teams`,
+`tickets`, `users`. (`skills` — the cross-competition skills web, #364/ADR-0039 —
+is required-core *loaded* but gated site-wide by a `site_settings.skills_enabled`
+switch rather than a per-competition toggle, since the web spans every event.)
 
 Subsystem by subsystem, with the non-obvious bits called out:
 
@@ -296,12 +298,20 @@ Explicitly deferred past MVP (`docs/ROADMAP.md`, "Explicitly Deferred"
 section). If a task seems to need one of these, flag it and ask rather
 than quietly building a scoped-down version:
 
-- Plugin marketplace / third-party modules — the module *mechanism* is
-  used for required-core features starting in Tier 0, but the
-  marketplace path (listing/discovery + untrusted-code sandboxing) stays
-  closed.
+- Plugin marketplace / third-party modules — **now in progress for v1.7.0**
+  (ADR-0040, epic #385, spec in `docs/MODULES.md`): a tiered trust model
+  (content packs → declarative → signed code) over an open registry protocol
+  with code-based import. Build it *per that design*, not ad hoc. The module
+  *mechanism* was always used for required-core features; this opens it to
+  registry-distributed modules. **Still off-limits:** sandboxing genuinely
+  *untrusted* code (Tier 3, ARCHITECTURE §15) — the tiers are built so nothing
+  shipping now needs it.
 - Multi-competition tenancy *consolidation views* — `competition_id`
-  scoping is required from Tier 0; cross-site rollups are not.
+  scoping is required from Tier 0; cross-site rollups are not. **Carve-out:**
+  the cross-competition **skills web** (#364, ADR-0039) is a sanctioned,
+  narrowly-scoped consolidation read (a per-user, self-scoped skill profile — the
+  admin matrix was dropped, ADR-0039 amendment); a general rollup/global-organiser
+  role stays deferred.
 - Per-competition / white-label theming — site-wide only for now
   (ADR-0011); the per-competition variant may return later.
 

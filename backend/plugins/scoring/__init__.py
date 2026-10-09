@@ -33,15 +33,25 @@ def setup(app, event_bus, db_factory) -> None:
     # The unauthenticated spectator board for public competitions (Phase 9).
     app.include_router(public_router)
 
+    from utils.competition_status import has_started
+
     async def authorize(db, user, competition_id: str) -> bool:
-        # Same gate as the REST route (§7.6): competitor access to the
-        # competition. Also requires the competition to actually exist so a
-        # global admin token can't park sockets in rooms for made-up ids.
-        if await db.get(Competition, competition_id) is None:
+        # Same gate as the REST /scoreboard route (§7.6): the competition exists,
+        # the caller has competitor access, AND it has started — the #221 gate
+        # (GHSA-r7j2). REST require_started 403s a not_started board for
+        # competitors, so the WS room must match, or a Participant could snapshot
+        # the pre-start board (staff test-solve totals) the REST route refuses.
+        # Staff (challenge_edit) are exempt, exactly as require_started is.
+        competition = await db.get(Competition, competition_id)
+        if competition is None:
             return False
-        return await user_has_permission(
+        if not await user_has_permission(
             db, user.id, "challenge_view", competition_id
-        )
+        ):
+            return False
+        if has_started(competition):
+            return True
+        return await user_has_permission(db, user.id, "challenge_edit", competition_id)
 
     async def snapshot(db, user, competition_id: str) -> dict:
         competition = await db.get(Competition, competition_id)

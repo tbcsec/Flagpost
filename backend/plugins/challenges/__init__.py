@@ -27,12 +27,28 @@ def setup(app, event_bus, db_factory) -> None:
     # Flag submission + scoring (Phase 6) — competitor-facing, same module.
     app.include_router(submissions_router)
 
+    from db import ensure_aware_utc, utcnow
+
     async def authorize_challenge(db, user, challenge_id: str) -> bool:
         challenge = await db.get(Challenge, challenge_id)
         if challenge is None:
             return False
-        return await user_has_permission(
+        if not await user_has_permission(
             db, user.id, "challenge_view", challenge.competition_id
+        ):
+            return False
+        # Visibility gate (GHSA-r7j2): a draft or not-yet-released challenge 404s
+        # on the REST detail for competitors, so the presence room must not
+        # confirm its existence or stream its members either. Staff (challenge_edit)
+        # see drafts, as on REST.
+        visible = challenge.state == "published" and (
+            challenge.release_at is None
+            or ensure_aware_utc(challenge.release_at) <= utcnow()
+        )
+        if visible:
+            return True
+        return await user_has_permission(
+            db, user.id, "challenge_edit", challenge.competition_id
         )
 
     async def challenge_presence_member(db, user, challenge_id: str, mode: str) -> dict:

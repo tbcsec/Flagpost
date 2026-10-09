@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flagpost.io/spec/catalog-index.schema.json",
+  "title": "Flagpost registry catalog index",
+  "description": "The machine-readable catalog a registry serves so an instance can list and resolve modules/packs without downloading every artifact first. A signed, static, mirrorable document (draft: ADR-0040, docs/MODULES.md §5.1). Distributed with a DETACHED signature over its exact bytes (catalog-index.json + catalog-index.json.sig); the instance verifies that signature against the registry's pinned root key before trusting any entry.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "registry", "generated_at", "entries"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "registry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "url"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "format": "uri" }
+      }
+    },
+    "generated_at": {
+      "description": "RFC 3339 timestamp the index was generated. Advisory only — freshness/trust comes from the signature, not this field.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "entries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "entry": {
+      "description": "One catalog item (a module or pack) and its published versions.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "kind", "publisher", "versions"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "name": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "enum": ["pack", "module"] },
+        "summary": { "type": "string", "maxLength": 500 },
+        "publisher": { "$ref": "#/$defs/publisher" },
+        "versions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/version" }
+        }
+      }
+    },
+    "version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "artifact", "signature", "requires_flagpost"],
+      "properties": {
+        "version": { "$ref": "#/$defs/semver" },
+        "released_at": { "type": "string", "format": "date-time" },
+        "trust_tier": {
+          "description": "declarative | code for modules; omitted for packs (a pack is the lowest trust level, 'pack').",
+          "type": "string",
+          "enum": ["declarative", "code"]
+        },
+        "pack_type": {
+          "type": "string",
+          "enum": ["challenges", "theme", "translations", "automation-recipes"]
+        },
+        "artifact": { "$ref": "#/$defs/artifactRef" },
+        "signature": { "$ref": "#/$defs/signature" },
+        "requires_flagpost": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min"],
+          "properties": {
+            "min": { "$ref": "#/$defs/semver" },
+            "max": { "$ref": "#/$defs/semver" }
+          }
+        },
+        "capabilities": {
+          "description": "Summary of the capabilities the module's manifest requests, so a listing can show them before download. Authoritative source is the signed artifact's manifest.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "paid": {
+          "description": "Whether obtaining this artifact requires a purchase/entitlement. Independent of the signature — a paid artifact is still verified the same way; the entitlement only gates download (docs/MODULES.md §7).",
+          "type": "boolean",
+          "default": false
+        },
+        "entitlement_required": {
+          "description": "Whether the instance must present an entitlement to download. Usually equals `paid`; kept separate so site-licensed free-to-that-org artifacts can be modelled.",
+          "type": "boolean",
+          "default": false
+        },
+        "yanked": {
+          "description": "A published version withdrawn by the publisher (e.g. a security issue). Already-installed instances keep it; new installs are refused.",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "artifactRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "digest"],
+      "properties": {
+        "url": {
+          "description": "Where to fetch the artifact. Content-addressed; a mirror MAY rewrite the host, so the digest — not the URL — is the identity.",
+          "type": "string",
+          "format": "uri"
+        },
+        "digest": { "$ref": "#/$defs/digest" },
+        "size": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "signature": {
+      "description": "A detached signature over the artifact's exact bytes, verified by the instance against a key allowed by its trust policy.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "key_id", "value"],
+      "properties": {
+        "algorithm": { "type": "string", "enum": ["ed25519", "sigstore"] },
+        "key_id": {
+          "description": "Identifies the signing key (e.g. an ed25519 public-key fingerprint, or a sigstore identity). The instance maps this to a trust level via its policy.",
+          "type": "string"
+        },
+        "value": {
+          "description": "Base64-encoded detached signature (for algorithm=ed25519), or a sigstore bundle reference.",
+          "type": "string"
+        }
+      }
+    },
+    "publisher": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "format": "uri" },
+        "verified": {
+          "description": "The registry vouches for this publisher's identity. Advisory in the index; the instance's trust policy decides whether 'verified' is sufficient to install.",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "digest": {
+      "type": "string",
+      "description": "A content digest, algorithm-prefixed. Only sha256 is defined for v1.",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    }
+  }
+}

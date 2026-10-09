@@ -466,8 +466,26 @@ class KubernetesProvisioner(Provisioner):
         """Egress half of the per-instance NetworkPolicy (#320 D5) — the
         load-bearing isolation control. DNS is always allowed (a pod needs it to
         resolve anything, and kube-dns lives in the cluster range that ``allow``
-        mode otherwise excepts, so it is carved back in explicitly)."""
-        dns = {"ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}]}
+        mode otherwise excepts, so it is carved back in explicitly).
+
+        The DNS rule is scoped to the cluster DNS pods (GHSA-vgrr): without a
+        ``to`` selector the port-53 allowance reaches *any* host, reopening a full
+        outbound channel (DNS tunnelling, or a plain reverse shell to
+        ``attacker:53``) despite deny mode advertising "no internet". The default
+        selector matches a standard CoreDNS/kube-dns install (``k8s-app=kube-dns``
+        in ``kube-system``); an operator whose DNS lives elsewhere must relabel or
+        widen it — but the safe default is a scoped rule, not egress-to-any."""
+        dns = {
+            "to": [
+                {
+                    "namespaceSelector": {
+                        "matchLabels": {"kubernetes.io/metadata.name": "kube-system"}
+                    },
+                    "podSelector": {"matchLabels": {"k8s-app": "kube-dns"}},
+                }
+            ],
+            "ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}],
+        }
         if self._cfg.egress_denied:
             # Deny mode (default): DNS only. Blocks the internet, the control
             # plane, peer instances and the metadata IP in one stroke — and

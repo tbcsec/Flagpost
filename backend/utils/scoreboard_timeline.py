@@ -84,7 +84,9 @@ async def awarded_solves(
     Live (``as_of`` None): ``points_awarded`` is already current — the submit
     path re-values prior solvers whenever a dynamic challenge decays. Frozen:
     re-value each challenge by its solve count *as of the cutoff*, the CTFd
-    freeze semantics ``_awarded_by_subject`` implements for the board itself.
+    freeze semantics ``_awarded_by_subject`` implements for the board itself —
+    net of each solve's stored multiple-choice penalty, so a penalised solver's
+    frozen series still lands on their frozen board total (the invariant above).
 
     Known simplification (both paths): a dynamic challenge's *historical* worth
     isn't stored, so a series reflects current values applied backwards. It
@@ -105,15 +107,16 @@ async def awarded_solves(
                 column,
                 Submission.created_at,
                 Submission.points_awarded,
+                Submission.mc_penalty,
             ).where(*conditions)
         )
     ).all()
 
     if as_of is None:
-        return [(cid, sid, ts, int(pts or 0)) for cid, sid, ts, pts in rows]
+        return [(cid, sid, ts, int(pts or 0)) for cid, sid, ts, pts, _pen in rows]
 
     counts: dict[str, int] = {}
-    for cid, _sid, _ts, _pts in rows:
+    for cid, _sid, _ts, _pts, _pen in rows:
         counts[cid] = counts.get(cid, 0) + 1
     challenges = {
         c.id: c
@@ -124,9 +127,13 @@ async def awarded_solves(
         ).scalars()
     }
     valued = []
-    for cid, sid, ts, _pts in rows:
+    for cid, sid, ts, _pts, mc_penalty in rows:
         challenge = challenges.get(cid)
-        value = challenge_value(challenge, counts[cid]) if challenge else 0
+        gross = challenge_value(challenge, counts[cid]) if challenge else 0
+        # Net the stored per-solve MC penalty, exactly as ``_awarded_by_subject``
+        # does, so the series total matches the frozen board (0 for every
+        # non-penalised solve, leaving them unchanged).
+        value = max(0, gross - (mc_penalty or 0))
         valued.append((cid, sid, ts, value))
     return valued
 

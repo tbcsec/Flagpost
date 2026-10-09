@@ -38,6 +38,11 @@ from schemas.team import (
     TeamOut,
     TeamUpdate,
 )
+from utils.competitions import (
+    assert_email_verified_to_join,
+    can_see_competition,
+    get_visible_competition,
+)
 from utils.event_bus import event_bus
 from utils.registration_fields import (
     get_values as get_registration_values,
@@ -113,9 +118,16 @@ async def _my_team_out(db: AsyncSession, team: Team) -> MyTeamOut:
 @router.get("", response_model=list[TeamOut])
 async def list_teams(
     competition_id: str,
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[TeamOut]:
+    # Visibility gate (GHSA-4mmf): a private competition's roster is not public.
+    # 404 (not 403) so a private competition's existence isn't disclosed, matching
+    # every other competition-scoped read (rules, registration_fields, ...).
+    if await get_visible_competition(db, competition_id, current_user) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"
+        )
     # Listing is allowed regardless of participation_mode (harmlessly empty for
     # individual competitions); scoped by competition_id per §6.2.
     rows = (
@@ -213,6 +225,21 @@ async def create_team(
     db: AsyncSession = Depends(get_db),
 ) -> MyTeamOut:
     competition = await _get_team_competition(db, competition_id)
+    # Entry gate (GHSA-4mmf): creating a team grants the Participant role, so it
+    # is a self-serve *entry* into the competition and must honour the same
+    # boundary as the join routes. A private competition is enterable only with
+    # its invite code (via POST /competitions/join, which then makes the caller a
+    # member) — never by POSTing a team with just the competition id. So allow
+    # only when the caller can already see it: public, a global admin, or an
+    # existing member. 404 (like the sibling reads) rather than 403 so a private
+    # competition's existence stays undisclosed.
+    if not await can_see_competition(db, competition, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"
+        )
+    # Email-verification gate (#74): parity with _join / join_team — a genuinely
+    # new joiner needs a verified email when the site requires it.
+    await assert_email_verified_to_join(db, competition, current_user)
     # Rules gate (#57): creating a team grants the Participant role just like
     # joining one, so it's the fourth join site (owner-confirmed) — without it,
     # "Create a team" on a public competition would bypass the rules entirely.
@@ -303,6 +330,12 @@ async def join_team(
     db: AsyncSession = Depends(get_db),
 ) -> TeamJoinResult:
     competition = await _get_team_competition(db, competition_id)
+    # Email-verification gate (#74): parity with _join / create_team. No
+    # visibility gate here — the team invite code in the body is the secret that
+    # authorizes entry into a private competition (as the competition invite code
+    # is for /competitions/join), so requiring can_see_competition would break
+    # the legitimate team-invite path.
+    await assert_email_verified_to_join(db, competition, current_user)
     # Rules gate (#57), deliberately ahead of the approval branch below: filing
     # a join *request* is the join moment for approval-required teams (owner
     # decision), so acceptance is required before an application exists.

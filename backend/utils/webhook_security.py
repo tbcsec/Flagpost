@@ -22,9 +22,11 @@ independent hardenings, all applied by ``_execute_webhook``:
    can't rename their team to ``@everyone`` and mass-ping through an
    organiser's rule.
 
-Residual risk (see ADR-0013): the resolve-then-connect TOCTOU isn't fully
-closed (no connection pinning to the validated IP), and destination-rate
-limiting is still the open §15 question — both deliberately out of this phase.
+The resolve-then-connect TOCTOU is now closed by :func:`resolve_pinned_target`,
+which pins the connection to a validated IP (ADR-0013 amendment, GHSA-r7rp), and
+``_execute_webhook`` streams the response without buffering its body so a hostile
+target can't exhaust memory. Residual risk (see ADR-0013): destination-rate
+limiting is still the open §15 question, deliberately out of this phase.
 """
 
 from __future__ import annotations
@@ -35,7 +37,8 @@ import json
 import logging
 import re
 import socket
-from urllib.parse import quote, urlsplit
+from typing import NamedTuple
+from urllib.parse import quote, urlsplit, urlunsplit
 
 logger = logging.getLogger("automation")
 
@@ -106,10 +109,32 @@ async def _resolve_host(host: str, port: int) -> list[str]:
     return [sockaddr[0] for *_, sockaddr in infos]
 
 
-async def validate_webhook_url(url: str) -> None:
-    """Raise :class:`WebhookSecurityError` unless ``url`` is a safe http(s)
-    target (§5.4). Run on every call, so DNS that changes after rule save is
-    re-checked."""
+class PinnedTarget(NamedTuple):
+    """A validated webhook target whose connection is pinned to a checked IP.
+
+    ``url`` points at the literal IP (so the HTTP client connects there and can't
+    re-resolve to a different address); ``host_header`` and ``sni_hostname``
+    carry the original hostname so routing and TLS still work. Pass
+    ``extensions={"sni_hostname": t.sni_hostname}`` on the request when set.
+    """
+
+    url: str
+    host_header: str
+    sni_hostname: str | None
+
+    @property
+    def extensions(self) -> dict[str, str]:
+        return {"sni_hostname": self.sni_hostname} if self.sni_hostname else {}
+
+
+async def _resolve_validated(url: str) -> tuple[str, int, str, list[str]]:
+    """Parse + SSRF-check ``url``; return (scheme, port, host, validated IPs).
+
+    Resolves the host once and checks *every* resolved IP against the blocked
+    ranges, so a name that resolves partly to a public and partly to an internal
+    address (DNS rebinding) is refused. An unresolvable host is refused too
+    (can't prove it safe). Raises :class:`WebhookSecurityError` on any failure.
+    """
     parts = urlsplit(url)
     if parts.scheme not in _ALLOWED_SCHEMES:
         raise WebhookSecurityError(f"scheme {parts.scheme!r} not allowed")
@@ -124,12 +149,52 @@ async def validate_webhook_url(url: str) -> None:
         # Can't resolve → can't prove safe → refuse.
         raise WebhookSecurityError(f"host {host!r} does not resolve") from exc
 
+    if not addresses:
+        raise WebhookSecurityError(f"host {host!r} does not resolve")
     for address in addresses:
         ip = ipaddress.ip_address(address)
         if _ip_is_blocked(ip):
             raise WebhookSecurityError(
                 f"host {host!r} resolves to blocked address {address}"
             )
+    return parts.scheme, port, host, addresses
+
+
+async def validate_webhook_url(url: str) -> None:
+    """Raise :class:`WebhookSecurityError` unless ``url`` is a safe http(s)
+    target (§5.4). Used at rule-save time; the fire path uses
+    :func:`resolve_pinned_target` so the checked address is the connected one."""
+    await _resolve_validated(url)
+
+
+async def resolve_pinned_target(url: str) -> PinnedTarget:
+    """SSRF-check ``url`` and return a :class:`PinnedTarget` that pins the
+    connection to a **validated** IP (ADR-0013 amendment).
+
+    This closes the resolve-then-connect TOCTOU: the SSRF check resolved the
+    host, and the request must connect to one of *those* addresses — not to
+    whatever a rebinding DNS server answers on a second, independent lookup at
+    connect time. We rewrite the URL host to the first validated IP and carry the
+    original hostname in the Host header and (for https) the TLS SNI, so the
+    origin still routes correctly and the certificate is still verified against
+    the real hostname.
+    """
+    scheme, port, host, addresses = await _resolve_validated(url)
+    parts = urlsplit(url)
+    ip = addresses[0]
+    ip_host = f"[{ip}]" if ":" in ip else ip  # bracket IPv6 in the URL authority
+    pinned_url = urlunsplit(
+        (scheme, f"{ip_host}:{port}", parts.path or "/", parts.query, "")
+    )
+    default_port = 443 if scheme == "https" else 80
+    # Mirror the Host header the client would have sent for the original URL:
+    # bare host on the default port, host:port otherwise.
+    host_header = host if port == default_port else f"{host}:{port}"
+    return PinnedTarget(
+        url=pinned_url,
+        host_header=host_header,
+        sni_hostname=host if scheme == "https" else None,
+    )
 
 
 # --- 2. Header sanitisation --------------------------------------------------

@@ -137,6 +137,7 @@ type AdminNavKey =
   | "events"
   | "automations"
   | "pages"
+  | "marketplace"
   | "siteSettings";
 
 const ADMIN_SUBNAV: { href: string; key: AdminNavKey }[] = [
@@ -150,6 +151,10 @@ const ADMIN_SUBNAV: { href: string; key: AdminNavKey }[] = [
   // `manage_pages` is a separate, delegable grant, and this is a content
   // manager with an editor rather than a settings form.
   { href: "/admin/pages", key: "pages" },
+  // Import content packs + configure the registry/trust (#389). Its own page
+  // (like Pages), not a Site-settings tab: the import surface is a workflow, and
+  // manage_marketplace is a separate delegable grant.
+  { href: "/admin/marketplace", key: "marketplace" },
   // Appearance (#104) and Auth providers (#58) are tabs under Site settings,
   // not their own pages.
   { href: "/admin/settings", key: "siteSettings" },

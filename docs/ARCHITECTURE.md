@@ -1227,20 +1227,26 @@ later. Modules split by **provenance and trust**, not by capability:
 - **Marketplace modules** are third-party, opt-in from the start, and need
   the stronger isolation story flagged in §15 before that ships.
 
-**What actually shipped**, against the prediction above. Twenty-three modules load
-through §11.1; exactly **six are optional** (per-competition toggleable via
+**What actually shipped**, against the prediction above. Twenty-six modules load
+through §11.1; **seven are optional** (per-competition toggleable via
 `competition_modules`): `automations`, `feedback`, `analytics`, `certificates`,
-`reports`, and `ai`. The other seventeen are required-core: `announcements`,
-`audit_log`, `challenges`, `collab`, `competitions`, `dashboard`, `hints`,
-`notifications`, `pages`, `roles`, `scoring`, `setup`, `site_settings`, `sso`,
-`teams`, `tickets`, `users`. `pages` (#198, ADR-0034) is required-core with
+`reports`, `instances`, and `ai`. The other nineteen are required-core:
+`announcements`, `audit_log`, `challenges`, `collab`, `competitions`,
+`dashboard`, `hints`, `marketplace`, `notifications`, `pages`, `roles`,
+`scoring`, `setup`, `site_settings`, `skills`, `sso`, `teams`, `tickets`,
+`users`. `pages` (#198, ADR-0034) is required-core with
 **no** toggle for a reason worth naming: its content is site-level, and
 `competition_modules` has no site-scoped equivalent — an install with no pages
 renders no sidebar section and no route that resolves, so content *is* the
-on/off switch. The `ai` module (§12) is the odd one out among the optional
-six: even when enabled for a competition it ships **inert** behind a site master
+on/off switch. The `ai` module (§12) is one of two optional modules that ship
+**inert**: even when enabled for a competition it stays behind a site master
 switch (`ai_settings.enabled`, default off), so nothing runs until an
-administrator configures a provider and turns it on (ADR-0023).
+administrator configures a provider and turns it on (ADR-0023). `instances`
+(§16, ADR-0036) ships inert the same way — it mounts site-wide but provisions
+nothing until an operator configures a provisioner kind. `skills` (#364,
+ADR-0039) is the inverse: required-core *loaded* but gated site-wide by a
+`site_settings.skills_enabled` switch rather than a per-competition toggle,
+since the cross-competition skills web spans every event.
 
 One prediction was wrong and is worth naming: this section listed **SSO
 providers as an optional/third-party module**, and it shipped **required-core**

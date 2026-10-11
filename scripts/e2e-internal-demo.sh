@@ -147,8 +147,8 @@ fi
 
 say "restore refuses a corrupt baseline"
 cp -r "$BASELINE_DIR" "$SCRATCH/corrupt"
-head -c 100 "$SCRATCH/corrupt/minio-data.tgz" > "$SCRATCH/corrupt/minio-data.tgz.t" \
-  && mv "$SCRATCH/corrupt/minio-data.tgz.t" "$SCRATCH/corrupt/minio-data.tgz"
+head -c 100 "$SCRATCH/corrupt/rustfs-data.tgz" > "$SCRATCH/corrupt/rustfs-data.tgz.t" \
+  && mv "$SCRATCH/corrupt/rustfs-data.tgz.t" "$SCRATCH/corrupt/rustfs-data.tgz"
 refusal=$(BASELINE_DIR="$SCRATCH/corrupt" deploy/internal-demo/restore.sh 2>&1 || true)
 if echo "$refusal" | grep -q "corrupt" && curl -fsS "$BASE/health" >/dev/null; then
   echo "PASS: corrupt tarball refused before any wipe"

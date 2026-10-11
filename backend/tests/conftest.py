@@ -134,7 +134,7 @@ def _competitions_default_running(request):
 
 @pytest.fixture
 def object_storage() -> InMemoryStorage:
-    """In-memory object storage double so the suite needs no MinIO (ADR-0006)."""
+    """In-memory object storage double so the suite needs no S3 server (ADR-0006)."""
     return InMemoryStorage()
 
 

@@ -685,7 +685,7 @@ class DockerProvisioner(Provisioner):
             return legs
 
         # 2b. Network isolation — verify the instance network is `internal`, so
-        # instances can't reach the control plane (Postgres/Redis/MinIO/API) or
+        # instances can't reach the control plane (Postgres/Redis/object store/API) or
         # the internet, when the site egress policy is deny. Turns a deployment
         # assumption into a checked, testable precondition.
         iso_leg = await self._check_network_isolation()

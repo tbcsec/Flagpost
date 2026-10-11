@@ -198,7 +198,7 @@ async def test_signed_url_forces_safe_download(client):
         headers=_auth(admin),
     )
     url = resp.json()["url"]
-    # Signed overrides (MinIO and the in-memory double both put them in the URL).
+    # Signed overrides (a real S3 server and the in-memory double both put them in the URL).
     assert "response-content-type=application%2Foctet-stream" in url
     assert "response-content-disposition=attachment" in url
     assert "handout.zip" in url  # download keeps a friendly filename

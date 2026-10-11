@@ -53,7 +53,7 @@ ride the baseline:
 sudo /opt/flagpost/deploy/internal-demo/snapshot.sh
 ```
 
-The script stops the volume-writing services (backend, MinIO, Postgres — the
+The script stops the volume-writing services (backend, RustFS, Postgres — the
 front door keeps answering, with errors, instead of the port going dead),
 tars the three data volumes into `deploy/internal-demo/baseline/`, verifies
 the tarballs, starts the stack again, and only then swaps the new baseline in
@@ -91,6 +91,20 @@ timer, pull new images, `docker compose up -d` (migrations run on boot),
 verify, **re-run `snapshot.sh`**, start the timer. (A concurrent
 snapshot/restore is also blocked by a lock file, so a mid-snapshot timer tick
 refuses rather than tearing the capture.)
+
+**Upgrading across the object-store change (v1.7.0, ADR-0041):** the baseline
+volume list now names `rustfs-data` instead of `minio-data`, so two things
+follow. Until you re-snapshot, every timer tick's `restore.sh` refuses with
+"`rustfs-data.tgz` missing — run `snapshot.sh` first" (safe, but the demo
+stops resetting). And a re-snapshot captures whatever the *new* object store
+holds — which is **empty** unless you migrate first, so an attachment-bearing
+baseline would be replaced by one with no objects (the old
+`baseline.prev/minio-data.tgz` survives only until the next rotation). Order
+the upgrade as: stop the timer → `docker compose down --remove-orphans`
+(removes the retired `minio` container, which would otherwise keep port 9000)
+→ rename `MINIO_*` → `S3_*` in `.env` → `up -d` → `rclone sync` the objects
+from the old `minio-data` volume into the new server → verify attachments
+render → **then** `snapshot.sh` → start the timer.
 
 ## Do not use `DEMO_MODE` for this
 

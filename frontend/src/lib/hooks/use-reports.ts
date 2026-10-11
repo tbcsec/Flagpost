@@ -58,7 +58,7 @@ export function useDeleteReport(competitionId: string) {
 }
 
 /** Download a ready report's PDF/HTML. The file is streamed through the API as
- *  an auth'd blob (not a presigned URL), so it works even where MinIO isn't
+ *  an auth'd blob (not a presigned URL), so it works even where the object store isn't
  *  browser-reachable — e.g. the tunnelled demo. */
 export function useDownloadReport(competitionId: string) {
   return useMutation({

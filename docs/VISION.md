@@ -402,7 +402,7 @@ Collaboration:
 
 * PostgreSQL
 * Redis
-* MinIO (S3 compatible storage)
+* RustFS (S3-compatible storage; any S3 server works)
 
 ---
 

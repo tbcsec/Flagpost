@@ -8,7 +8,7 @@ document states what we defend, how, and what stays the operator's job.
 
 ## Assets & trust boundaries
 
-- **The control plane** — Postgres, Redis, MinIO, the API. An exploited instance
+- **The control plane** — Postgres, Redis, the object store, the API. An exploited instance
   reaching it is the worst case (data theft, tampering, pivot). It must be
   unreachable from the instance network.
 - **Peer instances** — one team's exploited box must not reach another team's.

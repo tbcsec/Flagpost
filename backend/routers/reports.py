@@ -9,7 +9,7 @@ object-storage keys, mirroring the certificates bulk export. Clients poll the
 status route; once ready, the PDF/HTML are **streamed back through this API**
 (``/{id}/download/{fmt}``), not handed out as presigned object-store URLs — so
 downloads work on any topology (single-origin proxy, Cloudflare Tunnel,
-un-exposed MinIO like the public demo) and every fetch re-checks
+un-exposed object store like the public demo) and every fetch re-checks
 ``generate_report``. This matches the ticket-attachment ``/content`` and
 per-user certificate download routes; the certificates *bulk* ZIP export still
 presigns because it can be large.
@@ -64,7 +64,7 @@ def _download_path(competition_id: str, report_id: str, fmt: str) -> str:
     """Same-origin API path the browser fetches the rendered file from.
 
     Not a presigned object-store URL: the bytes are streamed back through the
-    API (see :func:`download_report`), so a download never needs MinIO to be
+    API (see :func:`download_report`), so a download never needs the object store to be
     browser-reachable — which it isn't on a single-origin / Cloudflare-Tunnel
     deployment like the public demo.
     """
@@ -216,7 +216,7 @@ async def download_report(
     """Stream a ready report's PDF/HTML back through the API (§13.3).
 
     Proxied, not presigned, so the object store never has to be browser-reachable
-    (the backend reaches it internally at ``minio:9000``) — which is what a
+    (the backend reaches it internally at ``rustfs:9000``) — which is what a
     single-origin / Cloudflare-Tunnel deployment like the demo needs. It also
     re-checks ``generate_report`` on every fetch, where a presigned URL would be
     a bearer secret good for its whole TTL. Served defensively (``nosniff`` +

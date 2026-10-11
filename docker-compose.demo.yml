@@ -64,16 +64,16 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-flagpost}:${POSTGRES_PASSWORD:-flagpost}@postgres:5432/${POSTGRES_DB:-flagpost}
       REDIS_URL: redis://redis:6379/0
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_ENDPOINT: rustfs:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
       CORS_ORIGINS: https://demo.flagpost.io
       # The public connection is HTTPS (via Cloudflare), so mark the cookie Secure.
       REFRESH_COOKIE_SECURE: "true"
       DEMO_MODE: "true"
       JWT_SECRET_FILE: /data/.jwt_secret
-      # MINIO_PUBLIC_ENDPOINT intentionally unset: MinIO isn't exposed, so
-      # attachment *downloads* don't resolve on the demo. The seed adds no
+      # S3_PUBLIC_ENDPOINT intentionally unset: the object store isn't exposed,
+      # so attachment *downloads* don't resolve on the demo. The seed adds no
       # attachments, so nothing user-facing depends on it.
     expose:
       - "8000"
@@ -90,7 +90,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
+      rustfs:
         condition: service_healthy
 
   # Demo activity simulator — drives realistic API traffic (rolling sign-ups,
@@ -142,24 +142,28 @@ services:
       timeout: 5s
       retries: 5
 
-  minio:
-    image: minio/minio:latest
+  # S3-compatible object storage. RustFS replaces the retired MinIO (ADR-0041):
+  # pinned, not :latest, so the hourly reset recreates a reproducible stack; the
+  # same tag is mirrored at ghcr.io/rustfs/rustfs:1.0.1.
+  rustfs:
+    image: rustfs/rustfs:1.0.1
     restart: unless-stopped
-    command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      # Only the credential pair: the image already defaults to serving /data
+      # on :9000.
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
     volumes:
-      - minio-data:/data
+      - rustfs-data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 5s
       timeout: 5s
       retries: 5
 
 volumes:
   postgres-data:
-  minio-data:
+  rustfs-data:
   backend-data:
   caddy-data:
   caddy-config:

@@ -84,7 +84,7 @@ describe("ReportsPanel", () => {
     expect(screen.getByText("Sponsor shout-outs")).toBeInTheDocument();
   });
 
-  it("downloads a ready report through the API hook (not a raw MinIO link)", () => {
+  it("downloads a ready report through the API hook (not a raw object-store link)", () => {
     mockReports = [
       {
         id: "r1", version: 2, status: "ready", config: { sections: [], formats: [] },

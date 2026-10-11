@@ -15,7 +15,7 @@ NULL and are never touched. Unarchiving clears the clock; re-archiving restarts
 it.
 
 :func:`delete_competition_tree` is shared with the manual ``DELETE`` route — that
-route previously cascaded the DB tree but orphaned the MinIO objects; now both
+route previously cascaded the DB tree but orphaned the stored objects; now both
 paths clean storage.
 """
 

@@ -13,7 +13,7 @@ rather than remain fetchable by id.
 
 Bytes are served **through this API** (``/content``), not via a presigned
 storage URL: the production CSP allows ``img-src 'self' … blob:``, so a
-cross-origin MinIO URL would be blocked in an ``<img>``. Same-origin streaming
+cross-origin object-store URL would be blocked in an ``<img>``. Same-origin streaming
 also lets us serve defensively (``nosniff``, sandbox CSP) the way the site-logo
 endpoint does.
 """

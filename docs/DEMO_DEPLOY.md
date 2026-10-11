@@ -145,11 +145,11 @@ For a **static** demo instead, remove the `simulator` service (or set
 ## Notes / limits
 
 - **Challenge attachments don't download** on the demo — they're served by
-  signed URL against MinIO, which isn't exposed (no ports). The seed adds no
+  signed URL against the object store, which isn't exposed (no ports). The seed adds no
   attachments, so nothing user-facing depends on it. If you want them, add a
-  MinIO ingress to the tunnel and set `MINIO_PUBLIC_ENDPOINT`. **Ticket
+  RustFS ingress to the tunnel and set `S3_PUBLIC_ENDPOINT`. **Ticket
   screenshots are unaffected**: their bytes stream through the API rather than a
-  signed URL (§13.3), so the backend's in-network MinIO is enough.
+  signed URL (§13.3), so the backend's in-network object store is enough.
 - Demo mode disables outbound automation actions (webhooks, email) and seeds the
   public accounts `admin` / `judge` / `participant` (password `password`).
 - Demo mode also **suppresses the daily update check** (#111). An hourly reset

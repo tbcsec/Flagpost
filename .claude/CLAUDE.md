@@ -175,10 +175,12 @@ Hard-won, non-obvious, and not visible from reading the code you're changing.
   from `package.json` (during the Next 16 bump the container still reported
   Next 15). Use `up -d --build --renew-anon-volumes frontend`, and confirm with
   `exec frontend node -e "console.log(require('next/package.json').version)"`.
-- **Object storage has no local-filesystem backend.** `get_storage()` needs
-  MinIO, so the zero-infra SQLite preview stack needs
-  `docker compose -f docker-compose.dev.yml up -d minio` before any attachment
-  upload works (config defaults to `localhost:9000`).
+- **Object storage has no local-filesystem backend.** `get_storage()` needs an
+  S3-compatible server (RustFS by default — ADR-0041; MinIO was withdrawn from
+  distribution), so the zero-infra SQLite preview stack needs
+  `docker compose -f docker-compose.dev.yml up -d rustfs` before any attachment
+  upload works (config defaults to `localhost:9000`). Config is vendor-neutral
+  (`S3_*`) on purpose — don't name the vendor in settings.
 - **`PUBLIC_BASE_URL` is required behind a TLS-terminating proxy.** uvicorn runs
   without `--proxy-headers`, so a request-derived OIDC `redirect_uri` says
   `http://` and the IdP rejects the mismatch.
@@ -329,7 +331,7 @@ something already decided there (e.g. Zustand + TanStack Query, not
 Redux; SQLAlchemy 2.x async, not a different ORM).
 
 ```
-# Whole PRODUCTION stack (Caddy + backend + frontend + Postgres/Redis/MinIO).
+# Whole PRODUCTION stack (Caddy + backend + frontend + Postgres/Redis/RustFS).
 # Caddy fronts everything single-origin; the backend runs `alembic upgrade head`
 # before serving, so the DB is migrated + roles seeded on first boot.
 docker compose up --build            # app on http://localhost:8080

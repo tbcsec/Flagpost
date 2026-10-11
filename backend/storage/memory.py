@@ -1,6 +1,6 @@
 """In-memory object storage — the test/dev double for ``ObjectStorage``.
 
-Keeps the pytest suite infra-free (ADR-0006): no MinIO required. Signed URLs
+Keeps the pytest suite infra-free (ADR-0006): no object-storage server required. Signed URLs
 are synthetic (``memory://…``) but carry an expiry so tests can assert one was
 issued and honoured the requested TTL.
 """
@@ -33,7 +33,7 @@ class InMemoryStorage:
         expires_at = int(time.time()) + expires_seconds
         url = f"memory://challenge-files/{key}?expires={expires_at}"
         if response_headers:
-            # Mirror MinIO, which signs overrides in as query params — lets tests
+            # Mirror a real S3 server, which signs overrides in as query params — lets tests
             # assert the forced disposition/type without a real object store.
             url += "&" + urlencode(response_headers)
         return url

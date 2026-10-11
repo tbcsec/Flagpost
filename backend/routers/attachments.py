@@ -148,7 +148,7 @@ async def get_attachment_url(
     # Force a download of a neutral type regardless of the object's stored
     # Content-Type, so a challenge file uploaded as text/html or image/svg+xml
     # can't render as active content inline (#8). Signed into the URL, so it
-    # holds even when MinIO is served from another origin. The stored filename
+    # holds even when the object store is served from another origin. The stored filename
     # is already _safe_name'd; strip quotes/CR/LF as belt-and-suspenders.
     safe = attachment.filename.replace('"', "").replace("\r", "").replace("\n", "")
     url = storage.presigned_get_url(

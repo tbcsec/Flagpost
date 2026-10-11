@@ -102,7 +102,7 @@ This is the actual MVP: enough to run one competition, live, end to end.
    (see Tier 2) — a challenge is either draft or published.
 9. **Challenge categories** — simple tagging/grouping (web, pwn, crypto,
    forensics, etc.), used for navigation and later analytics.
-10. **File/asset storage** — MinIO-backed upload and serving for challenge
+10. **File/asset storage** — S3-backed upload and serving for challenge
     files, sized and typed appropriately; this is a dependency for #8, not
     optional.
 11. **Challenge browsing & submission (competitor)** — the competitor-facing
@@ -386,7 +386,7 @@ mode so one image works behind any single-origin proxy without a rebuild.
 - **Responsive venue/projector mode** (#214), the competition-scoped
   **`manage_modules`** permission (#168), and a batch of **security hardening**
   (live-WebSocket eviction on ban/delete/team-removal, forced-safe attachment
-  downloads with bounded upload memory, contained backup-import grants, MinIO
+  downloads with bounded upload memory, contained backup-import grants, the object store
   bound to loopback, request-body cap, pool pre-ping, and announcement/freeze
   scoping fixes).
 
@@ -419,7 +419,7 @@ closed:
 - **Admin-authored custom pages** (#198, ADR-0034) — rich-text pages with their
   own sidebar entries, stored as a validated node tree and carried in the backup.
 - **Post-event report generation** (#134) — a generated end-of-event report,
-  streamed through the API rather than a presigned URL (#256), with the MinIO
+  streamed through the API rather than a presigned URL (#256), with the S3
   client region pinned so URLs sign offline (#255).
 - **Authoring & onboarding** — a **master-detail challenge editor** on a
   dedicated manage route (#274), **connection info** (URL / host:port) for

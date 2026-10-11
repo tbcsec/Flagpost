@@ -4,7 +4,7 @@
 # liking, and again whenever the baseline should change — including after an
 # image upgrade. See docs/INTERNAL_DEMO.md.
 #
-# Only the volume-writing services (backend, minio, postgres) are stopped
+# Only the volume-writing services (backend, rustfs, postgres) are stopped
 # while the volumes are tarred — Postgres is captured in a clean shutdown
 # state, and the capture is atomic: the new baseline is written to a staging
 # dir and only swapped in (previous baseline → baseline.prev) once complete.

@@ -1,7 +1,7 @@
 """Object storage interface (ARCHITECTURE.md §13.3).
 
 Challenge files live behind this abstraction so the rest of the app never
-touches the MinIO client directly, and so the test suite can swap in an
+touches the S3 client directly, and so the test suite can swap in an
 in-memory implementation and stay infra-free (ADR-0006). Object keys are
 namespaced ``<competition_id>/<challenge_id>/<name>`` by the caller — the
 storage layer just stores what it's given.

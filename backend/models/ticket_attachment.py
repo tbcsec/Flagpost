@@ -3,7 +3,7 @@
 Screenshots a participant (or staff) attaches to a message on a ticket thread.
 Stored in object storage like challenge :class:`~models.attachment.Attachment`
 — not as a ``LargeBinary`` column — because this is a *growing per-ticket
-collection* added to by several authors over time, which is the shape MinIO
+collection* added to by several authors over time, which is the shape object storage
 already solves; the site logo and collab snapshots are singleton
 overwrite-in-place blobs, hence their different treatment.
 

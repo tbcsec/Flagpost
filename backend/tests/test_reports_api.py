@@ -155,7 +155,7 @@ async def test_generate_html_stores_and_serves_download(client, object_storage, 
     ).json()
     assert got["status"] == "ready"
     # A same-origin API path, not a presigned object-store URL — so it resolves
-    # even where MinIO isn't browser-reachable (the tunnelled demo, #134).
+    # even where the object store isn't browser-reachable (the tunnelled demo, #134).
     assert got["html_url"] == (
         f"/api/competitions/{comp}/reports/{created['id']}/download/html"
     )

@@ -60,7 +60,7 @@ into concrete technical commitments:
 | ORM / migrations | SQLAlchemy 2.x / Alembic | |
 | Database | PostgreSQL | |
 | Cache / pub-sub transport | Redis | |
-| Object storage | MinIO (S3-compatible) | challenge files, evidence, avatars |
+| Object storage | RustFS (S3-compatible; vendor-neutral `S3_*` config — ADR-0041) | challenge files, evidence, avatars |
 | Internationalization | next-intl (non-routed, cookie locale) + Crowdin | UI chrome only; ICU messages, `messages/en.json` source of truth — ADR-0029 |
 | Deployment | Docker Compose (default), Kubernetes (future) | |
 
@@ -1435,7 +1435,7 @@ submission is the one endpoint they have direct incentive to script.
 
 ### 13.3 File Storage & Access Control
 
-Challenge files live in MinIO, but tenancy scoping (§6.2) has to be
+Challenge files live in S3-compatible object storage, but tenancy scoping (§6.2) has to be
 enforced at the storage layer too, not just in the database:
 
 - Object keys are namespaced by competition and challenge

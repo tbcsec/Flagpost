@@ -479,7 +479,7 @@ async def delete_competition(
 ) -> None:
     """Permanently delete a competition and everything under it (§6.2 tenant
     tree cascades on the FK), including its stored attachment objects (#26 —
-    previously orphaned in MinIO). Irreversible — the destructive counterpart
+    previously orphaned in object storage). Irreversible — the destructive counterpart
     to archive. Shares the tree-delete with the retention purge."""
     competition = await _competition_or_404(db, competition_id)
     await delete_competition_tree(

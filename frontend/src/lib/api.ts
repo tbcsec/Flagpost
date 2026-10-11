@@ -716,7 +716,7 @@ export const reportsApi = {
       method: "DELETE",
     }),
   // Streamed through the API (auth'd blob), not a presigned object-store URL —
-  // the report renders on any topology, incl. the tunnelled demo where MinIO
+  // the report renders on any topology, incl. the tunnelled demo where the object store
   // isn't browser-reachable. Mirrors certificatesApi.downloadMine.
   download: (
     competitionId: string,

@@ -127,7 +127,7 @@ The things that set Flagpost apart — every one of them **built and working tod
 **Challenges**
 - Categories, static / regex / **multiple-choice** flags
 - **Dynamic (decay)** or static scoring
-- Hints, file attachments (S3/MinIO)
+- Hints, file attachments (S3-compatible object storage)
 - **Prerequisite unlock chains**, scheduled release
 - Managed **tags & difficulty** vocab
 - **Connection info** (URL / `host:port`) for challenges that run a live service
@@ -196,7 +196,7 @@ The things that set Flagpost apart — every one of them **built and working tod
 
 Requires [Docker](https://docs.docker.com/get-docker/) with Compose. The default
 stack is **production**: built images behind a Caddy reverse proxy, with Postgres,
-Redis, and MinIO.
+Redis, and RustFS (S3-compatible object storage).
 
 ```bash
 git clone https://github.com/tbcsec/flagpost.git
@@ -225,18 +225,27 @@ resets to your own configured baseline on a schedule? See
 | `SITE_ADDRESS` | Your domain, e.g. `ctf.example.com`. Caddy obtains & renews **TLS automatically**. Map ports `80` + `443`. |
 | `PUBLIC_ORIGIN` | The browser-facing origin, e.g. `https://ctf.example.com`. Baked into the frontend at build time — set it before `docker compose build`. Also what OIDC redirect URIs are built from, so it must be exact if you configure SSO. |
 | `JWT_SECRET` | A long random value (required for multi-host; otherwise the app derives and persists one). |
-| `POSTGRES_PASSWORD`, `MINIO_ROOT_USER/PASSWORD` | **Real credentials — generate with `openssl rand -hex 24`.** Compose falls back to well-known development values so a local run needs no config, but those are published defaults, not secrets. |
-| `MINIO_PUBLIC_ENDPOINT` | A browser-reachable MinIO host for signed attachment downloads. |
+| `POSTGRES_PASSWORD`, `S3_ACCESS_KEY`/`S3_SECRET_KEY` | **Real credentials — generate with `openssl rand -hex 24`.** Compose falls back to well-known development values so a local run needs no config, but those are published defaults, not secrets. |
+| `S3_PUBLIC_ENDPOINT` | A browser-reachable object-storage host for signed attachment downloads. |
 
-> **The backend refuses to start** if it finds MinIO's default credentials on a
-> deployment that looks reachable — `PUBLIC_ORIGIN` naming a non-local host, or
-> `MINIO_PUBLIC_ENDPOINT` being set. Browsers fetch attachments straight from
-> the S3 API, so it has to be reachable, and default credentials there mean
-> world read/write on every challenge attachment — including unreleased ones —
-> outside RBAC entirely. Note that `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD`
-> *initialise* the MinIO server rather than reconfigure it: changing them after
-> first boot needs `docker compose up -d --force-recreate minio`, and a rotation
-> on a stack that already holds data has to be done inside MinIO too.
+> **The backend refuses to start** if it finds the object store's default
+> credentials on a deployment that looks reachable — `PUBLIC_ORIGIN` naming a
+> non-local host, or `S3_PUBLIC_ENDPOINT` being set. Browsers fetch attachments
+> straight from the S3 API, so it has to be reachable, and default credentials
+> there mean world read/write on every challenge attachment — including
+> unreleased ones — outside RBAC entirely. Note that `S3_ACCESS_KEY`/
+> `S3_SECRET_KEY` *initialise* the storage server rather than reconfigure it:
+> changing them after first boot needs
+> `docker compose up -d --force-recreate rustfs`, and a rotation on a stack that
+> already holds data has to be done inside the server too.
+>
+> **Upgrading from v1.6 or earlier:** the object store is now RustFS (ADR-0041 —
+> MinIO was withdrawn from distribution) and the variables were renamed as a
+> hard break: `MINIO_ROOT_USER`→`S3_ACCESS_KEY`, `MINIO_ROOT_PASSWORD`→
+> `S3_SECRET_KEY`, `MINIO_PUBLIC_ENDPOINT`→`S3_PUBLIC_ENDPOINT` (and
+> `MINIO_ENDPOINT`/`MINIO_REGION`/`MINIO_IAM_AUTH` → `S3_*`). Objects in the old
+> `minio-data` volume are not migrated automatically — copy them across with
+> `rclone sync` before removing the old service, or re-upload.
 
 The backend runs as a **single process by default** (in-process WebSocket
 broadcast, no Redis required). For larger events it scales out to **multiple
@@ -309,7 +318,7 @@ once before shipping one.
 ## 🧱 Tech stack
 
 **Backend** — Python · FastAPI · SQLAlchemy 2 (async) · Alembic · PostgreSQL ·
-Redis · MinIO/S3 · JWT + argon2 + OIDC/OAuth2/SAML/LDAP · WeasyPrint + Pillow
+Redis · RustFS/S3 · JWT + argon2 + OIDC/OAuth2/SAML/LDAP · WeasyPrint + Pillow
 (reports & certificates) · a first-class async event bus.
 **Frontend** — TypeScript · Next.js 16 (App Router) · React 19 · TanStack Query ·
 Zustand · Tailwind v4 · TipTap + Y.js (CRDT) · next-intl (i18n).

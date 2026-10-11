@@ -25,13 +25,15 @@ _INSECURE_JWT_DEFAULTS = frozenset(
         "dev-insecure-secret-change-me-0000000000",
     }
 )
-# MinIO's vendor defaults. Same reasoning as the JWT secret above — these are
-# public knowledge — but the remedy has to differ: a JWT secret can be derived
-# per install, while these must match whatever the object-storage server was
-# started with, so the app cannot invent them. It refuses to run on them
-# instead, and only where it can tell that doing so would be exposed (see
-# _assert_object_storage_credentials).
-_INSECURE_MINIO_DEFAULTS = frozenset({"", "minioadmin"})
+# The object-storage server's published vendor defaults: RustFS's (the bundled
+# server, ADR-0041) and MinIO's, so an install carried over from the MinIO era
+# is still caught; an empty value is the "forgot to set it" shape. Same
+# reasoning as the JWT secret above — these are public knowledge — but the
+# remedy has to differ: a JWT secret can be derived per install, while these
+# must match whatever the object-storage server was started with, so the app
+# cannot invent them. It refuses to run on them instead, and only where it can
+# tell that doing so would be exposed (see _assert_object_storage_credentials).
+_INSECURE_S3_DEFAULTS = frozenset({"", "minioadmin", "rustfsadmin"})
 
 
 def _endpoint_host(value: str) -> str:
@@ -327,30 +329,33 @@ class Settings(BaseSettings):
     # flag: running it is the explicit opt-in.
     scheduler_enabled: bool = True
 
-    # --- Object storage (MinIO / S3, §13.3) ---
-    # Endpoint the backend talks to. Defaults to the compose MinIO as exposed on
-    # the host, so a native `uvicorn` run works against `docker compose up minio`.
-    minio_endpoint: str = "localhost:9000"
+    # --- Object storage (S3-compatible; RustFS by default — ADR-0041, §13.3) ---
+    # Vendor-neutral on purpose: the server is an interchangeable S3-compatible
+    # service, and naming the vendor in config is what turned the MinIO
+    # retirement into a forty-file rename.
+    # Endpoint the backend talks to. Defaults to the compose server as exposed on
+    # the host, so a native `uvicorn` run works against `docker compose up rustfs`.
+    s3_endpoint: str = "localhost:9000"
     # Endpoint used when *signing* download URLs, i.e. the host the browser can
-    # reach. Falls back to minio_endpoint. In full-docker the backend talks to
-    # `minio:9000` but must sign against `localhost:9000` — compose sets this.
-    minio_public_endpoint: str | None = None
-    minio_access_key: str = "minioadmin"
-    minio_secret_key: str = "minioadmin"
+    # reach. Falls back to s3_endpoint. In full-docker the backend talks to
+    # `rustfs:9000` but must sign against `localhost:9000` — compose sets this.
+    s3_public_endpoint: str | None = None
+    s3_access_key: str = "rustfsadmin"
+    s3_secret_key: str = "rustfsadmin"
     # Authenticate to object storage with AWS IAM role credentials (ECS task
     # role / EC2 instance profile) instead of the static keys above (ADR-0031).
     # The client resolves and auto-refreshes them from the container/instance
     # metadata endpoint, so there is no long-lived storage secret to distribute;
-    # the two key settings are ignored. Only meaningful against real S3 —
-    # MinIO has no metadata endpoint to serve role credentials.
-    minio_iam_auth: bool = False
-    minio_bucket: str = "challenge-files"
-    minio_secure: bool = False  # http in dev; true behind TLS in prod
+    # the two key settings are ignored. Only meaningful against real S3 — a
+    # self-hosted server has no metadata endpoint to serve role credentials.
+    s3_iam_auth: bool = False
+    s3_bucket: str = "challenge-files"
+    s3_secure: bool = False  # http in dev; true behind TLS in prod
     # SigV4 region. Setting it lets the client sign presigned URLs *offline*; with
     # it unset the client makes a GetBucketLocation call to the (browser-facing)
     # public endpoint at sign time, which the backend can't reach when the public
-    # and internal endpoints differ (e.g. localhost:9000 vs minio:9000 in compose).
-    minio_region: str = "us-east-1"
+    # and internal endpoints differ (e.g. localhost:9000 vs rustfs:9000 in compose).
+    s3_region: str = "us-east-1"
     # Lifetime of a signed download URL, in seconds (§13.3 — short-lived).
     signed_url_ttl_seconds: int = 300
 
@@ -486,14 +491,17 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _assert_object_storage_credentials(self) -> "Settings":
-        """Refuse to serve a real deployment on MinIO's published defaults.
+        """Refuse to serve a real deployment on the object store's published
+        defaults.
 
         The compose stack publishes the S3 API on the host — it has to, because
-        the browser fetches attachments straight from it via signed URLs — so
-        ``minioadmin``/``minioadmin`` there means anyone who can reach the box
-        has read/write on every challenge attachment and ticket screenshot, for
-        every competition, entirely outside RBAC. On a CTF platform that is the
-        competition itself: unreleased challenge binaries leak, or get replaced.
+        the browser fetches attachments straight from it via signed URLs — so the
+        vendor default key pair there (``rustfsadmin``, or ``minioadmin`` on an
+        install carried over from the MinIO era) means anyone who can reach the
+        box has read/write on every challenge attachment and ticket screenshot,
+        for every competition, entirely outside RBAC. On a CTF platform that is
+        the competition itself: unreleased challenge binaries leak, or get
+        replaced.
 
         Two independent signals, because either alone has a blind spot:
 
@@ -501,49 +509,50 @@ class Settings(BaseSettings):
           → "Deploying to production"). Empty for a native run, ``localhost``
           for the default compose, so local workflows are untouched. Misses the
           operator who sets only ``SITE_ADDRESS``.
-        - ``minio_public_endpoint`` — set precisely when browsers must reach the
+        - ``s3_public_endpoint`` — set precisely when browsers must reach the
           object store over the network, which is a direct statement that it is
           exposed. Catches the case above, since remote attachment downloads do
           not work without it.
 
         Deliberately *not* inferred from the compose port mapping, which the app
-        cannot see. An install serving from ``minio:9000`` on the compose network
-        with no published port is safe and unaffected — that is how the demo
-        stack runs.
+        cannot see. An install serving from ``rustfs:9000`` on the compose
+        network with no published port is safe and unaffected — that is how the
+        demo stack runs.
 
         A hard failure rather than a warning: a warning scrolls past, and the
-        window between "operator deploys" and "someone finds an open MinIO" is
-        not one a log line closes.
+        window between "operator deploys" and "someone finds an open object
+        store" is not one a log line closes.
         """
-        if self.minio_iam_auth:
+        if self.s3_iam_auth:
             # IAM-role auth (ADR-0031): no static credentials are in play at
             # all — the storage client ignores the key settings this check
             # would otherwise be inspecting.
             return self
         if not (
-            self.minio_access_key in _INSECURE_MINIO_DEFAULTS
-            or self.minio_secret_key in _INSECURE_MINIO_DEFAULTS
+            self.s3_access_key in _INSECURE_S3_DEFAULTS
+            or self.s3_secret_key in _INSECURE_S3_DEFAULTS
         ):
             return self
 
         exposed_by = None
         if not _is_loopback(_endpoint_host(self.public_base_url)):
             exposed_by = f"PUBLIC_BASE_URL={self.public_base_url!r}"
-        elif self.minio_public_endpoint and not _is_loopback(
-            _endpoint_host(self.minio_public_endpoint)
+        elif self.s3_public_endpoint and not _is_loopback(
+            _endpoint_host(self.s3_public_endpoint)
         ):
-            exposed_by = f"MINIO_PUBLIC_ENDPOINT={self.minio_public_endpoint!r}"
+            exposed_by = f"S3_PUBLIC_ENDPOINT={self.s3_public_endpoint!r}"
 
         if exposed_by is not None:
             raise ValueError(
-                "Refusing to start: object storage is using MinIO's default "
+                "Refusing to start: object storage is using the server's default "
                 f"credentials on a deployment that is reachable ({exposed_by}). "
                 "These are published defaults, not secrets — anyone who can "
                 "reach the S3 API would have full read/write on every challenge "
                 "attachment, including unreleased ones, outside RBAC entirely. "
-                "Set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD (compose passes "
-                "them to both MinIO and the backend) to values from e.g. "
-                "`openssl rand -hex 24`, then recreate the minio service."
+                "Set S3_ACCESS_KEY and S3_SECRET_KEY (compose passes them to "
+                "both the object-storage service and the backend) to values "
+                "from e.g. `openssl rand -hex 24`, then recreate the rustfs "
+                "service."
             )
         return self
 

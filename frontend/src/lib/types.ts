@@ -328,7 +328,7 @@ export type TicketStatus = "open" | "resolved";
 
 /** A screenshot attached to a ticket message (issue #80). The bytes come from
  *  the API's `/content` route, never a storage URL — the production CSP allows
- *  `img-src 'self' … blob:` only, so a cross-origin MinIO URL wouldn't load. */
+ *  `img-src 'self' … blob:` only, so a cross-origin object-store URL wouldn't load. */
 export interface TicketAttachment {
   id: string;
   filename: string;

@@ -53,7 +53,7 @@ ride the baseline:
 sudo /opt/flagpost/deploy/internal-demo/snapshot.sh
 ```
 
-The script stops the volume-writing services (backend, MinIO, Postgres — the
+The script stops the volume-writing services (backend, RustFS, Postgres — the
 front door keeps answering, with errors, instead of the port going dead),
 tars the three data volumes into `deploy/internal-demo/baseline/`, verifies
 the tarballs, starts the stack again, and only then swaps the new baseline in

@@ -68,7 +68,7 @@ class User(Base, TimestampMixin):
     )
     # Profile picture: stored in the DB like the site logo (not object storage)
     # so the additive backup (ADR-0016) carries it and the zero-infra dev stack
-    # needs no MinIO. Always a server-re-encoded square WebP (utils/avatars) —
+    # needs no object store. Always a server-re-encoded square WebP (utils/avatars) —
     # never the uploaded bytes. The blob is deferred so directory/auth queries
     # never drag image bytes; ``avatar_updated_at`` doubles as the "has an
     # avatar" flag and the client-side cache-buster.

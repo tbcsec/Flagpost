@@ -21,7 +21,7 @@ esac
 
 # The volumes that ARE the instance state, and the ones that deliberately
 # aren't (Caddy's cert/config cache renews on its own schedule).
-VOLUMES=(postgres-data minio-data backend-data)
+VOLUMES=(postgres-data rustfs-data backend-data)
 EXCLUDED_VOLUMES=(caddy-data caddy-config)
 
 # The services that write those volumes. Only these are stopped during a
@@ -29,7 +29,7 @@ EXCLUDED_VOLUMES=(caddy-data caddy-config)
 # going dead, and unchanged containers are reused so `down`-churn doesn't leak
 # the redis image's anonymous /data volume every cycle.
 # shellcheck disable=SC2034  # consumed by the sourcing scripts
-WRITER_SERVICES=(backend minio postgres)
+WRITER_SERVICES=(backend rustfs postgres)
 
 # Resolve the compose project name (honours COMPOSE_PROJECT_NAME and the
 # file's `name:`) so both scripts always target the same `<project>_<volume>`

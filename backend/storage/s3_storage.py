@@ -1,18 +1,24 @@
-"""MinIO/S3-backed :class:`ObjectStorage` (ARCHITECTURE.md §13.3).
+"""S3-backed :class:`ObjectStorage` (ARCHITECTURE.md §13.3, ADR-0041).
+
+Vendor-neutral by design: any S3-compatible server works (the bundled default is
+RustFS; AWS S3 via IAM for cloud deployments, ADR-0031). The ``minio`` PyPI
+package used below is a generic S3 *client* and is unrelated to the retired
+MinIO server — it is confined to this module so the rest of the codebase never
+names a vendor.
 
 Two clients on purpose: one bound to the internal endpoint the backend uses to
 put/delete objects, and one bound to the *public* endpoint used only to sign
 download URLs — so a browser-facing signed URL points at a host the browser can
 actually reach (e.g. ``localhost:9000``) even when the backend talks to
-``minio:9000`` inside the compose network. Both clients are pinned to a region so
+``rustfs:9000`` inside the compose network. Both clients are pinned to a region so
 signing is genuinely offline — without one the client makes a GetBucketLocation
 call to the public endpoint at sign time, which the backend can't reach when that
 endpoint is browser-facing only.
 
-Credentials are the static key pair by default; ``MINIO_IAM_AUTH=true``
-(ADR-0031, AWS deployments) swaps in the metadata-endpoint provider instead —
-one shared instance for both clients, so role credentials are fetched and
-refreshed once, not per client.
+Credentials are the static key pair by default; ``S3_IAM_AUTH=true`` (ADR-0031,
+AWS deployments) swaps in the metadata-endpoint provider instead — one shared
+instance for both clients, so role credentials are fetched and refreshed once,
+not per client.
 """
 
 from __future__ import annotations
@@ -26,30 +32,30 @@ from minio.credentials import IamAwsProvider
 from config import settings
 
 
-class MinioStorage:
+class S3Storage:
     def __init__(self) -> None:
-        self._bucket = settings.minio_bucket
-        if settings.minio_iam_auth:
+        self._bucket = settings.s3_bucket
+        if settings.s3_iam_auth:
             # ECS task role / EC2 instance profile (ADR-0031): resolved and
             # auto-refreshed from the AWS metadata endpoint; the static key
             # settings are ignored.
             auth: dict = {"credentials": IamAwsProvider()}
         else:
             auth = {
-                "access_key": settings.minio_access_key,
-                "secret_key": settings.minio_secret_key,
+                "access_key": settings.s3_access_key,
+                "secret_key": settings.s3_secret_key,
             }
         self._client = Minio(
-            settings.minio_endpoint,
-            secure=settings.minio_secure,
-            region=settings.minio_region,
+            settings.s3_endpoint,
+            secure=settings.s3_secure,
+            region=settings.s3_region,
             **auth,
         )
-        public_endpoint = settings.minio_public_endpoint or settings.minio_endpoint
+        public_endpoint = settings.s3_public_endpoint or settings.s3_endpoint
         self._presign_client = Minio(
             public_endpoint,
-            secure=settings.minio_secure,
-            region=settings.minio_region,
+            secure=settings.s3_secure,
+            region=settings.s3_region,
             **auth,
         )
         self._ensure_bucket()

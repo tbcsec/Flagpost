@@ -9,76 +9,89 @@ import pytest
 
 from config import Settings, _endpoint_host, _is_loopback
 
-_MINIO_DEFAULTS = {"minio_access_key": "minioadmin", "minio_secret_key": "minioadmin"}
+# The bundled server's published defaults (RustFS, ADR-0041).
+_S3_DEFAULTS = {"s3_access_key": "rustfsadmin", "s3_secret_key": "rustfsadmin"}
 
 
-def test_default_minio_credentials_are_fine_for_a_local_run():
+def test_default_s3_credentials_are_fine_for_a_local_run():
     """`docker compose up` with no .env must keep working."""
-    assert Settings(public_base_url="http://localhost:8080", **_MINIO_DEFAULTS)
-    assert Settings(public_base_url="http://127.0.0.1:8080", **_MINIO_DEFAULTS)
+    assert Settings(public_base_url="http://localhost:8080", **_S3_DEFAULTS)
+    assert Settings(public_base_url="http://127.0.0.1:8080", **_S3_DEFAULTS)
     # A native `uvicorn` run leaves it unset entirely.
-    assert Settings(public_base_url="", **_MINIO_DEFAULTS)
+    assert Settings(public_base_url="", **_S3_DEFAULTS)
 
 
-def test_default_minio_credentials_are_refused_on_a_real_deployment():
+def test_default_s3_credentials_are_refused_on_a_real_deployment():
     """The vulnerable shape: reachable install, published-default object store.
 
-    MinIO's S3 API is published on the host so browsers can fetch signed
-    attachment URLs, so defaults here mean world read/write on every challenge
-    attachment — including unreleased challenges — outside RBAC entirely.
+    The S3 API is published on the host so browsers can fetch signed attachment
+    URLs, so defaults here mean world read/write on every challenge attachment —
+    including unreleased challenges — outside RBAC entirely.
     """
     with pytest.raises(ValueError, match="default credentials"):
-        Settings(public_base_url="https://ctf.example.com", **_MINIO_DEFAULTS)
+        Settings(public_base_url="https://ctf.example.com", **_S3_DEFAULTS)
+
+
+def test_minio_era_defaults_are_still_refused():
+    """An install carried over from before ADR-0041 may still hold MinIO's
+    published pair; the guard must not develop a blind spot just because the
+    bundled server changed."""
+    with pytest.raises(ValueError, match="default credentials"):
+        Settings(
+            public_base_url="https://ctf.example.com",
+            s3_access_key="minioadmin",
+            s3_secret_key="minioadmin",
+        )
 
 
 def test_either_half_of_the_default_pair_is_enough_to_refuse():
     with pytest.raises(ValueError, match="default credentials"):
         Settings(
             public_base_url="https://ctf.example.com",
-            minio_access_key="minioadmin",
-            minio_secret_key="a-real-secret",
+            s3_access_key="rustfsadmin",
+            s3_secret_key="a-real-secret",
         )
     with pytest.raises(ValueError, match="default credentials"):
         Settings(
             public_base_url="https://ctf.example.com",
-            minio_access_key="a-real-user",
-            minio_secret_key="",
+            s3_access_key="a-real-user",
+            s3_secret_key="",
         )
 
 
-def test_exposed_minio_is_caught_even_when_public_base_url_is_unset():
+def test_exposed_object_store_is_caught_even_when_public_base_url_is_unset():
     """The SITE_ADDRESS-only operator, who never sets PUBLIC_ORIGIN.
 
     Their deployment is reachable but `public_base_url` still says localhost.
-    MINIO_PUBLIC_ENDPOINT gives them away: remote attachment downloads don't
-    work without it, so setting it means browsers reach the object store.
+    S3_PUBLIC_ENDPOINT gives them away: remote attachment downloads don't work
+    without it, so setting it means browsers reach the object store.
     """
-    with pytest.raises(ValueError, match="MINIO_PUBLIC_ENDPOINT"):
+    with pytest.raises(ValueError, match="S3_PUBLIC_ENDPOINT"):
         Settings(
             public_base_url="http://localhost:8080",
-            minio_public_endpoint="files.ctf.example.com",
-            **_MINIO_DEFAULTS,
+            s3_public_endpoint="files.ctf.example.com",
+            **_S3_DEFAULTS,
         )
 
 
-def test_compose_internal_minio_with_no_published_port_is_unaffected():
+def test_compose_internal_object_store_with_no_published_port_is_unaffected():
     """How the demo stack runs: reachable site, object store on the private
-    compose network only. `MINIO_PUBLIC_ENDPOINT` is deliberately unset there."""
+    compose network only. `S3_PUBLIC_ENDPOINT` is deliberately unset there."""
     assert Settings(
         public_base_url="",
-        minio_endpoint="minio:9000",
-        minio_public_endpoint=None,
-        **_MINIO_DEFAULTS,
+        s3_endpoint="rustfs:9000",
+        s3_public_endpoint=None,
+        **_S3_DEFAULTS,
     )
 
 
 def test_real_credentials_deploy_normally():
     settings = Settings(
         public_base_url="https://ctf.example.com",
-        minio_access_key="a-real-user",
-        minio_secret_key="a-real-secret",
+        s3_access_key="a-real-user",
+        s3_secret_key="a-real-secret",
     )
-    assert settings.minio_secret_key == "a-real-secret"
+    assert settings.s3_secret_key == "a-real-secret"
 
 
 @pytest.mark.parametrize(
@@ -89,7 +102,7 @@ def test_real_credentials_deploy_normally():
         ("https://ctf.example.com/sub/path", "ctf.example.com"),
         ("http://127.0.0.1:8080", "127.0.0.1"),
         ("[::1]:9000", "::1"),
-        ("minio", "minio"),
+        ("rustfs", "rustfs"),
         ("", ""),
     ],
 )
@@ -112,7 +125,7 @@ def test_endpoint_host_parsing(value, expected):
         # Not loopback, but not routable either: a compose-internal name. It is
         # deliberately treated as a real deployment, since the guard cannot see
         # whether the port is published and refusing is the safe direction.
-        ("minio", False),
+        ("rustfs", False),
     ],
 )
 def test_loopback_detection(host, expected):
@@ -120,11 +133,11 @@ def test_loopback_detection(host, expected):
 
 
 def test_iam_role_auth_bypasses_the_static_credential_guard():
-    """MINIO_IAM_AUTH=true (ADR-0031) means no static credentials exist at all —
+    """S3_IAM_AUTH=true (ADR-0031) means no static credentials exist at all —
     the vendor-default check would be inspecting settings the storage client
     ignores, so it must not block an otherwise-valid AWS deployment."""
     assert Settings(
         public_base_url="https://ctf.example.com",
-        minio_iam_auth=True,
-        **_MINIO_DEFAULTS,
+        s3_iam_auth=True,
+        **_S3_DEFAULTS,
     )

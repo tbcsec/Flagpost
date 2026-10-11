@@ -9,7 +9,7 @@
 #   SITE_ADDRESS   your domain (e.g. ctf.example.com) → Caddy gets TLS for you
 #   PUBLIC_ORIGIN  the browser-facing origin (e.g. https://ctf.example.com)
 #   JWT_SECRET     a long random value (else one is generated + persisted)
-#   POSTGRES_PASSWORD / MINIO_ROOT_USER / MINIO_ROOT_PASSWORD  real credentials
+#   POSTGRES_PASSWORD / S3_ACCESS_KEY / S3_SECRET_KEY  real credentials
 #
 # See the README "Deploying to production" section and .env.example.
 #
@@ -76,11 +76,11 @@ services:
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-flagpost}:${POSTGRES_PASSWORD:-flagpost}@postgres:5432/${POSTGRES_DB:-flagpost}
       REDIS_URL: redis://redis:6379/0
-      MINIO_ENDPOINT: minio:9000
+      S3_ENDPOINT: rustfs:9000
       # Signed download URLs must point at a host the browser can reach (§13.3).
-      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-localhost:9000}
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-localhost:9000}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
       CORS_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost:8080}
       # Single-origin topology, so the browser-facing origin is the same one
       # CORS uses. OIDC (#58) needs it explicitly: the redirect_uri handed to an
@@ -134,7 +134,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
+      rustfs:
         condition: service_healthy
 
   postgres:
@@ -166,31 +166,35 @@ services:
       timeout: 5s
       retries: 5
 
-  minio:
-    image: minio/minio:latest
+  # S3-compatible object storage. RustFS replaces the retired MinIO (ADR-0041):
+  # pinned, not :latest, so a fresh install is reproducible; the same tag is
+  # mirrored at ghcr.io/rustfs/rustfs:1.0.1 if Docker Hub is unavailable.
+  rustfs:
+    image: rustfs/rustfs:1.0.1
     restart: unless-stopped
-    command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: 0.0.0.0:9000
     ports:
       # S3 API, bound to loopback only. Browsers on the host still reach signed
       # URLs at localhost:9000; a remote/multi-host deploy must publish this
-      # deliberately AND set MINIO_PUBLIC_ENDPOINT (a non-loopback value trips the
+      # deliberately AND set S3_PUBLIC_ENDPOINT (a non-loopback value trips the
       # default-credential guard in config.py, forcing real creds). Binding
       # 0.0.0.0 here exposed the S3 API with vendor-default creds outside RBAC.
       - "127.0.0.1:9000:9000"
     volumes:
-      - minio-data:/data
+      - rustfs-data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 5s
       timeout: 5s
       retries: 5
 
 volumes:
   postgres-data:
-  minio-data:
+  rustfs-data:
   backend-data:
   caddy-data:
   caddy-config:

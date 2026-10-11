@@ -101,7 +101,7 @@ async def run_bootstrap_import(
     try:
         if storage is None:
             # Constructed lazily, only once we know we're importing — the no-op
-            # paths above never need object storage (and thus never MinIO).
+            # paths above never need object storage (and thus never the S3 server).
             from storage import get_storage
 
             storage = get_storage()

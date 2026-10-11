@@ -76,7 +76,7 @@ This adds:
 > individual subnets, pin Docker's `default-address-pools` (in
 > `/etc/docker/daemon.json`) to a known range and drop forwarded traffic from
 > that whole range except the ports competitors need, and always block the cloud
-> metadata IP `169.254.169.254`. Keep the control plane (Postgres/Redis/MinIO/API)
+> metadata IP `169.254.169.254`. Keep the control plane (Postgres/Redis/object store/API)
 > off any address the instance subnets can reach. The `network_isolation` leg of
 > Test connection reminds you of this; it can't verify your firewall rules for you.
 

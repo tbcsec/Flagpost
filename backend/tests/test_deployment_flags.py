@@ -1,6 +1,6 @@
 """Multi-instance deployment flags (ADR-0031).
 
-SCHEDULER_ENABLED, MULTI_INSTANCE and MINIO_IAM_AUTH exist so N app tasks
+SCHEDULER_ENABLED, MULTI_INSTANCE and S3_IAM_AUTH exist so N app tasks
 behind a load balancer (ECS/Fargate + ALB) can split the singleton scheduler
 into its own service, keep the Redis relay on regardless of per-task worker
 count, and authenticate to S3 with role credentials. These tests pin the gate
@@ -12,7 +12,7 @@ import pytest
 
 from config import Settings, settings
 from realtime import start_realtime
-from storage import minio_storage as ms
+from storage import s3_storage as ms
 from utils.automation_scheduler import runs_in_process
 
 
@@ -66,7 +66,7 @@ async def test_single_worker_single_instance_stays_a_no_op(monkeypatch):
     await start_realtime()  # returns without raising, attaches nothing
 
 
-# --- MINIO_IAM_AUTH ---------------------------------------------------------
+# --- S3_IAM_AUTH ------------------------------------------------------------
 
 
 class _RecordingMinio:
@@ -80,32 +80,32 @@ class _RecordingMinio:
 
 
 @pytest.fixture
-def recording_minio(monkeypatch):
+def recording_s3(monkeypatch):
     _RecordingMinio.calls = []
     monkeypatch.setattr(ms, "Minio", _RecordingMinio)
     return _RecordingMinio
 
 
 def test_iam_auth_passes_one_shared_provider_and_no_static_keys(
-    recording_minio, monkeypatch
+    recording_s3, monkeypatch
 ):
-    monkeypatch.setattr(ms.settings, "minio_iam_auth", True)
-    ms.MinioStorage()
-    assert len(recording_minio.calls) == 2  # internal + presign clients
-    for _endpoint, kwargs in recording_minio.calls:
+    monkeypatch.setattr(ms.settings, "s3_iam_auth", True)
+    ms.S3Storage()
+    assert len(recording_s3.calls) == 2  # internal + presign clients
+    for _endpoint, kwargs in recording_s3.calls:
         assert isinstance(kwargs["credentials"], ms.IamAwsProvider)
         assert "access_key" not in kwargs and "secret_key" not in kwargs
     # One provider instance for both clients: role credentials are fetched and
     # cached once, not once per client.
     assert (
-        recording_minio.calls[0][1]["credentials"]
-        is recording_minio.calls[1][1]["credentials"]
+        recording_s3.calls[0][1]["credentials"]
+        is recording_s3.calls[1][1]["credentials"]
     )
 
 
-def test_static_keys_remain_the_default(recording_minio, monkeypatch):
-    monkeypatch.setattr(ms.settings, "minio_iam_auth", False)
-    ms.MinioStorage()
-    for _endpoint, kwargs in recording_minio.calls:
+def test_static_keys_remain_the_default(recording_s3, monkeypatch):
+    monkeypatch.setattr(ms.settings, "s3_iam_auth", False)
+    ms.S3Storage()
+    for _endpoint, kwargs in recording_s3.calls:
         assert "credentials" not in kwargs
-        assert kwargs["access_key"] == ms.settings.minio_access_key
+        assert kwargs["access_key"] == ms.settings.s3_access_key

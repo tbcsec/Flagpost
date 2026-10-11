@@ -100,10 +100,18 @@ systemctl list-timers flagpost-demo-reset.timer   # confirm next run is on the h
 ```
 
 Each firing runs `git pull --ff-only → pull → down -v → up -d`: it refreshes the
-checkout (so compose/config changes on `main` propagate on their own — the
-`git pull` is non-fatal, so a failure just leaves the last-known-good checkout in
-place), pulls the latest images, **and** wipes the DB/object/secret volumes, so
-demo mode re-seeds a clean instance.
+checkout (so compose/config changes on `main` propagate on their own), pulls the
+latest images, **and** wipes the DB/object/secret volumes, so demo mode re-seeds
+a clean instance.
+
+**The wipe always runs.** Both the `git pull` *and* the image `pull` are
+best-effort — a failure (local edits, offline, or a Docker Hub anonymous
+pull-rate 429 on `postgres`/`redis`/`minio`/`caddy`/`cloudflared`) is logged and
+the reset recreates from the last-known-good checkout + cached images rather than
+aborting. This matters because the stack runs `restart: unless-stopped`: if a
+pre-wipe step could abort the script, the demo would keep serving accumulated
+data and never reset. Check a run with
+`journalctl -u flagpost-demo-reset.service`.
 
 ## 5. Live activity simulator (makes the demo look busy)
 

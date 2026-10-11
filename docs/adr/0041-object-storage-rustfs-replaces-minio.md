@@ -99,13 +99,19 @@ S3-compatible server and should be named as one.
   on `:9001`, as MinIO did).
 - **Negative / cost:** RustFS 1.0 reached GA on 2026-09-16 — it is young,
   mitigated by the version pin and the presigned acceptance gate above; the
-  `MINIO_*` → `S3_*` rename is a **hard break** for existing deployments (their
-  `.env` must be updated per the release notes; the backend's default-credential
-  guard will refuse to start a reachable install whose keys silently fell back
-  to defaults, which is the intended fail-safe); existing object data does **not**
-  migrate across the server swap — objects live in the old `minio-data` volume,
-  so an install holding attachments either keeps its cached MinIO image until it
-  copies objects across (`rclone sync`, S3→S3) or re-uploads.
+  `MINIO_*` → `S3_*` rename is a **hard break** for existing deployments. Because
+  `Settings` ignores unknown environment variables, a stale `.env` would
+  otherwise be dropped *silently* — keys falling back to vendor defaults and, in
+  the `SITE_ADDRESS`-only shape, the public endpoint falling back to loopback so
+  the default-credential guard sees nothing wrong — so the backend **refuses to
+  start while any `MINIO_*` variable is present** and prints the rename mapping;
+  the break fails safe in every deployment shape rather than only the
+  `PUBLIC_ORIGIN` one. Upgrading also needs `docker compose down
+  --remove-orphans`: the retired `minio` service's container is not removed by a
+  plain `up -d` and would keep port 9000, so `rustfs` could not bind. Existing
+  object data does **not** migrate across the server swap — objects live in the
+  old `minio-data` volume, so an install holding attachments copies them across
+  (`rclone sync`, S3→S3, while the old server is still reachable) or re-uploads.
 - **Forecloses:** little — the storage interface and the vendor-neutral names
   mean a later move to another S3 server, or to a managed bucket via IAM
   (ADR-0031), is a compose/config change.

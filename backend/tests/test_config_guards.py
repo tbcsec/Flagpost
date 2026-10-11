@@ -44,6 +44,33 @@ def test_minio_era_defaults_are_still_refused():
         )
 
 
+def test_retired_minio_env_vars_are_refused_with_the_rename_mapping(monkeypatch):
+    """The v1.7.0 MINIO_* -> S3_* rename is a hard break, and `Settings` drops
+    unknown env vars (`extra="ignore"`). Without this guard a stale .env is
+    *silently* ignored — the keys fall back to vendor defaults and, in the
+    SITE_ADDRESS-only shape, `S3_PUBLIC_ENDPOINT` falls back to loopback too, so
+    the default-credential guard sees nothing wrong and the server boots with
+    published creds on an exposed port. Refusing while any MINIO_* variable is
+    present makes the break fail safe in every deployment shape."""
+    monkeypatch.setenv("MINIO_PUBLIC_ENDPOINT", "files.ctf.example.com")
+    with pytest.raises(ValueError) as exc:
+        Settings(public_base_url="http://localhost:8080", **_S3_DEFAULTS)
+    message = str(exc.value)
+    assert "MINIO_PUBLIC_ENDPOINT" in message and "S3_PUBLIC_ENDPOINT" in message
+    # The AWS shape must be pointed at the right replacement, not at static keys.
+    monkeypatch.setenv("MINIO_IAM_AUTH", "true")
+    with pytest.raises(ValueError, match="S3_IAM_AUTH"):
+        Settings(public_base_url="http://localhost:8080", **_S3_DEFAULTS)
+
+
+def test_no_legacy_env_means_no_refusal(monkeypatch):
+    """The guard keys on the MINIO_ prefix only; an unrelated variable that
+    merely contains the word must not trip it."""
+    monkeypatch.delenv("MINIO_PUBLIC_ENDPOINT", raising=False)
+    monkeypatch.setenv("NOT_MINIO_RELATED", "x")
+    assert Settings(public_base_url="http://localhost:8080", **_S3_DEFAULTS)
+
+
 def test_either_half_of_the_default_pair_is_enough_to_refuse():
     with pytest.raises(ValueError, match="default credentials"):
         Settings(

@@ -149,10 +149,10 @@ services:
     image: rustfs/rustfs:1.0.1
     restart: unless-stopped
     environment:
+      # Only the credential pair: the image already defaults to serving /data
+      # on :9000.
       RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
       RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
-      RUSTFS_VOLUMES: /data
-      RUSTFS_ADDRESS: 0.0.0.0:9000
     volumes:
       - rustfs-data:/data
     healthcheck:

@@ -490,6 +490,49 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def _refuse_retired_minio_env(self) -> "Settings":
+        """Fail safe on a pre-ADR-0041 ``.env``.
+
+        The v1.7.0 ``MINIO_*`` → ``S3_*`` rename is a deliberate hard break, and
+        ``model_config`` ignores unknown environment variables — so a stale
+        ``.env`` would otherwise be dropped *silently*: the keys fall back to the
+        vendor defaults and, in the ``SITE_ADDRESS``-only shape, the public
+        endpoint falls back to loopback too, so ``_assert_object_storage_credentials``
+        below sees nothing wrong and the server boots with published credentials
+        on an exposed port. Refusing while any ``MINIO_*`` variable is present
+        makes the break fail safe in every deployment shape, and tells the
+        operator exactly what to rename. Runs before the credentials guard so an
+        AWS install (``MINIO_IAM_AUTH``) is pointed at ``S3_IAM_AUTH`` rather than
+        at static keys.
+        """
+        renames = {
+            "MINIO_ROOT_USER": "S3_ACCESS_KEY",
+            "MINIO_ROOT_PASSWORD": "S3_SECRET_KEY",
+            "MINIO_ACCESS_KEY": "S3_ACCESS_KEY",
+            "MINIO_SECRET_KEY": "S3_SECRET_KEY",
+            "MINIO_ENDPOINT": "S3_ENDPOINT",
+            "MINIO_PUBLIC_ENDPOINT": "S3_PUBLIC_ENDPOINT",
+            "MINIO_BUCKET": "S3_BUCKET",
+            "MINIO_SECURE": "S3_SECURE",
+            "MINIO_REGION": "S3_REGION",
+            "MINIO_IAM_AUTH": "S3_IAM_AUTH",
+        }
+        stale = sorted(k for k in os.environ if k.startswith("MINIO_"))
+        if not stale:
+            return self
+        mapping = ", ".join(
+            f"{k} -> {renames.get(k, '(no longer read; remove it)')}" for k in stale
+        )
+        raise ValueError(
+            "Refusing to start: legacy MINIO_* object-storage variables are set "
+            f"but no longer read ({mapping}). Flagpost v1.7.0 replaced MinIO with "
+            "RustFS and renamed the configuration to vendor-neutral S3_* names "
+            "(ADR-0041) as a hard break — silently ignoring these would let the "
+            "object store fall back to default credentials. Rename them in your "
+            ".env (see README → Upgrading), then start again."
+        )
+
+    @model_validator(mode="after")
     def _assert_object_storage_credentials(self) -> "Settings":
         """Refuse to serve a real deployment on the object store's published
         defaults.
@@ -552,7 +595,8 @@ class Settings(BaseSettings):
                 "Set S3_ACCESS_KEY and S3_SECRET_KEY (compose passes them to "
                 "both the object-storage service and the backend) to values "
                 "from e.g. `openssl rand -hex 24`, then recreate the rustfs "
-                "service."
+                "service — or, against real AWS S3, set S3_IAM_AUTH=true to use "
+                "role credentials instead (ADR-0031)."
             )
         return self
 

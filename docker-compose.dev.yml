@@ -41,10 +41,10 @@ services:
   rustfs:
     image: rustfs/rustfs:1.0.1
     environment:
+      # The image already defaults to serving /data on :9000; only the
+      # credential pair and the console switches differ from it.
       RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
       RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
-      RUSTFS_VOLUMES: /data
-      RUSTFS_ADDRESS: 0.0.0.0:9000
       RUSTFS_CONSOLE_ENABLE: "true"
       RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
     ports:

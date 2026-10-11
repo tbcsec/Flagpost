@@ -25,7 +25,10 @@ pyyaml>=6.0.3,<7.0
 # stall the whole event loop. `regex` releases the GIL and honours `timeout=`.
 regex>=2026.9.3,<2027.0
 
-# Object storage — MinIO/S3 for challenge files (§13.3); multipart for uploads
+# Object storage (§13.3) — `minio` is a generic S3 client that works against any
+# S3-compatible server (RustFS is bundled, ADR-0041); it is confined to
+# storage/s3_storage.py and is unrelated to the retired MinIO server. Multipart
+# for uploads.
 minio>=7.2.20,<8.0
 python-multipart>=0.0.32,<0.1
 

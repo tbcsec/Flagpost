@@ -57,7 +57,7 @@ explicit configuration rather than inferred:
   centrally, *before* room dispatch, so CRDT room handlers never see it and
   broadcast-only rooms keep draining other frames unparsed (a small size gate
   keeps that path parse-free). Pong frames are swallowed client-side.
-- **`MINIO_IAM_AUTH` (default `false`)** — authenticate to S3 with the ECS
+- **`MINIO_IAM_AUTH` (default `false`)** *(renamed **`S3_IAM_AUTH`** in v1.7.0 — see the amendment below / ADR-0041)* — authenticate to S3 with the ECS
   task role / EC2 instance profile via the metadata endpoint (one shared,
   auto-refreshing provider for both storage clients) instead of static keys.
   The static-credential startup guard skips its check in this mode: there are
@@ -92,3 +92,14 @@ loss; topology is the operator's fact to state).
   behind a load balancer, kill one mid-broadcast, watch relay/presence/
   reconnect/keepalive behave. Until then this topology is *supported but not
   yet load-proven*.
+
+## Amendment (2026-10-11): `MINIO_IAM_AUTH` is now `S3_IAM_AUTH`
+
+ADR-0041 replaced MinIO with RustFS and renamed the object-storage
+configuration to vendor-neutral `S3_*` names as a **hard break**. The IAM-role
+flag this ADR introduced is now **`S3_IAM_AUTH`** (and the endpoint it pairs
+with is `S3_ENDPOINT`); its semantics are unchanged. The old `MINIO_IAM_AUTH`
+is no longer read — the backend refuses to start while any `MINIO_*` variable
+is still set and prints the rename mapping, so an AWS deployment that upgrades
+without renaming fails loudly rather than silently falling back to static
+default keys. The text above is left as the historical record.

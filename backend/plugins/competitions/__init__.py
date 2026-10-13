@@ -45,8 +45,11 @@ ACTIVITY_EVENTS: tuple[str, ...] = (
     "challenge.instance_destroyed",
     "challenge.instance_provision_failed",
     "hint.released",
-    "category.created",
-    "category.deleted",
+    # category.created / category.deleted are intentionally NOT fanned to the
+    # activity room (#427 security review): a category minted ahead of a release
+    # wave leaks upcoming-content intent to competitors, and a category's
+    # structure isn't a live competitor surface — their list refreshes on
+    # challenge.published. Staff authoring doesn't need the live ping.
     "score.adjusted",
     "achievement.awarded",
     "competition.member_joined",
@@ -139,6 +142,34 @@ def setup(app, event_bus, db_factory) -> None:
         # The one id worth carrying: lets clients target per-challenge caches.
         if challenge_id:
             frame["challenge_id"] = challenge_id
+        # Draft/unreleased containment (GHSA-r7j2 class): authoring events on a
+        # challenge that isn't competitor-visible (a draft, or a scheduled
+        # release not yet reached) must NOT ping the activity room. Even the
+        # id-only frame leaks the existence, count and exact edit/release timing
+        # of unreleased challenges — the competitive intel the permission-
+        # filtered REST list is built to hide. A published challenge *appearing*
+        # is carried by challenge.published instead. challenge.deleted can't be
+        # looked up (the row is already gone) so it fails closed — a published
+        # challenge's removal simply won't ping live, erring toward non-leakage.
+        if event_name in (
+            "challenge.created",
+            "challenge.updated",
+            "challenge.deleted",
+        ):
+            async with db_factory() as db:
+                challenge = (
+                    await db.get(Challenge, challenge_id) if challenge_id else None
+                )
+                visible = (
+                    challenge is not None
+                    and challenge.state == "published"
+                    and (
+                        challenge.release_at is None
+                        or ensure_aware_utc(challenge.release_at) <= utcnow()
+                    )
+                )
+            if not visible:
+                return False
         # Solve delta (#188): carry the challenge's *new public* solve_count +
         # value so the ~N watching clients patch that card in place instead of
         # each refetching the whole list (the 4:1 refetch storm), plus the

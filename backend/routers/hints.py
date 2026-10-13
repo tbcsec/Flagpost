@@ -25,6 +25,7 @@ from models.hint import Hint, HintReveal
 from models.user import User
 from routers.challenges import load_visible_challenge
 from schemas.hint import HintCreate, HintOut, HintRevealOut, HintUpdate
+from utils.competition_status import require_playable
 from utils.event_bus import event_bus
 from utils.scoring import resolve_subject, revealed_hint_ids, subject_has_revealed
 
@@ -61,6 +62,14 @@ async def list_hints(
     # 404s a draft for a non-editor, exactly like the challenge read (§13.2).
     await load_visible_challenge(db, competition_id, challenge_id, current_user)
 
+    # Same status gate as viewing the challenge itself (#221): a competitor can't
+    # list a challenge's hints when the competition isn't running — not before
+    # start, not after end. Staff (challenge_edit) bypass. No pause check here:
+    # pause halts gameplay actions, not read-only viewing (a paused competition
+    # is still `running`, so viewing challenges/hints stays open).
+    competition = await db.get(Competition, competition_id)
+    await require_playable(db, competition, current_user.id)
+
     hints = list(
         (
             await db.execute(
@@ -93,7 +102,6 @@ async def list_hints(
             for h in hints
         ]
 
-    competition = await db.get(Competition, competition_id)
     subject = (
         await resolve_subject(db, competition, current_user)
         if competition is not None
@@ -223,6 +231,19 @@ async def reveal_hint(
         )
 
     competition = await db.get(Competition, competition_id)
+
+    # Revealing a hint charges points and records a reveal — a scoring action,
+    # so it's gated exactly like flag submission (#221): the competition must be
+    # running (not before start / after end), and not paused. Staff bypass.
+    await require_playable(db, competition, current_user.id)
+    if competition.paused and not await user_has_permission(
+        db, current_user.id, "challenge_edit", competition_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The competition is paused — hints are closed",
+        )
+
     subject = await resolve_subject(db, competition, current_user)
     if subject is None:
         # Team-mode competitor with no team — nothing to attribute the reveal to.

@@ -347,11 +347,19 @@ async def join_team(
             detail="You are already in a team for this competition",
         )
     # Scoped lookup: an invite code from another competition must not match.
+    # `with_for_update` locks the matched team row (#427 security-review M5): the
+    # size check below counts-then-inserts, which raced — two concurrent joins to
+    # a team with one seat left both passed the count and both inserted, busting
+    # max_team_size (the only unique constraint is user-per-competition, which
+    # doesn't bound size). Locking the team row serialises concurrent joins so
+    # the second one counts the first's committed membership and is refused.
     team = await db.scalar(
-        select(Team).where(
+        select(Team)
+        .where(
             Team.competition_id == competition_id,
             Team.invite_code == body.invite_code,
         )
+        .with_for_update()
     )
     if team is None:
         raise HTTPException(
@@ -455,6 +463,9 @@ async def approve_join_request(
 ) -> MyTeamOut:
     app = await _captain_application(db, competition_id, current_user.id, application_id)
     competition = await db.get(Competition, competition_id)
+    # Lock the team row before the size check so concurrent approvals/joins
+    # serialise on max_team_size (#427 security-review M5), same as join_team.
+    await db.execute(select(Team).where(Team.id == app.team_id).with_for_update())
     await _assert_not_full(db, competition, app.team_id)
     # The applicant may have joined another team meanwhile — guard the invariant.
     if await _membership_of(db, competition_id, app.user_id) is None:

@@ -452,3 +452,46 @@ async def test_future_scheduled_hint_stays_hidden(client):
     ).json()
     assert listed == []  # not due yet
     assert await _published_hint_events(hint) == []
+
+
+async def test_reveal_blocked_while_paused_but_listing_stays_open(client):
+    # #427 security-review M1: revealing a hint charges points, so it's gated
+    # like flag submission (running + not paused). Listing is read-only viewing,
+    # so it stays open while paused (a paused competition is still `running`).
+    comp = await _competition(client)
+    chal = await _published_challenge(client, comp, flag="flag{p}", points=500)
+    hint = await _add_hint(client, comp, chal, cost=100)
+    token = await _team_member(client, comp, "paused@example.com", "Paused")
+    admin = await admin_token(client)
+    reveal = f"/api/competitions/{comp}/challenges/{chal}/hints/{hint}/reveal"
+    listing = f"/api/competitions/{comp}/challenges/{chal}/hints"
+
+    await client.patch(
+        f"/api/competitions/{comp}", json={"paused": True}, headers=_auth(admin)
+    )
+    r = await client.post(reveal, headers=_auth(token))
+    assert r.status_code == 403 and "paused" in r.json()["detail"]
+    assert (await client.get(listing, headers=_auth(token))).status_code == 200  # viewing
+
+    await client.patch(
+        f"/api/competitions/{comp}", json={"paused": False}, headers=_auth(admin)
+    )
+    assert (await client.post(reveal, headers=_auth(token))).status_code == 200
+
+
+async def test_hints_closed_to_competitors_after_the_competition_ends(client):
+    # #427 security-review M1: hint list + reveal were missing the #221 status
+    # gate — competitors could reveal (and lose points) after the end.
+    comp = await _competition(client)
+    chal = await _published_challenge(client, comp, points=300)
+    hint = await _add_hint(client, comp, chal, cost=50)
+    token = await _team_member(client, comp, "late@example.com", "Late")
+    admin = await admin_token(client)
+    reveal = f"/api/competitions/{comp}/challenges/{chal}/hints/{hint}/reveal"
+    listing = f"/api/competitions/{comp}/challenges/{chal}/hints"
+
+    await client.post(f"/api/competitions/{comp}/stop", headers=_auth(admin))
+    assert (await client.post(reveal, headers=_auth(token))).status_code == 403
+    assert (await client.get(listing, headers=_auth(token))).status_code == 403
+    # Staff (challenge_edit) bypass the gate and can still list after the end.
+    assert (await client.get(listing, headers=_auth(admin))).status_code == 200

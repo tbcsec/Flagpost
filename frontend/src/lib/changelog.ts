@@ -29,6 +29,14 @@ function entry(
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  entry("v1.7.0", "2026-10-13", "Module SDK & marketplace, cross-competition skills, challenge sharing", [
+    "Module SDK & marketplace: import content packs (challenges, themes) from an open, mirrorable registry over a signed, trust-tiered protocol — code-based resolve → confirm → signature/digest verification → install, an admin import + settings UI, and an authoring SDK (build, sign, validate, scaffold).",
+    "Cross-competition skills web: competitors get a personal skills radar and at-a-glance stats across every event they play; organisers get a users × skills matrix with difficulty-weighted scores, coverage, a percentile heat-map, efficiency and first-blood signals, activity windows, a per-user drill-down, and CSV export.",
+    "Challenge sharing: shareable invite and view links for a competition — revocable, expiring, use-capped — with a public landing page that walks recipients from link to sign-in to joined.",
+    "RustFS replaces MinIO as the default object store, with vendor-neutral S3_* configuration (see the upgrade notes).",
+    "An in-app changelog at /changelog, linked from the footer.",
+    "A broad security-hardening pass across authentication, SSO, real-time, automations, webhooks, challenge instancing, import/export and the gameplay gates.",
+  ]),
   entry("v1.6.0", "2026-08-31", "On-demand challenge instances, brand themes, dashboard breadth & observability", [
     "On-demand challenge instances: each team or player gets their own isolated, running copy of a service — Docker and Kubernetes provisioner backends, TTL reaping, TCP and HTTP exposure with per-instance subdomains (optional module).",
     "Organisation brand themes: admin-authored full design-token packs alongside the built-in palettes.",

@@ -116,7 +116,7 @@ def _resolve_jwt_secret(configured: str) -> str:
 # **Bump this when tagging a release.** A tag-push check in release-images.yml
 # fails the release if it disagrees with the tag, so a forgotten bump is a red
 # build rather than months of quietly wrong data.
-SOURCE_BUILD_VERSION = "1.6.0-src"
+SOURCE_BUILD_VERSION = "1.7.0-src"
 
 # The marketplace project **root** ed25519 public key (base64 raw), an
 # always-trusted signer for the official/verified/signed trust policies (#389,

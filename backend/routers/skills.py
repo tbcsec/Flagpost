@@ -14,7 +14,10 @@ certificates ``_guard`` pattern, adapted from a per-competition to a site flag.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import csv
+import io
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import get_current_user, require_permission
@@ -22,6 +25,7 @@ from db import get_db
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 from models.user import User
 from schemas.skills import SkillMatrixOut, SkillMatrixUser, UserSkillsOut
+from utils.csv_safe import csv_safe
 from utils.skills import cached_skill_matrix, cached_user_skills
 
 me_router = APIRouter(prefix="/api/me/skills", tags=["skills"])
@@ -55,23 +59,83 @@ async def my_skills(
     return UserSkillsOut(**await cached_user_skills(db, current_user.id))
 
 
+def _sorted_users(matrix: dict, sort: str, direction: str) -> list[dict]:
+    """Order the cached user list per request. ``total`` (the default) ranks by
+    total weighted points; a skill key ranks by that column's weighted value.
+    Sorting the whole list before pagination is what makes sort truthful across
+    pages — and it's cheap, the compute/cache did the heavy lifting."""
+    if sort == "total":
+        key = lambda u: u["total_weighted"]  # noqa: E731
+    elif sort in matrix["skills"]:
+        key = lambda u: u["scores"].get(sort, {}).get("weighted", 0)  # noqa: E731
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Unknown sort column",
+        )
+    # Two-pass stable sort: name first, then the requested key — so ties keep a
+    # deterministic order and pages never shuffle between requests.
+    by_name = sorted(matrix["users"], key=lambda u: (u["display_name"] or "").lower())
+    return sorted(by_name, key=key, reverse=direction == "desc")
+
+
 @admin_router.get("", response_model=SkillMatrixOut)
 async def skill_matrix(
     _user: User = Depends(require_permission("view_global_analytics")),
     db: AsyncSession = Depends(get_db),
     limit: int = Query(default=_DEFAULT_PAGE, ge=1, le=_MAX_PAGE),
     offset: int = Query(default=0, ge=0),
+    sort: str = Query(default="total", max_length=100),
+    direction: str = Query(default="desc", pattern="^(asc|desc)$"),
 ) -> SkillMatrixOut:
     """Every user × skill, cross-competition (Administrator only). The shared
-    ``skills`` axis is returned whole; ``users`` is the requested page."""
+    ``skills`` axis and the per-column ``population`` footer are returned whole;
+    ``users`` is the requested page of the requested ordering."""
     await _require_skills_enabled(db)
     matrix = await cached_skill_matrix(db)
-    users = matrix["users"]
+    users = _sorted_users(matrix, sort, direction)
     page = users[offset : offset + limit]
     return SkillMatrixOut(
         skills=matrix["skills"],
         users=[SkillMatrixUser(**u) for u in page],
+        population=matrix["population"],
         total_users=len(users),
         limit=limit,
         offset=offset,
+    )
+
+
+@admin_router.get("/export")
+async def skill_matrix_export(
+    _user: User = Depends(require_permission("view_global_analytics")),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """The whole matrix as CSV (no pagination) for off-platform selection work.
+    Every cell goes through ``csv_safe`` (GHSA-352q): display names are
+    competitor-controlled and this file is opened in a spreadsheet."""
+    await _require_skills_enabled(db)
+    matrix = await cached_skill_matrix(db)
+    skills = matrix["skills"]
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    header = ["User", "Total points", "Total solves"]
+    for skill in skills:
+        header += [f"{skill} (points)", f"{skill} (solved)", f"{skill} (available)"]
+    writer.writerow([csv_safe(h) for h in header])
+    for u in matrix["users"]:
+        row = [u["display_name"], u["total_weighted"], u["total"]]
+        for skill in skills:
+            cell = u["scores"].get(skill)
+            row += (
+                [cell["weighted"], cell["solved"], cell["available"]]
+                if cell
+                else [0, 0, ""]
+            )
+        writer.writerow([csv_safe(v) for v in row])
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="skills-matrix.csv"'},
     )

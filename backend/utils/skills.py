@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from models.challenge import Category, Challenge
+from models.role import RoleAssignment
 from models.submission import Submission
 from models.user import User
 
@@ -103,11 +104,36 @@ async def compute_user_skills(db: AsyncSession, user_id: str) -> dict[str, Any]:
     }
 
 
+def _percentile(values: list[int], v: int) -> int:
+    """Percentile rank of ``v`` within ``values`` (which includes ``v``): the
+    share of *other* users strictly below. Deterministic, tie-stable, 0–100."""
+    n = len(values)
+    if n <= 1:
+        return 0
+    below = sum(1 for x in values if x < v)
+    return round(100 * below / (n - 1))
+
+
 async def compute_skill_matrix(db: AsyncSession) -> dict[str, Any]:
-    """Every user × skill: ``{skills: [...axis...], users: [{user_id, display_name,
-    scores, total}]}``. Computed whole (all users, all skills) so one cache entry
-    serves every page; the router slices ``users`` for pagination while the shared
-    ``skills`` axis rides along. Users sorted by total descending, then name."""
+    """Every user × skill, enriched (#435): per cell ``{weighted, solved,
+    available, pct}`` —
+
+    - ``weighted``: Σ ``points_awarded`` over awarded solves. The decay engine
+      already priced rarity into each row at solve time, so this is the "sum a
+      column" weighting the ``solve_weight`` seam anticipated. Points are
+      per-competition vocab and do NOT normalize across events (the ADR-0039
+      caveat) — which is why cross-user comparison happens via ``pct``, not raw
+      weighted values.
+    - ``solved`` / ``available``: distinct solves vs **published** challenges in
+      that category across the competitions the user is a *member* of — coverage
+      against genuine opportunity, immune to column-size bias.
+    - ``pct``: percentile of ``weighted`` within the column over every tracked
+      user (zeros included) — the scale-free comparator the heat map renders.
+
+    Plus a ``population`` footer per skill (solver count + mean weighted among
+    solvers). Computed whole so one cache entry serves every page; the router
+    sorts + slices per request. Default order: total weighted desc, then name.
+    """
     rows = (
         await db.execute(
             select(
@@ -115,6 +141,7 @@ async def compute_skill_matrix(db: AsyncSession) -> dict[str, Any]:
                 User.display_name,
                 Category.name,
                 func.count(func.distinct(Submission.challenge_id)),
+                func.coalesce(func.sum(Submission.points_awarded), 0),
             )
             .join(Challenge, Challenge.id == Submission.challenge_id)
             .join(Category, Category.id == Challenge.category_id)
@@ -124,20 +151,91 @@ async def compute_skill_matrix(db: AsyncSession) -> dict[str, Any]:
         )
     ).all()
 
+    # Opportunity: published challenges per (competition, skill) — folded in
+    # Python like everything else (ADR-0006 parity).
+    availability_rows = (
+        await db.execute(
+            select(Challenge.competition_id, Category.name, func.count(Challenge.id))
+            .join(Category, Category.id == Challenge.category_id)
+            .where(Challenge.state == "published")
+            .group_by(Challenge.competition_id, Category.name)
+        )
+    ).all()
+    available: dict[tuple[str, str], int] = {}
+    for competition_id, name, count in availability_rows:
+        key = (competition_id, normalize_skill(name))
+        available[key] = available.get(key, 0) + int(count or 0)
+
+    # Membership: which competitions each user genuinely had access to. Any
+    # competition-scoped role counts (Participant, Judge, custom) — opportunity
+    # is about access, not role.
+    membership_rows = (
+        await db.execute(
+            select(RoleAssignment.user_id, RoleAssignment.competition_id)
+            .where(RoleAssignment.competition_id.is_not(None))
+            .distinct()
+        )
+    ).all()
+    memberships: dict[str, set[str]] = {}
+    for user_id, competition_id in membership_rows:
+        memberships.setdefault(user_id, set()).add(competition_id)
+
     axis: set[str] = set()
     users: dict[str, dict[str, Any]] = {}
-    for user_id, display_name, name, count in rows:
+    for user_id, display_name, name, count, weighted in rows:
         key = normalize_skill(name)
         axis.add(key)
         row = users.setdefault(
             user_id,
             {"user_id": user_id, "display_name": display_name, "scores": {}},
         )
-        row["scores"][key] = row["scores"].get(key, 0) + int(count or 0) * solve_weight()
+        cell = row["scores"].setdefault(
+            key, {"weighted": 0, "solved": 0, "available": 0, "pct": 0}
+        )
+        cell["solved"] += int(count or 0) * solve_weight()
+        cell["weighted"] += int(weighted or 0)
 
-    user_list = [{**row, "total": sum(row["scores"].values())} for row in users.values()]
-    user_list.sort(key=lambda u: (-u["total"], (u["display_name"] or "").lower()))
-    return {"skills": sorted(axis), "users": user_list}
+    skills = sorted(axis)
+
+    # Fill availability per user cell (their member competitions only), clamped
+    # so an unpublished-after-solve challenge can't read as "3/0".
+    for user_id, row in users.items():
+        comps = memberships.get(user_id, set())
+        for skill, cell in row["scores"].items():
+            avail = sum(available.get((c, skill), 0) for c in comps)
+            cell["available"] = max(avail, cell["solved"])
+
+    # Column percentiles over every tracked user (zeros included): scale-free.
+    for skill in skills:
+        column = [u["scores"].get(skill, {}).get("weighted", 0) for u in users.values()]
+        for row in users.values():
+            cell = row["scores"].get(skill)
+            if cell is not None:
+                cell["pct"] = _percentile(column, cell["weighted"])
+
+    population = {
+        skill: {
+            "solvers": sum(1 for u in users.values() if skill in u["scores"]),
+            "mean_weighted": (
+                round(
+                    sum(u["scores"][skill]["weighted"] for u in users.values() if skill in u["scores"])
+                    / max(sum(1 for u in users.values() if skill in u["scores"]), 1)
+                )
+            ),
+        }
+        for skill in skills
+    }
+
+    user_list = [
+        {
+            **row,
+            "total": sum(c["solved"] for c in row["scores"].values()),
+            "total_weighted": sum(c["weighted"] for c in row["scores"].values()),
+        }
+        for row in users.values()
+    ]
+    user_list.sort(key=lambda u: (-u["total_weighted"], (u["display_name"] or "").lower()))
+    return {"skills": skills, "users": user_list, "population": population}
 
 
 # --- Cached read model (ADR-0039) --------------------------------------------

@@ -134,8 +134,74 @@ async def test_admin_matrix_requires_global_analytics(client):
     matrix = (await client.get("/api/admin/skills", headers=_auth(admin))).json()
     assert matrix["skills"] == ["web"]
     names = {u["display_name"]: u for u in matrix["users"]}
-    assert names["ada"]["scores"] == {"web": 1}
+    # Enriched cell (#435): ada joined (membership = opportunity), one published
+    # web challenge, one solve worth its 100 points.
+    assert names["ada"]["scores"] == {
+        "web": {"weighted": 100, "solved": 1, "available": 1, "pct": 0}
+    }
     assert names["ada"]["total"] == 1
+    assert names["ada"]["total_weighted"] == 100
+    assert matrix["population"] == {"web": {"solvers": 1, "mean_weighted": 100}}
+
+
+async def test_admin_matrix_sorts_by_column(client):
+    admin = await admin_token(client)
+    comp = await _competition(client, admin)
+    web = await _category(client, admin, comp, "Web")
+    pwn = await _category(client, admin, comp, "Pwn")
+    w = await _challenge(client, admin, comp, flag="flag{w}", category_id=web, title="w")
+    p1 = await _challenge(client, admin, comp, flag="flag{p1}", category_id=pwn, title="p1")
+    p2 = await _challenge(client, admin, comp, flag="flag{p2}", category_id=pwn, title="p2")
+    webber, _ = await _register(client, "webber")
+    await _join(client, webber, comp)
+    await _solve(client, webber, comp, w, "flag{w}")
+    pwner, _ = await _register(client, "pwner")
+    await _join(client, pwner, comp)
+    await _solve(client, pwner, comp, p1, "flag{p1}")
+    await _solve(client, pwner, comp, p2, "flag{p2}")
+
+    # Default: total weighted desc → pwner (200) first.
+    default = (await client.get("/api/admin/skills", headers=_auth(admin))).json()
+    assert [u["display_name"] for u in default["users"]] == ["pwner", "webber"]
+    # Sorting by the web column puts the web solver first…
+    by_web = (
+        await client.get("/api/admin/skills?sort=web", headers=_auth(admin))
+    ).json()
+    assert by_web["users"][0]["display_name"] == "webber"
+    # …and ascending flips it.
+    asc = (
+        await client.get(
+            "/api/admin/skills?sort=web&direction=asc", headers=_auth(admin)
+        )
+    ).json()
+    assert asc["users"][-1]["display_name"] == "webber"
+    # An unknown column is a 422, not a silent default.
+    bad = await client.get("/api/admin/skills?sort=nope", headers=_auth(admin))
+    assert bad.status_code == 422
+
+
+async def test_admin_matrix_csv_export(client):
+    admin = await admin_token(client)
+    comp = await _competition(client, admin)
+    cat = await _category(client, admin, comp, "Web")
+    chal = await _challenge(client, admin, comp, flag="flag{a}", category_id=cat)
+    ada, _ = await _register(client, "ada")
+    await _join(client, ada, comp)
+    await _solve(client, ada, comp, chal, "flag{a}")
+
+    # Participant: same RBAC wall as the matrix itself.
+    assert (
+        await client.get("/api/admin/skills/export", headers=_auth(ada))
+    ).status_code == 403
+
+    resp = await client.get("/api/admin/skills/export", headers=_auth(admin))
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/csv")
+    lines = resp.text.strip().splitlines()
+    assert lines[0].startswith("User,Total points,Total solves")
+    assert "web (points)" in lines[0] and "web (available)" in lines[0]
+    ada_line = next(line for line in lines if line.startswith("ada"))
+    assert "100" in ada_line
 
 
 async def test_admin_matrix_paginates_over_users(client):

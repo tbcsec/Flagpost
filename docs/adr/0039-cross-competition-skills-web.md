@@ -1,6 +1,6 @@
 # ADR-0039: Cross-competition skills web — the first participant-facing consolidation view
 
-**Status:** Accepted (amended 2026-09-04 — admin matrix dropped; re-amended 2026-10-13 — admin matrix reinstated, #435)
+**Status:** Accepted (amended 2026-09-04 — admin matrix dropped; re-amended 2026-10-13 — admin matrix reinstated and enriched, #435)
 **Date:** 2026-09-04
 **Architecture reference:** `ARCHITECTURE.md` §6.3 (tenancy scoping — the
 sanctioned cross-competition reads). Implements #364.
@@ -147,3 +147,30 @@ site-wide `skills_enabled` switch is off, paginated (50 default / 200 max) over
 the shared TTL-cached read model. The additive re-add the first amendment
 predicted is what happened; the privacy surface is named in `PRIVACY.md`. The
 rollup table remains the scale follow-up, out of scope here.
+
+## Amendment: the matrix enriched — weighted points, coverage, percentile (2026-10-13, #435)
+
+Raw solve counts conflate volume with proficiency, so each matrix cell now
+carries three labeled signals instead of one number:
+
+- **weighted** — Σ ``Submission.points_awarded``: the value priced at solve time,
+  so dynamic-decay rarity is already in the row. This is the "sum a column"
+  weighting the ``solve_weight`` seam anticipated. The original caveat stands:
+  **points are per-competition vocab and do not normalize across events** — raw
+  weighted values are context, never the cross-user comparator.
+- **solved / available** — coverage against genuine opportunity: published
+  challenges in the competitions the user is a *member* of (any competition-
+  scoped role). Clamped so a challenge unpublished after a solve can't read as
+  ``3/0``; a category the user never had access to renders as absence, not zero.
+- **pct** — the percentile of ``weighted`` within the column over every tracked
+  user. This is the scale-free comparator, rendered as the heat map.
+
+Plus a per-column **population** footer (solver count, mean weighted — the
+"where is the community weak" read), server-side column sorting (truthful
+across pages), and a CSV export (``csv_safe``-escaped; display names are
+competitor-controlled). The self view (``/api/me/skills``) is unchanged.
+Invalidation now also rides ``challenge.published`` and
+``competition.member_joined``, since opportunity moves cells. A composite
+"proficiency index" was considered and rejected: three explainable signals over
+one opaque number. Efficiency signals (attempts/hints per solve), first-blood
+badges and time-windowing are the deliberate v2 line.

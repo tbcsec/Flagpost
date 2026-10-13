@@ -2009,17 +2009,42 @@ export interface InviteLinkJoinInput {
 
 // --- Admin skills matrix (#364/#435, ADR-0039) -------------------------------
 
+/** One user×skill cell (#435). `weighted` = Σ points awarded at solve time
+ * (decay rarity included — but points don't normalize across competitions, so
+ * compare via `pct`); `solved`/`available` = coverage against the user's member
+ * competitions; `pct` = percentile of `weighted` within the column. */
+export interface SkillCell {
+  weighted: number;
+  solved: number;
+  available: number;
+  pct: number;
+}
+
+export interface SkillPopulation {
+  solvers: number;
+  mean_weighted: number;
+}
+
 export interface SkillMatrixUser {
   user_id: string;
   display_name: string;
-  scores: Record<string, number>; // skill name -> cumulative score (missing = 0)
+  scores: Record<string, SkillCell>; // missing key = untouched category
   total: number;
+  total_weighted: number;
 }
 
 export interface SkillMatrix {
   skills: string[]; // the shared axis (columns)
   users: SkillMatrixUser[];
+  population: Record<string, SkillPopulation>;
   total_users: number;
   limit: number;
   offset: number;
+}
+
+export interface SkillMatrixQuery {
+  limit: number;
+  offset: number;
+  sort?: string; // "total" or a skill key
+  direction?: "asc" | "desc";
 }

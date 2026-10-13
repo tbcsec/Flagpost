@@ -145,6 +145,7 @@ import type {
   MyCertificate,
   UserSkills,
   SkillMatrix,
+  SkillMatrixQuery,
   MarketplaceSettings,
   MarketplaceSettingsUpdate,
   MarketplaceResolveResult,
@@ -1504,8 +1505,13 @@ export const analyticsApi = {
 // nested under a competition) because a user's web spans every event.
 export const skillsApi = {
   mine: () => apiFetch<UserSkills>("/api/me/skills"),
-  matrix: ({ limit, offset }: { limit: number; offset: number }) =>
-    apiFetch<SkillMatrix>(`/api/admin/skills?limit=${limit}&offset=${offset}`),
+  matrix: ({ limit, offset, sort = "total", direction = "desc" }: SkillMatrixQuery) =>
+    apiFetch<SkillMatrix>(
+      `/api/admin/skills?limit=${limit}&offset=${offset}` +
+        `&sort=${encodeURIComponent(sort)}&direction=${direction}`,
+    ),
+  // The whole matrix as CSV — streamed with the token, not an <a href> (#435).
+  exportCsv: () => downloadFile("/api/admin/skills/export", "skills-matrix.csv"),
 };
 
 export const notificationsApi = {

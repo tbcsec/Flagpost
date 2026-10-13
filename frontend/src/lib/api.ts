@@ -31,6 +31,8 @@ import type {
   AiConnectionResult,
   InstanceSettings,
   InstanceSettingsUpdate,
+  InviteLink,
+  InviteLinkInput,
   InstanceConnectionResult,
   ChallengeDeployment,
   ChallengeDeploymentUpdate,
@@ -742,6 +744,23 @@ export const categoriesApi = {
     apiFetch<void>(
       `/api/competitions/${competitionId}/categories/${categoryId}`,
       { method: "DELETE" },
+    ),
+};
+
+// Competition invite links (#427) — the organiser management surface. The
+// public resolve/join endpoints are consumed by the landing page, not here.
+export const inviteLinksApi = {
+  list: (competitionId: string) =>
+    apiFetch<InviteLink[]>(`/api/competitions/${competitionId}/invite-links`),
+  create: (competitionId: string, input: InviteLinkInput) =>
+    apiFetch<InviteLink>(`/api/competitions/${competitionId}/invite-links`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  revoke: (competitionId: string, linkId: string) =>
+    apiFetch<InviteLink>(
+      `/api/competitions/${competitionId}/invite-links/${linkId}/revoke`,
+      { method: "POST" },
     ),
 };
 

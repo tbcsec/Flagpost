@@ -1928,7 +1928,8 @@
       "rules": "Rules",
       "assistant": "Assistant",
       "certificates": "Certificates",
-      "modules": "Modules"
+      "modules": "Modules",
+      "invites": "Sharing"
     },
     "modulesIntro": "Turn optional features on or off for this competition.",
     "form": {
@@ -2069,6 +2070,58 @@
       "creating": "Creating…",
       "create": "Create"
     }
+  },
+  "inviteLinks": {
+    "title": "Invite links",
+    "description": "Shareable links for this competition — a join link invites people in; a view link shares the public spectator view.",
+    "create": "New link",
+    "emptyTitle": "No links yet",
+    "emptyDescription": "Create a link to share this competition.",
+    "loadError": "Couldn't load invite links: {message}",
+    "colCapability": "Type",
+    "colLabel": "Label",
+    "colUses": "Uses",
+    "colExpires": "Expires",
+    "colStatus": "Status",
+    "colActions": "Actions",
+    "capability": {
+      "join": "Join",
+      "view": "View"
+    },
+    "status": {
+      "active": "Active",
+      "revoked": "Revoked",
+      "expired": "Expired",
+      "usedUp": "Used up"
+    },
+    "noExpiry": "Never",
+    "copy": "Copy link",
+    "copied": "Copied",
+    "copyError": "Couldn't copy to the clipboard",
+    "revoke": "Revoke",
+    "revokeConfirmTitle": "Revoke this link?",
+    "revokeConfirmDescription": "Anyone holding the link will no longer be able to use it. This can't be undone.",
+    "revokeConfirmLabel": "Revoke link",
+    "revokedToast": "Link revoked",
+    "revokeError": "Couldn't revoke the link",
+    "createTitle": "New invite link",
+    "createDescription": "Mint a shareable link for this competition.",
+    "capabilityLabel": "Link type",
+    "joinHint": "Recipients are invited to sign in and join this competition.",
+    "joinHintPrivate": "Recipients are invited to sign in and join. The link is the only self-serve way into this private competition.",
+    "viewHint": "A read-only link to the public spectator view. It only works while the competition is public and its public scoreboard is enabled.",
+    "labelLabel": "Label (optional)",
+    "labelPlaceholder": "e.g. sponsor newsletter",
+    "expiresLabel": "Expires (optional)",
+    "expiresHint": "Leave empty for a link that never expires.",
+    "maxUsesLabel": "Max joins (optional)",
+    "maxUsesHint": "Leave empty for unlimited joins.",
+    "creating": "Creating…",
+    "createSubmit": "Create link",
+    "createError": "Couldn't create the link",
+    "createdTitle": "Link created",
+    "createdDescription": "Share this URL. You can copy it again later from the list.",
+    "done": "Done"
   },
   "admin": {
     "dashboard": {

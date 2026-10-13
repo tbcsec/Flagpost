@@ -12,6 +12,7 @@ import {
   CompetitionSettingsForm,
   type SettingsSection,
 } from "@/components/competitions/competition-settings-form";
+import { InviteLinksPanel } from "@/components/competitions/invite-links-panel";
 import { ModulesPanel } from "@/components/competitions/modules-panel";
 import { ReportsPanel } from "@/components/reports/reports-panel";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,7 +26,8 @@ type Tab =
   | "modules"
   | "assistant"
   | "certificates"
-  | "reports";
+  | "reports"
+  | "invites";
 
 // Tab order; labels resolve at render via the settings namespace, except
 // "reports", which resolves via its own module namespace (t("reports.tab")).
@@ -34,6 +36,7 @@ const TAB_ORDER: Tab[] = [
   "schedule",
   "challenges",
   "rules",
+  "invites",
   "assistant",
   "certificates",
   "reports",
@@ -76,11 +79,14 @@ export default function CompetitionSettingsPage() {
   const reportsEnabled =
     !enabledModules.data || enabledModules.data.includes("reports");
   const reportsTabOn = reportsEnabled && access.has("generate_report");
+  // Sharing (#427) has its own delegable grant, like modules and reports.
+  const canShare = access.has("manage_invite_links");
   const visibleTabs = TAB_ORDER.filter(
     (value) =>
       (value !== "assistant" || aiEnabled) &&
       (value !== "certificates" || certTabOn) &&
       (value !== "reports" || reportsTabOn) &&
+      (value !== "invites" || canShare) &&
       (value !== "modules" || canManageModules),
   ).map((value) => ({
     value,
@@ -90,6 +96,7 @@ export default function CompetitionSettingsPage() {
     (tab === "assistant" && !aiEnabled) ||
     (tab === "certificates" && !certTabOn) ||
     (tab === "reports" && !reportsTabOn) ||
+    (tab === "invites" && !canShare) ||
     (tab === "modules" && !canManageModules)
       ? "general"
       : tab;
@@ -104,7 +111,8 @@ export default function CompetitionSettingsPage() {
     activeTab !== "modules" &&
     activeTab !== "assistant" &&
     activeTab !== "certificates" &&
-    activeTab !== "reports";
+    activeTab !== "reports" &&
+    activeTab !== "invites";
 
   return (
     <>
@@ -146,6 +154,15 @@ export default function CompetitionSettingsPage() {
                 <CertificateDesigner competitionId={competitionId} />
               </CardContent>
             </Card>
+          )}
+
+          {/* Sharing / invite links (#427) — renders its own Card; mounted only
+              when shown (own queries). */}
+          {activeTab === "invites" && (
+            <InviteLinksPanel
+              competitionId={competitionId}
+              visibility={data.visibility}
+            />
           )}
 
           {/* Post-event reports (#134) — mounted only when shown (own queries). */}

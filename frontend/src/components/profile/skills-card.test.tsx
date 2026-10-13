@@ -26,12 +26,13 @@ describe("MySkillsCard", () => {
     expect(screen.getByText(/No skills yet/i)).toBeInTheDocument();
   });
 
-  it("renders the summary, breakdown, and radar for a populated web", () => {
+  it("renders the stats strip, breakdown, and radar for a populated web", () => {
     state = {
       data: {
         skills: [
-          { skill: "web", score: 4 },
+          // Deliberately not score-ordered: the tiles must rank for themselves.
           { skill: "pwn", score: 2 },
+          { skill: "web", score: 4 },
           { skill: "crypto", score: 1 },
         ],
         total: 7,
@@ -41,8 +42,15 @@ describe("MySkillsCard", () => {
       isError: false,
     };
     renderWithIntl(<MySkillsCard />);
-    // Cross-competition summary.
-    expect(screen.getByText(/7 solves across 2 competitions/i)).toBeInTheDocument();
+    // The stats strip (#436): totals as tiles…
+    expect(screen.getByText("Total solves")).toBeInTheDocument();
+    expect(screen.getByText("7")).toBeInTheDocument();
+    expect(screen.getByText("Competitions")).toBeInTheDocument();
+    // …and most/least-solved derived from the scores, not the API order.
+    const strongest = screen.getByText("Most solved").parentElement!;
+    expect(strongest).toHaveTextContent("web");
+    const weakest = screen.getByText("Least solved").parentElement!;
+    expect(weakest).toHaveTextContent("crypto");
     // The radar (≥3 axes) renders as a labelled SVG.
     expect(
       screen.getByRole("img", { name: /Skills web across 3 categories/i }),
@@ -60,6 +68,22 @@ describe("MySkillsCard", () => {
     };
     renderWithIntl(<MySkillsCard />);
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
-    expect(screen.getByText("web")).toBeInTheDocument();
+    expect(screen.getAllByText("web").length).toBeGreaterThan(0);
+  });
+
+  it("shows no least-solved claim with a single category", () => {
+    // One category is both strongest and weakest — asserting a "least solved"
+    // there would be noise, so the tile goes neutral.
+    state = {
+      data: { skills: [{ skill: "web", score: 3 }], total: 3, competitions_played: 1 },
+      isLoading: false,
+      isError: false,
+    };
+    renderWithIntl(<MySkillsCard />);
+    const strongest = screen.getByText("Most solved").parentElement!;
+    expect(strongest).toHaveTextContent("web");
+    const weakest = screen.getByText("Least solved").parentElement!;
+    expect(weakest).toHaveTextContent("—");
+    expect(weakest).not.toHaveTextContent("web");
   });
 });

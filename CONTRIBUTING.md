@@ -124,8 +124,13 @@ images, so the tag *is* the release artefact — there's nothing to build by han
 1. **Bump the source-build version.** In [`backend/config.py`](backend/config.py),
    set `SOURCE_BUILD_VERSION` to the version you're about to tag, keeping the
    `-src` suffix — e.g. `"1.3.0-src"` for `v1.3.0`. Commit it.
-2. Tag and push: `git tag v1.3.0 && git push origin v1.3.0`.
-3. Write the GitHub Release notes.
+2. **Add the release to the in-app changelog.** Prepend an entry (version, date,
+   title, headline bullets) to
+   [`frontend/src/lib/changelog.ts`](frontend/src/lib/changelog.ts) — the
+   `/changelog` page is bundled static data, so a tagged build only knows the
+   history committed before the tag. Commit it with the version bump.
+3. Tag and push: `git tag v1.3.0 && git push origin v1.3.0`.
+4. Write the GitHub Release notes.
 
 Step 1 is easy to forget and matters more than it looks. Release *images* get
 their version baked from the tag automatically, but the README's headline

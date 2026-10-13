@@ -38,6 +38,7 @@ from models.feedback import (
     SurveyResponse,
 )
 from models.hint import Hint, HintReveal
+from models.invite_link import InviteLink
 from models.marketplace import MarketplaceSettings
 from models.mc_guess_reset import MCGuessReset
 from models.notification import Notification
@@ -95,6 +96,7 @@ __all__ = [
     "Notification",
     "AuthLoginState",
     "IdentityProvider",
+    "InviteLink",
     "Page",
     "PasswordResetToken",
     "RegistrationField",

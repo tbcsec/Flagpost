@@ -35,6 +35,9 @@ EVENT_TYPES: tuple[str, ...] = (
     # Emitted by the scheduler as a competition nears its end_at (§5.2) — a
     # time-based trigger, unlike the mutation events around it.
     "competition.time_remaining",
+    # Shareable invite / view links (#427): an organiser minted or revoked one.
+    "invite_link.created",
+    "invite_link.revoked",
     "team.created",
     "team.member_joined",
     "team.member_left",

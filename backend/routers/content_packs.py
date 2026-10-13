@@ -18,6 +18,7 @@ from models.user import User
 from schemas.content_pack import ContentPackInstallOut
 from storage import get_storage
 from storage.base import ObjectStorage
+from routers.marketplace import _require_enabled
 from utils.content_packs import PackError, apply_pack
 from utils.event_bus import event_bus
 
@@ -35,6 +36,11 @@ async def install_content_pack(
     db: AsyncSession = Depends(get_db),
     storage: ObjectStorage = Depends(get_storage),
 ) -> ContentPackInstallOut:
+    # The marketplace master switch is a full kill switch (models/marketplace.py:
+    # "enabled = false fully disables it"). This direct-upload path must honour it
+    # too — otherwise a locked-down instance could still install packs by file.
+    await _require_enabled(db)
+
     pack_bytes = await file.read()
     if len(pack_bytes) > MAX_UPLOAD_BYTES:
         raise HTTPException(

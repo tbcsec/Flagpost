@@ -260,3 +260,24 @@ async def test_challenge_pack_emits_one_bulk_event_not_per_row(client):
         ).all()
     assert len(installed) == 1
     assert per_row == []  # bulk import must not flood per-challenge events
+
+
+async def test_direct_upload_blocked_when_marketplace_disabled(client):
+    # #427 security-review M2: marketplace.enabled is a full kill switch, so the
+    # direct content-pack upload path must refuse while the marketplace is off —
+    # otherwise a locked-down instance could still install packs by file.
+    token = await admin_token(client)
+    await client.put(
+        "/api/marketplace/settings", json={"enabled": False}, headers=_auth(token)
+    )
+    resp = await _install(client, token, _theme_pack([_theme_preset("locked")]))
+    assert resp.status_code == 404
+    assert "disabled" in resp.json()["detail"].lower()
+
+    # Re-enabling restores the path.
+    await client.put(
+        "/api/marketplace/settings", json={"enabled": True}, headers=_auth(token)
+    )
+    assert (
+        await _install(client, token, _theme_pack([_theme_preset("unlocked")]))
+    ).status_code == 200

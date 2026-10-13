@@ -342,3 +342,35 @@ async def test_thread_reply_bumps_the_support_room(client):
         assert resp.status_code == 200, resp.text
         frame = await ws.receive_json()
         assert frame == {"type": "ticket_updated", "ticket_id": ticket}
+
+
+async def test_draft_challenge_authoring_is_silent_but_published_edits_ping(client):
+    """#427 security-review M3: challenge.created/updated/deleted must NOT ping
+    the activity room for a challenge that isn't competitor-visible — the id-only
+    frame leaked the existence, count and timing of unreleased challenges. A
+    published, released challenge's edit is still a legitimate live event."""
+    comp, published = await _competition_with_challenge(client)  # a published chal
+    member = await _joined_participant(client, comp, "m3@example.com", "Watch3")
+    admin = await admin_token(client)
+
+    async with WsTestClient(main.app, f"/ws/activity/{comp}") as ws:
+        await ws.send_json({"token": member})
+        assert (await ws.receive_json())["type"] == "auth_ok"
+
+        # Authoring a DRAFT challenge mid-competition → room stays silent.
+        await client.post(
+            f"/api/competitions/{comp}/challenges",
+            json={"title": "Secret wave", "points": 100, "flag": "flag{secret}"},
+            headers=_auth(admin),
+        )
+        await _expect_silence(ws)
+
+        # Editing the PUBLISHED, released challenge → a real challenge.updated ping.
+        await client.patch(
+            f"/api/competitions/{comp}/challenges/{published}",
+            json={"title": "Chal (renamed)"},
+            headers=_auth(admin),
+        )
+        frame = await ws.receive_json()
+        assert frame["event"] == "challenge.updated"
+        assert frame["challenge_id"] == published

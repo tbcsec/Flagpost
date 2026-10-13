@@ -19,7 +19,7 @@ the ``competition.member_joined`` emit stay in one place.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import get_current_user, require_permission
@@ -271,6 +271,27 @@ async def join_via_invite_link(
     already_member = competition.id in await member_competition_ids(
         db, current_user.id
     )
+    # Atomic use reservation for a capped link (#427 security-review M4). The old
+    # check-then-increment raced: N concurrent joins on a `max_uses=1` link all
+    # passed `is_active()` and all admitted. Reserve a slot with a conditional
+    # UPDATE *before* granting access — the row lock serialises concurrent joins,
+    # and winning 0 rows means the cap filled under us → fail closed with the
+    # same undisclosing 404. It rides the same transaction as `_join` (which
+    # commits), so a join gate that raises rolls the reservation back (the
+    # session closes without commit). A re-clicking member burns nothing.
+    if not already_member and link.max_uses is not None:
+        reserved = await db.execute(
+            update(InviteLink)
+            .where(
+                InviteLink.id == link.id,
+                InviteLink.use_count < InviteLink.max_uses,
+            )
+            .values(use_count=InviteLink.use_count + 1, last_used_at=utcnow())
+        )
+        if reserved.rowcount == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Invite link not found"
+            )
     await _join(
         db,
         competition,
@@ -278,13 +299,14 @@ async def join_via_invite_link(
         field_values=body.field_values if body else None,
         require_fields=False,
     )
-    # Count only a genuine new join, so max_uses means "admit this many people"
-    # and a member re-clicking their own link doesn't burn a use. last_used_at
-    # shares the semantics. Commit before emitting (SQLite writer lock).
     if not already_member:
-        link.use_count += 1
-        link.last_used_at = utcnow()
-        await db.commit()
+        # Uncapped links can't race a cap, so a plain post-join increment is
+        # fine; capped links already incremented in the reservation above
+        # (committed by `_join`). Commit before emitting (SQLite writer lock).
+        if link.max_uses is None:
+            link.use_count += 1
+            link.last_used_at = utcnow()
+            await db.commit()
         await event_bus.emit(
             "invite_link.used",
             {

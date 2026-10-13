@@ -1957,3 +1957,30 @@ export interface ContentPackInstallResult {
   target: string; // a competition id, or "site"
   result: Record<string, unknown>;
 }
+
+// --- Competition invite links (#427) ---
+
+/** A shareable competition link (join or view) with a managed lifecycle —
+ * richer than the permanent competition invite code. */
+export interface InviteLink {
+  id: string;
+  competition_id: string;
+  token: string;
+  capability: "join" | "view";
+  label: string | null;
+  expires_at: string | null;
+  max_uses: number | null;
+  use_count: number;
+  revoked_at: string | null;
+  created_at: string;
+  /** Usable right now: not revoked, not expired, uses remaining. */
+  active: boolean;
+}
+
+/** Create payload — lifecycle fields are optional (null = no limit). */
+export interface InviteLinkInput {
+  capability: "join" | "view";
+  label?: string | null;
+  expires_at?: string | null;
+  max_uses?: number | null;
+}

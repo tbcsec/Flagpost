@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 
 import { FlagpostMark } from "@/components/brand/flagpost-mark";
@@ -33,6 +34,15 @@ export function PoweredByFooter({ className }: { className?: string }) {
         </span>
         Flagpost
       </a>
+      {/* The product changelog — a quiet companion to the attribution, present
+          everywhere the footer is. */}
+      <span aria-hidden="true">·</span>
+      <Link
+        href="/changelog"
+        className="text-muted-foreground transition-colors hover:text-foreground"
+      >
+        {t("changelog")}
+      </Link>
     </footer>
   );
 }

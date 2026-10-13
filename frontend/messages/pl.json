@@ -58,7 +58,14 @@
     "visibility": {
       "public": "publiczna",
       "private": "prywatny"
-    }
+    },
+    "changelog": "Changelog"
+  },
+  "changelog": {
+    "title": "Changelog",
+    "description": "What shipped in each Flagpost release. Full notes live on each GitHub release.",
+    "releasedOn": "Released {date}",
+    "viewRelease": "View the {version} release on GitHub"
   },
   "announcements": {
     "severity": {

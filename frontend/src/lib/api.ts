@@ -146,6 +146,8 @@ import type {
   UserSkills,
   SkillMatrix,
   SkillMatrixQuery,
+  SkillWindow,
+  AdminUserSkills,
   MarketplaceSettings,
   MarketplaceSettingsUpdate,
   MarketplaceResolveResult,
@@ -1505,13 +1507,18 @@ export const analyticsApi = {
 // nested under a competition) because a user's web spans every event.
 export const skillsApi = {
   mine: () => apiFetch<UserSkills>("/api/me/skills"),
-  matrix: ({ limit, offset, sort = "total", direction = "desc" }: SkillMatrixQuery) =>
+  matrix: ({ limit, offset, sort = "total", direction = "desc", window = "all" }: SkillMatrixQuery) =>
     apiFetch<SkillMatrix>(
       `/api/admin/skills?limit=${limit}&offset=${offset}` +
-        `&sort=${encodeURIComponent(sort)}&direction=${direction}`,
+        `&sort=${encodeURIComponent(sort)}&direction=${direction}&window=${window}`,
+    ),
+  userDetail: (userId: string, window: SkillWindow = "all") =>
+    apiFetch<AdminUserSkills>(
+      `/api/admin/skills/users/${userId}?window=${window}`,
     ),
   // The whole matrix as CSV — streamed with the token, not an <a href> (#435).
-  exportCsv: () => downloadFile("/api/admin/skills/export", "skills-matrix.csv"),
+  exportCsv: (window: SkillWindow = "all") =>
+    downloadFile(`/api/admin/skills/export?window=${window}`, "skills-matrix.csv"),
 };
 
 export const notificationsApi = {

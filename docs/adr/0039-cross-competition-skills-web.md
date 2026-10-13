@@ -174,3 +174,28 @@ Invalidation now also rides ``challenge.published`` and
 "proficiency index" was considered and rejected: three explainable signals over
 one opaque number. Efficiency signals (attempts/hints per solve), first-blood
 badges and time-windowing are the deliberate v2 line.
+
+## Amendment: matrix v2 — efficiency, first bloods, windows, drill-down (2026-10-13, #440)
+
+Four additions over the #435 enrichment, all derived (no schema change):
+
+- **Efficiency counts** per cell: ``attempts`` (every non-duplicate graded
+  submission in the category — struggle on never-solved challenges included,
+  deliberately: it is signal) and ``hints`` (reveals taken). Served as counts;
+  the UI derives per-solve ratios.
+- **First bloods** are a **historical fact**: the earliest awarded submission
+  per challenge (ties broken by ``created_at`` then id for SQLite/Postgres
+  determinism), derived over **all time** and never recomputed inside a window
+  — otherwise the second solver would be crowned once the true first scrolls
+  out. A window only decides which *earned* first bloods are counted.
+- **Activity windows** (``all``/``365``/``90``/``30`` days) bound solves,
+  attempts and hints — never opportunity (``available`` is always current).
+  The allowlist is the cache-key design: windows key the cache
+  (``matrix:<window>``), so an open-ended date range would grow the keyspace
+  per request and is rejected (422).
+- **Admin drill-down** (``GET /api/admin/skills/users/{user_id}``): one user's
+  per-skill stats plus their recent solves with attempts/hints/first-blood
+  context (capped at 200). Same gates as the matrix; an unknown user is an
+  undisclosing 404, and misses are never cached (id probing must not grow the
+  cache). This is a deeper per-user read than the matrix — named in
+  ``PRIVACY.md``.

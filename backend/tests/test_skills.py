@@ -63,18 +63,19 @@ async def _user(db, name: str) -> str:
     return user.id
 
 
-async def _solve(db, comp_id, chal_id, user_id, *, correct=True, duplicate=False, points=100):
-    db.add(
-        Submission(
-            competition_id=comp_id,
-            challenge_id=chal_id,
-            user_id=user_id,
-            value="f",
-            is_correct=correct,
-            is_duplicate=duplicate,
-            points_awarded=points if correct and not duplicate else 0,
-        )
+async def _solve(db, comp_id, chal_id, user_id, *, correct=True, duplicate=False, points=100, at=None):
+    sub = Submission(
+        competition_id=comp_id,
+        challenge_id=chal_id,
+        user_id=user_id,
+        value="f",
+        is_correct=correct,
+        is_duplicate=duplicate,
+        points_awarded=points if correct and not duplicate else 0,
     )
+    if at is not None:
+        sub.created_at = at
+    db.add(sub)
 
 
 async def _member(db, comp_id, user_id):
@@ -197,10 +198,23 @@ async def test_matrix_lists_users_by_total_with_a_shared_axis():
     assert ada_row["total_weighted"] == 300
     # Enriched cells (#435): weighted points, coverage (no memberships here, so
     # `available` clamps to solved), and the column percentile.
-    assert ada_row["scores"]["web"] == {"weighted": 200, "solved": 2, "available": 2, "pct": 100}
-    assert ada_row["scores"]["pwn"] == {"weighted": 100, "solved": 1, "available": 1, "pct": 100}
+    # v2 signals ride along: ada's 2 web submissions were both solves (clean),
+    # and she drew first blood on both web challenges (bo solved w1 later).
+    assert ada_row["scores"]["web"] == {
+        "weighted": 200, "solved": 2, "available": 2, "pct": 100,
+        "attempts": 2, "hints": 0, "first_bloods": 2,
+    }
+    assert ada_row["scores"]["pwn"] == {
+        "weighted": 100, "solved": 1, "available": 1, "pct": 100,
+        "attempts": 1, "hints": 0, "first_bloods": 1,
+    }
     bo_row = matrix["users"][1]
-    assert bo_row["scores"] == {"web": {"weighted": 100, "solved": 1, "available": 1, "pct": 0}}
+    assert bo_row["scores"] == {
+        "web": {
+            "weighted": 100, "solved": 1, "available": 1, "pct": 0,
+            "attempts": 1, "hints": 0, "first_bloods": 0,
+        }
+    }
     # The population footer: solvers + mean weighted per column.
     assert matrix["population"] == {
         "pwn": {"solvers": 1, "mean_weighted": 100},
@@ -265,3 +279,105 @@ async def test_percentile_is_the_cross_scale_comparator():
     assert rows["dana"]["scores"]["web"]["solved"] == 3
     assert rows["charlie"]["scores"]["web"]["pct"] == 100
     assert rows["dana"]["scores"]["web"]["pct"] == 0
+
+
+async def test_window_bounds_activity_but_not_the_first_blood_fact():
+    """#440: a window filters which activity counts, but first blood is a
+    historical fact — the second solver is never crowned just because the true
+    first scrolled out of the window."""
+    from datetime import timedelta
+
+    from db import utcnow
+
+    async with SessionLocal() as db:
+        comp = await _competition(db, "AAAA0009")
+        web = await _category(db, comp, "Web")
+        w1 = await _challenge(db, comp, category_id=web, title="w1")
+        old = await _user(db, "old-timer")
+        new = await _user(db, "newcomer")
+        # old-timer drew first blood 200 days ago; newcomer solved yesterday.
+        await _solve(db, comp, w1, old, at=utcnow() - timedelta(days=200))
+        await _solve(db, comp, w1, new, at=utcnow() - timedelta(days=1))
+        await db.commit()
+
+        everything = await compute_skill_matrix(db, "all")
+        recent = await compute_skill_matrix(db, "90")
+
+    rows_all = {u["display_name"]: u for u in everything["users"]}
+    assert rows_all["old-timer"]["scores"]["web"]["first_bloods"] == 1
+    assert rows_all["newcomer"]["scores"]["web"]["first_bloods"] == 0
+
+    rows_recent = {u["display_name"]: u for u in recent["users"]}
+    # The old solve (and its first blood) fall outside the window entirely…
+    assert "old-timer" not in rows_recent
+    # …and the newcomer is NOT promoted to first blood: the fact is all-time.
+    assert rows_recent["newcomer"]["scores"]["web"]["first_bloods"] == 0
+    assert rows_recent["newcomer"]["scores"]["web"]["solved"] == 1
+
+
+async def test_attempts_and_hints_count_into_cells():
+    """#440 efficiency signals: wrong guesses and hint reveals accumulate on the
+    cell (attempts include struggle on a never-solved challenge in the same
+    category — that's signal, not noise)."""
+    from models.hint import Hint, HintReveal
+
+    async with SessionLocal() as db:
+        comp = await _competition(db, "AAAA0010")
+        web = await _category(db, comp, "Web")
+        w1 = await _challenge(db, comp, category_id=web, title="w1")
+        w2 = await _challenge(db, comp, category_id=web, title="w2")
+        user = await _user(db, "grinder")
+        # Two wrong guesses on w1, then the solve; one wrong guess on w2, never
+        # solved. A duplicate re-submit must not count as an attempt.
+        await _solve(db, comp, w1, user, correct=False)
+        await _solve(db, comp, w1, user, correct=False)
+        await _solve(db, comp, w1, user)
+        await _solve(db, comp, w1, user, duplicate=True)
+        await _solve(db, comp, w2, user, correct=False)
+        hint = Hint(competition_id=comp, challenge_id=w1, body="look closer", cost=0)
+        db.add(hint)
+        await db.flush()
+        db.add(
+            HintReveal(
+                competition_id=comp, hint_id=hint.id, challenge_id=w1,
+                user_id=user, cost_charged=0,
+            )
+        )
+        await db.commit()
+
+        matrix = await compute_skill_matrix(db)
+
+    cell = {u["display_name"]: u for u in matrix["users"]}["grinder"]["scores"]["web"]
+    assert cell["solved"] == 1
+    assert cell["attempts"] == 4  # 3 on w1 (dup excluded) + 1 on w2
+    assert cell["hints"] == 1
+
+
+async def test_user_skill_detail_shape():
+    """The drill-down (#440): per-skill rollups + solve rows with context."""
+    from utils.skills import compute_user_skill_detail
+
+    async with SessionLocal() as db:
+        comp = await _competition(db, "AAAA0011")
+        web = await _category(db, comp, "Web")
+        w1 = await _challenge(db, comp, category_id=web, title="Heist")
+        user = await _user(db, "sleuth")
+        await _solve(db, comp, w1, user, correct=False)
+        await _solve(db, comp, w1, user, points=250)
+        await db.commit()
+
+        detail = await compute_user_skill_detail(db, user)
+        missing = await compute_user_skill_detail(db, "not-a-user")
+
+    assert missing is None
+    assert detail["display_name"] == "sleuth"
+    assert detail["total"] == 1 and detail["total_weighted"] == 250
+    assert detail["skills"] == [
+        {"skill": "web", "weighted": 250, "solved": 1, "attempts": 2, "hints": 0, "first_bloods": 1}
+    ]
+    [solve] = detail["solves"]
+    assert solve["challenge_title"] == "Heist"
+    assert solve["skill"] == "web"
+    assert solve["points_awarded"] == 250
+    assert solve["attempts"] == 2
+    assert solve["first_blood"] is True

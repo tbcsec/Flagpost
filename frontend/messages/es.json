@@ -2958,14 +2958,34 @@
       "prev": "Previous",
       "next": "Next",
       "coverage": "{solved}/{available}",
-      "cellTitle": "{pct}th percentile in this skill",
       "totalSolves": "{count, plural, one {# solve} other {# solves}}",
       "footerLabel": "Everyone",
       "footerCell": "{solvers}× · avg {mean}",
-      "legend": "Each cell: points earned (decay-priced at solve time) over solved/available challenges in that player's competitions. Shading = percentile within the column — the cross-competition comparator, since raw points don't normalize across events.",
+      "legend": "Each cell: points earned (decay-priced at solve time) over solved/available challenges in that player's competitions; FB marks first bloods. Shading = percentile within the column — the cross-competition comparator, since raw points don't normalize across events. Hover a cell for attempts and hints; click a row for the full breakdown.",
       "export": "Export CSV",
       "exporting": "Exporting…",
-      "exportError": "Couldn't export the matrix"
+      "exportError": "Couldn't export the matrix",
+      "windowLabel": "Activity window",
+      "window": {
+        "all": "All time",
+        "365": "Last year",
+        "90": "Last 90 days",
+        "30": "Last 30 days"
+      },
+      "cellDetail": "{pct}th percentile · {attempts} attempts · {hints} hints · {fb} first bloods",
+      "fbSuffix": "FB×{count}",
+      "fbMark": "FB",
+      "drilldownLoading": "Loading…",
+      "drillSolves": "Solves",
+      "drillFirstBloods": "First bloods",
+      "drillAttemptsPerSolve": "Attempts / solve",
+      "drillColChallenge": "Challenge",
+      "drillColCompetition": "Competition",
+      "drillColSkill": "Skill",
+      "drillColPoints": "Points",
+      "drillColAttempts": "Attempts",
+      "drillColHints": "Hints",
+      "drillColWhen": "Solved"
     }
   },
   "registration": {

@@ -144,6 +144,20 @@ describe("InviteLandingPage", () => {
     expect(screen.queryByRole("button", { name: "Join competition" })).toBeNull();
   });
 
+  it("explains a closed registration window (#427 Phase 4)", () => {
+    mockAuthStatus = "authenticated";
+    mockResolve = {
+      data: resolved({ actionable: false, reason: "registration_closed" }),
+      isLoading: false,
+      isError: false,
+    };
+    renderWithIntl(<InviteLandingPage />);
+    expect(
+      screen.getByText("Registration has closed for this competition."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Join competition" })).toBeNull();
+  });
+
   it("hands a view link off to the public board", () => {
     mockResolve = {
       data: resolved({ capability: "view", actionable: true, requires_login: false }),

@@ -36,7 +36,12 @@ from schemas.invite_link import (
     InviteLinkResolved,
 )
 from utils.event_bus import event_bus
-from utils.invite_links import is_active, is_resolvable, view_available
+from utils.invite_links import (
+    is_active,
+    is_resolvable,
+    join_blocked_reason,
+    view_available,
+)
 from utils.rules import accept_rules, effective_rules
 
 org_router = APIRouter(
@@ -55,6 +60,7 @@ def _to_out(link: InviteLink) -> InviteLinkOut:
         expires_at=link.expires_at,
         max_uses=link.max_uses,
         use_count=link.use_count,
+        last_used_at=link.last_used_at,
         revoked_at=link.revoked_at,
         created_at=link.created_at,
         active=is_active(link),
@@ -188,8 +194,11 @@ async def resolve_invite_link(
             status_code=status.HTTP_404_NOT_FOUND, detail="Invite link not found"
         )
     if link.capability == "join":
-        actionable = competition.status != "ended"
+        # ended, or the competition's registration window (#427 Phase 4).
+        reason = join_blocked_reason(competition)
+        actionable = reason is None
     else:
+        reason = None
         actionable = view_available(competition)
     return InviteLinkResolved(
         capability=link.capability,
@@ -198,6 +207,7 @@ async def resolve_invite_link(
         competition_status=competition.status,
         participation_mode=competition.participation_mode,
         actionable=actionable,
+        reason=reason,
         requires_login=link.capability == "join",
     )
 
@@ -234,11 +244,23 @@ async def join_via_invite_link(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Invite link not found"
         )
-    # Ended competitions don't admit new members via a link (#427, decision 4).
-    if competition.status == "ended":
+    # Ended competitions don't admit new members via a link (#427, decision 4),
+    # and the competition's registration window — enforced on the link path
+    # only (#427 Phase 4) — gates it the same way. Same vocabulary as the
+    # landing's resolve, so the two surfaces can't disagree.
+    blocked = join_blocked_reason(competition)
+    if blocked is not None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="This competition has ended",
+            detail={
+                "ended": "This competition has ended",
+                "registration_not_open": (
+                    "Registration hasn't opened yet for this competition"
+                ),
+                "registration_closed": (
+                    "Registration has closed for this competition"
+                ),
+            }[blocked],
         )
     # Accept-with-join (#57): a private competition's rules can't be pre-fetched
     # from the landing page, so acceptance rides the join request.
@@ -257,8 +279,18 @@ async def join_via_invite_link(
         require_fields=False,
     )
     # Count only a genuine new join, so max_uses means "admit this many people"
-    # and a member re-clicking their own link doesn't burn a use.
+    # and a member re-clicking their own link doesn't burn a use. last_used_at
+    # shares the semantics. Commit before emitting (SQLite writer lock).
     if not already_member:
         link.use_count += 1
+        link.last_used_at = utcnow()
         await db.commit()
+        await event_bus.emit(
+            "invite_link.used",
+            {
+                "competition_id": competition.id,
+                "invite_link_id": link.id,
+                "user_id": current_user.id,
+            },
+        )
     return competition

@@ -1971,6 +1971,8 @@ export interface InviteLink {
   expires_at: string | null;
   max_uses: number | null;
   use_count: number;
+  /** When the link last admitted someone (new-join semantics, like use_count). */
+  last_used_at: string | null;
   revoked_at: string | null;
   created_at: string;
   /** Usable right now: not revoked, not expired, uses remaining. */
@@ -1994,6 +1996,8 @@ export interface InviteLinkResolved {
   competition_status: "not_started" | "running" | "ended";
   participation_mode: "team" | "individual";
   actionable: boolean;
+  /** Why a join link isn't actionable (#427 Phase 4); null when it is. */
+  reason?: "ended" | "registration_not_open" | "registration_closed" | null;
   requires_login: boolean;
 }
 

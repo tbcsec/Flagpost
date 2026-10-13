@@ -73,6 +73,9 @@ class InviteLink(Base, CompetitionScopedMixin, TimestampMixin):
     use_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
+    # When the link last admitted someone (same new-join semantics as
+    # use_count) — "is this link still circulating?" at a glance (#427 Phase 4).
+    last_used_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
     # Soft revoke: set once, never reused. A revoked link fails closed like an
     # expired one; the row is kept for the audit trail rather than deleted.
     revoked_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)

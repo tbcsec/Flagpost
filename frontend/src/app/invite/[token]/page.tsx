@@ -122,8 +122,10 @@ export default function InviteLandingPage() {
                 </Link>
               </Button>
             ) : !data.actionable ? (
+              // Why the link can't admit right now (#427 Phase 4): ended, or
+              // the competition's registration window. Honest per-reason copy.
               <p className="text-sm text-muted-foreground">
-                {t("joinEndedHint")}
+                {t(`blocked.${data.reason ?? "ended"}`)}
               </p>
             ) : authStatus === "loading" ? (
               <Skeleton className="h-10 w-full" />

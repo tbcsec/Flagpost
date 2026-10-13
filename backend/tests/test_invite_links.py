@@ -350,3 +350,106 @@ async def test_ended_competition_blocks_join_but_still_resolves(client):
         f"/api/invite-links/{link['token']}/join", headers=_auth(token)
     )
     assert resp.status_code == 403
+
+
+# ---- Phase 4: registration window + audit (#427) ----------------------------------
+
+
+async def test_registration_window_gates_link_join(client):
+    comp, admin = await _make_competition(client, visibility="private")
+    link = await _make_link(client, admin, comp["id"])
+
+    # Not open yet: the landing explains it, the join is refused.
+    await client.patch(
+        f"/api/competitions/{comp['id']}",
+        json={"registration_opens_at": (utcnow() + timedelta(hours=1)).isoformat()},
+        headers=_auth(admin),
+    )
+    resp = await client.get(f"/api/invite-links/{link['token']}")
+    assert resp.status_code == 200
+    assert resp.json()["actionable"] is False
+    assert resp.json()["reason"] == "registration_not_open"
+    token, _ = await _register(client, "early@example.com", name="Early")
+    resp = await client.post(
+        f"/api/invite-links/{link['token']}/join", headers=_auth(token)
+    )
+    assert resp.status_code == 403
+    assert "hasn't opened" in resp.json()["detail"]
+
+    # Open window: admits.
+    await client.patch(
+        f"/api/competitions/{comp['id']}",
+        json={
+            "registration_opens_at": (utcnow() - timedelta(hours=1)).isoformat(),
+            "registration_closes_at": (utcnow() + timedelta(hours=1)).isoformat(),
+        },
+        headers=_auth(admin),
+    )
+    assert (await client.get(f"/api/invite-links/{link['token']}")).json()[
+        "actionable"
+    ] is True
+    resp = await client.post(
+        f"/api/invite-links/{link['token']}/join", headers=_auth(token)
+    )
+    assert resp.status_code == 200, resp.text
+
+    # Closed: refused again — but the member it already admitted is unaffected.
+    await client.patch(
+        f"/api/competitions/{comp['id']}",
+        json={"registration_closes_at": (utcnow() - timedelta(minutes=1)).isoformat()},
+        headers=_auth(admin),
+    )
+    resp = await client.get(f"/api/invite-links/{link['token']}")
+    assert resp.json()["reason"] == "registration_closed"
+    late, _ = await _register(client, "late2@example.com", name="Late")
+    resp = await client.post(
+        f"/api/invite-links/{link['token']}/join", headers=_auth(late)
+    )
+    assert resp.status_code == 403
+    assert "has closed" in resp.json()["detail"]
+
+
+async def test_registration_window_does_not_gate_code_or_public_join(client):
+    """The window gates the LINK path only (#427 Phase 4) — the permanent
+    invite-code and lobby paths keep their released behaviour; widening is a
+    separate decision."""
+    comp, admin = await _make_competition(client, visibility="public")
+    await client.patch(
+        f"/api/competitions/{comp['id']}",
+        json={"registration_closes_at": (utcnow() - timedelta(hours=1)).isoformat()},
+        headers=_auth(admin),
+    )
+    token, _ = await _register(client, "codepath@example.com", name="CodePath")
+    resp = await client.post(
+        "/api/competitions/join",
+        json={"invite_code": comp["invite_code"]},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200, resp.text
+
+
+async def test_join_stamps_last_used_and_emits_used_event(client):
+    comp, admin = await _make_competition(client, visibility="private")
+    link = await _make_link(client, admin, comp["id"])
+    assert link["last_used_at"] is None
+
+    token, user_id = await _register(client, "stamped@example.com", name="Stamped")
+    await client.post(f"/api/invite-links/{link['token']}/join", headers=_auth(token))
+    rows = (
+        await client.get(
+            f"/api/competitions/{comp['id']}/invite-links", headers=_auth(admin)
+        )
+    ).json()
+    first_stamp = rows[0]["last_used_at"]
+    assert first_stamp is not None
+    assert await _audit_count("invite_link.used") == 1
+
+    # A member re-clicking is not a "use": no new event, stamp unchanged.
+    await client.post(f"/api/invite-links/{link['token']}/join", headers=_auth(token))
+    rows = (
+        await client.get(
+            f"/api/competitions/{comp['id']}/invite-links", headers=_auth(admin)
+        )
+    ).json()
+    assert rows[0]["last_used_at"] == first_stamp
+    assert await _audit_count("invite_link.used") == 1

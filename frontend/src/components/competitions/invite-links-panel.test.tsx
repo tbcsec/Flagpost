@@ -38,6 +38,7 @@ function makeLink(overrides: Partial<InviteLink> = {}): InviteLink {
     expires_at: null,
     max_uses: null,
     use_count: 3,
+    last_used_at: null,
     revoked_at: null,
     created_at: "2026-10-13T09:00:00Z",
     active: true,
@@ -98,6 +99,8 @@ describe("InviteLinksPanel", () => {
 
     expect(screen.getByText("sponsor email")).toBeInTheDocument();
     expect(screen.getByText("3 / 10")).toBeInTheDocument();
+    // "Never" twice: the no-expiry column and the never-used column.
+    expect(screen.getAllByText("Never")).toHaveLength(2);
     expect(screen.getByText("Active")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Copy link" }));

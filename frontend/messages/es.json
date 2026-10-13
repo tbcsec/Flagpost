@@ -164,7 +164,8 @@
       "automations": "Automatizaciones",
       "siteSettings": "Ajustes del sitio",
       "pages": "Pages",
-      "marketplace": "Marketplace"
+      "marketplace": "Marketplace",
+      "skills": "Skills"
     },
     "notifications": {
       "title": "Notificaciones",
@@ -2942,6 +2943,29 @@
       "saving": "Saving…",
       "settingsSaved": "Settings saved",
       "couldntSave": "Couldn't save"
+    },
+    "skills": {
+      "title": "Admin — Skills",
+      "subtitle": "Global — the skills matrix across every competitor and competition",
+      "noAccessTitle": "No access",
+      "noAccessDescription": "You need the view-global-analytics permission to see the skills matrix.",
+      "emptyTitle": "No skill data yet",
+      "emptyDescription": "Once competitors solve categorised challenges, their skills appear here — accumulated across every competition.",
+      "cardTitle": "{count, plural, one {# competitor} other {# competitors}}",
+      "colUser": "Competitor",
+      "colTotal": "Total",
+      "range": "{from}–{to} of {total}",
+      "prev": "Previous",
+      "next": "Next",
+      "coverage": "{solved}/{available}",
+      "cellTitle": "{pct}th percentile in this skill",
+      "totalSolves": "{count, plural, one {# solve} other {# solves}}",
+      "footerLabel": "Everyone",
+      "footerCell": "{solvers}× · avg {mean}",
+      "legend": "Each cell: points earned (decay-priced at solve time) over solved/available challenges in that player's competitions. Shading = percentile within the column — the cross-competition comparator, since raw points don't normalize across events.",
+      "export": "Export CSV",
+      "exporting": "Exporting…",
+      "exportError": "Couldn't export the matrix"
     }
   },
   "registration": {

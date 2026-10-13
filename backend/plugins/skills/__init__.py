@@ -12,9 +12,10 @@ from __future__ import annotations
 
 
 def setup(app, event_bus, db_factory) -> None:
-    from routers.skills import me_router
+    from routers.skills import admin_router, me_router
 
     app.include_router(me_router)
+    app.include_router(admin_router)
 
     # A new solve or category change moves the web, so drop the cross-competition
     # cache on those events (foreground, like the scoring plugin's board
@@ -30,5 +31,10 @@ def setup(app, event_bus, db_factory) -> None:
         "challenge.updated",
         "category.created",
         "category.deleted",
+        # The enriched matrix (#435) also derives *opportunity*: `available`
+        # counts published challenges across a user's member competitions, so a
+        # publish or a new membership moves cells too.
+        "challenge.published",
+        "competition.member_joined",
     ):
         event_bus.subscribe(event_type, _invalidate, owner="skills")

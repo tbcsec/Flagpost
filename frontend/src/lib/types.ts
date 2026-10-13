@@ -1984,3 +1984,21 @@ export interface InviteLinkInput {
   expires_at?: string | null;
   max_uses?: number | null;
 }
+
+/** What the public landing gets back for a valid token — no token echo, no
+ * counters. `actionable`: join = still admits people; view = board available. */
+export interface InviteLinkResolved {
+  capability: "join" | "view";
+  competition_id: string;
+  competition_name: string;
+  competition_status: "not_started" | "running" | "ended";
+  participation_mode: "team" | "individual";
+  actionable: boolean;
+  requires_login: boolean;
+}
+
+/** Body for completing a join through a link (mirrors the invite-code path). */
+export interface InviteLinkJoinInput {
+  accept_rules?: boolean;
+  field_values?: Record<string, unknown> | null;
+}

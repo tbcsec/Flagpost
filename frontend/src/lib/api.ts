@@ -33,6 +33,8 @@ import type {
   InstanceSettingsUpdate,
   InviteLink,
   InviteLinkInput,
+  InviteLinkJoinInput,
+  InviteLinkResolved,
   InstanceConnectionResult,
   ChallengeDeployment,
   ChallengeDeploymentUpdate,
@@ -762,6 +764,20 @@ export const inviteLinksApi = {
       `/api/competitions/${competitionId}/invite-links/${linkId}/revoke`,
       { method: "POST" },
     ),
+  // The public landing surface (#427 Phase 3). resolve is anonymous by design —
+  // `auth:false` also keeps a stale token from triggering the 401→refresh→
+  // clearSession dance on a page a logged-out visitor opens from a link.
+  resolve: (token: string) =>
+    apiFetch<InviteLinkResolved>(
+      `/api/invite-links/${encodeURIComponent(token)}`,
+      {},
+      { auth: false },
+    ),
+  join: (token: string, input: InviteLinkJoinInput = {}) =>
+    apiFetch<Competition>(`/api/invite-links/${encodeURIComponent(token)}/join`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
 };
 
 export const challengesApi = {

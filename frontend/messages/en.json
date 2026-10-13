@@ -2124,7 +2124,26 @@
     "createError": "Couldn't create the link",
     "createdTitle": "Link created",
     "createdDescription": "Share this URL. You can copy it again later from the list.",
-    "done": "Done"
+    "done": "Done",
+    "landing": {
+      "invalidTitle": "This link isn't available",
+      "invalidDescription": "It may have expired, been revoked, or never existed.",
+      "joinTitle": "You're invited to {name}",
+      "viewDescription": "A read-only live view of this competition.",
+      "status": {
+        "not_started": "This competition hasn't started yet — join now and be ready at kickoff.",
+        "running": "This competition is live.",
+        "ended": "This competition has ended."
+      },
+      "joinEndedHint": "This competition has ended, so the link can no longer be used to join.",
+      "join": "Join competition",
+      "joining": "Joining…",
+      "signIn": "Sign in to join",
+      "register": "Create an account",
+      "viewBoard": "View the scoreboard",
+      "joinedToast": "Welcome to {name}!",
+      "goToProfile": "Go to your profile"
+    }
   },
   "admin": {
     "dashboard": {

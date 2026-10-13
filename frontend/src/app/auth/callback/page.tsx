@@ -17,6 +17,7 @@ import { Lockup } from "@/components/brand/flagpost-mark";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRestoreSession } from "@/lib/hooks/use-users";
 import { useBrandSettings } from "@/lib/hooks/use-site-settings";
+import { safeNextPath } from "@/lib/safe-next";
 
 function CallbackInner() {
   const t = useTranslations("auth.callback");
@@ -32,13 +33,9 @@ function CallbackInner() {
     if (started.current) return;
     started.current = true;
 
-    const next = params.get("next");
-    // Same allowlist the backend applies, for the same reason: a "starts with /
-    // but not //" check misses `/\evil.com`, which browsers normalise into a
-    // protocol-relative URL. The backend validates this too — this is the
+    // Same allowlist the backend applies (see safe-next.ts) — this is the
     // second lock, not the only one.
-    const destination =
-      next && /^\/(?!\/)[A-Za-z0-9\-._~!$&'()*+,;=:@%/?#[\]]*$/.test(next) ? next : "/";
+    const destination = safeNextPath(params.get("next")) ?? "/";
 
     restore
       .mutateAsync()

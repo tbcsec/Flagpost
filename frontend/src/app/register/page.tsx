@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 
 import { LocaleSwitcher } from "@/components/app/locale-switcher";
 import { PoweredByFooter } from "@/components/app/powered-by-footer";
@@ -20,10 +20,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useBrandSettings } from "@/lib/hooks/use-site-settings";
 import { useRegister } from "@/lib/hooks/use-users";
+import { safeNextPath } from "@/lib/safe-next";
 
-export default function RegisterPage() {
+function RegisterForm() {
   const t = useTranslations("auth.register");
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Post-auth return path (#427), validated same-origin-path-only.
+  const next = safeNextPath(searchParams.get("next"));
   const register = useRegister();
   const brand = useBrandSettings();
   const platformName = brand.platform_name;
@@ -38,7 +42,7 @@ export default function RegisterPage() {
     register.mutate(
       // Email is optional — omit it when blank rather than sending "".
       { display_name: displayName, password, email: email.trim() || undefined },
-      { onSuccess: () => router.push("/") },
+      { onSuccess: () => router.push(next ?? "/") },
     );
   }
 
@@ -118,7 +122,10 @@ export default function RegisterPage() {
           )}
           <p className="mt-4 text-sm text-muted-foreground">
             {t("haveAccount")}{" "}
-            <Link href="/login" className="text-primary hover:underline">
+            <Link
+              href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"}
+              className="text-primary hover:underline"
+            >
               {t("signIn")}
             </Link>
           </p>
@@ -127,5 +134,16 @@ export default function RegisterPage() {
       <LocaleSwitcher className="mx-auto" />
       <PoweredByFooter />
     </main>
+  );
+}
+
+export default function RegisterPage() {
+  // useSearchParams needs a Suspense boundary under the App Router. Every route
+  // renders dynamically since i18n (ADR-0029), but the boundary is load-bearing
+  // the moment any route goes static — keep it (CLAUDE.md).
+  return (
+    <Suspense fallback={null}>
+      <RegisterForm />
+    </Suspense>
   );
 }

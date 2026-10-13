@@ -56,6 +56,11 @@ The things that set Flagpost apart — every one of them **built and working tod
 - **🧩 A genuinely deep challenge model.** Static, regex, and multiple-choice flags;
   dynamic (decay) scoring; prerequisite unlock chains; scheduled/waved release;
   tags & difficulty; connection info for live services; and per-competition guess caps.
+- **📦 On-demand challenge instances.** Hand every team (or player) their **own
+  isolated, running copy** of a service — Docker or Kubernetes backends, TTL
+  reaping, raw TCP or per-instance HTTPS subdomains, and a "Test connection"
+  button so operators verify the infrastructure before anyone clicks *Launch*.
+  An optional module that ships inert until configured.
 - **🏆 A scoreboard done right.** Live standings with first-blood, parallel
   **brackets/divisions**, a **freeze** for the final stretch, a public **spectator
   board**, and a **CTFtime feed** so rated events just work.
@@ -119,6 +124,9 @@ The things that set Flagpost apart — every one of them **built and working tod
 **Competitions**
 - Team **or** individual mode, per competition
 - Public / private visibility & self-serve or invite-code join
+- **Shareable invite & view links** — revocable, expiring,
+  use-capped, with a public landing that walks recipients
+  from link → sign-in → joined
 - Schedule, **pause**, archive, and one-click **clone**
 - **Rules / code of conduct** gate with recorded acceptance
 - Archive **retention policy** with automatic purge
@@ -131,6 +139,8 @@ The things that set Flagpost apart — every one of them **built and working tod
 - **Prerequisite unlock chains**, scheduled release
 - Managed **tags & difficulty** vocab
 - **Connection info** (URL / `host:port`) for challenges that run a live service
+- **On-demand instances** per team/player (Docker /
+  Kubernetes provisioners, optional module)
 - Bulk **ctfcli YAML** import/export
 - Manual guess-cap resets for multiple-choice
 
@@ -157,6 +167,8 @@ The things that set Flagpost apart — every one of them **built and working tod
 **Teams & participants**
 - Invite codes, optional **captain approval**, size caps
 - Team profiles; individual-mode roster with standing
+- Cross-competition **skills web** — a per-player profile of
+  the categories they've solved across every event
 
 **Communicate & collaborate**
 - **Support tickets** with a live staff queue, audio cue
@@ -184,9 +196,15 @@ The things that set Flagpost apart — every one of them **built and working tod
 - Data-driven **roles & permissions** editor
 - Personal **API tokens** with platform-wide oversight
 - **Email verification** & registration domain allowlist
-- Site-wide **theming & branding** (custom logo, palettes)
+- Site-wide **theming & branding** — custom logo, built-in
+  palettes, and admin-authored **brand themes** (full token packs)
 - SMTP, registration policy, cross-competition **audit log**
 - Full **export / import** backup (incl. secrets)
+- **Module marketplace** — import content packs & modules from
+  an open, mirrorable registry with a tiered trust model
+- Opt-in **Prometheus `/metrics`** for observability
+- An in-app **release changelog** at `/changelog`, linked from
+  the footer
 
 </td>
 </tr>

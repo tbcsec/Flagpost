@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { SectionHeader } from "@/components/app/section-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -42,11 +43,13 @@ import { toast } from "@/stores/toast";
 // truthful across pages.
 const PAGE_SIZE = 25;
 
-/** Heat background steps from the percentile — the radar's accent at rising
- * alpha, readable in both themes (tokens only, §9). */
+/** Heat background steps from the percentile — the instance's accent
+ * (`--primary`, the colour the admin chose for this theme) at rising alpha, so
+ * the heat map tracks the selected palette rather than a fixed chart hue.
+ * Readable in both light and dark (tokens only, §9). */
 function heatColor(pct: number): string | undefined {
   const alpha = pct >= 90 ? 0.55 : pct >= 75 ? 0.4 : pct >= 50 ? 0.26 : pct >= 25 ? 0.14 : 0;
-  return alpha ? `hsl(var(--chart-1) / ${alpha})` : undefined;
+  return alpha ? `hsl(var(--primary) / ${alpha})` : undefined;
 }
 
 export default function AdminSkillsPage() {
@@ -58,10 +61,23 @@ export default function AdminSkillsPage() {
   const [direction, setDirection] = useState<"asc" | "desc">("desc");
   // Activity window (#440): bounds solves/attempts/hints, never opportunity.
   const [window, setWindow] = useState<SkillWindow>("all");
+  // Display-name search. `search` is the input; `q` is debounced so typing
+  // doesn't fire a request per keystroke (the users-directory pattern). Search
+  // is server-side (`?q=`) over every tracked participant, so it finds someone
+  // on a later page — committing a search resets to the first page.
+  const [search, setSearch] = useState("");
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      setQ(search);
+      setOffset(0);
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [search]);
   // Drill-down target — a row click opens the per-user dialog.
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const matrix = useSkillMatrix(
-    { limit: PAGE_SIZE, offset, sort, direction, window },
+    { limit: PAGE_SIZE, offset, sort, direction, window, q },
     canView,
   );
 
@@ -85,7 +101,9 @@ export default function AdminSkillsPage() {
         <EmptyState title={t("noAccessTitle")} description={t("noAccessDescription")} />
       ) : matrix.isLoading || !matrix.data ? (
         <Skeleton className="h-64 w-full" />
-      ) : matrix.data.users.length === 0 ? (
+      ) : matrix.data.users.length === 0 && !q ? (
+        // Truly no data — distinct from a search that matched nobody (handled
+        // inside the card so the search box stays usable).
         <EmptyState title={t("emptyTitle")} description={t("emptyDescription")} />
       ) : (
         <MatrixCard
@@ -100,6 +118,8 @@ export default function AdminSkillsPage() {
             setWindow(w);
             setOffset(0);
           }}
+          search={search}
+          onSearch={setSearch}
           onSelectUser={setSelectedUser}
         />
       )}
@@ -249,6 +269,8 @@ function MatrixCard({
   onSort,
   window,
   onWindow,
+  search,
+  onSearch,
   onSelectUser,
 }: {
   data: SkillMatrix;
@@ -259,6 +281,8 @@ function MatrixCard({
   onSort: (column: string) => void;
   window: SkillWindow;
   onWindow: (w: SkillWindow) => void;
+  search: string;
+  onSearch: (value: string) => void;
   onSelectUser: (userId: string) => void;
 }) {
   const t = useTranslations("admin.skills");
@@ -277,7 +301,15 @@ function MatrixCard({
     <Card>
       <CardHeader className="flex-row items-start justify-between space-y-0">
         <CardTitle>{t("cardTitle", { count: data.total_users })}</CardTitle>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            type="search"
+            aria-label={t("searchLabel")}
+            placeholder={t("searchPlaceholder")}
+            value={search}
+            onChange={(e) => onSearch(e.target.value)}
+            className="w-48"
+          />
           <Select
             aria-label={t("windowLabel")}
             value={window}
@@ -301,6 +333,13 @@ function MatrixCard({
         </div>
       </CardHeader>
       <CardContent className="grid gap-4">
+        {data.users.length === 0 ? (
+          // A search that matched nobody — the box above stays usable to retype.
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            {t("noMatches", { search })}
+          </p>
+        ) : (
+          <>
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -424,6 +463,8 @@ function MatrixCard({
             </Button>
           </div>
         </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );

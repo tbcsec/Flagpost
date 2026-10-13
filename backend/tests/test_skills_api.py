@@ -320,3 +320,30 @@ async def test_window_param_is_allowlisted(client):
     # The allowlisted values pass straight through.
     ok = await client.get("/api/admin/skills?window=90", headers=_auth(admin))
     assert ok.status_code == 200
+
+
+async def test_admin_matrix_search_filters_by_display_name(client):
+    admin = await admin_token(client)
+    comp = await _competition(client, admin)
+    cat = await _category(client, admin, comp, "Web")
+    chal = await _challenge(client, admin, comp, flag="flag{a}", category_id=cat)
+    for name in ("alice", "alpha", "bob"):
+        tok, _ = await _register(client, name)
+        await _join(client, tok, comp)
+        await _solve(client, tok, comp, chal, "flag{a}")
+
+    # Substring, case-insensitive, over every tracked user — "al" matches
+    # alice + alpha (and searching finds them regardless of which page they'd
+    # otherwise land on).
+    res = (
+        await client.get("/api/admin/skills?q=AL", headers=_auth(admin))
+    ).json()
+    assert res["total_users"] == 2
+    assert {u["display_name"] for u in res["users"]} == {"alice", "alpha"}
+    # A specific name narrows to one.
+    one = (await client.get("/api/admin/skills?q=bob", headers=_auth(admin))).json()
+    assert [u["display_name"] for u in one["users"]] == ["bob"]
+    # No match → empty page, but the population footer stays whole (community ref).
+    none = (await client.get("/api/admin/skills?q=zzz", headers=_auth(admin))).json()
+    assert none["total_users"] == 0 and none["users"] == []
+    assert none["population"]["web"]["solvers"] == 3

@@ -2204,7 +2204,10 @@
       "drillColPoints": "Points",
       "drillColAttempts": "Attempts",
       "drillColHints": "Hints",
-      "drillColWhen": "Solved"
+      "drillColWhen": "Solved",
+      "searchLabel": "Search participants",
+      "searchPlaceholder": "Search participants…",
+      "noMatches": "No participants match “{search}”."
     },
     "dashboard": {
       "title": "Admin — Dashboard",

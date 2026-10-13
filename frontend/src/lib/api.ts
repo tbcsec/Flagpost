@@ -1507,10 +1507,18 @@ export const analyticsApi = {
 // nested under a competition) because a user's web spans every event.
 export const skillsApi = {
   mine: () => apiFetch<UserSkills>("/api/me/skills"),
-  matrix: ({ limit, offset, sort = "total", direction = "desc", window = "all" }: SkillMatrixQuery) =>
+  matrix: ({
+    limit,
+    offset,
+    sort = "total",
+    direction = "desc",
+    window = "all",
+    q = "",
+  }: SkillMatrixQuery) =>
     apiFetch<SkillMatrix>(
       `/api/admin/skills?limit=${limit}&offset=${offset}` +
-        `&sort=${encodeURIComponent(sort)}&direction=${direction}&window=${window}`,
+        `&sort=${encodeURIComponent(sort)}&direction=${direction}` +
+        `&window=${window}&q=${encodeURIComponent(q)}`,
     ),
   userDetail: (userId: string, window: SkillWindow = "all") =>
     apiFetch<AdminUserSkills>(

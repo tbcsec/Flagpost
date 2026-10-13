@@ -2018,6 +2018,10 @@ export interface SkillCell {
   solved: number;
   available: number;
   pct: number;
+  /** v2 (#440): counts, not ratios — derive per-solve client-side. */
+  attempts: number;
+  hints: number;
+  first_bloods: number;
 }
 
 export interface SkillPopulation {
@@ -2042,9 +2046,42 @@ export interface SkillMatrix {
   offset: number;
 }
 
+export type SkillWindow = "all" | "365" | "90" | "30";
+
 export interface SkillMatrixQuery {
   limit: number;
   offset: number;
   sort?: string; // "total" or a skill key
   direction?: "asc" | "desc";
+  window?: SkillWindow;
+}
+
+/** The admin drill-down (#440). */
+export interface AdminUserSkillRow {
+  skill: string;
+  weighted: number;
+  solved: number;
+  attempts: number;
+  hints: number;
+  first_bloods: number;
+}
+
+export interface AdminUserSolve {
+  challenge_title: string;
+  competition_name: string;
+  skill: string;
+  points_awarded: number;
+  attempts: number;
+  hints: number;
+  first_blood: boolean;
+  solved_at: string;
+}
+
+export interface AdminUserSkills {
+  user_id: string;
+  display_name: string;
+  skills: AdminUserSkillRow[];
+  solves: AdminUserSolve[];
+  total: number;
+  total_weighted: number;
 }

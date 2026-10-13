@@ -16,9 +16,22 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SkillsRadar } from "@/components/skills/skills-radar";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Select } from "@/components/ui/select";
 import { useAccess } from "@/lib/hooks/use-permissions";
-import { useExportSkillMatrix, useSkillMatrix } from "@/lib/hooks/use-skills";
-import type { SkillCell, SkillMatrix } from "@/lib/types";
+import {
+  useAdminUserSkills,
+  useExportSkillMatrix,
+  useSkillMatrix,
+} from "@/lib/hooks/use-skills";
+import type { SkillCell, SkillMatrix, SkillWindow } from "@/lib/types";
 import { toast } from "@/stores/toast";
 
 // Admin → Skills. The cross-competition users×skills matrix (#364/#435,
@@ -43,7 +56,14 @@ export default function AdminSkillsPage() {
   const [offset, setOffset] = useState(0);
   const [sort, setSort] = useState<string>("total");
   const [direction, setDirection] = useState<"asc" | "desc">("desc");
-  const matrix = useSkillMatrix({ limit: PAGE_SIZE, offset, sort, direction }, canView);
+  // Activity window (#440): bounds solves/attempts/hints, never opportunity.
+  const [window, setWindow] = useState<SkillWindow>("all");
+  // Drill-down target — a row click opens the per-user dialog.
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const matrix = useSkillMatrix(
+    { limit: PAGE_SIZE, offset, sort, direction, window },
+    canView,
+  );
 
   function onSort(column: string) {
     if (sort === column) {
@@ -75,8 +95,19 @@ export default function AdminSkillsPage() {
           sort={sort}
           direction={direction}
           onSort={onSort}
+          window={window}
+          onWindow={(w) => {
+            setWindow(w);
+            setOffset(0);
+          }}
+          onSelectUser={setSelectedUser}
         />
       )}
+      <DrilldownDialog
+        userId={selectedUser}
+        window={window}
+        onOpenChange={() => setSelectedUser(null)}
+      />
     </>
   );
 }
@@ -92,10 +123,122 @@ function CellValue({ cell }: { cell: SkillCell | undefined }) {
       <span className="font-mono tabular-nums">{cell.weighted}</span>
       <span className="text-[0.7rem] text-muted-foreground tabular-nums">
         {t("coverage", { solved: cell.solved, available: cell.available })}
+        {cell.first_bloods > 0 && ` · ${t("fbSuffix", { count: cell.first_bloods })}`}
       </span>
     </div>
   );
 }
+
+/** The per-user drill-down (#440): the matrix row opened up — radar, efficiency
+ * stats, and the underlying solves with context. Fetched on open. */
+function DrilldownDialog({
+  userId,
+  window,
+  onOpenChange,
+}: {
+  userId: string | null;
+  window: SkillWindow;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const t = useTranslations("admin.skills");
+  const detail = useAdminUserSkills(userId, window, Boolean(userId));
+  const d = detail.data;
+  const radar = (d?.skills ?? []).map((s) => ({ skill: s.skill, score: s.weighted }));
+  return (
+    <Dialog open={Boolean(userId)} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{d ? d.display_name : t("drilldownLoading")}</DialogTitle>
+          <DialogDescription>{t(`window.${window}`)}</DialogDescription>
+        </DialogHeader>
+        {detail.isLoading || !d ? (
+          <Skeleton className="h-48 w-full" />
+        ) : (
+          <div className="grid gap-6">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <DrillStat value={d.total_weighted} label={t("colTotal")} />
+              <DrillStat value={d.total} label={t("drillSolves")} />
+              <DrillStat
+                value={d.skills.reduce((n, row) => n + row.first_bloods, 0)}
+                label={t("drillFirstBloods")}
+              />
+              <DrillStat
+                value={
+                  d.total > 0
+                    ? (
+                        d.skills.reduce((n, row) => n + row.attempts, 0) / d.total
+                      ).toFixed(1)
+                    : "–"
+                }
+                label={t("drillAttemptsPerSolve")}
+              />
+            </div>
+            {radar.length >= 3 && <SkillsRadar skills={radar} />}
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("drillColChallenge")}</TableHead>
+                  <TableHead>{t("drillColCompetition")}</TableHead>
+                  <TableHead>{t("drillColSkill")}</TableHead>
+                  <TableHead className="text-right">{t("drillColPoints")}</TableHead>
+                  <TableHead className="text-right">{t("drillColAttempts")}</TableHead>
+                  <TableHead className="text-right">{t("drillColHints")}</TableHead>
+                  <TableHead className="text-right">{t("drillColWhen")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {d.solves.map((solve, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-medium">
+                      {solve.challenge_title}
+                      {solve.first_blood && (
+                        <span
+                          className="ml-1.5 text-[0.65rem] font-semibold text-primary"
+                          title={t("fbSuffix", { count: 1 })}
+                        >
+                          {t("fbMark")}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {solve.competition_name}
+                    </TableCell>
+                    <TableCell className="capitalize text-muted-foreground">
+                      {solve.skill}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">
+                      {solve.points_awarded}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {solve.attempts}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {solve.hints}
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      {new Date(solve.solved_at).toLocaleDateString()}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DrillStat({ value, label }: { value: string | number; label: string }) {
+  return (
+    <div className="rounded-lg border border-border p-3">
+      <div className="text-base font-semibold tabular-nums">{value}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+    </div>
+  );
+}
+
+const WINDOW_OPTIONS: SkillWindow[] = ["all", "365", "90", "30"];
 
 function MatrixCard({
   data,
@@ -104,6 +247,9 @@ function MatrixCard({
   sort,
   direction,
   onSort,
+  window,
+  onWindow,
+  onSelectUser,
 }: {
   data: SkillMatrix;
   offset: number;
@@ -111,6 +257,9 @@ function MatrixCard({
   sort: string;
   direction: "asc" | "desc";
   onSort: (column: string) => void;
+  window: SkillWindow;
+  onWindow: (w: SkillWindow) => void;
+  onSelectUser: (userId: string) => void;
 }) {
   const t = useTranslations("admin.skills");
   const exportCsv = useExportSkillMatrix();
@@ -119,7 +268,7 @@ function MatrixCard({
   const arrow = direction === "desc" ? "↓" : "↑";
 
   function onExport() {
-    exportCsv.mutate(undefined, {
+    exportCsv.mutate(window, {
       onError: () => toast(t("exportError"), { variant: "destructive" }),
     });
   }
@@ -128,6 +277,19 @@ function MatrixCard({
     <Card>
       <CardHeader className="flex-row items-start justify-between space-y-0">
         <CardTitle>{t("cardTitle", { count: data.total_users })}</CardTitle>
+        <div className="flex items-center gap-2">
+          <Select
+            aria-label={t("windowLabel")}
+            value={window}
+            onChange={(e) => onWindow(e.target.value as SkillWindow)}
+            className="w-40"
+          >
+            {WINDOW_OPTIONS.map((w) => (
+              <option key={w} value={w}>
+                {t(`window.${w}`)}
+              </option>
+            ))}
+          </Select>
         <Button
           variant="outline"
           size="sm"
@@ -136,6 +298,7 @@ function MatrixCard({
         >
           {exportCsv.isPending ? t("exporting") : t("export")}
         </Button>
+        </div>
       </CardHeader>
       <CardContent className="grid gap-4">
         <div className="overflow-x-auto">
@@ -169,7 +332,11 @@ function MatrixCard({
             </TableHeader>
             <TableBody>
               {data.users.map((u) => (
-                <TableRow key={u.user_id}>
+                <TableRow
+                  key={u.user_id}
+                  className="cursor-pointer"
+                  onClick={() => onSelectUser(u.user_id)}
+                >
                   <TableCell className="font-medium">{u.display_name}</TableCell>
                   {data.skills.map((skill) => {
                     const cell = u.scores[skill];
@@ -180,7 +347,16 @@ function MatrixCard({
                         style={
                           cell ? { backgroundColor: heatColor(cell.pct) } : undefined
                         }
-                        title={cell ? t("cellTitle", { pct: cell.pct }) : undefined}
+                        title={
+                          cell
+                            ? t("cellDetail", {
+                                pct: cell.pct,
+                                attempts: cell.attempts,
+                                hints: cell.hints,
+                                fb: cell.first_bloods,
+                              })
+                            : undefined
+                        }
                       >
                         <CellValue cell={cell} />
                       </TableCell>

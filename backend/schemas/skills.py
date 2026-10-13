@@ -5,6 +5,8 @@ weight), keyed by normalized category name. The axis labels are explicit so the
 frontend renders the same set the backend computed rather than inferring it.
 """
 
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -33,6 +35,11 @@ class SkillCell(BaseModel):
     solved: int
     available: int
     pct: int
+    # v2 (#440): efficiency + elite signals. Counts, not ratios — the frontend
+    # derives attempts/hints *per solve* so the payload stays integers.
+    attempts: int
+    hints: int
+    first_bloods: int
 
 
 class SkillPopulation(BaseModel):
@@ -64,3 +71,39 @@ class SkillMatrixOut(BaseModel):
     total_users: int
     limit: int
     offset: int
+
+
+class AdminUserSkillRow(BaseModel):
+    """One skill in the admin drill-down (#440) — the matrix cell's signals
+    rolled up per category for one user, attempts including never-solved
+    struggle."""
+
+    skill: str
+    weighted: int
+    solved: int
+    attempts: int
+    hints: int
+    first_bloods: int
+
+
+class AdminUserSolve(BaseModel):
+    challenge_title: str
+    competition_name: str
+    skill: str
+    points_awarded: int
+    attempts: int
+    hints: int
+    first_blood: bool
+    solved_at: datetime
+
+
+class AdminUserSkillsOut(BaseModel):
+    """The admin drill-down (``GET /api/admin/skills/users/{user_id}``):
+    per-skill stats plus the recent solve rows (capped at 200, newest first)."""
+
+    user_id: str
+    display_name: str
+    skills: list[AdminUserSkillRow]
+    solves: list[AdminUserSolve]
+    total: int
+    total_weighted: int

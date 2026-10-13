@@ -23,13 +23,17 @@ category is excluded by the inner join to ``categories``.
 from __future__ import annotations
 
 import time
+from datetime import timedelta
 from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
+from db import ensure_aware_utc, utcnow
 from models.challenge import Category, Challenge
+from models.competition import Competition
+from models.hint import HintReveal
 from models.role import RoleAssignment
 from models.submission import Submission
 from models.user import User
@@ -114,7 +118,61 @@ def _percentile(values: list[int], v: int) -> int:
     return round(100 * below / (n - 1))
 
 
-async def compute_skill_matrix(db: AsyncSession) -> dict[str, Any]:
+# Allowlisted activity windows (#440): a bounded set so the cache keyspace stays
+# bounded ("matrix:90", never "matrix:<arbitrary date>"). `None` = all time.
+WINDOWS: dict[str, int | None] = {"all": None, "365": 365, "90": 90, "30": 30}
+
+
+def _window_cutoff(window: str):
+    """The inclusive lower bound for a window key, or None for all time. Callers
+    validate the key against ``WINDOWS`` (the router 422s unknown values)."""
+    days = WINDOWS[window]
+    return None if days is None else utcnow() - timedelta(days=days)
+
+
+async def _first_blood_counts(
+    db: AsyncSession, cutoff
+) -> tuple[dict[tuple[str, str], int], dict[str, str]]:
+    """First bloods per (user, skill), plus the winner per challenge.
+
+    First blood is a **historical fact** derived over all time — the earliest
+    awarded submission per challenge (ties: created_at, then id, so SQLite and
+    Postgres agree) — never recomputed inside a window, or the second solver
+    would be crowned once the true first scrolls out. The window only decides
+    which *earned* first bloods are counted (winning solve inside the window).
+    """
+    rows = (
+        await db.execute(
+            select(
+                Submission.challenge_id,
+                Submission.user_id,
+                Submission.created_at,
+                Submission.id,
+                Category.name,
+            )
+            .join(Challenge, Challenge.id == Submission.challenge_id)
+            .join(Category, Category.id == Challenge.category_id)
+            .where(*_AWARDED)
+        )
+    ).all()
+    winner: dict[str, tuple] = {}
+    for challenge_id, user_id, created_at, sub_id, name in rows:
+        key = (created_at, sub_id)
+        held = winner.get(challenge_id)
+        if held is None or key < (held[0], held[1]):
+            winner[challenge_id] = (created_at, sub_id, user_id, normalize_skill(name))
+    counts: dict[tuple[str, str], int] = {}
+    winners_by_challenge: dict[str, str] = {}
+    for challenge_id, (created_at, _sub_id, user_id, skill) in winner.items():
+        winners_by_challenge[challenge_id] = user_id
+        if cutoff is not None and created_at is not None:
+            if ensure_aware_utc(created_at) < cutoff:
+                continue
+        counts[(user_id, skill)] = counts.get((user_id, skill), 0) + 1
+    return counts, winners_by_challenge
+
+
+async def compute_skill_matrix(db: AsyncSession, window: str = "all") -> dict[str, Any]:
     """Every user × skill, enriched (#435): per cell ``{weighted, solved,
     available, pct}`` —
 
@@ -133,7 +191,18 @@ async def compute_skill_matrix(db: AsyncSession) -> dict[str, Any]:
     Plus a ``population`` footer per skill (solver count + mean weighted among
     solvers). Computed whole so one cache entry serves every page; the router
     sorts + slices per request. Default order: total weighted desc, then name.
+
+    v2 (#440): cells also carry ``attempts`` (every non-duplicate graded
+    submission in the category — struggle on never-solved challenges included,
+    that's signal), ``hints`` (reveals taken), and ``first_bloods`` (earned
+    inside the window; the fact itself is derived over all time). ``window``
+    bounds the *activity* (solves/attempts/hints); opportunity (``available``)
+    is always current.
     """
+    cutoff = _window_cutoff(window)
+    awarded_where = list(_AWARDED)
+    if cutoff is not None:
+        awarded_where.append(Submission.created_at >= cutoff)
     rows = (
         await db.execute(
             select(
@@ -146,10 +215,48 @@ async def compute_skill_matrix(db: AsyncSession) -> dict[str, Any]:
             .join(Challenge, Challenge.id == Submission.challenge_id)
             .join(Category, Category.id == Challenge.category_id)
             .join(User, User.id == Submission.user_id)
-            .where(*_AWARDED)
+            .where(*awarded_where)
             .group_by(Submission.user_id, User.display_name, Category.name)
         )
     ).all()
+
+    # Every graded attempt (right or wrong, never duplicates) per user×skill.
+    attempts_where = [Submission.is_duplicate.is_(False)]
+    if cutoff is not None:
+        attempts_where.append(Submission.created_at >= cutoff)
+    attempts_rows = (
+        await db.execute(
+            select(Submission.user_id, Category.name, func.count(Submission.id))
+            .join(Challenge, Challenge.id == Submission.challenge_id)
+            .join(Category, Category.id == Challenge.category_id)
+            .where(*attempts_where)
+            .group_by(Submission.user_id, Category.name)
+        )
+    ).all()
+    attempts: dict[tuple[str, str], int] = {}
+    for user_id, name, count in attempts_rows:
+        key = (user_id, normalize_skill(name))
+        attempts[key] = attempts.get(key, 0) + int(count or 0)
+
+    # Hint reveals per user×skill.
+    hints_where = []
+    if cutoff is not None:
+        hints_where.append(HintReveal.created_at >= cutoff)
+    hints_rows = (
+        await db.execute(
+            select(HintReveal.user_id, Category.name, func.count(HintReveal.id))
+            .join(Challenge, Challenge.id == HintReveal.challenge_id)
+            .join(Category, Category.id == Challenge.category_id)
+            .where(*hints_where)
+            .group_by(HintReveal.user_id, Category.name)
+        )
+    ).all()
+    hints: dict[tuple[str, str], int] = {}
+    for user_id, name, count in hints_rows:
+        key = (user_id, normalize_skill(name))
+        hints[key] = hints.get(key, 0) + int(count or 0)
+
+    first_bloods, _winners = await _first_blood_counts(db, cutoff)
 
     # Opportunity: published challenges per (competition, skill) — folded in
     # Python like everything else (ADR-0006 parity).
@@ -190,12 +297,30 @@ async def compute_skill_matrix(db: AsyncSession) -> dict[str, Any]:
             {"user_id": user_id, "display_name": display_name, "scores": {}},
         )
         cell = row["scores"].setdefault(
-            key, {"weighted": 0, "solved": 0, "available": 0, "pct": 0}
+            key,
+            {
+                "weighted": 0,
+                "solved": 0,
+                "available": 0,
+                "pct": 0,
+                "attempts": 0,
+                "hints": 0,
+                "first_bloods": 0,
+            },
         )
         cell["solved"] += int(count or 0) * solve_weight()
         cell["weighted"] += int(weighted or 0)
 
     skills = sorted(axis)
+
+    # Efficiency + first-blood signals attach to existing cells only — a cell
+    # exists where there's a solve, so attempts on never-solved *categories*
+    # surface in the drill-down, not the matrix (cell-existence rule, #435).
+    for user_id, row in users.items():
+        for skill, cell in row["scores"].items():
+            cell["attempts"] = attempts.get((user_id, skill), 0)
+            cell["hints"] = hints.get((user_id, skill), 0)
+            cell["first_bloods"] = first_bloods.get((user_id, skill), 0)
 
     # Fill availability per user cell (their member competitions only), clamped
     # so an unpublished-after-solve challenge can't read as "3/0".
@@ -238,6 +363,123 @@ async def compute_skill_matrix(db: AsyncSession) -> dict[str, Any]:
     return {"skills": skills, "users": user_list, "population": population}
 
 
+async def compute_user_skill_detail(
+    db: AsyncSession, user_id: str, window: str = "all"
+) -> dict[str, Any] | None:
+    """One user's admin drill-down (#440): per-skill stats (the matrix cell plus
+    efficiency) and their recent solve rows with full context. None for an
+    unknown user (the router 404s). Same windowing rules as the matrix."""
+    user = await db.get(User, user_id)
+    if user is None:
+        return None
+    cutoff = _window_cutoff(window)
+
+    awarded_where = [Submission.user_id == user_id, *_AWARDED]
+    if cutoff is not None:
+        awarded_where.append(Submission.created_at >= cutoff)
+    solve_rows = (
+        await db.execute(
+            select(
+                Submission.challenge_id,
+                Challenge.title,
+                Competition.name,
+                Category.name,
+                Submission.points_awarded,
+                Submission.created_at,
+            )
+            .join(Challenge, Challenge.id == Submission.challenge_id)
+            .join(Category, Category.id == Challenge.category_id)
+            .join(Competition, Competition.id == Submission.competition_id)
+            .where(*awarded_where)
+            .order_by(Submission.created_at.desc())
+        )
+    ).all()
+
+    # Per-challenge attempts + hints for this user, window-bounded like solves.
+    attempts_where = [Submission.user_id == user_id, Submission.is_duplicate.is_(False)]
+    if cutoff is not None:
+        attempts_where.append(Submission.created_at >= cutoff)
+    attempts_by_challenge = {
+        row[0]: int(row[1] or 0)
+        for row in (
+            await db.execute(
+                select(Submission.challenge_id, func.count(Submission.id))
+                .where(*attempts_where)
+                .group_by(Submission.challenge_id)
+            )
+        ).all()
+    }
+    hints_where = [HintReveal.user_id == user_id]
+    if cutoff is not None:
+        hints_where.append(HintReveal.created_at >= cutoff)
+    hints_by_challenge = {
+        row[0]: int(row[1] or 0)
+        for row in (
+            await db.execute(
+                select(HintReveal.challenge_id, func.count(HintReveal.id))
+                .where(*hints_where)
+                .group_by(HintReveal.challenge_id)
+            )
+        ).all()
+    }
+    _counts, winners = await _first_blood_counts(db, cutoff)
+
+    solves = []
+    per_skill: dict[str, dict[str, int]] = {}
+    for challenge_id, title, competition, category, points, created_at in solve_rows:
+        skill = normalize_skill(category)
+        solves.append(
+            {
+                "challenge_title": title,
+                "competition_name": competition,
+                "skill": skill,
+                "points_awarded": int(points or 0),
+                "attempts": attempts_by_challenge.get(challenge_id, 1),
+                "hints": hints_by_challenge.get(challenge_id, 0),
+                "first_blood": winners.get(challenge_id) == user_id,
+                "solved_at": created_at,
+            }
+        )
+        agg = per_skill.setdefault(
+            skill,
+            {"weighted": 0, "solved": 0, "attempts": 0, "hints": 0, "first_bloods": 0},
+        )
+        agg["weighted"] += int(points or 0)
+        agg["solved"] += 1
+        agg["first_bloods"] += 1 if winners.get(challenge_id) == user_id else 0
+
+    # Category-level attempts/hints (includes struggle on never-solved
+    # challenges, unlike the per-solve rows above).
+    cat_rows = (
+        await db.execute(
+            select(Category.name, Challenge.id)
+            .join(Challenge, Challenge.category_id == Category.id)
+        )
+    ).all()
+    skill_of_challenge = {cid: normalize_skill(name) for name, cid in cat_rows}
+    for challenge_id, n in attempts_by_challenge.items():
+        skill = skill_of_challenge.get(challenge_id)
+        if skill in per_skill:
+            per_skill[skill]["attempts"] += n
+    for challenge_id, n in hints_by_challenge.items():
+        skill = skill_of_challenge.get(challenge_id)
+        if skill in per_skill:
+            per_skill[skill]["hints"] += n
+
+    skills = sorted(
+        ({"skill": k, **v} for k, v in per_skill.items()),
+        key=lambda e: (-e["weighted"], e["skill"]),
+    )
+    return {
+        "user_id": user_id,
+        "display_name": user.display_name,
+        "skills": skills,
+        "solves": solves[:200],
+        "total": sum(a["solved"] for a in per_skill.values()),
+        "total_weighted": sum(a["weighted"] for a in per_skill.values()),
+    }
+
+
 # --- Cached read model (ADR-0039) --------------------------------------------
 #
 # Process-global TTL cache (single process, ADR-0005), mirroring the scoreboard/
@@ -260,8 +502,16 @@ async def cached_user_skills(db: AsyncSession, user_id: str) -> dict[str, Any]:
     return await _cached(f"user:{user_id}", compute_user_skills, db, user_id)
 
 
-async def cached_skill_matrix(db: AsyncSession) -> dict[str, Any]:
-    return await _cached("matrix", compute_skill_matrix, db)
+async def cached_skill_matrix(db: AsyncSession, window: str = "all") -> dict[str, Any]:
+    # Window keys are allowlisted (WINDOWS), so the keyspace stays bounded and
+    # invalidate_skills' wholesale wipe still clears every variant.
+    return await _cached(f"matrix:{window}", compute_skill_matrix, db, window)
+
+
+async def cached_user_skill_detail(
+    db: AsyncSession, user_id: str, window: str = "all"
+) -> dict[str, Any] | None:
+    return await _cached(f"detail:{user_id}:{window}", compute_user_skill_detail, db, user_id, window)
 
 
 async def _cached(key: str, compute, db: AsyncSession, *args: Any) -> dict[str, Any]:
@@ -272,6 +522,8 @@ async def _cached(key: str, compute, db: AsyncSession, *args: Any) -> dict[str, 
         if entry is not None and entry[0] > now:
             return entry[1]
     value = await compute(db, *args)
-    if ttl > 0:
+    # Never cache a miss: the detail read returns None for an unknown user, and
+    # caching probes would let id-guessing grow the keyspace for no benefit.
+    if ttl > 0 and value is not None:
         _cache[key] = (now + ttl, value)
     return value

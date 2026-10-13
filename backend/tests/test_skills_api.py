@@ -137,7 +137,10 @@ async def test_admin_matrix_requires_global_analytics(client):
     # Enriched cell (#435): ada joined (membership = opportunity), one published
     # web challenge, one solve worth its 100 points.
     assert names["ada"]["scores"] == {
-        "web": {"weighted": 100, "solved": 1, "available": 1, "pct": 0}
+        "web": {
+            "weighted": 100, "solved": 1, "available": 1, "pct": 0,
+            "attempts": 1, "hints": 0, "first_bloods": 1,
+        }
     }
     assert names["ada"]["total"] == 1
     assert names["ada"]["total_weighted"] == 100
@@ -271,3 +274,49 @@ async def test_operational_settings_round_trips_skills_enabled(client):
     )
     assert saved.status_code == 200 and saved.json()["skills_enabled"] is False
     assert (await client.get("/api/site-settings")).json()["skills_enabled"] is False
+
+
+async def test_admin_user_drilldown(client):
+    admin = await admin_token(client)
+    comp = await _competition(client, admin)
+    cat = await _category(client, admin, comp, "Web")
+    chal = await _challenge(client, admin, comp, flag="flag{a}", category_id=cat)
+    ada, ada_id = await _register(client, "ada")
+    await _join(client, ada, comp)
+    # A wrong guess before the solve — the drill-down shows the struggle.
+    await _solve(client, ada, comp, chal, "flag{wrong}")
+    await _solve(client, ada, comp, chal, "flag{a}")
+
+    # Same RBAC wall as the matrix.
+    assert (
+        await client.get(f"/api/admin/skills/users/{ada_id}", headers=_auth(ada))
+    ).status_code == 403
+    # Unknown user: undisclosing 404.
+    assert (
+        await client.get("/api/admin/skills/users/nope", headers=_auth(admin))
+    ).status_code == 404
+
+    detail = (
+        await client.get(f"/api/admin/skills/users/{ada_id}", headers=_auth(admin))
+    ).json()
+    assert detail["display_name"] == "ada"
+    assert detail["total"] == 1
+    assert detail["skills"][0]["skill"] == "web"
+    assert detail["skills"][0]["attempts"] == 2
+    assert detail["skills"][0]["first_bloods"] == 1
+    [solve] = detail["solves"]
+    assert solve["first_blood"] is True and solve["attempts"] == 2
+
+
+async def test_window_param_is_allowlisted(client):
+    admin = await admin_token(client)
+    for path in (
+        "/api/admin/skills?window=7",
+        "/api/admin/skills/export?window=yesterday",
+        "/api/admin/skills/users/someone?window=0",
+    ):
+        resp = await client.get(path, headers=_auth(admin))
+        assert resp.status_code == 422, path
+    # The allowlisted values pass straight through.
+    ok = await client.get("/api/admin/skills?window=90", headers=_auth(admin))
+    assert ok.status_code == 200

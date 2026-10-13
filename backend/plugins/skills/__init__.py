@@ -36,5 +36,9 @@ def setup(app, event_bus, db_factory) -> None:
         # publish or a new membership moves cells too.
         "challenge.published",
         "competition.member_joined",
+        # v2 (#440): wrong guesses and hint reveals are cell signals now, so a
+        # graded attempt or a reveal must drop the cache like a solve does.
+        "challenge.attempted",
+        "hint.released",
     ):
         event_bus.subscribe(event_type, _invalidate, owner="skills")

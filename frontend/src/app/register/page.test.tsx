@@ -23,6 +23,8 @@ vi.mock("@/lib/hooks/use-users", () => ({
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
+  // The page reads an optional ?next= return path (#427).
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 function settings(overrides: Partial<{ email_required: boolean }> = {}) {

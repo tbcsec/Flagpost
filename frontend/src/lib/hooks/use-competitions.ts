@@ -46,8 +46,10 @@ export function useActiveCompetition() {
 
 /** Joining grants the competition-scoped Participant role, so we refresh both
  *  the competition list (visibility) and permissions (nav gating), and switch
- *  the active competition to the one just joined. */
-function useOnJoined() {
+ *  the active competition to the one just joined. Exported for the invite-link
+ *  join (#427), which lives in its own domain module (§8) but must land the
+ *  user in exactly the same post-join state. */
+export function useOnJoined() {
   const queryClient = useQueryClient();
   const setActiveCompetition = useAuthStore((s) => s.setActiveCompetition);
   return (joined: Competition) => {

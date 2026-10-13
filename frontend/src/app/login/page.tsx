@@ -25,6 +25,7 @@ import dynamic from "next/dynamic";
 import { usePageNav } from "@/lib/hooks/use-pages";
 import { useBrandSettings } from "@/lib/hooks/use-site-settings";
 import { useAuthProviders, useLogin } from "@/lib/hooks/use-users";
+import { safeNextPath } from "@/lib/safe-next";
 
 // Loaded on demand, deliberately: the read-only TipTap renderer costs ~126 kB
 // of first-load JS, and most installs never configure a notice — every
@@ -65,6 +66,9 @@ function LoginForm() {
   const login = useLogin();
   const { data: providers } = useAuthProviders();
   const searchParams = useSearchParams();
+  // Post-auth return path (#427) — e.g. an invite landing sending the visitor
+  // through sign-in and back. Validated same-origin-path-only (safe-next.ts).
+  const next = safeNextPath(searchParams.get("next"));
   const ssoError = searchParams.get("error");
   const ssoErrorKey: SsoErrorCode | null = ssoError
     ? (SSO_ERROR_CODES as readonly string[]).includes(ssoError)
@@ -85,7 +89,7 @@ function LoginForm() {
     e.preventDefault();
     login.mutate(
       { identifier, password },
-      { onSuccess: () => router.push("/") },
+      { onSuccess: () => router.push(next ?? "/") },
     );
   }
 
@@ -131,7 +135,14 @@ function LoginForm() {
                 // has to happen in the address bar, not XHR.
                 <a
                   key={p.slug}
-                  href={p.login_url}
+                  // Carry the validated return path through the IdP round-trip
+                  // (#427): the backend re-validates return_to and hands it
+                  // back to /auth/callback?next=…
+                  href={
+                    next
+                      ? `${p.login_url}${p.login_url.includes("?") ? "&" : "?"}return_to=${encodeURIComponent(next)}`
+                      : p.login_url
+                  }
                   className="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground transition-colors hover:border-primary/50 hover:bg-accent"
                 >
                   {/* Renders null for an unbranded provider, so those buttons
@@ -191,7 +202,12 @@ function LoginForm() {
           {brand.registration_open && (
             <p className="mt-4 text-sm text-muted-foreground">
               {t("noAccount")}{" "}
-              <Link href="/register" className="text-primary hover:underline">
+              <Link
+                href={
+                  next ? `/register?next=${encodeURIComponent(next)}` : "/register"
+                }
+                className="text-primary hover:underline"
+              >
                 {t("register")}
               </Link>
             </p>

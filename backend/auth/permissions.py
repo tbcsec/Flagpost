@@ -57,6 +57,12 @@ PERMISSIONS: tuple[Permission, ...] = (
     # so report generation can be delegated or withheld independently of general
     # settings. Reaches existing installs via the startup role re-sync.
     Permission("generate_report", "Competition Management", Scope.COMPETITION),
+    # Create/revoke shareable invite & view links for a competition (#427). Its
+    # own competition-scoped grant (like manage_modules / generate_report) so
+    # link sharing can be delegated to a competition's organisers without
+    # handing over general settings. Reaches existing installs via the startup
+    # role re-sync.
+    Permission("manage_invite_links", "Competition Management", Scope.COMPETITION),
     # Challenges
     Permission("challenge_view", "Challenges", Scope.COMPETITION),
     Permission("challenge_create", "Challenges", Scope.COMPETITION),
@@ -204,6 +210,8 @@ JUDGE_PERMISSIONS: list[str] = [
     "manage_modules",
     # Generate a post-event report for their competition (#134, ADR-0030).
     "generate_report",
+    # Share their competition via invite / view links (#427).
+    "manage_invite_links",
     "challenge_view",
     "challenge_create",
     "challenge_edit",

@@ -102,6 +102,8 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "scoreboard.unfrozen": ["competition_id"],
     "competition.member_joined": ["competition_id", "user_id"],
     "competition.rules_accepted": ["competition_id", "user_id"],
+    "invite_link.created": ["competition_id", "invite_link_id", "capability"],
+    "invite_link.revoked": ["competition_id", "invite_link_id", "capability"],
     "registration_field.updated": ["competition_id", "count"],
     "registration_field.value_set": ["competition_id", "subject_id"],
     "competition.archived": ["competition_id"],
@@ -280,6 +282,10 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     "competition.member_joined": "challenge_view",
     # Same visibility tier as member_joined — a join-adjacent membership event.
     "competition.rules_accepted": "challenge_view",
+    # Minting/revoking a share link is an organiser action, gated by the same
+    # grant that creates them (#427).
+    "invite_link.created": "manage_invite_links",
+    "invite_link.revoked": "manage_invite_links",
     # Field-set edits are an organiser action; a subject setting values is
     # join-adjacent like member_joined.
     "registration_field.updated": "edit_competition",

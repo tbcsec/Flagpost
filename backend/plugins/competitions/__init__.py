@@ -81,6 +81,8 @@ def setup(app, event_bus, db_factory) -> None:
     from routers.awards import router as awards_router
     from routers.brackets import router as brackets_router
     from routers.competitions import router
+    from routers.invite_links import org_router as invite_links_org_router
+    from routers.invite_links import public_router as invite_links_public_router
     from routers.participants import router as participants_router
     from routers.registration_fields import router as registration_fields_router
     from routers.rules import router as rules_router
@@ -100,6 +102,10 @@ def setup(app, event_bus, db_factory) -> None:
     # self-service values + the operator CSV export. Team-mode values are
     # collected/edited through the teams module.
     app.include_router(registration_fields_router)
+    # Shareable invite / view links (#427): the organiser management surface and
+    # the public token-addressed landing/join surface.
+    app.include_router(invite_links_org_router)
+    app.include_router(invite_links_public_router)
 
     from utils.competition_status import has_started
 

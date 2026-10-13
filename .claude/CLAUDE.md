@@ -11,7 +11,7 @@ call to make silently.
 ## Read these before you start — don't duplicate them here
 
 - `docs/VISION.md` — what and why.
-- `docs/ARCHITECTURE.md` — how. 15 sections; check the relevant one
+- `docs/ARCHITECTURE.md` — how. 16 sections; check the relevant one
   before designing anything new (event bus, RBAC, tenancy, automation,
   and the module system each have a section — don't reinvent a pattern
   that's already specified).
@@ -32,7 +32,8 @@ Tiers 0–3 are complete and the platform shipped **v1.0.0 on 2026-07-25**, then
 v1.1.0, v1.1.1, v1.2.0, v1.3.0, v1.4.0, v1.5.0, v1.5.1 (the Apache-2.0
 relicense — ADR-0035) and **v1.6.0 (2026-08-31: challenge instancing, brand
 themes, dashboard breadth, observability)**. **The latest tag is `v1.6.0`;
-`main` is now `1.6.0-src`**, accumulating the next (not-yet-opened) milestone
+`main` is now `1.6.0-src`**, accumulating the **v1.7.0** milestone — the module
+SDK + marketplace (ADR-0040, epic #385), largely landed on `main`
 (`SOURCE_BUILD_VERSION` in `backend/config.py`, bumped at tag time; see
 CONTRIBUTING → "Cutting a release").
 
@@ -54,19 +55,20 @@ mechanism that already solves your problem. It names *where* things live; the
 authority on *how* they work is `docs/ARCHITECTURE.md` and the code.
 
 **Backend** is a small kernel (auth/RBAC, the Competition tenancy root, the
-event bus, the module loader) plus **24 modules** in `backend/plugins/`, each a
+event bus, the module loader) plus **26 modules** in `backend/plugins/`, each a
 `plugin.yaml` manifest + a `setup()` that mounts routers and subscribes
-listeners (§11.1). Exactly **six are optional** — per-competition toggleable
-via `competition_modules`: **`automations`**, **`feedback`**, **`analytics`**,
-**`certificates`**, **`reports`**, and **`ai`** (this last one additionally ships *inert*
-behind a site master switch — see the AI bullet below). The other eighteen are
-required-core (always loaded):
-`announcements`, `audit_log`,
-`challenges`, `collab`, `competitions`, `dashboard`, `hints`, `notifications`,
-`pages`, `roles`, `scoring`, `setup`, `site_settings`, `skills`, `sso`, `teams`,
-`tickets`, `users`. (`skills` — the cross-competition skills web, #364/ADR-0039 —
-is required-core *loaded* but gated site-wide by a `site_settings.skills_enabled`
-switch rather than a per-competition toggle, since the web spans every event.)
+listeners (§11.1). **Seven are optional** — per-competition toggleable via
+`competition_modules`: **`automations`**, **`feedback`**, **`analytics`**,
+**`certificates`**, **`reports`**, **`instances`**, and **`ai`** (the last two
+additionally ship *inert* — they mount site-wide but do nothing until an
+operator configures them; see the AI and instancing bullets below). The other
+nineteen are required-core (always loaded): `announcements`, `audit_log`,
+`challenges`, `collab`, `competitions`, `dashboard`, `hints`, `marketplace`,
+`notifications`, `pages`, `roles`, `scoring`, `setup`, `site_settings`,
+`skills`, `sso`, `teams`, `tickets`, `users`. (`skills` — the cross-competition
+skills web, #364/ADR-0039 — is required-core *loaded* but gated site-wide by a
+`site_settings.skills_enabled` switch rather than a per-competition toggle,
+since the web spans every event.)
 
 Subsystem by subsystem, with the non-obvious bits called out:
 
@@ -86,12 +88,12 @@ Subsystem by subsystem, with the non-obvious bits called out:
   reset, email verification (admin-toggleable), self-service email change, a
   registration domain allowlist, and personal **API tokens** (`flp_`-prefixed,
   minting is self-only by route shape).
-- **RBAC** — permissions as data (ADR-0004), 44 of them in
+- **RBAC** — permissions as data (ADR-0004), 51 of them in
   `auth/permissions.py`, each with a category and a `global`/`competition`
   scope. System roles **re-sync from the catalog on every startup**
   (`seed_system_roles`), so a new permission reaches an already-migrated
   Administrator without a migration.
-- **Events** — `utils/event_bus`, 79 event types in `utils/event_catalog.py`.
+- **Events** — `utils/event_bus`, 103 event types in `utils/event_catalog.py`.
   `emit()` awaits foreground handlers (audit + WS broadcasts) and schedules
   `background=True` ones fire-and-forget (ADR-0012) — that's the lane
   webhooks/email use.
@@ -108,12 +110,27 @@ Subsystem by subsystem, with the non-obvious bits called out:
   only while running; manual Start/Stop under `manage_schedule` + schedule
   auto-drive it, ADR-0028), **pause**, archive (with an opt-out retention policy
   that auto-purges), clone, hard delete, rules/CoC gate, brackets, and a
-  per-competition managed vocab for tags/difficulty.
+  per-competition managed vocab for tags/difficulty. **Shareable invite/view
+  links** (#427): revocable, expiring, use-capped tokens alongside the permanent
+  invite code, managed under `manage_invite_links` (Settings → Sharing), landing
+  at `/invite/{token}`. Join links admit through the normal gates and honour the
+  registration window (link path only — widening to lobby/code joins is an open
+  decision); view links are public-competition-only and resolve to no more than
+  the spectator board, fail-closed on every re-check. Links are ephemeral
+  secrets: excluded from backup and clone.
 - **Challenges & scoring** — static / regex / multiple-choice flags; static or
   **dynamic (decay)** scoring; prerequisites; scheduled release; hints; guess
   caps with non-destructive resets; bulk ctfcli-YAML import/export. The
   scoreboard supports **freeze** (a read-path filter plus an event), brackets, a
   public spectator board with insights, and a CTFtime feed.
+- **Challenge instancing** — the optional `instances` module (§16, ADR-0036):
+  per-player isolated challenge copies via a provisioner-*kind* registry
+  (`shared-static`/`docker`/`kubernetes` — a new backend is a new kind, not a
+  fork). Ships *inert* like `ai`. The `ChallengeInstance` row *is* the
+  provisioning job — a background-lane state machine (`requested`→…→
+  `destroyed`); TTL/orphan reaping rides the shared scheduler, no new process.
+  `docs/CHALLENGE_INSTANCES.md`, `docs/THREAT_MODEL.md` (the one subsystem that
+  runs adversary-controlled code).
 - **Automation** — the §5 engine on the background lane, catalog-driven
   (`utils/automation_catalog.py`) so a new action is a backend-only change that
   the visual builder picks up automatically. Webhook egress is hardened per
@@ -133,9 +150,14 @@ Subsystem by subsystem, with the non-obvious bits called out:
   admin configures + enables it, and no other feature may depend on it. Off by
   default; carries chat content (`PRIVACY.md`).
 - **Frontend** — Next.js App Router. One hook module per domain in
-  `src/lib/hooks/` (~32 of them); components never touch `@/lib/api` directly
-  (ESLint-enforced). Auth screens, `/setup`, `/public/*` and the password/email
-  flows live **outside** the `(app)` shell.
+  `src/lib/hooks/` (~45 of them); components never touch `@/lib/api` directly
+  (ESLint-enforced). Auth screens, `/setup`, `/public/*`, `/p/*`,
+  `/invite/*`, `/changelog` and the password/email flows live **outside** the
+  `(app)` shell. Post-auth return paths go through `lib/safe-next.ts`
+  (`/login`+`/register` `?next=`, SSO `return_to`) — same allowlist as the
+  backend's `_safe_return_to`. The `/changelog` page is **bundled static data**
+  (`lib/changelog.ts`, updated when cutting a release — CONTRIBUTING), never a
+  runtime GitHub fetch: deployments can be air-gapped and nothing phones home.
 
 ## Things that will bite you
 
@@ -236,7 +258,7 @@ home — keep it that way.
 
 ## Read the ADR before touching
 
-`docs/adr/` — 34 records, indexed in `docs/adr/README.md`. The ones most likely
+`docs/adr/` — 40 records, indexed in `docs/adr/README.md`. The ones most likely
 to matter:
 
 | Area | ADR |
@@ -259,9 +281,8 @@ to matter:
 | Built-in SSO provider presets (Google/Microsoft) | 0024 |
 | Multi-worker relay & cross-worker presence | 0025, 0026 |
 | Multi-instance / Fargate+ALB deployment flags | 0031 |
-
-If an ADR's decision looks wrong for what you're building, say so and propose a
-new one — don't quietly work around it.
+| Challenge instancing provisioners | 0036 |
+| Module SDK, import & marketplace | 0040 |
 
 **Standing scope notes** (owner decisions): the challenge lifecycle
 (ROADMAP item 17) is deferred and unscheduled, and theming is **site-wide only**
@@ -300,10 +321,11 @@ Explicitly deferred past MVP (`docs/ROADMAP.md`, "Explicitly Deferred"
 section). If a task seems to need one of these, flag it and ask rather
 than quietly building a scoped-down version:
 
-- Plugin marketplace / third-party modules — **now in progress for v1.7.0**
-  (ADR-0040, epic #385, spec in `docs/MODULES.md`): a tiered trust model
-  (content packs → declarative → signed code) over an open registry protocol
-  with code-based import. Build it *per that design*, not ad hoc. The module
+- Plugin marketplace / third-party modules — **largely landed in v1.7.0**
+  (ADR-0040, epic #385, specs in `docs/MODULES.md` + `docs/MODULE_SDK.md`): a
+  tiered trust model (content packs → declarative → signed code) over an open,
+  mirrorable registry protocol with code-based import, plus the authoring SDK
+  (`backend/sdk/`). Extend it *per that design*, not ad hoc. The module
   *mechanism* was always used for required-core features; this opens it to
   registry-distributed modules. **Still off-limits:** sandboxing genuinely
   *untrusted* code (Tier 3, ARCHITECTURE §15) — the tiers are built so nothing

@@ -1130,7 +1130,10 @@
     "skills": {
       "title": "Your skills",
       "description": "The categories you've solved in, built up across every competition you've played.",
-      "summary": "{total, plural, =0 {No solves yet} one {# solve} other {# solves}} across {competitions, plural, one {# competition} other {# competitions}}.",
+      "statTotal": "Total solves",
+      "statCompetitions": "Competitions",
+      "statStrongest": "Most solved",
+      "statWeakest": "Least solved",
       "emptyTitle": "No skills yet",
       "emptyDescription": "Solve challenges in a competition and the categories you tackle will grow your skills web here — across every event you take part in.",
       "loadError": "Couldn't load your skills."

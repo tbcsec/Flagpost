@@ -15,12 +15,49 @@ import { axisColor, radarMax } from "@/lib/skills-radar";
 
 const BAR = axisColor(0); // hsl(var(--chart-1)) — same accent as the web
 
+/** One stat tile, in the public insights-cards idiom (value on top, muted
+ * label) — a bordered div rather than a nested Card since we're already inside
+ * the profile card. */
+function SkillStat({
+  value,
+  label,
+  detail,
+}: {
+  value: string | number;
+  label: string;
+  detail?: number;
+}) {
+  return (
+    <div className="rounded-lg border border-border p-3">
+      <div
+        className="truncate text-base font-semibold capitalize tabular-nums"
+        title={typeof value === "string" ? value : undefined}
+      >
+        {value}
+        {detail !== undefined && (
+          <span className="ml-1.5 font-mono text-xs font-normal text-muted-foreground">
+            {detail}
+          </span>
+        )}
+      </div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+    </div>
+  );
+}
+
 export function MySkillsCard() {
   const t = useTranslations("profile.skills");
   const { data, isLoading, isError } = useMySkills();
 
   const scores = data?.skills ?? [];
   const max = radarMax(scores.map((s) => s.score));
+  // At-a-glance stats (#436), derived client-side from the same payload. Sort a
+  // copy — the API's order drives the radar axes and breakdown rows. "Least
+  // solved" means the weakest *practised* category, and only reads as a fact
+  // once there are two to compare.
+  const ranked = [...scores].sort((a, b) => b.score - a.score);
+  const strongest = ranked[0];
+  const weakest = ranked.length >= 2 ? ranked[ranked.length - 1] : null;
 
   return (
     <Card>
@@ -39,12 +76,24 @@ export function MySkillsCard() {
           <EmptyState title={t("emptyTitle")} description={t("emptyDescription")} />
         ) : (
           <div className="grid gap-6">
-            <p className="text-sm text-muted-foreground">
-              {t("summary", {
-                total: data?.total ?? 0,
-                competitions: data?.competitions_played ?? 0,
-              })}
-            </p>
+            {/* The stats strip (#436) — the summary line, promoted to tiles. */}
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <SkillStat value={data?.total ?? 0} label={t("statTotal")} />
+              <SkillStat
+                value={data?.competitions_played ?? 0}
+                label={t("statCompetitions")}
+              />
+              <SkillStat
+                value={strongest.skill}
+                detail={strongest.score}
+                label={t("statStrongest")}
+              />
+              <SkillStat
+                value={weakest ? weakest.skill : "—"}
+                detail={weakest?.score}
+                label={t("statWeakest")}
+              />
+            </div>
             {/* A radar needs at least a triangle to read as a shape. */}
             {scores.length >= 3 && <SkillsRadar skills={scores} />}
             <ul className="grid gap-2.5">

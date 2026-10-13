@@ -33,6 +33,41 @@ def is_active(link: InviteLink, now=None) -> bool:
     return True
 
 
+def registration_window_open(competition: Competition, now=None) -> bool:
+    """The competition's self-declared registration window (#427 Phase 4).
+
+    ``registration_opens_at`` / ``registration_closes_at`` predate this feature
+    but were never enforced anywhere. They now gate **the invite-link join
+    only**: changing the lobby/public join semantics on released installs is a
+    separate decision (flagged on #427), so a NULL bound stays "no limit" and
+    the permanent invite_code path is untouched.
+    """
+    now = now or utcnow()
+    opens = competition.registration_opens_at
+    closes = competition.registration_closes_at
+    if opens is not None and ensure_aware_utc(opens) > now:
+        return False
+    if closes is not None and ensure_aware_utc(closes) <= now:
+        return False
+    return True
+
+
+def join_blocked_reason(competition: Competition, now=None) -> str | None:
+    """Why a lifecycle-valid ``join`` link can't admit anyone right now — or
+    None when it can. Ordered: an ended competition reads as ended even if its
+    window also closed."""
+    if competition.status == "ended":
+        return "ended"
+    now = now or utcnow()
+    opens = competition.registration_opens_at
+    if opens is not None and ensure_aware_utc(opens) > now:
+        return "registration_not_open"
+    closes = competition.registration_closes_at
+    if closes is not None and ensure_aware_utc(closes) <= now:
+        return "registration_closed"
+    return None
+
+
 def view_available(competition: Competition) -> bool:
     """A ``view`` link may resolve only while the competition is publicly visible
     with its public scoreboard enabled and not archived — i.e. it exposes no more

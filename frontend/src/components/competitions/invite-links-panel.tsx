@@ -45,6 +45,7 @@ import {
   useInviteLinks,
   useRevokeInviteLink,
 } from "@/lib/hooks/use-invite-links";
+import { useRelativeTime } from "@/lib/hooks/use-relative-time";
 import type { InviteLink } from "@/lib/types";
 import { toast } from "@/stores/toast";
 
@@ -77,6 +78,7 @@ export function InviteLinksPanel({
   visibility: "public" | "private";
 }) {
   const t = useTranslations("inviteLinks");
+  const rel = useRelativeTime();
   const links = useInviteLinks(competitionId);
   const revoke = useRevokeInviteLink(competitionId);
   const confirm = useConfirm();
@@ -142,6 +144,7 @@ export function InviteLinksPanel({
                 <TableHead>{t("colCapability")}</TableHead>
                 <TableHead>{t("colLabel")}</TableHead>
                 <TableHead>{t("colUses")}</TableHead>
+                <TableHead>{t("colLastUsed")}</TableHead>
                 <TableHead>{t("colExpires")}</TableHead>
                 <TableHead>{t("colStatus")}</TableHead>
                 <TableHead className="text-right">{t("colActions")}</TableHead>
@@ -164,6 +167,9 @@ export function InviteLinksPanel({
                       {link.max_uses === null
                         ? link.use_count
                         : `${link.use_count} / ${link.max_uses}`}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {link.last_used_at ? rel(link.last_used_at) : t("never")}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {link.expires_at

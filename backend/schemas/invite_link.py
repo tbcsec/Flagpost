@@ -49,6 +49,8 @@ class InviteLinkOut(BaseModel):
     expires_at: datetime | None
     max_uses: int | None
     use_count: int
+    # When the link last admitted someone (new-join semantics, like use_count).
+    last_used_at: datetime | None
     revoked_at: datetime | None
     created_at: datetime
     # Computed (utils.invite_links.is_active): usable right now — not revoked, not
@@ -69,8 +71,14 @@ class InviteLinkResolved(BaseModel):
     competition_name: str
     competition_status: Literal["not_started", "running", "ended"]
     participation_mode: Literal["team", "individual"]
-    # join: can this link still admit someone (false once the competition has
-    # ended). view: whether the public spectator board is currently available.
+    # join: can this link still admit someone. view: whether the public
+    # spectator board is currently available.
     actionable: bool
+    # Why a join link isn't actionable (#427 Phase 4) — lets the landing explain
+    # the block honestly instead of a generic "can't join". None when actionable
+    # (and always None for view links).
+    reason: Literal["ended", "registration_not_open", "registration_closed"] | None = (
+        None
+    )
     # join links require sign-in to complete; view links do not.
     requires_login: bool

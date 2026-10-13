@@ -38,6 +38,9 @@ EVENT_TYPES: tuple[str, ...] = (
     # Shareable invite / view links (#427): an organiser minted or revoked one.
     "invite_link.created",
     "invite_link.revoked",
+    # A join link admitted someone (new joins only — the audit trail of who
+    # arrived via which link, #427 Phase 4).
+    "invite_link.used",
     "team.created",
     "team.member_joined",
     "team.member_left",

@@ -2135,15 +2135,21 @@
         "running": "This competition is live.",
         "ended": "This competition has ended."
       },
-      "joinEndedHint": "This competition has ended, so the link can no longer be used to join.",
       "join": "Join competition",
       "joining": "Joining…",
       "signIn": "Sign in to join",
       "register": "Create an account",
       "viewBoard": "View the scoreboard",
       "joinedToast": "Welcome to {name}!",
-      "goToProfile": "Go to your profile"
-    }
+      "goToProfile": "Go to your profile",
+      "blocked": {
+        "ended": "This competition has ended, so the link can no longer be used to join.",
+        "registration_not_open": "Registration hasn't opened yet — check back closer to the start.",
+        "registration_closed": "Registration has closed for this competition."
+      }
+    },
+    "colLastUsed": "Last used",
+    "never": "Never"
   },
   "admin": {
     "dashboard": {

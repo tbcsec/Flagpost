@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithIntl } from "@/test/intl";
@@ -123,5 +123,43 @@ describe("AdminSkillsPage v2", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
     expect(mockExport.mock.calls[0][0]).toBe("30");
+  });
+});
+
+describe("AdminSkillsPage search", () => {
+  afterEach(() => {
+    mockMatrix.mockReset();
+    mockDetail.mockReset();
+    vi.useRealTimers();
+  });
+
+  it("debounces the search into the query (reset to page 1) and shows a no-match message", () => {
+    vi.useFakeTimers();
+    // Non-empty until a search is set, then empty — so the box renders, then
+    // the search matches nobody.
+    mockMatrix.mockImplementation((query: { q?: string }) => ({
+      data:
+        query.q && query.q.length > 0
+          ? { ...MATRIX, users: [], total_users: 0 }
+          : MATRIX,
+      isLoading: false,
+    }));
+    mockDetail.mockReturnValue({ data: undefined, isLoading: false });
+    renderWithIntl(<AdminSkillsPage />);
+
+    // The search box is present alongside the populated matrix.
+    const box = screen.getByLabelText("Search participants");
+    expect(mockMatrix.mock.calls[0][0]).toMatchObject({ q: "", offset: 0 });
+
+    act(() => {
+      fireEvent.change(box, { target: { value: "zzz" } });
+      vi.advanceTimersByTime(300); // past the 250ms debounce
+    });
+
+    const last = mockMatrix.mock.calls.at(-1)![0];
+    expect(last).toMatchObject({ q: "zzz", offset: 0 });
+    // The card stays (box usable) and explains the empty result.
+    expect(screen.getByText(/No participants match/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Search participants")).toBeInTheDocument();
   });
 });

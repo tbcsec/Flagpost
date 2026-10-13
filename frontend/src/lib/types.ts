@@ -2054,6 +2054,7 @@ export interface SkillMatrixQuery {
   sort?: string; // "total" or a skill key
   direction?: "asc" | "desc";
   window?: SkillWindow;
+  q?: string; // display-name substring search
 }
 
 /** The admin drill-down (#440). */

@@ -3,7 +3,7 @@
 // Cross-competition skills web (#364, ADR-0039). One hook per read: the caller's
 // own web (Profile → Skills) and the admin users×skills matrix.
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 
 import { skillsApi } from "@/lib/api";
 import type { SkillMatrixQuery, SkillWindow } from "@/lib/types";
@@ -11,10 +11,11 @@ import { useAuthStore } from "@/stores/auth";
 
 const skillsKeys = {
   mine: () => ["skills", "me"] as const,
-  matrix: (q: SkillMatrixQuery) =>
+  matrix: (query: SkillMatrixQuery) =>
     [
       "skills", "matrix",
-      q.limit, q.offset, q.sort ?? "total", q.direction ?? "desc", q.window ?? "all",
+      query.limit, query.offset, query.sort ?? "total",
+      query.direction ?? "desc", query.window ?? "all", query.q ?? "",
     ] as const,
   detail: (userId: string, window: SkillWindow) =>
     ["skills", "detail", userId, window] as const,
@@ -35,6 +36,10 @@ export function useSkillMatrix(query: SkillMatrixQuery, enabled = true) {
     queryKey: skillsKeys.matrix(query),
     queryFn: () => skillsApi.matrix(query),
     enabled: enabled && isAuthenticated,
+    // Keep the previous result while a new search/sort/window/page loads, so the
+    // matrix card (and its search box) never unmounts to a skeleton mid-change —
+    // otherwise each debounced keystroke would steal focus from the search field.
+    placeholderData: keepPreviousData,
   });
 }
 

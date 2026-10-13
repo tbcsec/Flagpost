@@ -109,13 +109,20 @@ async def skill_matrix(
     sort: str = Query(default="total", max_length=100),
     direction: str = Query(default="desc", pattern="^(asc|desc)$"),
     window: str = Query(default="all", max_length=10),
+    q: str = Query(default="", max_length=100),
 ) -> SkillMatrixOut:
     """Every user × skill, cross-competition (Administrator only). The shared
     ``skills`` axis and the per-column ``population`` footer are returned whole;
-    ``users`` is the requested page of the requested ordering."""
+    ``users`` is the requested page of the requested ordering. ``q`` filters the
+    users by a case-insensitive display-name substring, over *every* tracked
+    participant (not just the current page) so a search finds someone on page
+    nine — the population footer stays whole (the community reference)."""
     await _require_skills_enabled(db)
     matrix = await cached_skill_matrix(db, _require_window(window))
     users = _sorted_users(matrix, sort, direction)
+    needle = q.strip().lower()
+    if needle:
+        users = [u for u in users if needle in (u["display_name"] or "").lower()]
     page = users[offset : offset + limit]
     return SkillMatrixOut(
         skills=matrix["skills"],

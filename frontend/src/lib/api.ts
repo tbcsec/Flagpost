@@ -144,6 +144,7 @@ import type {
   CertificateManifest,
   MyCertificate,
   UserSkills,
+  SkillMatrix,
   MarketplaceSettings,
   MarketplaceSettingsUpdate,
   MarketplaceResolveResult,
@@ -1499,10 +1500,12 @@ export const analyticsApi = {
     ),
 };
 
-// Cross-competition skills web (#364, ADR-0039): the caller's own web, site-wide
-// (not nested under a competition) because a user's web spans every event.
+// Cross-competition skills web (#364, ADR-0039). Both reads are site-wide (not
+// nested under a competition) because a user's web spans every event.
 export const skillsApi = {
   mine: () => apiFetch<UserSkills>("/api/me/skills"),
+  matrix: ({ limit, offset }: { limit: number; offset: number }) =>
+    apiFetch<SkillMatrix>(`/api/admin/skills?limit=${limit}&offset=${offset}`),
 };
 
 export const notificationsApi = {

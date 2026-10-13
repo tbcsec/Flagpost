@@ -13,7 +13,12 @@ from models.challenge import Category, Challenge
 from models.competition import Competition
 from models.submission import Submission
 from models.user import User
-from utils.skills import compute_user_skills, normalize_skill, solve_weight
+from utils.skills import (
+    compute_skill_matrix,
+    compute_user_skills,
+    normalize_skill,
+    solve_weight,
+)
 
 
 async def _competition(db, code: str) -> str:
@@ -154,22 +159,29 @@ async def test_empty_web_for_a_user_with_no_solves():
     assert result == {"skills": [], "total": 0, "competitions_played": 0}
 
 
-async def test_solve_credited_to_the_submitter_across_users():
+async def test_matrix_lists_users_by_total_with_a_shared_axis():
     async with SessionLocal() as db:
         comp = await _competition(db, "AAAA0004")
         web = await _category(db, comp, "Web")
+        pwn = await _category(db, comp, "Pwn")
         w1 = await _challenge(db, comp, category_id=web, title="w1")
         w2 = await _challenge(db, comp, category_id=web, title="w2")
+        p1 = await _challenge(db, comp, category_id=pwn, title="p1")
         ada = await _user(db, "ada")
         bo = await _user(db, "bo")
-        # ada solves both, bo solves one — each user's web counts only their own.
-        for chal in (w1, w2):
+        # ada: 2 web + 1 pwn = 3; bo: 1 web = 1.
+        for chal in (w1, w2, p1):
             await _solve(db, comp, chal, ada)
         await _solve(db, comp, w1, bo)
         await db.commit()
 
-        ada_web = await compute_user_skills(db, ada)
-        bo_web = await compute_user_skills(db, bo)
+        matrix = await compute_skill_matrix(db)
 
-    assert ada_web["skills"] == [{"skill": "web", "score": 2}]
-    assert bo_web["skills"] == [{"skill": "web", "score": 1}]
+    # Shared, sorted axis (columns) across all users.
+    assert matrix["skills"] == ["pwn", "web"]
+    # Users ranked by total descending.
+    assert [u["display_name"] for u in matrix["users"]] == ["ada", "bo"]
+    ada_row = matrix["users"][0]
+    assert ada_row["total"] == 3
+    assert ada_row["scores"] == {"web": 2, "pwn": 1}
+    assert matrix["users"][1]["scores"] == {"web": 1}

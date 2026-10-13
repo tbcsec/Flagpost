@@ -1,6 +1,6 @@
 # ADR-0039: Cross-competition skills web — the first participant-facing consolidation view
 
-**Status:** Accepted (amended 2026-09-04 — admin matrix dropped; self view only)
+**Status:** Accepted (amended 2026-09-04 — admin matrix dropped; re-amended 2026-10-13 — admin matrix reinstated, #435)
 **Date:** 2026-09-04
 **Architecture reference:** `ARCHITECTURE.md` §6.3 (tenancy scoping — the
 sanctioned cross-competition reads). Implements #364.
@@ -136,3 +136,14 @@ shape is the authorization, exactly like `/api/me/certificates`) — so it no lo
 even touches `view_global_analytics`. #364 asked for an admin view; that part is
 deliberately deferred (owner decision), and the read model keeps the per-user
 shape that a matrix would rebuild on, so re-adding it later is additive.
+
+## Amendment: admin matrix reinstated (2026-10-13, #435)
+
+The owner green-lit the deferred half. The matrix returns exactly as last
+reviewed — reverse-applied from the drop commit on #384's branch — under the
+same gates the first amendment described: `view_global_analytics` (GLOBAL,
+Administrator-only by default) on `GET /api/admin/skills`, 404 while the
+site-wide `skills_enabled` switch is off, paginated (50 default / 200 max) over
+the shared TTL-cached read model. The additive re-add the first amendment
+predicted is what happened; the privacy surface is named in `PRIVACY.md`. The
+rollup table remains the scale follow-up, out of scope here.

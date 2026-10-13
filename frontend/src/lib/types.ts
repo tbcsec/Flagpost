@@ -2006,3 +2006,20 @@ export interface InviteLinkJoinInput {
   accept_rules?: boolean;
   field_values?: Record<string, unknown> | null;
 }
+
+// --- Admin skills matrix (#364/#435, ADR-0039) -------------------------------
+
+export interface SkillMatrixUser {
+  user_id: string;
+  display_name: string;
+  scores: Record<string, number>; // skill name -> cumulative score (missing = 0)
+  total: number;
+}
+
+export interface SkillMatrix {
+  skills: string[]; // the shared axis (columns)
+  users: SkillMatrixUser[];
+  total_users: number;
+  limit: number;
+  offset: number;
+}

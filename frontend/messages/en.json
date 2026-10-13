@@ -157,6 +157,7 @@
     },
     "adminNav": {
       "dashboard": "Dashboard",
+      "skills": "Skills",
       "competitions": "Competitions",
       "users": "Users",
       "roles": "Roles",
@@ -2162,6 +2163,20 @@
     "never": "Never"
   },
   "admin": {
+    "skills": {
+      "title": "Admin — Skills",
+      "subtitle": "Global — the skills matrix across every competitor and competition",
+      "noAccessTitle": "No access",
+      "noAccessDescription": "You need the view-global-analytics permission to see the skills matrix.",
+      "emptyTitle": "No skill data yet",
+      "emptyDescription": "Once competitors solve categorised challenges, their skills appear here — accumulated across every competition.",
+      "cardTitle": "{count, plural, one {# competitor} other {# competitors}}",
+      "colUser": "Competitor",
+      "colTotal": "Total",
+      "range": "{from}–{to} of {total}",
+      "prev": "Previous",
+      "next": "Next"
+    },
     "dashboard": {
       "title": "Admin — Dashboard",
       "subtitle": "Global — status & health across every competition",

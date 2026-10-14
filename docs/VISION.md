@@ -108,6 +108,16 @@ For organisers:
 
 ---
 
+## 5. Simple Enough for Anyone to Run
+
+*(Added 2026-10-14.)*
+
+Someone non-technical should be able to deploy and run Flagpost.
+
+Every feature should be usable without reading documentation or editing configuration: sensible defaults, guided setup instead of forms to fill in, infrastructure that is one command, and problems explained in plain language with the fix alongside. Power-user controls can exist, but behind an "Advanced" door — never in the way of the common case.
+
+---
+
 # Initial Scope
 
 The initial release focuses exclusively on CTF competitions.

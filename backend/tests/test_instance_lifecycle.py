@@ -674,3 +674,104 @@ async def test_reaper_cannot_race_a_live_provision():
     assert (
         instance_reaper.REQUESTED_STUCK_MINUTES * 60 < PROVISION_HANDLER_TIMEOUT
     )
+
+
+async def test_cancelled_provision_is_reported_with_its_own_reason(
+    client, monkeypatch
+):
+    """provision() caught `except Exception`, which a CancelledError (a
+    BaseException) skips. So when the handler ceiling fired, nothing marked the
+    row, set a reason, emitted provision_failed or counted the metric — the
+    operator saw only the reaper's generic relabel much later (#456). A
+    cancelled provision now runs the same failure path, then still propagates."""
+    import asyncio
+    import contextlib
+
+    from utils import instance_service
+
+    entered = asyncio.Event()
+    running: dict = {}
+
+    class _HangingProvisioner:
+        async def create(self, spec):
+            running["task"] = asyncio.current_task()
+            entered.set()
+            await asyncio.Event().wait()  # a provision that never finishes
+
+        async def endpoints(self, handle):  # pragma: no cover — never reached
+            return []
+
+    monkeypatch.setattr(
+        instance_service,
+        "provisioner_for",
+        lambda settings, deployment, **kw: _HangingProvisioner(),
+    )
+
+    admin = await admin_token(client)
+    comp = await _make_competition(client, admin)
+    chal = await _make_challenge(client, comp, admin)
+    await _put_deployment(client, comp, chal, admin)
+    token, _ = await _competitor(client, comp)
+
+    launched = await client.post(
+        f"/api/competitions/{comp}/challenges/{chal}/instance", headers=_auth(token)
+    )
+    assert launched.status_code == 201, launched.text
+
+    await asyncio.wait_for(entered.wait(), timeout=5.0)
+    task = running["task"]
+    task.cancel()  # what the bus's wait_for does when the ceiling fires
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+    assert task.cancelled() or task.done()
+
+    async with SessionLocal() as session:
+        row = (
+            await session.execute(
+                select(ChallengeInstance).where(ChallengeInstance.challenge_id == chal)
+            )
+        ).scalar_one()
+    assert row.status == "failed"
+    assert "cancelled" in (row.failure_reason or ""), row.failure_reason
+    assert await _events("challenge.instance_provision_failed")
+
+
+async def test_provision_ceiling_is_derived_from_the_backends_bounds():
+    """#456 made every step under the ceiling genuinely bounded, so the ceiling
+    is now arithmetic rather than policy. Pin the arithmetic: moving any of these
+    constants past the ceiling must fail here, not quietly reintroduce #452."""
+    from utils import provisioner_docker as docker
+    from utils import provisioner_kubernetes as k8s
+    from utils.instance_service import (
+        PROVISION_FAILURE_SLACK,
+        PROVISION_HANDLER_TIMEOUT,
+    )
+
+    # Docker: pull + network + create + start + (endpoints | start-failure
+    # teardown). Teardown = inspect (quick) + delete (lifecycle) + network
+    # removal (quick).
+    docker_teardown = docker._TIMEOUT_QUICK * 2 + docker._TIMEOUT_LIFECYCLE
+    docker_worst = (
+        docker._PULL_TOTAL
+        + docker._TIMEOUT_QUICK  # per-instance network
+        + docker._TIMEOUT_LIFECYCLE * 2  # create + start
+        + max(docker._TIMEOUT_QUICK, docker_teardown)  # endpoints, or teardown
+    )
+    assert docker_worst < PROVISION_HANDLER_TIMEOUT, docker_worst
+
+    # Kubernetes: four creates + readiness budget (+ one in-flight poll and
+    # interval) + failure detail + teardown of all four objects.
+    k8s_teardown = k8s._TIMEOUT_LIFECYCLE * 4
+    k8s_worst = (
+        k8s._TIMEOUT_LIFECYCLE * 4
+        + k8s._READY_BUDGET
+        + k8s._TIMEOUT_QUICK
+        + k8s._READY_INTERVAL
+        + k8s._TIMEOUT_QUICK  # _pod_failure_detail
+        + k8s_teardown
+    )
+    assert k8s_worst < PROVISION_HANDLER_TIMEOUT, k8s_worst
+
+    # The failure path after a cancellation must fit in the slack, or the
+    # reaper relabels a provision that is still recording its own reason.
+    assert PROVISION_FAILURE_SLACK > max(docker_teardown, k8s_teardown)

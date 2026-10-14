@@ -687,3 +687,86 @@ async def test_validate_no_http_leg_without_base_domain():
     prov = KubernetesProvisioner(_cfg(), transport=router.transport(), sleep=_nosleep, tcp_probe=_yes_dial)
     legs = await prov.validate()
     assert not any(l.name == "http_ingress" for l in legs)
+
+
+# --- provision bounds (#456) -------------------------------------------------
+
+
+def _never_ready_router(on_poll=None) -> _Router:
+    def _not_ready(request):
+        if on_poll is not None:
+            on_poll(request)
+        return httpx.Response(200, json={"status": {"readyReplicas": 0}})
+
+    return (
+        _Router()
+        .on("POST", "/deployments", httpx.Response(201, json={"metadata": {"name": "flagpost-inst-inst-1"}}))
+        .on("POST", "/networkpolicies", httpx.Response(201, json={}))
+        .on("POST", "/services", httpx.Response(201, json={}))
+        .on("GET", lambda r: "/deployments/flagpost-inst-" in r.url.path, _not_ready)
+        .on("GET", "/pods", httpx.Response(200, json={"items": []}))
+        .on("DELETE", "/", httpx.Response(200, json={}))
+    )
+
+
+async def test_readiness_wait_is_bounded_by_wall_clock_not_attempt_count():
+    """The attempt count read as 60 × 2s = 120s, but each poll is itself a
+    request bounded by _TIMEOUT_QUICK — so a slow-but-answering API server
+    stretched it to 60 × 12s = 720s, past the whole provision ceiling. Simulate
+    exactly that server: every poll costs 10s and every sleep 2s, on a fake
+    clock, with an attempt cap far too large to be what stops it."""
+    from utils.provisioner_kubernetes import _READY_BUDGET, _READY_INTERVAL, _TIMEOUT_QUICK
+
+    now = {"t": 0.0}
+    polls = {"n": 0}
+
+    def _slow_poll(_request):
+        polls["n"] += 1
+        now["t"] += _TIMEOUT_QUICK  # the API server took its full timeout
+
+    async def _fake_sleep(seconds: float) -> None:
+        now["t"] += seconds
+
+    router = _never_ready_router(on_poll=_slow_poll)
+    prov = KubernetesProvisioner(
+        _cfg(),
+        transport=router.transport(),
+        sleep=_fake_sleep,
+        clock=lambda: now["t"],
+        ready_attempts=10_000,
+    )
+    with pytest.raises(ProvisionerError, match="did not become ready"):
+        await prov.create(_spec())
+
+    per_poll = _TIMEOUT_QUICK + _READY_INTERVAL
+    assert polls["n"] <= _READY_BUDGET / per_poll + 1, polls["n"]
+    # Elapsed is the budget plus at most one in-flight poll — not 10,000 polls.
+    assert now["t"] <= _READY_BUDGET + per_poll, now["t"]
+
+
+async def test_cancelled_create_still_deletes_what_it_laid_down():
+    """create()'s cleanup was `except Exception`, which a CancelledError (a
+    BaseException) skips — so the provision ceiling firing mid-readiness left
+    the NetworkPolicy, Deployment and Service orphaned until the reaper's GC."""
+    import asyncio
+
+    polling = asyncio.Event()
+
+    def _mark_polling(_request):
+        polling.set()
+
+    async def _sleep_forever(_seconds: float) -> None:
+        await asyncio.Event().wait()
+
+    router = _never_ready_router(on_poll=_mark_polling)
+    prov = KubernetesProvisioner(
+        _cfg(), transport=router.transport(), sleep=_sleep_forever
+    )
+
+    task = asyncio.ensure_future(prov.create(_spec()))
+    await asyncio.wait_for(polling.wait(), timeout=5.0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert router.saw("DELETE", "/deployments/flagpost-inst-inst-1")

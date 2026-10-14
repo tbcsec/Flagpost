@@ -20,6 +20,7 @@ Docker Engine API v1.47 spec and the proxy README (see ADR-0036 and the PR).
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -73,7 +74,20 @@ _INSTANCE_NET_PREFIX = "flagpost-net-"
 # rest are local proxy round-trips. These are hang-catchers, not budgets.
 _TIMEOUT_QUICK = 10.0
 _TIMEOUT_LIFECYCLE = 60.0
+# Per-read bound on the pull stream: catches a *stalled* pull (no bytes for
+# this long). It is NOT a total bound — httpx timeouts are per-phase, so this
+# never fires while layer bytes keep flowing (#456; the same trap
+# utils/automation_actions documents for webhooks).
 _TIMEOUT_PULL = 300.0
+# Total wall-clock budget for one pull, the bound _TIMEOUT_PULL can't give
+# (#456). Without it a multi-GB image over a slow link occupied the background
+# lane until the provision ceiling cancelled it, surfacing as an opaque
+# timeout rather than "the pull took too long". Sized so the whole Docker
+# provision fits under PROVISION_HANDLER_TIMEOUT (the derivation lives beside
+# that constant in utils/instance_service). An event shipping very large
+# images should pre-pull them on the instance host; a cached image is a fast
+# no-op here.
+_PULL_TOTAL = 300.0
 
 _MAX_ERROR_BODY = 500
 
@@ -483,9 +497,18 @@ class DockerProvisioner(Provisioner):
             )
         handle = created.json()["Id"]
 
-        started = await self._request(
-            "POST", f"/containers/{handle}/start", timeout=_TIMEOUT_LIFECYCLE
-        )
+        try:
+            started = await self._request(
+                "POST", f"/containers/{handle}/start", timeout=_TIMEOUT_LIFECYCLE
+            )
+        except BaseException:
+            # The container exists but create() hasn't returned its handle, so
+            # the caller can't clean it up. A transport error or a cancellation
+            # (the provision ceiling firing, #456) here used to leave it for the
+            # two-tick orphan GC. Tear it down now — shielded so a repeated
+            # cancellation can't abandon the teardown — and re-raise.
+            await asyncio.shield(self._safe_destroy(handle))
+            raise
         # 204 = started; 304 = already started (idempotent). Anything else is a
         # failure — tear down the created-but-not-running container so a failed
         # provision never leaks.
@@ -793,7 +816,7 @@ class DockerProvisioner(Provisioner):
         )
         async with self._client(_TIMEOUT_PULL) as http:
             try:
-                async with http.stream(
+                async with asyncio.timeout(_PULL_TOTAL), http.stream(
                     "POST",
                     "/images/create",
                     params={"fromImage": name, "tag": tag or "latest"},
@@ -827,6 +850,13 @@ class DockerProvisioner(Provisioner):
                         status = str(obj.get("status", ""))
                         if status.startswith("Status:") or "Digest:" in status:
                             saw_terminal = True
+            except TimeoutError:
+                # The total budget, not a stall — name it so an operator can
+                # tell "image too big for the link" from "registry unreachable".
+                return False, (
+                    f"pull of {image} did not finish within {_PULL_TOTAL:.0f}s "
+                    "— pre-pull large images on the instance host"
+                )
             except httpx.HTTPError as exc:
                 return False, f"pull of {image} failed: {exc}"
         if not saw_terminal:

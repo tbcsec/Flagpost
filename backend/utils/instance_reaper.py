@@ -35,6 +35,7 @@ from models.challenge_instancing import (
 )
 from utils.event_bus import event_bus
 from utils.instance_service import (
+    PROVISION_FAILURE_SLACK,
     PROVISION_HANDLER_TIMEOUT,
     load_settings,
     teardown,
@@ -56,11 +57,13 @@ REQUESTED_STUCK_MINUTES = 5
 # *after* that ceiling, or the reaper races a live provision: with a five-minute
 # rule, a seven-minute image pull was marked ``failed`` at t=5min, and the
 # handler then completed at t=7min, found the row no longer ``provisioning``,
-# and destroyed the container it had just spent seven minutes building. The
-# slack past the ceiling covers the handler's own failure path (destroy the
-# handle, mark the row, emit) so this rule only ever fires on a provision that
-# really has been abandoned or cancelled.
-PROVISIONING_STUCK_SECONDS = PROVISION_HANDLER_TIMEOUT + 120.0
+# and destroyed the container it had just spent seven minutes building.
+#
+# It also sits after the failure path's own budget (``PROVISION_FAILURE_SLACK``)
+# — since #456 a cancelled provision cleans up and records its specific reason
+# itself, so this rule is now purely the backstop for a provision whose task is
+# *gone* (process restart, loop teardown), not the normal reporting path.
+PROVISIONING_STUCK_SECONDS = PROVISION_HANDLER_TIMEOUT + PROVISION_FAILURE_SLACK
 # Bound the work one tick does, so a large backlog can't stall the shared
 # scheduler; the next tick picks up the rest.
 REAP_BATCH = 25

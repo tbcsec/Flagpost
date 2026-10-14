@@ -14,6 +14,7 @@ import { AttachmentsSection } from "@/components/challenges/attachments-section"
 import { ChallengeGuessesSection } from "@/components/challenges/challenge-guesses-section";
 import { DeploymentSection } from "@/components/challenges/deployment-section";
 import { HintsSection } from "@/components/challenges/hints-section";
+import { ProgrammingSection } from "@/components/challenges/programming-section";
 import { useConfirm } from "@/components/ui/confirm";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +44,7 @@ import {
   useUpdateChallenge,
 } from "@/lib/hooks/use-challenges";
 import { useActiveCompetition } from "@/lib/hooks/use-competitions";
+import { useJudgeProblem, useJudgeStatus } from "@/lib/hooks/use-judge";
 import { toast } from "@/stores/toast";
 import type {
   Category,
@@ -408,6 +410,28 @@ function ChallengeForm({
     challenge?.choices && challenge.choices.length >= 2 ? challenge.choices : ["", ""],
   );
   const [correctIndex, setCorrectIndex] = useState<number | null>(null);
+  // Programming (#447): offered only when this competition can judge code, and
+  // fixed once the challenge exists (test data and a flag don't convert).
+  const judgeStatus = useJudgeStatus(competitionId);
+  const judgeReady = judgeStatus.data?.ready ?? false;
+  const isProgramming = flagType === "programming";
+  const savedProgramming = challenge?.flag_type === "programming";
+  const judgeProblem = useJudgeProblem(
+    competitionId,
+    savedProgramming ? (challenge?.id ?? "") : "",
+  );
+  // A programming challenge is publishable once it has a test case; any other
+  // type once it has a flag.
+  const canPublish = savedProgramming
+    ? (judgeProblem.data?.testcases.length ?? 0) > 0
+    : !!challenge?.has_flag;
+  const programmingUnavailable = !judgeStatus.data
+    ? null
+    : !judgeStatus.data.module_enabled
+      ? t("programmingModuleOff")
+      : !judgeStatus.data.ready
+        ? t("programmingJudgeNotReady")
+        : null;
 
   function updateChoice(i: number, value: string) {
     setChoices((cs) => cs.map((c, idx) => (idx === i ? value : c)));
@@ -478,7 +502,9 @@ function ChallengeForm({
     base.difficulty = difficulty || null;
     // Blank clears it — this same object is the PATCH body, so "" must become null.
     base.connection_info = connectionInfo.trim() || null;
-    if (flagType === "multiple_choice") {
+    if (isProgramming) {
+      // No flag: marked by the code judge against the problem's test cases.
+    } else if (flagType === "multiple_choice") {
       const trimmed = choices.map((c) => c.trim());
       const hasCorrect = correctIndex !== null && !!trimmed[correctIndex];
       if (hasCorrect) {
@@ -548,7 +574,8 @@ function ChallengeForm({
                 variant="outline"
                 size="sm"
                 onClick={onTogglePublish}
-                disabled={stateMutation.isPending || (!isPublished && !challenge.has_flag)}
+                disabled={stateMutation.isPending || (!isPublished && !canPublish)}
+                title={!isPublished && !canPublish && savedProgramming ? t("programmingPublishHint") : undefined}
               >
                 {isPublished ? t("unpublish") : t("publish")}
               </Button>
@@ -669,14 +696,32 @@ function ChallengeForm({
               value={flagType}
               onChange={(e) => setFlagType(e.target.value as FlagType)}
               className="max-w-xs"
+              disabled={savedProgramming}
             >
-              <option value="static">{t("flagStatic")}</option>
-              <option value="regex">{t("flagRegex")}</option>
-              <option value="multiple_choice">{t("flagMultipleChoice")}</option>
+              <option value="static" disabled={savedProgramming}>{t("flagStatic")}</option>
+              <option value="regex" disabled={savedProgramming}>{t("flagRegex")}</option>
+              <option value="multiple_choice" disabled={savedProgramming}>
+                {t("flagMultipleChoice")}
+              </option>
+              <option
+                value="programming"
+                disabled={!savedProgramming && (isEdit || !judgeReady)}
+              >
+                {t("flagProgramming")}
+              </option>
             </Select>
+            {/* Say why Programming can't be picked, in plain words, rather than
+                leaving a mysteriously greyed-out option. */}
+            {!isEdit && programmingUnavailable && (
+              <p className="text-xs text-muted-foreground">{programmingUnavailable}</p>
+            )}
           </div>
 
-          {flagType === "multiple_choice" ? (
+          {isProgramming ? (
+            <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+              {isEdit ? t("programmingEditHint") : t("programmingCreateHint")}
+            </p>
+          ) : flagType === "multiple_choice" ? (
             <div className="space-y-2">
               <Label>{t("options")}</Label>
               <p className="text-xs text-muted-foreground">
@@ -886,6 +931,9 @@ function ChallengeForm({
             challenge id, so they're edit-mode only. */}
         {isEdit && (
           <div className="space-y-4 border-t border-border pt-5">
+            {savedProgramming && (
+              <ProgrammingSection competitionId={competitionId} challengeId={challenge.id} />
+            )}
             <AttachmentsSection competitionId={competitionId} challengeId={challenge.id} />
             <HintsSection competitionId={competitionId} challengeId={challenge.id} />
             {challenge.flag_type === "multiple_choice" && (
@@ -894,10 +942,13 @@ function ChallengeForm({
                 challengeId={challenge.id}
               />
             )}
-            <DeploymentSection
-              competitionId={competitionId}
-              challengeId={challenge.id}
-            />
+            {/* A programming challenge runs competitors' code, not a service. */}
+            {!savedProgramming && (
+              <DeploymentSection
+                competitionId={competitionId}
+                challengeId={challenge.id}
+              />
+            )}
           </div>
         )}
       </CardContent>

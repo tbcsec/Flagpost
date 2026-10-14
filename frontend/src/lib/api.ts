@@ -36,9 +36,14 @@ import type {
   JudgeLanguageCreate,
   JudgeLanguagePreset,
   JudgeLanguageUpdate,
+  JudgeProblem,
+  JudgeProblemUpdate,
   JudgeSettings,
   JudgeSettingsUpdate,
   JudgeSetupResult,
+  JudgeStatus,
+  JudgeTestcaseContent,
+  JudgeTestcaseInput,
   InviteLink,
   InviteLinkInput,
   InviteLinkJoinInput,
@@ -1430,6 +1435,60 @@ export const judgeAdminApi = {
     apiFetch<void>(`/api/admin/judge/languages/${encodeURIComponent(id)}`, {
       method: "DELETE",
     }),
+};
+
+// Programming challenges (#447): availability for a competition, and a problem's
+// settings + test cases. Every test-case write returns the whole problem.
+export const judgeProblemApi = {
+  status: (competitionId: string) =>
+    apiFetch<JudgeStatus>(`/api/competitions/${competitionId}/judge/status`),
+  base: (competitionId: string, challengeId: string) =>
+    `/api/competitions/${competitionId}/challenges/${challengeId}/judge`,
+  get: (competitionId: string, challengeId: string) =>
+    apiFetch<JudgeProblem>(judgeProblemApi.base(competitionId, challengeId)),
+  update: (competitionId: string, challengeId: string, input: JudgeProblemUpdate) =>
+    apiFetch<JudgeProblem>(judgeProblemApi.base(competitionId, challengeId), {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  addTestcase: (competitionId: string, challengeId: string, input: JudgeTestcaseInput) =>
+    apiFetch<JudgeProblem>(`${judgeProblemApi.base(competitionId, challengeId)}/testcases`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  uploadTestcase: (
+    competitionId: string,
+    challengeId: string,
+    input: { inputFile: File; answerFile: File; sample: boolean },
+  ) => {
+    const form = new FormData();
+    form.append("input_file", input.inputFile);
+    form.append("answer_file", input.answerFile);
+    form.append("sample", String(input.sample));
+    return apiFetch<JudgeProblem>(
+      `${judgeProblemApi.base(competitionId, challengeId)}/testcases/upload`,
+      { method: "POST", body: form },
+    );
+  },
+  getTestcase: (competitionId: string, challengeId: string, testcaseId: string) =>
+    apiFetch<JudgeTestcaseContent>(
+      `${judgeProblemApi.base(competitionId, challengeId)}/testcases/${encodeURIComponent(testcaseId)}`,
+    ),
+  updateTestcase: (
+    competitionId: string,
+    challengeId: string,
+    testcaseId: string,
+    input: Partial<JudgeTestcaseInput>,
+  ) =>
+    apiFetch<JudgeProblem>(
+      `${judgeProblemApi.base(competitionId, challengeId)}/testcases/${encodeURIComponent(testcaseId)}`,
+      { method: "PATCH", body: JSON.stringify(input) },
+    ),
+  deleteTestcase: (competitionId: string, challengeId: string, testcaseId: string) =>
+    apiFetch<void>(
+      `${judgeProblemApi.base(competitionId, challengeId)}/testcases/${encodeURIComponent(testcaseId)}`,
+      { method: "DELETE" },
+    ),
 };
 
 // The per-challenge deployment spec (authoring). One per challenge; GET 404s

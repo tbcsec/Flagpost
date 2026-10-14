@@ -26,12 +26,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.attachment import Attachment
+from models.judge_problem import JudgeProblem
 from models.challenge import Category, Challenge
 from models.competition import Competition, generate_invite_code
 from models.competition_module import CompetitionModule
 from models.feedback import Survey, SurveyQuestion
 from models.hint import Hint
 from storage.base import ObjectStorage
+from utils.judge_testdata import new_key as new_testdata_key
 
 
 async def clone_competition(
@@ -167,6 +169,38 @@ async def clone_competition(
                 object_key=new_key,
                 content_type=att.content_type,
                 size_bytes=att.size_bytes,
+            )
+        )
+
+    # Programming problems (#447): settings plus a copy of the test-data zip.
+    problems = (
+        await db.scalars(
+            select(JudgeProblem).where(JudgeProblem.competition_id == source.id)
+        )
+    ).all()
+    for problem in problems:
+        new_challenge_id = challenge_map[problem.challenge_id]
+        new_key = None
+        testcases: list[dict] = []
+        if problem.object_key:
+            new_key = new_testdata_key(clone.id, new_challenge_id)
+            try:
+                storage.put(new_key, storage.get(problem.object_key), problem.content_type)
+                testcases = list(problem.testcases or [])
+            except Exception:  # noqa: BLE001 — a missing source object shouldn't abort the clone
+                new_key = None
+        db.add(
+            JudgeProblem(
+                competition_id=clone.id,
+                challenge_id=new_challenge_id,
+                time_limit_ms=problem.time_limit_ms,
+                memory_limit_mb=problem.memory_limit_mb,
+                output_limit_kb=problem.output_limit_kb,
+                compare_mode=problem.compare_mode,
+                float_tolerance=problem.float_tolerance,
+                allowed_languages=problem.allowed_languages,
+                object_key=new_key,
+                testcases=testcases,
             )
         )
 

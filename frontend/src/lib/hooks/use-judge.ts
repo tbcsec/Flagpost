@@ -1,16 +1,20 @@
 "use client";
 
 // One hook module per domain (ARCHITECTURE.md §8) for the code judge (#446,
-// ADR-0042). This slice (#447) is the admin site config — Admin → Site settings
-// → Code judge; problem authoring and the competitor surfaces follow.
+// ADR-0042): the admin site config (Admin → Site settings → Code judge) and
+// programming-problem authoring in the challenge editor (#447). The competitor
+// surfaces follow in #449.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { judgeAdminApi } from "@/lib/api";
+import { judgeAdminApi, judgeProblemApi } from "@/lib/api";
 import type {
   JudgeLanguageCreate,
   JudgeLanguageUpdate,
+  JudgeProblem,
+  JudgeProblemUpdate,
   JudgeSettingsUpdate,
+  JudgeTestcaseInput,
 } from "@/lib/types";
 
 const judgeKeys = {
@@ -96,4 +100,105 @@ export function useApplyJudgeSetup() {
     mutationFn: (presetKeys: string[]) => judgeAdminApi.applySetup(presetKeys),
     onSuccess: invalidate,
   });
+}
+
+// --- programming problems (#447) ------------------------------------------------
+
+const problemKeys = {
+  status: (competitionId: string) => ["judge", "status", competitionId] as const,
+  problem: (competitionId: string, challengeId: string) =>
+    ["judge", "problem", competitionId, challengeId] as const,
+  testcase: (competitionId: string, challengeId: string, testcaseId: string) =>
+    ["judge", "problem", competitionId, challengeId, "testcase", testcaseId] as const,
+};
+
+/** Can this competition have programming challenges right now, and in which
+ *  languages? Drives whether the editor offers the Programming type. */
+export function useJudgeStatus(competitionId: string) {
+  return useQuery({
+    queryKey: problemKeys.status(competitionId),
+    queryFn: () => judgeProblemApi.status(competitionId),
+    enabled: Boolean(competitionId),
+    staleTime: 60_000,
+  });
+}
+
+export function useJudgeProblem(competitionId: string, challengeId: string) {
+  return useQuery({
+    queryKey: problemKeys.problem(competitionId, challengeId),
+    queryFn: () => judgeProblemApi.get(competitionId, challengeId),
+    enabled: Boolean(competitionId) && Boolean(challengeId),
+  });
+}
+
+/** Full content of one test case, fetched only while its editor is open. */
+export function useJudgeTestcase(
+  competitionId: string,
+  challengeId: string,
+  testcaseId: string | null,
+) {
+  return useQuery({
+    queryKey: problemKeys.testcase(competitionId, challengeId, testcaseId ?? ""),
+    queryFn: () => judgeProblemApi.getTestcase(competitionId, challengeId, testcaseId!),
+    enabled: Boolean(testcaseId),
+    staleTime: 0,
+  });
+}
+
+/** Every problem write answers with the whole problem, so the cache is set
+ *  directly (a delete answers with nothing, so it refetches). */
+function useProblemWrite<TInput>(
+  competitionId: string,
+  challengeId: string,
+  write: (input: TInput) => Promise<JudgeProblem | void>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: write,
+    onSuccess: (data) => {
+      if (data) {
+        queryClient.setQueryData(problemKeys.problem(competitionId, challengeId), data);
+      } else {
+        queryClient.invalidateQueries({
+          queryKey: problemKeys.problem(competitionId, challengeId),
+        });
+      }
+    },
+  });
+}
+
+export function useUpdateJudgeProblem(competitionId: string, challengeId: string) {
+  return useProblemWrite(competitionId, challengeId, (input: JudgeProblemUpdate) =>
+    judgeProblemApi.update(competitionId, challengeId, input),
+  );
+}
+
+export function useAddJudgeTestcase(competitionId: string, challengeId: string) {
+  return useProblemWrite(competitionId, challengeId, (input: JudgeTestcaseInput) =>
+    judgeProblemApi.addTestcase(competitionId, challengeId, input),
+  );
+}
+
+export function useUploadJudgeTestcase(competitionId: string, challengeId: string) {
+  return useProblemWrite(
+    competitionId,
+    challengeId,
+    (input: { inputFile: File; answerFile: File; sample: boolean }) =>
+      judgeProblemApi.uploadTestcase(competitionId, challengeId, input),
+  );
+}
+
+export function useUpdateJudgeTestcase(competitionId: string, challengeId: string) {
+  return useProblemWrite(
+    competitionId,
+    challengeId,
+    ({ id, input }: { id: string; input: Partial<JudgeTestcaseInput> }) =>
+      judgeProblemApi.updateTestcase(competitionId, challengeId, id, input),
+  );
+}
+
+export function useDeleteJudgeTestcase(competitionId: string, challengeId: string) {
+  return useProblemWrite(competitionId, challengeId, (id: string) =>
+    judgeProblemApi.deleteTestcase(competitionId, challengeId, id),
+  );
 }

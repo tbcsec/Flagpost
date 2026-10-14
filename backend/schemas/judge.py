@@ -215,3 +215,91 @@ class JudgeSetupRequest(BaseModel):
 class JudgeSetupResult(BaseModel):
     settings: JudgeSettingsOut
     languages: list[JudgeLanguageOut]
+
+
+# --- problem authoring (#447) -------------------------------------------------
+
+class JudgeTestcaseOut(BaseModel):
+    """A test case as listed in the editor: sizes plus a short preview, never
+    the whole (possibly multi-MB) content."""
+
+    id: str
+    sample: bool
+    input_bytes: int
+    answer_bytes: int
+    input_preview: str
+    answer_preview: str
+
+
+class JudgeTestcaseContent(BaseModel):
+    """One test case in full, for editing."""
+
+    id: str
+    sample: bool
+    # False when the data is too big or isn't text: the editor then offers to
+    # replace it by uploading files rather than editing in place.
+    editable: bool = True
+    input: str | None = None
+    answer: str | None = None
+
+
+class JudgeProblemOut(BaseModel):
+    # Null = the site default, which is reported alongside so the editor can
+    # show what an empty field means.
+    time_limit_ms: int | None
+    memory_limit_mb: int | None
+    output_limit_kb: int | None
+    compare_mode: str
+    float_tolerance: float | None
+    allowed_languages: list[str] | None
+    testcases: list[JudgeTestcaseOut]
+    default_time_limit_ms: int
+    default_memory_limit_mb: int
+    default_output_limit_kb: int
+
+
+class JudgeProblemUpdate(BaseModel):
+    """Partial update. An explicit null resets a limit (or the language list)
+    to its default; omitting a field leaves it unchanged."""
+
+    time_limit_ms: int | None = Field(default=None, ge=100, le=60_000)
+    memory_limit_mb: int | None = Field(default=None, ge=16, le=8192)
+    output_limit_kb: int | None = Field(default=None, ge=1, le=262_144)
+    compare_mode: str | None = None
+    float_tolerance: float | None = Field(default=None, gt=0, le=1)
+    allowed_languages: list[str] | None = Field(default=None, max_length=64)
+
+    @field_validator("compare_mode")
+    @classmethod
+    def _mode(cls, v: str | None) -> str | None:
+        from models.judge_problem import COMPARE_MODES
+
+        if v is not None and v not in COMPARE_MODES:
+            raise ValueError(f"compare_mode must be one of: {', '.join(COMPARE_MODES)}")
+        return v
+
+
+class JudgeTestcaseCreate(BaseModel):
+    """A test case typed or pasted in the editor. Bigger data goes through the
+    multipart upload route instead (the JSON body is capped)."""
+
+    input: str = Field(max_length=1_000_000)
+    answer: str = Field(max_length=1_000_000)
+    sample: bool = False
+
+
+class JudgeTestcaseUpdate(BaseModel):
+    input: str | None = Field(default=None, max_length=1_000_000)
+    answer: str | None = Field(default=None, max_length=1_000_000)
+    sample: bool | None = None
+
+
+class JudgeStatusOut(BaseModel):
+    """Whether this competition can have programming challenges right now, and
+    in which languages. Readable by competitors too (#449), so languages carry
+    only a key and a display name — never images or commands."""
+
+    module_enabled: bool
+    judge_enabled: bool
+    ready: bool
+    languages: list[dict]

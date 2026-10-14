@@ -1,0 +1,441 @@
+"""Programming challenges — problem authoring (#447, ADR-0042).
+
+Competition-scoped, under ``challenge_edit``, and only while the ``judge``
+module is enabled for the competition. A programming challenge's statement is
+its ordinary rich-text description; this router adds what's specific to it:
+test cases (paste or upload) and the optional limits / comparison / language
+overrides, every one of which defaults sensibly when left alone.
+
+Test data lives in one zip per problem (``models/judge_problem.py``). Every
+edit goes through ``_rewrite``: lock the problem row, load the zip, apply the
+change, store the new zip under a fresh key, commit, *then* delete the old
+object — so a failure at any point leaves the row pointing at a complete zip.
+
+``GET /judge/status`` tells authors (and, in #449, competitors) whether
+programming challenges are available here and in which languages.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Callable
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from auth.deps import require_permission
+from db import get_db
+from models.challenge import Challenge
+from models.competition import Competition
+from models.judge import (
+    DEFAULT_MEMORY_LIMIT_MB,
+    DEFAULT_OUTPUT_LIMIT_KB,
+    DEFAULT_TIME_LIMIT_MS,
+    JUDGE_SETTINGS_ID,
+    JudgeLanguage,
+    JudgeSettings,
+)
+from models.judge_problem import DEFAULT_FLOAT_TOLERANCE, JudgeProblem
+from models.user import User
+from plugins.loader import is_module_enabled
+from routers.challenges import _get_scoped_challenge
+from schemas.judge import (
+    JudgeProblemOut,
+    JudgeProblemUpdate,
+    JudgeStatusOut,
+    JudgeTestcaseContent,
+    JudgeTestcaseCreate,
+    JudgeTestcaseOut,
+    JudgeTestcaseUpdate,
+)
+from storage import get_storage
+from storage.base import ObjectStorage
+from utils import judge_testdata as td
+from utils.event_bus import event_bus
+from utils.uploads import read_upload_capped
+
+router = APIRouter(prefix="/api/competitions/{competition_id}", tags=["judge-problems"])
+
+_PREVIEW_CHARS = 160
+# Past this, a test case is listed and judged as normal but not offered for
+# in-place editing (a textarea isn't the tool for megabytes of input).
+_EDITABLE_BYTES = 256 * 1024
+
+
+async def _guard(db: AsyncSession, competition_id: str) -> None:
+    if await db.get(Competition, competition_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Competition not found")
+    if not await is_module_enabled(db, "judge", competition_id):
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "The code judge module is turned off for this competition",
+        )
+
+
+async def _programming_challenge(
+    db: AsyncSession, competition_id: str, challenge_id: str
+) -> Challenge:
+    await _guard(db, competition_id)
+    challenge = await _get_scoped_challenge(db, competition_id, challenge_id)
+    if challenge.flag_type != "programming":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "This isn't a programming challenge."
+        )
+    return challenge
+
+
+async def _problem(db: AsyncSession, challenge: Challenge) -> JudgeProblem | None:
+    return await db.scalar(
+        select(JudgeProblem).where(
+            JudgeProblem.challenge_id == challenge.id,
+            JudgeProblem.competition_id == challenge.competition_id,
+        )
+    )
+
+
+async def _problem_or_create(db: AsyncSession, challenge: Challenge) -> JudgeProblem:
+    problem = await _problem(db, challenge)
+    if problem is None:
+        problem = JudgeProblem(
+            competition_id=challenge.competition_id, challenge_id=challenge.id
+        )
+        db.add(problem)
+        await db.commit()
+        await db.refresh(problem)
+    return problem
+
+
+async def _site_defaults(db: AsyncSession) -> JudgeSettings:
+    return await db.get(JudgeSettings, JUDGE_SETTINGS_ID) or JudgeSettings()
+
+
+def _preview(blob: bytes) -> str:
+    return blob[: _PREVIEW_CHARS * 4].decode("utf-8", errors="replace")[:_PREVIEW_CHARS]
+
+
+async def _out(
+    db: AsyncSession, storage: ObjectStorage, problem: JudgeProblem | None
+) -> JudgeProblemOut:
+    defaults = await _site_defaults(db)
+    cases = (
+        await asyncio.to_thread(td.load, storage, problem.object_key, problem.testcases)
+        if problem is not None
+        else []
+    )
+    return JudgeProblemOut(
+        time_limit_ms=problem.time_limit_ms if problem else None,
+        memory_limit_mb=problem.memory_limit_mb if problem else None,
+        output_limit_kb=problem.output_limit_kb if problem else None,
+        compare_mode=problem.compare_mode if problem else "token",
+        float_tolerance=problem.float_tolerance if problem else None,
+        allowed_languages=problem.allowed_languages if problem else None,
+        testcases=[
+            JudgeTestcaseOut(
+                id=c.id,
+                sample=c.sample,
+                input_bytes=len(c.input),
+                answer_bytes=len(c.answer),
+                input_preview=_preview(c.input),
+                answer_preview=_preview(c.answer),
+            )
+            for c in cases
+        ],
+        default_time_limit_ms=defaults.default_time_limit_ms or DEFAULT_TIME_LIMIT_MS,
+        default_memory_limit_mb=defaults.default_memory_limit_mb or DEFAULT_MEMORY_LIMIT_MB,
+        default_output_limit_kb=defaults.default_output_limit_kb or DEFAULT_OUTPUT_LIMIT_KB,
+    )
+
+
+async def _rewrite(
+    db: AsyncSession,
+    storage: ObjectStorage,
+    challenge: Challenge,
+    user: User,
+    change: Callable[[list[td.Testcase]], list[td.Testcase]],
+) -> JudgeProblem:
+    problem = await _problem_or_create(db, challenge)
+    # Serialise concurrent editors on this problem: without the lock, two edits
+    # would each load the same zip and the second commit would silently drop
+    # the first's change. Real on Postgres; SQLite serialises writers anyway.
+    await db.execute(
+        select(JudgeProblem.id).where(JudgeProblem.id == problem.id).with_for_update()
+    )
+    await db.refresh(problem)
+    old_key = problem.object_key
+    cases = await asyncio.to_thread(td.load, storage, old_key, problem.testcases)
+    cases = change(cases)
+    try:
+        td.check_sizes(cases)
+    except td.TestdataError as exc:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, str(exc)) from exc
+
+    if cases:
+        key = td.new_key(challenge.competition_id, challenge.id)
+        await asyncio.to_thread(storage.put, key, td.build_zip(cases), "application/zip")
+        problem.object_key = key
+    else:
+        problem.object_key = None
+    problem.testcases = td.manifest(cases)
+    await db.commit()
+
+    if old_key and old_key != problem.object_key:
+        try:
+            await asyncio.to_thread(storage.delete, old_key)
+        except Exception:  # noqa: BLE001 — an orphaned old zip is harmless
+            pass
+    await event_bus.emit(
+        "challenge.updated",
+        {
+            "competition_id": challenge.competition_id,
+            "challenge_id": challenge.id,
+            "user_id": user.id,
+            "changed_fields": ["judge_testcases"],
+        },
+    )
+    return problem
+
+
+def _find(cases: list[td.Testcase], testcase_id: str) -> td.Testcase:
+    for case in cases:
+        if case.id == testcase_id:
+            return case
+    raise HTTPException(status.HTTP_404_NOT_FOUND, "Test case not found")
+
+
+# --- availability -------------------------------------------------------------
+
+
+@router.get("/judge/status", response_model=JudgeStatusOut)
+async def judge_status(
+    competition_id: str,
+    current_user: User = Depends(require_permission("challenge_view")),
+    db: AsyncSession = Depends(get_db),
+) -> JudgeStatusOut:
+    if await db.get(Competition, competition_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Competition not found")
+    module_enabled = await is_module_enabled(db, "judge", competition_id)
+    settings = await db.get(JudgeSettings, JUDGE_SETTINGS_ID)
+    judge_enabled = bool(settings and settings.enabled)
+    languages = (
+        await db.execute(
+            select(JudgeLanguage.key, JudgeLanguage.name)
+            .where(JudgeLanguage.enabled.is_(True))
+            .order_by(JudgeLanguage.name)
+        )
+    ).all()
+    return JudgeStatusOut(
+        module_enabled=module_enabled,
+        judge_enabled=judge_enabled,
+        ready=module_enabled and judge_enabled and bool(languages),
+        # Key + display name only: images and commands are admin business.
+        languages=[{"key": k, "name": n} for k, n in languages],
+    )
+
+
+# --- problem settings --------------------------------------------------------
+
+
+@router.get("/challenges/{challenge_id}/judge", response_model=JudgeProblemOut)
+async def get_problem(
+    competition_id: str,
+    challenge_id: str,
+    current_user: User = Depends(require_permission("challenge_edit")),
+    db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
+) -> JudgeProblemOut:
+    challenge = await _programming_challenge(db, competition_id, challenge_id)
+    return await _out(db, storage, await _problem(db, challenge))
+
+
+@router.put("/challenges/{challenge_id}/judge", response_model=JudgeProblemOut)
+async def update_problem(
+    competition_id: str,
+    challenge_id: str,
+    body: JudgeProblemUpdate,
+    current_user: User = Depends(require_permission("challenge_edit")),
+    db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
+) -> JudgeProblemOut:
+    challenge = await _programming_challenge(db, competition_id, challenge_id)
+    problem = await _problem_or_create(db, challenge)
+    sent = body.model_fields_set
+    # An explicit null resets to the default; an omitted field is left alone.
+    for field in ("time_limit_ms", "memory_limit_mb", "output_limit_kb", "allowed_languages"):
+        if field in sent:
+            setattr(problem, field, getattr(body, field))
+    if body.compare_mode is not None:
+        problem.compare_mode = body.compare_mode
+    if "float_tolerance" in sent:
+        problem.float_tolerance = body.float_tolerance
+    if problem.compare_mode == "float" and problem.float_tolerance is None:
+        problem.float_tolerance = DEFAULT_FLOAT_TOLERANCE
+    if "allowed_languages" in sent and body.allowed_languages is not None:
+        known = set(
+            (await db.execute(select(JudgeLanguage.key))).scalars().all()
+        )
+        unknown = sorted(set(body.allowed_languages) - known)
+        if unknown:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                f"Unknown language(s): {', '.join(unknown)}.",
+            )
+        if not body.allowed_languages:
+            # An empty allow-list would make the problem unsubmittable; treat
+            # it as "every enabled language", the default.
+            problem.allowed_languages = None
+    await db.commit()
+    await event_bus.emit(
+        "challenge.updated",
+        {
+            "competition_id": competition_id,
+            "challenge_id": challenge_id,
+            "user_id": current_user.id,
+            "changed_fields": ["judge_problem"],
+        },
+    )
+    return await _out(db, storage, problem)
+
+
+# --- test cases ---------------------------------------------------------------
+
+
+def _text(value: str) -> bytes:
+    # Text typed into a textarea: normalise line endings, and end with a newline
+    # as every judge-produced output does, so "expected" and "actual" compare
+    # cleanly under the exact mode too.
+    data = value.replace("\r\n", "\n")
+    if data and not data.endswith("\n"):
+        data += "\n"
+    return data.encode("utf-8")
+
+
+@router.post(
+    "/challenges/{challenge_id}/judge/testcases",
+    response_model=JudgeProblemOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_testcase(
+    competition_id: str,
+    challenge_id: str,
+    body: JudgeTestcaseCreate,
+    current_user: User = Depends(require_permission("challenge_edit")),
+    db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
+) -> JudgeProblemOut:
+    challenge = await _programming_challenge(db, competition_id, challenge_id)
+    new = td.Testcase(
+        id=uuid4().hex, sample=body.sample, input=_text(body.input), answer=_text(body.answer)
+    )
+    problem = await _rewrite(db, storage, challenge, current_user, lambda cases: [*cases, new])
+    return await _out(db, storage, problem)
+
+
+@router.post(
+    "/challenges/{challenge_id}/judge/testcases/upload",
+    response_model=JudgeProblemOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_testcase(
+    competition_id: str,
+    challenge_id: str,
+    input_file: UploadFile = File(...),
+    answer_file: UploadFile = File(...),
+    sample: bool = Form(False),
+    current_user: User = Depends(require_permission("challenge_edit")),
+    db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
+) -> JudgeProblemOut:
+    challenge = await _programming_challenge(db, competition_id, challenge_id)
+    # Uploaded files are stored byte-for-byte: big or binary inputs are exactly
+    # what the upload path is for.
+    data_in = await read_upload_capped(input_file, td.MAX_FILE_BYTES)
+    data_ans = await read_upload_capped(answer_file, td.MAX_FILE_BYTES)
+    new = td.Testcase(id=uuid4().hex, sample=sample, input=data_in, answer=data_ans)
+    problem = await _rewrite(db, storage, challenge, current_user, lambda cases: [*cases, new])
+    return await _out(db, storage, problem)
+
+
+@router.get(
+    "/challenges/{challenge_id}/judge/testcases/{testcase_id}",
+    response_model=JudgeTestcaseContent,
+)
+async def get_testcase(
+    competition_id: str,
+    challenge_id: str,
+    testcase_id: str,
+    current_user: User = Depends(require_permission("challenge_edit")),
+    db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
+) -> JudgeTestcaseContent:
+    challenge = await _programming_challenge(db, competition_id, challenge_id)
+    problem = await _problem(db, challenge)
+    cases = (
+        await asyncio.to_thread(td.load, storage, problem.object_key, problem.testcases)
+        if problem
+        else []
+    )
+    case = _find(cases, testcase_id)
+    if max(len(case.input), len(case.answer)) > _EDITABLE_BYTES:
+        return JudgeTestcaseContent(id=case.id, sample=case.sample, editable=False)
+    try:
+        return JudgeTestcaseContent(
+            id=case.id,
+            sample=case.sample,
+            input=case.input.decode("utf-8"),
+            answer=case.answer.decode("utf-8"),
+        )
+    except UnicodeDecodeError:
+        return JudgeTestcaseContent(id=case.id, sample=case.sample, editable=False)
+
+
+@router.patch(
+    "/challenges/{challenge_id}/judge/testcases/{testcase_id}",
+    response_model=JudgeProblemOut,
+)
+async def update_testcase(
+    competition_id: str,
+    challenge_id: str,
+    testcase_id: str,
+    body: JudgeTestcaseUpdate,
+    current_user: User = Depends(require_permission("challenge_edit")),
+    db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
+) -> JudgeProblemOut:
+    challenge = await _programming_challenge(db, competition_id, challenge_id)
+
+    def change(cases: list[td.Testcase]) -> list[td.Testcase]:
+        case = _find(cases, testcase_id)
+        if body.input is not None:
+            case.input = _text(body.input)
+        if body.answer is not None:
+            case.answer = _text(body.answer)
+        if body.sample is not None:
+            case.sample = body.sample
+        return cases
+
+    problem = await _rewrite(db, storage, challenge, current_user, change)
+    return await _out(db, storage, problem)
+
+
+@router.delete(
+    "/challenges/{challenge_id}/judge/testcases/{testcase_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_testcase(
+    competition_id: str,
+    challenge_id: str,
+    testcase_id: str,
+    current_user: User = Depends(require_permission("challenge_edit")),
+    db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
+) -> Response:
+    challenge = await _programming_challenge(db, competition_id, challenge_id)
+
+    def change(cases: list[td.Testcase]) -> list[td.Testcase]:
+        _find(cases, testcase_id)
+        return [c for c in cases if c.id != testcase_id]
+
+    await _rewrite(db, storage, challenge, current_user, change)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

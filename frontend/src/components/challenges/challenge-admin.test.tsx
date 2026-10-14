@@ -51,13 +51,23 @@ const ALPHA = mk({
   connection_info: "nc secret.example.com 1337",
 });
 const BRAVO = mk({ id: "b", title: "Bravo", connection_info: null });
+const CODE = mk({
+  id: "p",
+  title: "Sum it up",
+  flag_type: "programming",
+  has_flag: false,
+  state: "draft",
+});
+
+let judgeStatus = { module_enabled: true, judge_enabled: true, ready: true, languages: [] };
+let testcaseCount = 0;
 
 const createMutate = vi.fn();
 const updateMutate = vi.fn();
 const updateIds: string[] = [];
 
 vi.mock("@/lib/hooks/use-challenges", () => ({
-  useChallenges: () => ({ data: [ALPHA, BRAVO], isLoading: false, isError: false }),
+  useChallenges: () => ({ data: [ALPHA, BRAVO, CODE], isLoading: false, isError: false }),
   useCreateChallenge: () => ({ mutate: createMutate, isPending: false }),
   useUpdateChallenge: (_c: string, id: string) => {
     updateIds.push(id);
@@ -75,6 +85,15 @@ vi.mock("@/lib/hooks/use-categories", () => ({
 vi.mock("@/lib/hooks/use-competitions", () => ({
   useActiveCompetition: () => ({ data: { difficulty_tiers: [], challenge_tags: [] } }),
 }));
+vi.mock("@/lib/hooks/use-judge", () => ({
+  useJudgeStatus: () => ({ data: judgeStatus }),
+  useJudgeProblem: (_c: string, id: string) => ({
+    data: id ? { testcases: Array.from({ length: testcaseCount }, (_, i) => ({ id: `t${i}` })) } : undefined,
+  }),
+}));
+vi.mock("@/components/challenges/programming-section", () => ({
+  ProgrammingSection: () => <div data-testid="programming-section" />,
+}));
 vi.mock("@/components/ui/confirm", () => ({ useConfirm: () => () => Promise.resolve(true) }));
 vi.mock("@/components/ui/rich-text-editor", () => ({ RichTextEditor: () => null }));
 vi.mock("@/components/challenges/attachments-section", () => ({ AttachmentsSection: () => null }));
@@ -91,6 +110,8 @@ afterEach(() => {
   createMutate.mockClear();
   updateMutate.mockClear();
   updateIds.length = 0;
+  judgeStatus = { module_enabled: true, judge_enabled: true, ready: true, languages: [] };
+  testcaseCount = 0;
 });
 
 // Click the list row for `title`. Rows are buttons inside the list <ul>; the
@@ -138,5 +159,64 @@ describe("ChallengeAdmin master-detail editor", () => {
     expect(screen.getByLabelText("Connection info")).toHaveValue("");
     // The mutation is bound to the challenge actually being edited.
     expect(updateIds[updateIds.length - 1]).toBe("b");
+  });
+});
+
+describe("ChallengeAdmin programming challenges (#447)", () => {
+  function programmingOption() {
+    return screen.getByRole("option", { name: /Programming/ }) as HTMLOptionElement;
+  }
+
+  it("explains why Programming can't be picked when the module is off", () => {
+    judgeStatus = { module_enabled: false, judge_enabled: true, ready: false, languages: [] };
+    renderWithIntl(<ChallengeAdmin competitionId="c-1" />);
+    fireEvent.click(screen.getAllByRole("button", { name: "New challenge" })[0]);
+    expect(programmingOption().disabled).toBe(true);
+    expect(screen.getByText(/need the Code judge module/)).toBeInTheDocument();
+  });
+
+  it("explains that the judge needs setting up", () => {
+    judgeStatus = { module_enabled: true, judge_enabled: false, ready: false, languages: [] };
+    renderWithIntl(<ChallengeAdmin competitionId="c-1" />);
+    fireEvent.click(screen.getAllByRole("button", { name: "New challenge" })[0]);
+    expect(programmingOption().disabled).toBe(true);
+    expect(screen.getByText(/code judge to be set up first/)).toBeInTheDocument();
+  });
+
+  it("creates a programming challenge without a flag", () => {
+    renderWithIntl(<ChallengeAdmin competitionId="c-1" />);
+    fireEvent.click(screen.getAllByRole("button", { name: "New challenge" })[0]);
+    expect(programmingOption().disabled).toBe(false);
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "A + B" } });
+    fireEvent.change(screen.getByLabelText("Challenge type"), { target: { value: "programming" } });
+    // No flag field to fill in — just a pointer to the test cases step.
+    expect(screen.queryByLabelText("Flag")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Create challenge" }));
+    const body = createMutate.mock.calls[0][0];
+    expect(body.flag_type).toBe("programming");
+    expect(body).not.toHaveProperty("flag");
+    expect(body).not.toHaveProperty("case_insensitive");
+  });
+
+  it("locks the type and gates publishing on a test case", () => {
+    renderWithIntl(<ChallengeAdmin competitionId="c-1" />);
+    selectItem("Sum it up");
+    expect(screen.getByLabelText("Challenge type")).toBeDisabled();
+    expect(screen.getByTestId("programming-section")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
+  });
+
+  it("allows publishing once a test case exists", () => {
+    testcaseCount = 1;
+    renderWithIntl(<ChallengeAdmin competitionId="c-1" />);
+    selectItem("Sum it up");
+    expect(screen.getByRole("button", { name: "Publish" })).toBeEnabled();
+  });
+
+  it("doesn't offer Programming to an existing flag challenge", () => {
+    renderWithIntl(<ChallengeAdmin competitionId="c-1" />);
+    selectItem("Alpha");
+    expect(programmingOption().disabled).toBe(true);
+    expect(screen.queryByTestId("programming-section")).toBeNull();
   });
 });

@@ -11,6 +11,11 @@ Flag handling (§13.2): plaintext flags arrive on create/update, are hashed
 (static, salted) or stored as a pattern (regex) via utils/flags.py, and no
 response ever carries anything but ``has_flag``. Publishing requires a flag —
 an unsolvable published challenge is a configuration error, caught here.
+
+Programming challenges (#447, the optional ``judge`` module) have no flag: they
+are marked by running the competitor's code against test data, authored under
+``routers/judge_problems.py``. They need the module on to be created, and at
+least one test case to be published.
 """
 
 from __future__ import annotations
@@ -27,10 +32,12 @@ from models.challenge import Category, Challenge
 from models.challenge_instancing import ChallengeDeployment
 from models.competition import Competition
 from models.feedback import ChallengeRating
+from models.judge_problem import JudgeProblem
 from models.mc_guess_reset import MCGuessReset
 from models.submission import Submission
 from models.team import Team
 from models.user import User
+from plugins.loader import is_module_enabled
 from schemas.challenge import (
     ChallengeCreate,
     ChallengeOut,
@@ -110,6 +117,22 @@ def _validate_multiple_choice(challenge: Challenge, raw_flag: str | None) -> Non
             detail="The correct answer must be one of the options",
         )
     challenge.choices = cleaned
+
+
+async def _validate_programming(
+    db: AsyncSession, competition_id: str, raw_flag: str | None
+) -> None:
+    if not await is_module_enabled(db, "judge", competition_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Turn on the code judge module for this competition to add "
+            "programming challenges",
+        )
+    if raw_flag is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Programming challenges are marked by running code, not by a flag",
+        )
 
 
 async def _set_value(db: AsyncSession, challenge: Challenge) -> None:
@@ -659,6 +682,8 @@ async def create_challenge(
         case_insensitive=body.case_insensitive,
     )
     _validate_scoring(challenge)
+    if body.flag_type == "programming":
+        await _validate_programming(db, competition_id, body.flag)
     await _validate_prerequisites(
         db, competition_id, None, _prereq_ids(challenge)
     )
@@ -700,6 +725,21 @@ async def update_challenge(
         await _validate_category(db, competition_id, changes["category_id"])
 
     raw_flag = changes.pop("flag", None)
+    if "flag_type" in changes and (changes["flag_type"] == "programming") != (
+        challenge.flag_type == "programming"
+    ):
+        # A programming challenge's test data and a flag challenge's flag don't
+        # translate into each other; switching would strand one or the other.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A challenge can't be switched to or from Programming — "
+            "create a new challenge instead",
+        )
+    if challenge.flag_type == "programming" and raw_flag is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Programming challenges are marked by running code, not by a flag",
+        )
     for field, value in changes.items():
         setattr(challenge, field, value)
     _validate_scoring(challenge)
@@ -768,7 +808,24 @@ async def publish_challenge(
     db: AsyncSession = Depends(get_db),
 ) -> Challenge:
     challenge = await _get_scoped_challenge(db, competition_id, challenge_id)
-    if not challenge.has_flag:
+    if challenge.flag_type == "programming":
+        if not await is_module_enabled(db, "judge", competition_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Turn on the code judge module for this competition first",
+            )
+        problem = await db.scalar(
+            select(JudgeProblem).where(
+                JudgeProblem.challenge_id == challenge.id,
+                JudgeProblem.competition_id == competition_id,
+            )
+        )
+        if problem is None or not problem.testcases:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Add at least one test case before publishing",
+            )
+    elif not challenge.has_flag:
         # A unique-per-instance challenge (ADR-0036 §3) legitimately carries no
         # static flag — its flag is rendered per instance and graded against the
         # subject's live instance — so a unique-mode deployment satisfies "has a
@@ -840,7 +897,14 @@ async def delete_challenge(
             )
         )
     ).scalars().all()
-    for key in keys:
+    # ...and the programming problem's test-data zip (#447), if any.
+    judge_key = await db.scalar(
+        select(JudgeProblem.object_key).where(
+            JudgeProblem.challenge_id == challenge_id,
+            JudgeProblem.competition_id == competition_id,
+        )
+    )
+    for key in [*keys, *([judge_key] if judge_key else [])]:
         storage.delete(key)
 
     await db.delete(challenge)

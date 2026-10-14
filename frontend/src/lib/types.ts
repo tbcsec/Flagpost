@@ -941,7 +941,9 @@ export interface Category {
   created_at: string;
 }
 
-export type FlagType = "static" | "regex" | "multiple_choice";
+// "programming" (#447) has no flag: it's marked by the code judge running the
+// competitor's program against the problem's test cases.
+export type FlagType = "static" | "regex" | "multiple_choice" | "programming";
 export type ChallengeState = "draft" | "published";
 export type ScoringType = "static" | "dynamic";
 
@@ -2173,4 +2175,68 @@ export interface JudgeCheckResult {
 export interface JudgeSetupResult {
   settings: JudgeSettings;
   languages: JudgeLanguage[];
+}
+
+// Programming challenges (#447): whether this competition can have them, and in
+// which languages (key + display name only).
+export interface JudgeStatus {
+  module_enabled: boolean;
+  judge_enabled: boolean;
+  ready: boolean;
+  languages: { key: string; name: string }[];
+}
+
+export type JudgeCompareMode = "token" | "exact" | "float";
+
+export interface JudgeTestcase {
+  id: string;
+  sample: boolean;
+  input_bytes: number;
+  answer_bytes: number;
+  input_preview: string;
+  answer_preview: string;
+}
+
+/** One test case in full, for editing. `editable` is false when it's too big
+ *  or not text — the editor then offers replacing it by upload instead. */
+export interface JudgeTestcaseContent {
+  id: string;
+  sample: boolean;
+  editable: boolean;
+  input: string | null;
+  answer: string | null;
+}
+
+/** A programming problem. Null limits / languages mean "the default", which is
+ *  reported alongside so the editor can say what an empty field means. */
+export interface JudgeProblem {
+  time_limit_ms: number | null;
+  memory_limit_mb: number | null;
+  output_limit_kb: number | null;
+  compare_mode: JudgeCompareMode;
+  float_tolerance: number | null;
+  allowed_languages: string[] | null;
+  testcases: JudgeTestcase[];
+  default_time_limit_ms: number;
+  default_memory_limit_mb: number;
+  default_output_limit_kb: number;
+}
+
+/** Partial update — an explicit null resets a field to its default. */
+export type JudgeProblemUpdate = Partial<
+  Pick<
+    JudgeProblem,
+    | "time_limit_ms"
+    | "memory_limit_mb"
+    | "output_limit_kb"
+    | "compare_mode"
+    | "float_tolerance"
+    | "allowed_languages"
+  >
+>;
+
+export interface JudgeTestcaseInput {
+  input: string;
+  answer: string;
+  sample: boolean;
 }

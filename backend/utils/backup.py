@@ -98,6 +98,7 @@ from models.feedback import (
     SurveyResponse,
 )
 from models.hint import Hint, HintReveal
+from models.judge_problem import JudgeProblem
 from models.mc_guess_reset import MCGuessReset
 from models.page import Page
 from models.role import Role, RoleAssignment
@@ -233,6 +234,12 @@ class Spec:
 
 def _challenge_object_key(row: dict) -> str:
     return f"{row['competition_id']}/{row['challenge_id']}/{uuid4().hex}_{row.get('filename', 'file')}"
+
+
+def _judge_object_key(row: dict) -> str:
+    from utils.judge_testdata import new_key
+
+    return new_key(row["competition_id"], row["challenge_id"])
 
 
 def _ticket_object_key(row: dict) -> str:
@@ -409,6 +416,56 @@ def _validate_page_row(row: dict) -> None:
         raise ImportError_(f"pages {row.get('slug')!r}: {exc}") from exc
 
 
+def _validate_judge_problem_row(row: dict) -> None:
+    """Re-apply the problem-authoring invariants (``JudgeProblemUpdate``) on an
+    imported ``judge_problems`` row (#447) — limits in range, a known compare
+    mode, a list of language keys — plus the manifest shape the editor and the
+    executor rely on. The #323/#324 class.
+
+    The row must also point only at its *own* re-stored zip: the engine mints a
+    fresh ``{competition}/judge/{challenge}/`` key when the side-car carries
+    bytes, so any other key (a problem exported with no test data, or a crafted
+    row naming another competition's object) is dropped with its manifest
+    rather than imported as a dangling or foreign reference."""
+    from pydantic import ValidationError
+
+    from schemas.judge import JudgeProblemUpdate
+
+    where = f"judge_problems {row.get('id')!r}"
+    try:
+        JudgeProblemUpdate.model_validate(
+            {
+                key: row[key]
+                for key in (
+                    "time_limit_ms", "memory_limit_mb", "output_limit_kb",
+                    "compare_mode", "float_tolerance", "allowed_languages",
+                )
+                if key in row
+            },
+            strict=True,
+        )
+    except ValidationError as exc:
+        raise ImportError_(f"{where}: {exc}") from exc
+
+    own = f"{row.get('competition_id')}/judge/{row.get('challenge_id')}/"
+    if not str(row.get("object_key") or "").startswith(own):
+        row["object_key"] = None
+        row["testcases"] = []
+        return
+    manifest = row.get("testcases")
+    if not isinstance(manifest, list) or not manifest:
+        raise ImportError_(f"{where}: test data without a test-case list")
+    for entry in manifest:
+        if not (
+            isinstance(entry, dict)
+            and isinstance(entry.get("id"), str)
+            and isinstance(entry.get("sample"), bool)
+            and isinstance(entry.get("input_bytes"), int)
+            and isinstance(entry.get("answer_bytes"), int)
+        ):
+            raise ImportError_(f"{where}: malformed test-case entry")
+
+
 async def _nk_competition(db: AsyncSession, row: dict) -> str | None:
     return await db.scalar(select(Competition.id).where(Competition.name == row["name"]))
 
@@ -490,6 +547,11 @@ SPECS: tuple[Spec, ...] = (
     Spec("challenge_deployments", ChallengeDeployment, "competitions",
          remaps=(_COMP, ("challenge_id", "challenge", True)), owned_by_competition=True,
          validate_row=_validate_deployment_row),
+    # Programming problem (#447): limits/compare/languages plus ONE test-data zip
+    # carried in the object side-car like an attachment.
+    Spec("judge_problems", JudgeProblem, "competitions",
+         remaps=(_COMP, ("challenge_id", "challenge", True)), owned_by_competition=True,
+         object_key_for=_judge_object_key, validate_row=_validate_judge_problem_row),
     Spec("hints", Hint, "competitions", id_map="hint",
          remaps=(_COMP, ("challenge_id", "challenge", True)), owned_by_competition=True),
     Spec("attachments", Attachment, "competitions",

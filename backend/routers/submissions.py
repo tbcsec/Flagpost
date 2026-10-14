@@ -105,6 +105,12 @@ async def submit_flag(
     challenge = await load_visible_challenge(
         db, competition_id, challenge_id, current_user
     )
+    if challenge.flag_type == "programming":
+        # Marked by the code judge (#447/#448), never by a submitted string.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Programming challenges are solved by submitting code, not a flag",
+        )
     # Unique-per-instance mode (ADR-0036 §3) lives on the challenge's deployment,
     # not the Challenge row — so the flag is graded against the subject's live
     # instance, and the challenge itself may carry no static flag. One indexed

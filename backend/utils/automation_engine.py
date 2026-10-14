@@ -29,6 +29,7 @@ events*, wholesale.
 
 from __future__ import annotations
 
+import asyncio
 import contextvars
 import logging
 from typing import Any
@@ -204,6 +205,21 @@ async def run_rule(
     for action in rule.actions or []:
         try:
             await execute_action(db, rule, event_name, payload, action)
+        except asyncio.CancelledError:
+            # The per-action isolation below cannot see this: CancelledError is
+            # a BaseException, so a cancelled run (the handler ceiling in
+            # plugins/automations, or shutdown) otherwise skipped the remaining
+            # actions, the trigger-count bump and the rule_triggered emit with
+            # no trace at all — a rule that silently half-ran (#455). Log where
+            # it stopped, then re-raise: cancellation is never swallowed.
+            logger.warning(
+                "rule %s (%s) cancelled during action %r; %s action(s) not run",
+                rule_id,
+                rule_name,
+                action.get("type"),
+                len(rule.actions or []) - (rule.actions or []).index(action) - 1,
+            )
+            raise
         except Exception:  # noqa: BLE001 — isolate per action
             logger.exception(
                 "action %r failed on rule %s (%s)",

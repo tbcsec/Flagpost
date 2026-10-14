@@ -20,6 +20,17 @@ from config import settings
 
 logger = logging.getLogger("mailer")
 
+# Total bound on one SMTP delivery, in seconds (#455). aiosmtplib's own default
+# is 60s, which already exceeds the event bus's 10s per-handler cap on its own —
+# so a single ``send_email`` action against a slow or unreachable mail server
+# could consume an entire automation rule evaluation and get the whole run
+# cancelled mid-loop. Bounded here, at the one place email leaves the platform,
+# so the engine's per-action isolation can actually do its job: a timeout
+# becomes one failed action, logged, with the rule's remaining actions still
+# running. Chosen generously relative to webhook egress (5s, ADR-0013) because
+# a legitimate SMTP conversation is several round trips, including TLS.
+SMTP_TIMEOUT_SECONDS = 20.0
+
 
 async def _effective_smtp():
     """Resolve the SMTP config: the DB SiteSettings row wins when its host is set
@@ -102,5 +113,6 @@ async def send_email(to: list[str], subject: str, body: str) -> bool:
         username=smtp["username"],
         password=smtp["password"],
         start_tls=smtp["starttls"],
+        timeout=SMTP_TIMEOUT_SECONDS,
     )
     return True

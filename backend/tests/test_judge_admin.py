@@ -255,3 +255,60 @@ async def test_judge_is_an_optional_module(client):
     catalog = await client.get("/api/modules", headers=_auth(admin))
     assert catalog.status_code == 200, catalog.text
     assert "judge" in [m["id"] for m in catalog.json()]
+
+
+# --- built-in presets + endpoint suggestion ----------------------------------
+
+
+def test_every_preset_passes_the_same_validation_as_a_hand_entered_language():
+    """A preset must not be a way around the argv/placeholder rules."""
+    from schemas.judge import JudgeLanguageCreate
+    from utils.judge_presets import LANGUAGE_PRESETS
+
+    keys = [p["key"] for p in LANGUAGE_PRESETS]
+    assert len(keys) == len(set(keys)), "preset keys must be unique"
+    for preset in LANGUAGE_PRESETS:
+        JudgeLanguageCreate(**preset, enabled=True)  # raises if invalid
+        image = preset["image_ref"]
+        # Pinned to a release line, and glibc-based: never a floating
+        # :latest, never Alpine/musl (ADR-0042, utils/judge_presets).
+        assert ":" in image and not image.endswith(":latest"), image
+        assert "alpine" not in image, image
+
+
+async def test_presets_are_listed_for_the_admin_and_can_be_added(client):
+    admin = await admin_token(client)
+    resp = await client.get(f"{BASE}/presets", headers=_auth(admin))
+    assert resp.status_code == 200
+    presets = {p["key"]: p for p in resp.json()}
+    assert {"python3", "cpp", "java"} <= set(presets)
+
+    # Adding one is an ordinary language create from the preset body.
+    added = await client.post(
+        f"{BASE}/languages", json={**presets["cpp"], "enabled": True}, headers=_auth(admin)
+    )
+    assert added.status_code == 201, added.text
+    assert added.json()["image_ref"] == presets["cpp"]["image_ref"]
+
+
+async def test_presets_require_manage_judge_infra(client):
+    token = await _participant(client, "preset-peek@example.com")
+    assert (await client.get(f"{BASE}/presets", headers=_auth(token))).status_code == 403
+
+
+async def test_endpoint_suggestion_prefers_the_instancing_proxy(client):
+    """A suggestion only — nothing is stored until the admin saves."""
+    from models.challenge_instancing import INSTANCE_SETTINGS_ID, InstanceSettings
+
+    admin = await admin_token(client)
+    first = (await client.get(f"{BASE}/settings", headers=_auth(admin))).json()
+    assert first["endpoint_url"] is None
+    assert first["suggested_endpoint_url"] == "http://socket-proxy:2375"
+
+    async with SessionLocal() as session:
+        session.add(InstanceSettings(id=INSTANCE_SETTINGS_ID, endpoint_url="http://chal-proxy:2375"))
+        await session.commit()
+
+    second = (await client.get(f"{BASE}/settings", headers=_auth(admin))).json()
+    assert second["endpoint_url"] is None
+    assert second["suggested_endpoint_url"] == "http://chal-proxy:2375"

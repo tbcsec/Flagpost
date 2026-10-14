@@ -2771,11 +2771,8 @@
       "endpointBeforeEnabling": "Set a container endpoint before enabling the judge.",
       "languageBeforeEnabling": "Add and enable at least one language before enabling the judge.",
       "languages": "Languages",
-      "languagesDescription": "Each language is a stock container image plus the commands that compile and run a submission in it.",
+      "languagesDescription": "Tick the languages competitors can submit in. Built-in languages use official Docker images, pinned to a version so results don't change mid-event; edit one to re-pin it.",
       "addLanguage": "Add language",
-      "noLanguages": "No languages yet. Add one before enabling the judge.",
-      "enabled": "Enabled",
-      "disabled": "Disabled",
       "edit": "Edit",
       "delete": "Delete",
       "cancel": "Cancel",
@@ -2802,7 +2799,13 @@
       "languageEnabled": "Available to competitors",
       "languageAdded": "Language added",
       "languageSaved": "Language saved",
-      "couldntSaveLanguage": "Couldn't save the language"
+      "couldntSaveLanguage": "Couldn't save the language",
+      "endpointSuggestedHint": "Suggested — reuses your challenge-instancing proxy if one is set up, otherwise the default from the Docker Compose stack. Nothing is stored until you save.",
+      "advanced": "Advanced: concurrency and default limits",
+      "editNamed": "Edit {name}",
+      "customLanguages": "Custom languages",
+      "customLanguagesDescription": "For a language that isn't built in, or an image with extra libraries.",
+      "addCustomLanguage": "Add custom language"
     },
     "ai": {
       "provider": "Provider",

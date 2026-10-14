@@ -2,11 +2,12 @@ import { fireEvent, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithIntl } from "@/test/intl";
-import type { JudgeLanguage, JudgeSettings } from "@/lib/types";
+import type { JudgeLanguage, JudgeLanguagePreset, JudgeSettings } from "@/lib/types";
 
-// Admin → Site settings → Code judge (#446/#447). The judge ships inert, so the
-// enable invariant (endpoint + an enabled language) is mirrored client-side;
-// language commands are argv lists entered one argument per line.
+// Admin → Site settings → Code judge (#446/#447). Built-in languages are ticked
+// on from presets; custom languages are the advanced path, with argv commands
+// entered one argument per line. The judge ships inert, so the enable invariant
+// (endpoint + an enabled language) is mirrored client-side.
 
 const mockUpdateSettings = vi.fn();
 const mockCreate = vi.fn();
@@ -15,9 +16,31 @@ const mockToast = vi.fn();
 let settings: JudgeSettings;
 let languages: JudgeLanguage[];
 
+const presets: JudgeLanguagePreset[] = [
+  {
+    key: "python3",
+    name: "Python 3",
+    image_ref: "python:3.14-slim",
+    source_filename: "solution.py",
+    compile_command: null,
+    run_command: ["python3", "{source}"],
+    time_multiplier: 1,
+  },
+  {
+    key: "cpp",
+    name: "C++",
+    image_ref: "gcc:16",
+    source_filename: "main.cpp",
+    compile_command: ["g++", "-O2", "-o", "{work}/main", "{source}"],
+    run_command: ["{work}/main"],
+    time_multiplier: 1,
+  },
+];
+
 vi.mock("@/lib/hooks/use-judge", () => ({
   useJudgeSettings: () => ({ data: settings, isLoading: false }),
   useJudgeLanguages: () => ({ data: languages, isLoading: false }),
+  useJudgeLanguagePresets: () => ({ data: presets, isLoading: false }),
   useUpdateJudgeSettings: () => ({ mutate: mockUpdateSettings, isPending: false }),
   useCreateJudgeLanguage: () => ({ mutate: mockCreate, isPending: false }),
   useUpdateJudgeLanguage: () => ({ mutate: mockUpdateLanguage, isPending: false }),
@@ -36,19 +59,21 @@ function baseSettings(over: Partial<JudgeSettings> = {}): JudgeSettings {
     default_time_limit_ms: 2000,
     default_memory_limit_mb: 256,
     default_output_limit_kb: 8192,
+    suggested_endpoint_url: "http://socket-proxy:2375",
     ...over,
   };
 }
 
-const python: JudgeLanguage = {
+/** The Python preset, as an added (stored) language. */
+const addedPython: JudgeLanguage = {
   id: "lang-1",
   key: "python3",
   name: "Python 3",
-  image_ref: "python:3.13-slim",
+  image_ref: "python:3.13-slim", // re-pinned by the operator
   source_filename: "solution.py",
   compile_command: null,
   run_command: ["python3", "{source}"],
-  time_multiplier: 2,
+  time_multiplier: 1,
   enabled: true,
 };
 
@@ -60,8 +85,15 @@ describe("JudgeSettingsPanel", () => {
     mockToast.mockClear();
   });
 
+  it("prefills the suggested endpoint when none is stored", () => {
+    settings = baseSettings({ suggested_endpoint_url: "http://chal-proxy:2375" });
+    languages = [];
+    renderWithIntl(<JudgeSettingsPanel />);
+    expect(screen.getByLabelText("Container endpoint")).toHaveValue("http://chal-proxy:2375");
+  });
+
   it("refuses to enable the judge with no enabled language", () => {
-    settings = baseSettings({ endpoint_url: "http://socket-proxy:2375" });
+    settings = baseSettings();
     languages = [];
     renderWithIntl(<JudgeSettingsPanel />);
 
@@ -75,37 +107,60 @@ describe("JudgeSettingsPanel", () => {
     );
   });
 
-  it("saves the settings once an endpoint and a language exist", () => {
+  it("saves the prefilled endpoint once a language is enabled", () => {
     settings = baseSettings();
-    languages = [python];
+    languages = [addedPython];
     renderWithIntl(<JudgeSettingsPanel />);
 
     fireEvent.change(screen.getByLabelText("Status"), { target: { value: "on" } });
-    fireEvent.change(screen.getByLabelText("Container endpoint"), {
-      target: { value: "http://socket-proxy:2375" },
-    });
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect(mockUpdateSettings).toHaveBeenCalledWith(
-      expect.objectContaining({
-        enabled: true,
-        endpoint_url: "http://socket-proxy:2375",
-        max_concurrent_judgings: 1,
-      }),
+      expect.objectContaining({ enabled: true, endpoint_url: "http://socket-proxy:2375" }),
       expect.anything(),
     );
   });
 
-  it("sends commands as one argv entry per line, and an empty compile box as null", () => {
+  it("ticking a built-in that isn't added yet creates it from the preset", () => {
     settings = baseSettings();
     languages = [];
     renderWithIntl(<JudgeSettingsPanel />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Add language" }));
-    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Python 3" } });
-    fireEvent.change(screen.getByLabelText("Key"), { target: { value: "python3" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /C\+\+/ }));
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ key: "cpp", image_ref: "gcc:16", enabled: true }),
+      expect.anything(),
+    );
+    expect(mockUpdateLanguage).not.toHaveBeenCalled();
+  });
+
+  it("unticking an added built-in disables the stored row, keeping its pinned image", () => {
+    settings = baseSettings();
+    languages = [addedPython];
+    renderWithIntl(<JudgeSettingsPanel />);
+
+    // The row shows the operator's pin, not the preset's newer tag.
+    expect(screen.getByText("python:3.13-slim")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Python 3/ }));
+
+    expect(mockUpdateLanguage).toHaveBeenCalledWith(
+      { id: "lang-1", input: { enabled: false } },
+      expect.anything(),
+    );
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it("a custom language's commands go one argv entry per line; empty compile is null", () => {
+    settings = baseSettings();
+    languages = [];
+    renderWithIntl(<JudgeSettingsPanel />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add custom language" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Python + NumPy" } });
+    fireEvent.change(screen.getByLabelText("Key"), { target: { value: "python-numpy" } });
     fireEvent.change(screen.getByLabelText("Container image"), {
-      target: { value: "python:3.13-slim" },
+      target: { value: "registry.example.org/py-numpy:1" },
     });
     fireEvent.change(screen.getByLabelText("Source filename"), {
       target: { value: "solution.py" },
@@ -118,7 +173,7 @@ describe("JudgeSettingsPanel", () => {
 
     expect(mockCreate).toHaveBeenCalledWith(
       expect.objectContaining({
-        key: "python3",
+        key: "python-numpy",
         compile_command: null,
         run_command: ["python3", "-X utf8", "{source}"],
       }),
@@ -128,20 +183,22 @@ describe("JudgeSettingsPanel", () => {
 
   it("locks the key when editing, and never sends it", () => {
     settings = baseSettings();
-    languages = [python];
+    languages = [addedPython];
     renderWithIntl(<JudgeSettingsPanel />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit Python 3" }));
     expect(screen.getByLabelText("Key")).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Python" } });
+    fireEvent.change(screen.getByLabelText("Container image"), {
+      target: { value: "python:3.14-slim" },
+    });
     fireEvent.submit(screen.getByLabelText("Run command").closest("form")!);
 
     expect(mockUpdateLanguage).toHaveBeenCalledTimes(1);
     const [{ id, input }] = mockUpdateLanguage.mock.calls[0];
     expect(id).toBe("lang-1");
     expect(input).not.toHaveProperty("key");
-    expect(input.name).toBe("Python");
+    expect(input.image_ref).toBe("python:3.14-slim");
   });
 
   it("shows the command placeholders literally rather than as ICU arguments", () => {
@@ -149,7 +206,7 @@ describe("JudgeSettingsPanel", () => {
     settings = baseSettings();
     languages = [];
     renderWithIntl(<JudgeSettingsPanel />);
-    fireEvent.click(screen.getByRole("button", { name: "Add language" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add custom language" }));
     expect(screen.getByText("{source}")).toBeInTheDocument();
     expect(screen.getByText("{work}")).toBeInTheDocument();
   });

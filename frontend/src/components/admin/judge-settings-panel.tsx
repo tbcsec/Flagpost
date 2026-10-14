@@ -3,7 +3,6 @@
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -28,12 +27,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   useCreateJudgeLanguage,
   useDeleteJudgeLanguage,
+  useJudgeLanguagePresets,
   useJudgeLanguages,
   useJudgeSettings,
   useUpdateJudgeLanguage,
   useUpdateJudgeSettings,
 } from "@/lib/hooks/use-judge";
-import type { JudgeLanguage, JudgeSettings } from "@/lib/types";
+import type { JudgeLanguage, JudgeLanguagePreset, JudgeSettings } from "@/lib/types";
 import { toast } from "@/stores/toast";
 
 // Admin → Site settings → Code judge (#446, ADR-0042). The site-wide judge
@@ -68,8 +68,9 @@ function argvToLines(argv: string[] | null): string {
 export function JudgeSettingsPanel() {
   const settings = useJudgeSettings();
   const languages = useJudgeLanguages();
+  const presets = useJudgeLanguagePresets();
   const [nonce, setNonce] = useState(0);
-  if (settings.isLoading || !settings.data || languages.isLoading) {
+  if (settings.isLoading || !settings.data || languages.isLoading || presets.isLoading) {
     return <Skeleton className="h-64 w-full" />;
   }
   const langs = languages.data ?? [];
@@ -81,7 +82,11 @@ export function JudgeSettingsPanel() {
         enabledLanguageCount={langs.filter((l) => l.enabled).length}
         onSaved={() => setNonce((n) => n + 1)}
       />
-      <LanguagesCard languages={langs} judgeEnabled={settings.data.enabled} />
+      <LanguagesCard
+        languages={langs}
+        presets={presets.data ?? []}
+        judgeEnabled={settings.data.enabled}
+      />
     </div>
   );
 }
@@ -98,7 +103,12 @@ function JudgeSettingsForm({
   const t = useTranslations("admin.judge");
   const update = useUpdateJudgeSettings();
   const [enabled, setEnabled] = useState(data.enabled);
-  const [endpointUrl, setEndpointUrl] = useState(data.endpoint_url ?? "");
+  // Prefill a suggestion (the instancing proxy, or the compose default) when
+  // nothing is stored yet — saved only when the admin saves.
+  const suggested = data.endpoint_url === null;
+  const [endpointUrl, setEndpointUrl] = useState(
+    data.endpoint_url ?? data.suggested_endpoint_url,
+  );
   const [concurrency, setConcurrency] = useState(String(data.max_concurrent_judgings));
   const [timeMs, setTimeMs] = useState(String(data.default_time_limit_ms));
   const [memoryMb, setMemoryMb] = useState(String(data.default_memory_limit_mb));
@@ -167,8 +177,20 @@ function JudgeSettingsForm({
               placeholder="http://socket-proxy:2375"
               autoComplete="off"
             />
-            <p className="text-xs text-muted-foreground">{t("endpointHint")}</p>
+            <p className="text-xs text-muted-foreground">
+              {suggested ? t("endpointSuggestedHint") : t("endpointHint")}
+            </p>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Concurrency and default limits have sensible defaults; most installs
+          never touch them, so they sit behind a disclosure. */}
+      <details className="group rounded-lg border border-border bg-card">
+        <summary className="cursor-pointer select-none px-6 py-4 text-sm font-medium">
+          {t("advanced")}
+        </summary>
+        <div className="grid gap-5 border-t border-border px-6 py-5">
           <div className="grid gap-2">
             <Label htmlFor="judge-concurrency">{t("concurrency")}</Label>
             <Input
@@ -182,50 +204,47 @@ function JudgeSettingsForm({
             />
             <p className="text-xs text-muted-foreground">{t("concurrencyHint")}</p>
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("defaultLimits")}</CardTitle>
-          <CardDescription>{t("defaultLimitsDescription")}</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-3">
-          <div className="grid gap-2">
-            <Label htmlFor="judge-time">{t("timeLimitMs")}</Label>
-            <Input
-              id="judge-time"
-              type="number"
-              min={100}
-              max={60000}
-              value={timeMs}
-              onChange={(e) => setTimeMs(e.target.value)}
-            />
+          <div className="grid gap-1.5">
+            <p className="text-sm font-medium">{t("defaultLimits")}</p>
+            <p className="text-xs text-muted-foreground">{t("defaultLimitsDescription")}</p>
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="judge-memory">{t("memoryLimitMb")}</Label>
-            <Input
-              id="judge-memory"
-              type="number"
-              min={16}
-              max={8192}
-              value={memoryMb}
-              onChange={(e) => setMemoryMb(e.target.value)}
-            />
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-2">
+              <Label htmlFor="judge-time">{t("timeLimitMs")}</Label>
+              <Input
+                id="judge-time"
+                type="number"
+                min={100}
+                max={60000}
+                value={timeMs}
+                onChange={(e) => setTimeMs(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="judge-memory">{t("memoryLimitMb")}</Label>
+              <Input
+                id="judge-memory"
+                type="number"
+                min={16}
+                max={8192}
+                value={memoryMb}
+                onChange={(e) => setMemoryMb(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="judge-output">{t("outputLimitKb")}</Label>
+              <Input
+                id="judge-output"
+                type="number"
+                min={1}
+                max={262144}
+                value={outputKb}
+                onChange={(e) => setOutputKb(e.target.value)}
+              />
+            </div>
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="judge-output">{t("outputLimitKb")}</Label>
-            <Input
-              id="judge-output"
-              type="number"
-              min={1}
-              max={262144}
-              value={outputKb}
-              onChange={(e) => setOutputKb(e.target.value)}
-            />
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+      </details>
 
       <Button type="submit" className="w-fit" disabled={update.isPending}>
         {update.isPending ? t("saving") : t("saveChanges")}
@@ -236,16 +255,47 @@ function JudgeSettingsForm({
 
 function LanguagesCard({
   languages,
+  presets,
   judgeEnabled,
 }: {
   languages: JudgeLanguage[];
+  presets: JudgeLanguagePreset[];
   judgeEnabled: boolean;
 }) {
   const t = useTranslations("admin.judge");
   const confirm = useConfirm();
+  const create = useCreateJudgeLanguage();
+  const update = useUpdateJudgeLanguage();
   const remove = useDeleteJudgeLanguage();
-  // null = closed; "new" = create; a language = edit it.
+  // null = closed; "new" = add a custom language; a language = edit it.
   const [editing, setEditing] = useState<JudgeLanguage | "new" | null>(null);
+
+  const byKey = new Map(languages.map((l) => [l.key, l]));
+  const presetKeys = new Set(presets.map((p) => p.key));
+  const custom = languages.filter((l) => !presetKeys.has(l.key));
+  const busy = create.isPending || update.isPending || remove.isPending;
+
+  const onError = (err: unknown) =>
+    toast(t("couldntSaveLanguage"), {
+      description: (err as Error).message,
+      variant: "destructive",
+    });
+
+  /** Ticking a built-in on the first time creates it from the preset; after
+   *  that it's an ordinary enable/disable of the stored row (which keeps the
+   *  version the operator pinned, even if a later preset moves on). */
+  function togglePreset(preset: JudgeLanguagePreset, on: boolean) {
+    const existing = byKey.get(preset.key);
+    if (existing) {
+      update.mutate({ id: existing.id, input: { enabled: on } }, { onError });
+    } else if (on) {
+      create.mutate({ ...preset, enabled: true }, { onError });
+    }
+  }
+
+  function toggleCustom(language: JudgeLanguage, on: boolean) {
+    update.mutate({ id: language.id, input: { enabled: on } }, { onError });
+  }
 
   async function onDelete(language: JudgeLanguage) {
     const ok = await confirm({
@@ -266,66 +316,125 @@ function LanguagesCard({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
-        <div className="grid gap-1.5">
-          <CardTitle>{t("languages")}</CardTitle>
-          <CardDescription>{t("languagesDescription")}</CardDescription>
-        </div>
-        <Button type="button" size="sm" onClick={() => setEditing("new")}>
-          {t("addLanguage")}
-        </Button>
+      <CardHeader>
+        <CardTitle>{t("languages")}</CardTitle>
+        <CardDescription>{t("languagesDescription")}</CardDescription>
       </CardHeader>
-      <CardContent>
-        {languages.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t("noLanguages")}</p>
-        ) : (
-          <ul className="divide-y divide-border rounded-md border border-border">
-            {languages.map((language) => (
+      <CardContent className="grid gap-6">
+        <ul className="divide-y divide-border rounded-md border border-border">
+          {presets.map((preset) => {
+            const existing = byKey.get(preset.key);
+            const enabled = existing?.enabled ?? false;
+            const image = existing?.image_ref ?? preset.image_ref;
+            const id = `lang-toggle-${preset.key}`;
+            return (
               <li
-                key={language.id}
+                key={preset.key}
                 className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
               >
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{language.name}</span>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {language.key}
+                <label htmlFor={id} className="flex min-w-0 cursor-pointer items-center gap-3">
+                  <input
+                    id={id}
+                    type="checkbox"
+                    checked={enabled}
+                    disabled={busy}
+                    onChange={(e) => togglePreset(preset, e.target.checked)}
+                    style={{ accentColor: "hsl(var(--primary))" }}
+                    className="h-4 w-4 shrink-0"
+                  />
+                  <span className="min-w-0">
+                    <span className="block font-medium">{existing?.name ?? preset.name}</span>
+                    <span className="block truncate font-mono text-xs text-muted-foreground">
+                      {image}
                     </span>
-                    {language.enabled ? (
-                      <Badge variant="success">{t("enabled")}</Badge>
-                    ) : (
-                      <Badge variant="muted">{t("disabled")}</Badge>
-                    )}
-                  </div>
-                  <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
-                    {language.image_ref}
-                  </p>
-                </div>
-                <div className="flex gap-2">
+                  </span>
+                </label>
+                {existing && (
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => setEditing(language)}
+                    onClick={() => setEditing(existing)}
+                    aria-label={t("editNamed", { name: existing.name })}
                   >
                     {t("edit")}
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onDelete(language)}
-                    disabled={remove.isPending}
-                  >
-                    {t("delete")}
-                  </Button>
-                </div>
+                )}
               </li>
-            ))}
-          </ul>
-        )}
+            );
+          })}
+        </ul>
+
+        <div className="grid gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="grid gap-1">
+              <p className="text-sm font-medium">{t("customLanguages")}</p>
+              <p className="text-xs text-muted-foreground">{t("customLanguagesDescription")}</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => setEditing("new")}>
+              {t("addCustomLanguage")}
+            </Button>
+          </div>
+          {custom.length > 0 && (
+            <ul className="divide-y divide-border rounded-md border border-border">
+              {custom.map((language) => {
+                const id = `lang-toggle-custom-${language.id}`;
+                return (
+                  <li
+                    key={language.id}
+                    className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                  >
+                    <label htmlFor={id} className="flex min-w-0 cursor-pointer items-center gap-3">
+                      <input
+                        id={id}
+                        type="checkbox"
+                        checked={language.enabled}
+                        disabled={busy}
+                        onChange={(e) => toggleCustom(language, e.target.checked)}
+                        style={{ accentColor: "hsl(var(--primary))" }}
+                        className="h-4 w-4 shrink-0"
+                      />
+                      <span className="min-w-0">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">{language.name}</span>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {language.key}
+                          </span>
+                        </span>
+                        <span className="block truncate font-mono text-xs text-muted-foreground">
+                          {language.image_ref}
+                        </span>
+                      </span>
+                    </label>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setEditing(language)}
+                        aria-label={t("editNamed", { name: language.name })}
+                      >
+                        {t("edit")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onDelete(language)}
+                        disabled={busy}
+                      >
+                        {t("delete")}
+                      </Button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
         {judgeEnabled && (
-          <p className="mt-3 text-xs text-muted-foreground">{t("lastLanguageHint")}</p>
+          <p className="text-xs text-muted-foreground">{t("lastLanguageHint")}</p>
         )}
       </CardContent>
       {editing !== null && (

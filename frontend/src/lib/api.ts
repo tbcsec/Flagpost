@@ -33,6 +33,7 @@ import type {
   InstanceSettingsUpdate,
   JudgeLanguage,
   JudgeLanguageCreate,
+  JudgeLanguagePreset,
   JudgeLanguageUpdate,
   JudgeSettings,
   JudgeSettingsUpdate,
@@ -1403,6 +1404,7 @@ export const judgeAdminApi = {
       body: JSON.stringify(input),
     }),
   listLanguages: () => apiFetch<JudgeLanguage[]>("/api/admin/judge/languages"),
+  listPresets: () => apiFetch<JudgeLanguagePreset[]>("/api/admin/judge/presets"),
   createLanguage: (input: JudgeLanguageCreate) =>
     apiFetch<JudgeLanguage>("/api/admin/judge/languages", {
       method: "POST",

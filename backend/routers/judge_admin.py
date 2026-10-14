@@ -22,20 +22,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import require_permission
 from db import get_db
+from models.challenge_instancing import INSTANCE_SETTINGS_ID, InstanceSettings
 from models.judge import JUDGE_SETTINGS_ID, JudgeLanguage, JudgeSettings
 from models.user import User
 from schemas.judge import (
     JudgeLanguageCreate,
     JudgeLanguageOut,
+    JudgeLanguagePreset,
     JudgeLanguageUpdate,
     JudgeSettingsOut,
     JudgeSettingsUpdate,
 )
 from utils.event_bus import event_bus
+from utils.judge_presets import LANGUAGE_PRESETS
 
 router = APIRouter(prefix="/api/admin/judge", tags=["judge-admin"])
 
 _PERM = "manage_judge_infra"
+_COMPOSE_DEFAULT_ENDPOINT = "http://socket-proxy:2375"
 
 
 async def _get_or_create(db: AsyncSession) -> JudgeSettings:
@@ -89,12 +93,26 @@ async def _check_enable_invariant(db: AsyncSession, settings: JudgeSettings) -> 
 # --- settings ----------------------------------------------------------------
 
 
+async def _to_out(db: AsyncSession, settings: JudgeSettings) -> JudgeSettingsOut:
+    """The settings plus a suggested endpoint for the form to prefill. Reusing
+    the challenge-instancing proxy is the common case — one least-privilege
+    proxy can serve both — so offer that before the compose default."""
+    out = JudgeSettingsOut.model_validate(settings)
+    instance = await db.get(InstanceSettings, INSTANCE_SETTINGS_ID)
+    out.suggested_endpoint_url = (
+        instance.endpoint_url
+        if instance is not None and instance.endpoint_url
+        else _COMPOSE_DEFAULT_ENDPOINT
+    )
+    return out
+
+
 @router.get("/settings", response_model=JudgeSettingsOut)
 async def get_settings(
     current_user: User = Depends(require_permission(_PERM)),
     db: AsyncSession = Depends(get_db),
-) -> JudgeSettings:
-    return await _get_or_create(db)
+) -> JudgeSettingsOut:
+    return await _to_out(db, await _get_or_create(db))
 
 
 @router.put("/settings", response_model=JudgeSettingsOut)
@@ -102,7 +120,7 @@ async def update_settings(
     body: JudgeSettingsUpdate,
     current_user: User = Depends(require_permission(_PERM)),
     db: AsyncSession = Depends(get_db),
-) -> JudgeSettings:
+) -> JudgeSettingsOut:
     settings = await _lock_settings(db)
     if body.executor is not None:
         settings.executor = body.executor
@@ -126,7 +144,7 @@ async def update_settings(
         "judge.settings_updated",
         {"actor_user_id": current_user.id, "enabled": settings.enabled},
     )
-    return settings
+    return await _to_out(db, settings)
 
 
 # --- languages ---------------------------------------------------------------
@@ -145,6 +163,16 @@ async def _get_language(db: AsyncSession, language_id: str) -> JudgeLanguage:
     if language is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Language not found.")
     return language
+
+
+@router.get("/presets", response_model=list[JudgeLanguagePreset])
+async def list_presets(
+    current_user: User = Depends(require_permission(_PERM)),
+) -> list[dict]:
+    """Built-in languages the admin can add with one click
+    (``utils/judge_presets``). Which are already added is the client's join
+    against ``/languages`` by key."""
+    return LANGUAGE_PRESETS
 
 
 @router.get("/languages", response_model=list[JudgeLanguageOut])

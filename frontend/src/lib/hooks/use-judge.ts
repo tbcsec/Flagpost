@@ -16,6 +16,7 @@ import type {
 const judgeKeys = {
   settings: ["judge", "settings"] as const,
   languages: ["judge", "languages"] as const,
+  presets: ["judge", "presets"] as const,
 };
 
 export function useJudgeSettings() {
@@ -39,6 +40,15 @@ export function useJudgeLanguages() {
     queryKey: judgeKeys.languages,
     queryFn: judgeAdminApi.listLanguages,
     staleTime: 60_000,
+  });
+}
+
+/** The built-in catalog is static per release, so cache it for the session. */
+export function useJudgeLanguagePresets() {
+  return useQuery({
+    queryKey: judgeKeys.presets,
+    queryFn: judgeAdminApi.listPresets,
+    staleTime: Infinity,
   });
 }
 

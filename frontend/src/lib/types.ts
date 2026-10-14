@@ -2098,6 +2098,9 @@ export interface JudgeSettings {
   default_time_limit_ms: number;
   default_memory_limit_mb: number;
   default_output_limit_kb: number;
+  /** What the form prefills when no endpoint is stored: the instancing proxy
+   *  if configured, else the compose default. Never stored by itself. */
+  suggested_endpoint_url: string;
 }
 
 /** Partial update. `endpoint_url: ""` clears it. */
@@ -2139,3 +2142,15 @@ export interface JudgeLanguageCreate {
 /** The key is immutable once created (problems refer to it). An explicit
  *  `compile_command: null` clears the compile step; omitting leaves it. */
 export type JudgeLanguageUpdate = Partial<Omit<JudgeLanguageCreate, "key">>;
+
+/** A built-in language definition. Adding one creates an ordinary language
+ *  from it; which presets are already added is a join on `key`. */
+export interface JudgeLanguagePreset {
+  key: string;
+  name: string;
+  image_ref: string;
+  source_filename: string;
+  compile_command: string[] | null;
+  run_command: string[];
+  time_multiplier: number;
+}

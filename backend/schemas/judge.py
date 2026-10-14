@@ -61,6 +61,10 @@ class JudgeSettingsOut(BaseModel):
     default_time_limit_ms: int
     default_memory_limit_mb: int
     default_output_limit_kb: int
+    # What the form prefills when no endpoint is stored yet: the challenge-
+    # instancing proxy if one is configured, else the compose stack's default.
+    # Only a suggestion — nothing is stored until the admin saves.
+    suggested_endpoint_url: str = "http://socket-proxy:2375"
 
 
 class JudgeSettingsUpdate(BaseModel):
@@ -170,3 +174,16 @@ class JudgeLanguageUpdate(_LanguageFields):
     @classmethod
     def _run(cls, v: list[str] | None) -> list[str] | None:
         return None if v is None else _validate_command(v, required=True)
+
+
+class JudgeLanguagePreset(BaseModel):
+    """A built-in language definition (``utils/judge_presets``). Adding one
+    creates an ordinary language from it, enabled."""
+
+    key: str
+    name: str
+    image_ref: str
+    source_filename: str
+    compile_command: list[str] | None
+    run_command: list[str]
+    time_multiplier: float

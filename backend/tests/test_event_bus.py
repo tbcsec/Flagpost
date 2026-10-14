@@ -134,3 +134,38 @@ async def test_unsubscribe_owner_detaches_handlers():
     bus.unsubscribe_owner("plugin_a")
     await bus.emit("x.y", {})
     assert seen == ["x.y"]  # only the pre-detach emit landed
+
+
+async def test_wait_for_background_is_bounded_against_a_wedged_task():
+    """Regression: the per-test teardown drains background tasks before dropping
+    the schema, and intermittently a task sat *un-driven* at teardown (its own
+    _run timeout timer belonged to the test's event loop, which the finaliser
+    loop no longer ran), so a plain gather awaited it forever — a silent CI hang.
+    wait_for_background is now bounded: a task that ignores its own cancellation
+    is itself cancelled and dropped rather than awaited indefinitely."""
+    bus = EventBus(handler_timeout=0.1)
+    release = asyncio.Event()
+
+    @bus.on("x.y", background=True)
+    async def _wedged(name, payload):
+        # Swallow cancellation — stands in for a straggler that never settles on
+        # this loop — until explicitly released at the end of the test.
+        while not release.is_set():
+            try:
+                await asyncio.sleep(0.02)
+            except asyncio.CancelledError:
+                pass
+
+    await bus.emit("x.y", {})
+    assert bus._background_tasks  # scheduled and pending
+
+    # Without the bound this hangs forever; with it, it returns within the drain
+    # window and clears the set.
+    await asyncio.wait_for(
+        bus.wait_for_background(), timeout=bus._handler_timeout + 4
+    )
+    assert not bus._background_tasks
+
+    # Let the dropped task exit so it isn't destroyed-while-pending.
+    release.set()
+    await asyncio.sleep(0.05)

@@ -2086,3 +2086,56 @@ export interface AdminUserSkills {
   total: number;
   total_weighted: number;
 }
+
+// --- Code judge (#446, ADR-0042) --------------------------------------------
+
+/** Site judge configuration (Admin → Site settings → Code judge). */
+export interface JudgeSettings {
+  enabled: boolean;
+  executor: string;
+  endpoint_url: string | null;
+  max_concurrent_judgings: number;
+  default_time_limit_ms: number;
+  default_memory_limit_mb: number;
+  default_output_limit_kb: number;
+}
+
+/** Partial update. `endpoint_url: ""` clears it. */
+export interface JudgeSettingsUpdate {
+  enabled?: boolean;
+  executor?: string;
+  endpoint_url?: string;
+  max_concurrent_judgings?: number;
+  default_time_limit_ms?: number;
+  default_memory_limit_mb?: number;
+  default_output_limit_kb?: number;
+}
+
+/** A language the judge can run: a stock image plus argv compile/run
+ *  commands, which may only use the `{source}` and `{work}` placeholders. */
+export interface JudgeLanguage {
+  id: string;
+  key: string;
+  name: string;
+  image_ref: string;
+  source_filename: string;
+  compile_command: string[] | null;
+  run_command: string[];
+  time_multiplier: number;
+  enabled: boolean;
+}
+
+export interface JudgeLanguageCreate {
+  key: string;
+  name: string;
+  image_ref: string;
+  source_filename: string;
+  compile_command: string[] | null;
+  run_command: string[];
+  time_multiplier: number;
+  enabled: boolean;
+}
+
+/** The key is immutable once created (problems refer to it). An explicit
+ *  `compile_command: null` clears the compile step; omitting leaves it. */
+export type JudgeLanguageUpdate = Partial<Omit<JudgeLanguageCreate, "key">>;

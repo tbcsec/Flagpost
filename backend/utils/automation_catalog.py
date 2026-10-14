@@ -73,6 +73,10 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
         "matched_user_id", "matched_team_id", "instance_id",
     ],
     "instance.settings_updated": ["actor_user_id", "enabled"],
+    "judge.settings_updated": ["actor_user_id", "enabled"],
+    "judge.language_created": ["actor_user_id", "language_id", "key"],
+    "judge.language_updated": ["actor_user_id", "language_id", "key"],
+    "judge.language_deleted": ["actor_user_id", "language_id", "key"],
     "challenge.hint_requested": [
         "competition_id", "challenge_id", "hint_id", "user_id", "team_id", "cost",
     ],
@@ -263,6 +267,11 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     "challenge.flag_shared_detected": "view_submissions",
     # Site provisioner config is admin-domain, like ai.settings_updated.
     "instance.settings_updated": "manage_instance_infra",
+    # Judge site config, likewise admin-domain.
+    "judge.settings_updated": "manage_judge_infra",
+    "judge.language_created": "manage_judge_infra",
+    "judge.language_updated": "manage_judge_infra",
+    "judge.language_deleted": "manage_judge_infra",
     # Member-visible events (published challenges, solves, scoreboard-facing).
     "challenge.published": "challenge_view",
     "challenge.solved": "challenge_view",

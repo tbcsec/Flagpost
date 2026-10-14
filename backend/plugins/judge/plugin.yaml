@@ -1,0 +1,14 @@
+id: judge
+name: Code Judge
+version: 0.1.0
+description: >-
+  Programming challenges graded by running submitted code against test data in
+  an ephemeral, network-less container. Ships inert: nothing judges until an
+  operator configures a container endpoint and at least one language.
+required_core: false
+provides:
+  routes: true
+  event_listeners: false
+dependencies:
+  - competitions
+  - challenges

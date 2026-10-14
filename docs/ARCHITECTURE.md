@@ -148,6 +148,8 @@ ticket.message_posted        ticket.attachment_added    ticket.attachment_delete
 survey.submitted             survey.opened
 announcement.published
 site.settings_updated
+judge.settings_updated       judge.language_created     judge.language_updated
+judge.language_deleted
 score.adjusted               achievement.awarded
 scoreboard.frozen            scoreboard.unfrozen
 module.enabled               module.disabled
@@ -156,7 +158,8 @@ automation.rule_updated      automation.rule_deleted
 platform.imported
 ```
 
-`site.settings_updated` is site-wide (not competition-scoped), so its payload
+`site.settings_updated` (and likewise the site-wide `judge.*` config events) is
+site-wide (not competition-scoped), so its payload
 carries no `competition_id` — the audit log records it with a null tenant,
 which is correct for a global setting change. The same is true of an
 `automation.rule_*` event for a **global** rule (`competition_id = None`,
@@ -623,6 +626,9 @@ Site Settings             manage_site_settings  (global — the site-wide
                           higher-stakes than how the site looks, §7.7),
                           manage_ai  (global — the AI provider config + master
                           switch, issue #98/ADR-0023, §12)
+                          manage_judge_infra  (global — the code judge's
+                          container endpoint and language registry, i.e. which
+                          images and commands it runs; issue #446/ADR-0042)
 AI Assistants             ai_view_transcripts  (read others' assistant
                           conversation history, issue #98/ADR-0023, §12)
 Analytics                 view_competition_analytics, view_global_analytics,

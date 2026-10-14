@@ -169,6 +169,12 @@ EVENT_TYPES: tuple[str, ...] = (
     # like ai.settings_updated; carries no endpoint/credential, only who + the
     # new enabled flag.
     "instance.settings_updated",
+    # Code judge site config (#446, ADR-0042) — admin-domain like the instancing
+    # config above. Language payloads carry the key and id, never the commands.
+    "judge.settings_updated",
+    "judge.language_created",
+    "judge.language_updated",
+    "judge.language_deleted",
     "score.adjusted",
     "achievement.awarded",
     "scoreboard.frozen",

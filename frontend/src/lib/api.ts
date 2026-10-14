@@ -31,6 +31,11 @@ import type {
   AiConnectionResult,
   InstanceSettings,
   InstanceSettingsUpdate,
+  JudgeLanguage,
+  JudgeLanguageCreate,
+  JudgeLanguageUpdate,
+  JudgeSettings,
+  JudgeSettingsUpdate,
   InviteLink,
   InviteLinkInput,
   InviteLinkJoinInput,
@@ -1384,6 +1389,33 @@ export const instancesAdminApi = {
   testConnection: () =>
     apiFetch<InstanceConnectionResult>("/api/admin/instances/test-connection", {
       method: "POST",
+    }),
+};
+
+// Code judge site config (#446, ADR-0042): the executor endpoint, concurrency
+// and default limits, and the language registry. No test-connection yet — that
+// arrives with the executor (#448).
+export const judgeAdminApi = {
+  getSettings: () => apiFetch<JudgeSettings>("/api/admin/judge/settings"),
+  updateSettings: (input: JudgeSettingsUpdate) =>
+    apiFetch<JudgeSettings>("/api/admin/judge/settings", {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  listLanguages: () => apiFetch<JudgeLanguage[]>("/api/admin/judge/languages"),
+  createLanguage: (input: JudgeLanguageCreate) =>
+    apiFetch<JudgeLanguage>("/api/admin/judge/languages", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  updateLanguage: (id: string, input: JudgeLanguageUpdate) =>
+    apiFetch<JudgeLanguage>(`/api/admin/judge/languages/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
+  deleteLanguage: (id: string) =>
+    apiFetch<void>(`/api/admin/judge/languages/${encodeURIComponent(id)}`, {
+      method: "DELETE",
     }),
 };
 

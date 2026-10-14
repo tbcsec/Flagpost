@@ -6,8 +6,11 @@ gating both the API and the engine, and the §3.2 events.
 The engine runs on the background lane (ADR-0012), so tests that trigger it
 await ``event_bus.wait_for_background()`` before asserting effects."""
 
+import asyncio
+import logging
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from sqlalchemy import func, select
 
 from db import SessionLocal
@@ -1371,3 +1374,113 @@ async def test_create_announcement_action(client):
     async with SessionLocal() as s:
         anns = (await s.scalars(select(Announcement).where(Announcement.competition_id == comp))).all()
     assert len(anns) == 1 and anns[0].title == "Solved!"
+
+
+# --- handler + action bounds (#455) -----------------------------------------
+
+
+async def test_evaluate_subscription_declares_a_timeout_above_the_bus_default():
+    """Guard for #455. One event's evaluation runs every matched rule and every
+    action sequentially; under the bus's 10s default a single slow email action
+    could exhaust it and cancel the rest of the run."""
+    from unittest.mock import MagicMock
+
+    from db import SessionLocal
+    from plugins.automations import EVALUATE_HANDLER_TIMEOUT, setup
+    from utils.event_bus import DEFAULT_HANDLER_TIMEOUT, EventBus
+
+    bus = EventBus()
+    setup(MagicMock(), bus, SessionLocal)
+
+    subs = [s for s in bus._subscriptions if s.pattern == "*"]
+    assert len(subs) == 1
+    assert subs[0].background is True
+    assert subs[0].timeout == EVALUATE_HANDLER_TIMEOUT
+    assert subs[0].timeout > DEFAULT_HANDLER_TIMEOUT
+
+
+async def test_send_email_bounds_the_smtp_delivery(monkeypatch):
+    """aiosmtplib's own default timeout is 60s — longer than the bus's whole
+    per-handler budget — so the one place email leaves the platform must pass
+    an explicit bound (#455). Nothing else in the suite exercises the real
+    aiosmtplib call; every other test swaps out send_email wholesale."""
+    import aiosmtplib
+
+    from utils import mailer
+
+    captured: dict = {}
+
+    async def _fake_send(message, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(aiosmtplib, "send", _fake_send)
+    monkeypatch.setattr(
+        mailer,
+        "_effective_smtp",
+        lambda: _as_coro(
+            {
+                "host": "smtp.example.com",
+                "port": 587,
+                "username": "u",
+                "password": "p",
+                "starttls": True,
+                "from": "noreply@example.com",
+            }
+        ),
+    )
+
+    assert await mailer.send_email(["a@example.com"], "Subject", "Body") is True
+    assert captured["timeout"] == mailer.SMTP_TIMEOUT_SECONDS
+    assert captured["timeout"] < 60.0, "must beat aiosmtplib's own default"
+
+
+async def _as_coro(value):
+    return value
+
+
+async def test_cancelled_action_is_logged_and_still_propagates(
+    client, monkeypatch, caplog
+):
+    """The engine isolates each action behind `except Exception`, which cannot
+    see a CancelledError (a BaseException). So a cancelled run skipped the
+    remaining actions, the trigger-count bump and the rule_triggered emit with
+    *no trace at all* — a rule that silently half-ran (#455).
+
+    Propagation was already correct and must stay that way (swallowing a
+    cancellation would be worse). What this pins is the part that was missing:
+    the run says where it stopped before it unwinds."""
+    from utils import automation_engine
+
+    comp = await _competition(client)
+    admin = await admin_token(client)
+    created = await _create_rule(client, admin, comp)
+
+    async def _cancelled(*args, **kwargs):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(automation_engine, "execute_action", _cancelled)
+
+    async with SessionLocal() as db:
+        rule = (
+            await db.execute(
+                select(AutomationRule).where(AutomationRule.id == created["id"])
+            )
+        ).scalar_one()
+        before = rule.trigger_count or 0
+
+        with caplog.at_level(logging.WARNING, logger="utils.automation_engine"):
+            with pytest.raises(asyncio.CancelledError):
+                await automation_engine.run_rule(db, rule, "challenge.solved", {})
+
+    # The change under test: a cancelled run is no longer silent. It names the
+    # rule and the action it stopped on.
+    assert any(
+        "cancelled during action" in r.message and created["id"] in str(r.args)
+        for r in caplog.records
+    ), [r.getMessage() for r in caplog.records]
+
+    # And propagation is unchanged: the bump never happens, because the rule
+    # did not complete.
+    async with SessionLocal() as db:
+        after = await db.get(AutomationRule, created["id"])
+        assert (after.trigger_count or 0) == before

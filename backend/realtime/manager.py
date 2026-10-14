@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 from collections import defaultdict
+from collections.abc import Awaitable, Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -37,6 +39,17 @@ logger = logging.getLogger("realtime")
 # few-hundred-socket room fans out in one wave, bounded so a huge room can't
 # open an unbounded burst of send tasks at once.
 _BROADCAST_CONCURRENCY = 64
+
+# Background retry for an eviction whose relay publish failed (GHSA-p679):
+# 1 + 2 + 4 + 8 + 16 + 30 s ≈ a minute of attempts before giving up loudly.
+_EVICT_RETRY_INITIAL_S = 1.0
+_EVICT_RETRY_MAX_S = 30.0
+_EVICT_RETRY_ATTEMPTS = 6
+
+# A relay gap closes every socket on the worker; spread those closes over this
+# window so the whole site doesn't reconnect into a just-restarted Redis in the
+# same second. The sockets are already marked revoked — inert — while they wait.
+_GAP_CLOSE_SPREAD_S = 5.0
 
 
 @dataclass
@@ -69,6 +82,23 @@ class ConnectionManager:
         # access is revoked mid-session; these let a ban/removal close it.
         self._user_sockets: dict[str, set[WebSocket]] = defaultdict(set)
         self._socket_meta: dict[WebSocket, tuple[str, str, str]] = {}
+        # Sockets whose access has been revoked but which may not have finished
+        # closing (GHSA-p679). Marked *synchronously*, before any close is
+        # awaited, so revocation takes effect immediately even if a close
+        # stalls on a half-open peer or the evicting handler is cancelled:
+        # local delivery skips them and the router refuses their inbound
+        # frames. Cleared by ``leave`` when the socket's receive loop unwinds.
+        self._revoked: set[WebSocket] = set()
+        # Per-user revocation counter, bumped on every eviction that names the
+        # user (locally or relayed), plus one counter for relay gaps that may
+        # have swallowed evictions. A handshake snapshots this *before* it
+        # authorizes and re-checks it right after joining: an eviction that
+        # landed in between — when the socket wasn't indexed yet, so nothing
+        # could mark it — is caught there (GHSA-p679).
+        self._revocation_epoch: dict[str, int] = defaultdict(int)
+        self._gap_epoch = 0
+        # Strong refs to fire-and-forget closes (asyncio holds only weak refs).
+        self._background: set[asyncio.Task] = set()
         # Cross-worker fan-out (#189). None ⇒ single-worker: broadcast is a
         # pure local fan-out. A per-process id tags outgoing relayed frames so
         # this worker skips its own copy (it already delivered locally).
@@ -97,7 +127,37 @@ class ConnectionManager:
         """Begin consuming relayed broadcasts from other workers. No-op when no
         relay is attached (single-worker)."""
         if self._relay is not None:
-            await self._relay.start(self._on_relayed)
+            await self._relay.start(self._on_relayed, on_gap=self._on_relay_gap)
+
+    async def _on_relay_gap(self) -> None:
+        """The relay's subscription dropped and has just been re-established.
+        Redis pub/sub is at-most-once, so anything published in between —
+        including evictions — is gone, and this worker can't know whose access
+        changed (GHSA-p679). Conservatively close every local socket: clients
+        reconnect automatically and re-handshake, which re-runs authorization
+        against current state. Sockets are marked first so they're inert while
+        their closes land, and the gap epoch is bumped so a handshake that was
+        in flight across the gap re-checks too."""
+        self._gap_epoch += 1
+        targets = list(self._socket_meta)
+        self._revoked.update(targets)
+        if targets:
+            logger.warning(
+                "relay gap: closing %d local socket(s) to force re-authorization",
+                len(targets),
+            )
+        # 1012 "service restart": a reconnect is expected, not a rejection.
+        # Staggered so every worker's clients don't all reconnect at once.
+        self._spawn(self._close_staggered(targets, 1012, _GAP_CLOSE_SPREAD_S))
+
+    async def _close_staggered(
+        self, targets: list[WebSocket], code: int, spread: float
+    ) -> None:
+        async def _later(websocket: WebSocket) -> None:
+            await asyncio.sleep(random.uniform(0, spread))
+            await self._close_bounded([websocket], code)
+
+        await asyncio.gather(*(_later(ws) for ws in targets))
 
     async def stop_relay(self) -> None:
         """Tear down the relay subscriber. Safe no-op when none is attached."""
@@ -150,11 +210,34 @@ class ConnectionManager:
                 logger.exception("presence heartbeat failed")
 
     async def _on_relayed(self, payload: dict[str, Any]) -> None:
-        """Deliver a broadcast published by another worker to our local sockets.
+        """Act on a payload published by another worker: deliver a broadcast to
+        our local sockets, or revoke our local sockets for an eviction.
 
-        Skips frames this worker itself published — it already delivered those
-        locally, so re-delivering the relayed copy would double-send."""
+        Skips payloads this worker itself published — it already acted on those
+        locally, so re-handling the relayed copy would double-send.
+
+        A payload with no ``kind`` is a broadcast, the only kind before
+        GHSA-p679; that keeps a rolling deploy safe in both directions (an old
+        worker receiving an ``evict`` payload fails that one relay delivery and
+        logs it — no worse than before — and a new worker still understands an
+        old worker's broadcasts)."""
         if payload.get("origin") == self._worker_id:
+            return
+        if payload.get("kind") == "evict":
+            user_ids = payload.get("user_ids")
+            if not isinstance(user_ids, list):
+                return
+            # Mark inline (revocation is immediate), but close in the
+            # background: this runs inside the worker's single subscriber task,
+            # so awaiting a stalled peer's close here would hold up every other
+            # relayed broadcast and eviction behind it.
+            targets = self._mark_revoked(
+                user_ids, payload.get("room_type"), payload.get("room_id_prefix")
+            )
+            code = payload.get("code")
+            self._spawn(
+                self._close_bounded(targets, code if isinstance(code, int) else 4403)
+            )
             return
         await self._deliver_local(
             payload["room_type"], payload["room_id"], payload["message"]
@@ -180,6 +263,30 @@ class ConnectionManager:
                 socks.discard(websocket)
                 if not socks:
                     del self._user_sockets[meta[0]]
+        self._revoked.discard(websocket)
+
+    def is_revoked(self, websocket: WebSocket) -> bool:
+        """True once the socket's access has been revoked (GHSA-p679), even if
+        its close hasn't completed."""
+        return websocket in self._revoked
+
+    def may_serve(self, websocket: WebSocket) -> bool:
+        """Whether the router may still act on this socket's frames: it must be
+        tracked *and* not revoked. The router checks this on every inbound frame
+        (GHSA-p679). Tracked matters as much as revoked: a socket dropped from
+        the indexes — by a broadcast send that failed or timed out — is
+        invisible to eviction, so if it could keep sending it would be a
+        session no revocation can reach."""
+        return websocket in self._socket_meta and websocket not in self._revoked
+
+    def revocation_epoch(self, user_id: str) -> tuple[int, int]:
+        """Snapshot for the handshake race check — see ``_revocation_epoch``."""
+        return (self._revocation_epoch.get(user_id, 0), self._gap_epoch)
+
+    def _spawn(self, coro: Awaitable[Any]) -> None:
+        task = asyncio.ensure_future(coro)
+        self._background.add(task)
+        task.add_done_callback(self._background.discard)
 
     async def close_user_sockets(
         self,
@@ -189,30 +296,149 @@ class ConnectionManager:
         room_id_prefix: str | None = None,
         code: int = 4403,
     ) -> int:
-        """Force-close a user's open sockets — server-driven revocation (#10).
+        """Force-close one user's open sockets — server-driven revocation (#10).
+        A single-user convenience over :meth:`evict_users`; see there."""
+        return await self.evict_users(
+            [user_id], room_type=room_type, room_id_prefix=room_id_prefix, code=code
+        )
+
+    async def evict_users(
+        self,
+        user_ids: Iterable[str],
+        *,
+        room_type: str | None = None,
+        room_id_prefix: str | None = None,
+        code: int = 4403,
+    ) -> int:
+        """Revoke these users' open sockets on **every** worker (GHSA-p679).
 
         Optionally filter to one ``room_type`` and/or a ``room_id`` prefix (used
-        to target only a removed team's scratchpad docs). Returns the count
-        closed. The socket's own receive loop then unwinds and calls ``leave``,
-        which clears the indexes; closing here doesn't mutate them, so a slow
-        unwind can't corrupt state.
+        to target only a removed team's scratchpad docs). Returns the number of
+        this worker's sockets revoked.
+
+        The order is the security property, not an implementation detail:
+
+        1. **Mark locally, synchronously.** Every matching socket here is
+           revoked before anything is awaited, so delivery to it and inbound
+           frames from it stop at once — even if what follows is cancelled (the
+           event bus cuts background handlers off at their timeout) or a close
+           stalls on a half-open peer.
+        2. **Publish through the relay** before the slow part, so peers act even
+           if this worker's handler is cut short. Without this, a revoked user
+           kept every socket held on another worker indefinitely — handshake
+           authorization never re-runs and the relay only ever carried
+           broadcasts.
+        3. **Close the local sockets**, concurrently and each bounded, exactly
+           as :meth:`broadcast` bounds sends (#177) — so one stalled peer can't
+           hold up the rest. A socket whose close times out is still revoked.
         """
-        closed = 0
-        for websocket in list(self._user_sockets.get(user_id, ())):
-            meta = self._socket_meta.get(websocket)
-            if meta is None:
-                continue
-            _uid, rt, rid = meta
-            if room_type is not None and rt != room_type:
-                continue
-            if room_id_prefix is not None and not rid.startswith(room_id_prefix):
-                continue
+        user_ids = list(dict.fromkeys(u for u in user_ids if u))
+        if not user_ids:
+            return 0
+        targets = self._mark_revoked(user_ids, room_type, room_id_prefix)
+        # Publish and close concurrently: a failed or slow publish (Redis down,
+        # the pool's acquire wait) must not hold up — or, by raising, skip —
+        # the local closes.
+        await asyncio.gather(
+            self._publish_eviction(
+                {
+                    "origin": self._worker_id,
+                    "kind": "evict",
+                    "user_ids": user_ids,
+                    "room_type": room_type,
+                    "room_id_prefix": room_id_prefix,
+                    "code": code,
+                }
+            ),
+            self._close_bounded(targets, code),
+        )
+        return len(targets)
+
+    async def _publish_eviction(self, payload: dict[str, Any]) -> None:
+        """Relay an eviction to peers; if that fails, keep retrying in the
+        background. Evictions are idempotent, so a retry is always safe.
+
+        The retry matters because a failed publish does not imply a gap on the
+        *subscribers*: a pool-acquire timeout (the relay's pool is shared with
+        every broadcast and presence publish), a reset on the publisher's own
+        connection, or this background handler being cut off by the event
+        bus while it waits for a pool slot all leave peers' subscriptions
+        healthy — so no gap fires and, without a retry, they never hear it."""
+        if self._relay is None:
+            return
+        try:
+            await self._relay.publish(payload)
+        except asyncio.CancelledError:
+            # Cut off mid-publish: hand it to a task that outlives us, then let
+            # the cancellation propagate.
+            self._spawn(self._retry_eviction_publish(payload))
+            raise
+        except Exception:  # noqa: BLE001 — retried below
+            logger.warning(
+                "eviction of %s not relayed; retrying", payload.get("user_ids")
+            )
+            self._spawn(self._retry_eviction_publish(payload))
+
+    async def _retry_eviction_publish(self, payload: dict[str, Any]) -> None:
+        delay = _EVICT_RETRY_INITIAL_S
+        for _ in range(_EVICT_RETRY_ATTEMPTS):
+            await asyncio.sleep(delay)
             try:
-                await websocket.close(code=code)
-            except Exception:  # noqa: BLE001 — already gone is fine
-                pass
-            closed += 1
-        return closed
+                await self._relay.publish(payload)  # type: ignore[union-attr]
+                logger.info("eviction of %s relayed on retry", payload.get("user_ids"))
+                return
+            except Exception:  # noqa: BLE001 — keep trying, then give up loudly
+                delay = min(delay * 2, _EVICT_RETRY_MAX_S)
+        # Out of attempts: Redis has been unusable for over a minute, by which
+        # point peers' subscriptions have almost certainly dropped too — and a
+        # gap closes every socket on resubscribe (``_on_relay_gap``).
+        logger.error(
+            "eviction of %s could not be relayed to other workers after %d attempts",
+            payload.get("user_ids"),
+            _EVICT_RETRY_ATTEMPTS,
+        )
+
+    def _mark_revoked(
+        self,
+        user_ids: Iterable[str],
+        room_type: str | None,
+        room_id_prefix: str | None,
+    ) -> list[WebSocket]:
+        """Mark this worker's matching sockets revoked; return them. No awaits —
+        that is what makes revocation immediate. Also bumps each user's
+        revocation epoch, so a handshake in flight for them notices."""
+        targets: list[WebSocket] = []
+        for user_id in user_ids:
+            self._revocation_epoch[user_id] += 1
+            for websocket in list(self._user_sockets.get(user_id, ())):
+                meta = self._socket_meta.get(websocket)
+                if meta is None:
+                    continue
+                _uid, rt, rid = meta
+                if room_type is not None and rt != room_type:
+                    continue
+                if room_id_prefix is not None and not rid.startswith(room_id_prefix):
+                    continue
+                self._revoked.add(websocket)
+                targets.append(websocket)
+        return targets
+
+    async def _close_bounded(self, targets: list[WebSocket], code: int) -> None:
+        if not targets:
+            return
+        semaphore = asyncio.Semaphore(_BROADCAST_CONCURRENCY)
+
+        async def _close(websocket: WebSocket) -> None:
+            async with semaphore:
+                try:
+                    await asyncio.wait_for(
+                        websocket.close(code=code),
+                        timeout=settings.ws_send_timeout_seconds,
+                    )
+                except Exception:  # noqa: BLE001 — already gone, or stalled: it stays revoked
+                    pass
+
+        await asyncio.gather(*(_close(ws) for ws in targets))
 
     def room_size(self, room_type: str, room_id: str) -> int:
         return len(self._rooms.get((room_type, room_id), ()))
@@ -263,10 +489,12 @@ class ConnectionManager:
         delivery to the whole room. A socket that times out is treated as gone,
         like one that errors.
         """
+        # Revoked sockets get nothing more, even while their close is still in
+        # flight or has stalled (GHSA-p679).
         targets = [
             ws
             for ws in list(self._rooms.get((room_type, room_id), ()))
-            if ws is not exclude
+            if ws is not exclude and ws not in self._revoked
         ]
         if not targets:
             return
@@ -286,9 +514,18 @@ class ConnectionManager:
 
         await asyncio.gather(*(_send(ws) for ws in targets))
 
-        for websocket in dead:
-            self.leave(room_type, room_id, websocket)
-            logger.debug("dropped dead socket from %s/%s", room_type, room_id)
+        if dead:
+            for websocket in dead:
+                self.leave(room_type, room_id, websocket)
+                logger.debug("dropped dead socket from %s/%s", room_type, room_id)
+            # Actually close what we dropped (GHSA-p679). A send that timed out
+            # does not mean the connection is gone — a client can stall reads on
+            # purpose and resume later. Left open but untracked, its receive
+            # loop would carry on as a session eviction can't see; the router
+            # now refuses an untracked socket's frames, and this makes it go
+            # away promptly rather than on its next frame. 1013 "try again
+            # later": the client reconnects and re-handshakes.
+            self._spawn(self._close_bounded(dead, 1013))
 
     # --- Presence (§4.1) --------------------------------------------------
     #

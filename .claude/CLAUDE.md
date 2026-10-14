@@ -258,7 +258,7 @@ home — keep it that way.
 
 ## Read the ADR before touching
 
-`docs/adr/` — 40 records, indexed in `docs/adr/README.md`. The ones most likely
+`docs/adr/` — 42 records, indexed in `docs/adr/README.md`. The ones most likely
 to matter:
 
 | Area | ADR |

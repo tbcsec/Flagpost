@@ -186,6 +186,22 @@ async def room_socket(
     try:
         while True:
             raw = await websocket.receive_text()
+            # Access revoked mid-session (GHSA-p679): the eviction marks the
+            # socket before its close is attempted, so a close that stalled on a
+            # half-open peer — or a revocation relayed from another worker —
+            # still stops this loop acting on the client's frames: no pong, no
+            # CRDT write. Close with the eviction code (bounded, best-effort —
+            # it may be the very close that stalled) so a client that is
+            # listening learns why, then leave the loop for the cleanup below.
+            if manager.is_revoked(websocket):
+                try:
+                    await asyncio.wait_for(
+                        websocket.close(code=4403),
+                        timeout=settings.ws_send_timeout_seconds,
+                    )
+                except Exception:  # noqa: BLE001 — already closing/gone/stalled
+                    pass
+                break
             # App-level keepalive (ADR-0031): browsers can't send protocol-level
             # WS pings, so an idle socket has zero traffic and gets culled by
             # proxy / load-balancer idle timeouts. The client sends a tiny

@@ -7,6 +7,15 @@ when the corresponding events fire, restoring the bound the handshake ban-check
 only promises for *new* connections. Registered on the background lane (ADR-0012):
 the work is a socket close, never a DB touch, and must not block the emitting
 request.
+
+Eviction reaches **every worker** (GHSA-p679). These handlers run only on the
+worker that emitted the event — the bus is per-process — so the manager
+publishes each eviction through the cross-worker relay; before that, a revoked
+user kept every socket held on any other worker, indefinitely. It also marks the
+target sockets revoked *before* awaiting any close, so neither a stalled close
+nor this background handler being cut off at the bus timeout can leave access
+in place: at worst a TCP close is abandoned on a socket that already receives
+nothing and is refused when it sends.
 """
 
 from __future__ import annotations
@@ -61,8 +70,22 @@ def register_ws_eviction(event_bus) -> None:
         # access may have shrunk, so re-handshake them all. `affected_user_ids` is
         # present only when permissions (not just name/description) changed, so a
         # cosmetic edit doesn't churn every holder's sockets.
-        for subject in payload.get("affected_user_ids") or []:
-            await _evict(subject, "role permissions changed")
+        #
+        # One call for all holders, not a loop of per-user evictions: the old
+        # sequential loop awaited each close in turn, so one stalled peer could
+        # run it past the bus timeout and leave every later holder un-evicted
+        # (GHSA-p679). evict_users marks them all revoked before awaiting
+        # anything, then closes concurrently.
+        subjects = payload.get("affected_user_ids") or []
+        if not subjects:
+            return
+        closed = await manager.evict_users(subjects)
+        if closed:
+            logger.info(
+                "evicted %d websocket(s) across %d holder(s) (role permissions changed)",
+                closed,
+                len(subjects),
+            )
 
     event_bus.subscribe("user.banned", _on_user_revoked, background=True)
     event_bus.subscribe("user.deleted", _on_user_revoked, background=True)

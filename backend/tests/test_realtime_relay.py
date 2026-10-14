@@ -128,3 +128,124 @@ async def test_single_worker_without_relay_is_pure_local():
     await mgr.broadcast("scoreboard", "c1", {"x": 1})
     await mgr.stop_relay()  # safe no-op with no relay attached
     assert s.frames == [{"x": 1}]
+
+
+# --- eviction across workers (GHSA-p679) -------------------------------------
+
+
+class ClosableSock(Sock):
+    """A socket whose close is recorded — or, with ``hang=True``, never returns,
+    standing in for a half-open TCP peer."""
+
+    def __init__(self, *, hang: bool = False) -> None:
+        super().__init__()
+        self.closed_code: int | None = None
+        self._hang = hang
+
+    async def close(self, code: int = 1000) -> None:
+        import asyncio
+
+        if self._hang:
+            await asyncio.Event().wait()
+        self.closed_code = code
+
+
+async def test_eviction_reaches_a_socket_on_another_worker():
+    """The core finding: revocation ran only on the worker that emitted the
+    event, so a socket held on any other worker survived it indefinitely."""
+    bus = FakeBus()
+    w1, w2 = ConnectionManager(), ConnectionManager()
+    await _wire(bus, w1)
+    await _wire(bus, w2)
+
+    remote = ClosableSock()
+    w2.join("ticket", "t-internal", remote, "demoted-judge")
+
+    await w1.close_user_sockets("demoted-judge")  # the request landed on w1
+
+    assert remote.closed_code == 4403
+    assert w2.is_revoked(remote)
+
+
+async def test_eviction_filters_survive_the_relay():
+    # A team removal targets only that team's scratchpads; the filter has to
+    # apply on the remote worker too, not widen into a full eviction.
+    bus = FakeBus()
+    w1, w2 = ConnectionManager(), ConnectionManager()
+    await _wire(bus, w1)
+    await _wire(bus, w2)
+
+    old_team, other_team, board = ClosableSock(), ClosableSock(), ClosableSock()
+    w2.join("note", "team_challenge:t1:c", old_team, "alice")
+    w2.join("note", "team_challenge:t2:c", other_team, "alice")
+    w2.join("scoreboard", "comp", board, "alice")
+
+    await w1.close_user_sockets(
+        "alice", room_type="note", room_id_prefix="team_challenge:t1:"
+    )
+
+    assert old_team.closed_code == 4403
+    assert other_team.closed_code is None and board.closed_code is None
+    assert not w2.is_revoked(other_team) and not w2.is_revoked(board)
+
+
+async def test_revoked_socket_gets_nothing_even_if_its_close_stalls(monkeypatch):
+    """A close that never completes must not leave the socket receiving. It is
+    revoked before the close is attempted, and delivery skips revoked sockets."""
+    from config import settings
+
+    monkeypatch.setattr(settings, "ws_send_timeout_seconds", 0.05)
+    bus = FakeBus()
+    w1, w2 = ConnectionManager(), ConnectionManager()
+    await _wire(bus, w1)
+    await _wire(bus, w2)
+
+    stuck = ClosableSock(hang=True)
+    w2.join("ticket", "t-internal", stuck, "banned")
+
+    await w1.close_user_sockets("banned")  # returns: the stalled close is bounded
+    assert stuck.closed_code is None  # the TCP close never finished...
+    assert w2.is_revoked(stuck)  # ...but access is gone regardless
+
+    await w1.broadcast("ticket", "t-internal", {"type": "internal_note"})
+    assert stuck.frames == []
+
+
+async def test_eviction_is_effective_even_if_the_handler_is_cancelled():
+    """The event bus cancels background handlers at their timeout. Marking
+    happens before the first await, so cancelling the eviction part-way — here,
+    while the relay publish is in flight — cannot leave a local socket live."""
+    import asyncio
+
+    class _HangingRelay(FakeRelay):
+        async def publish(self, payload: dict) -> None:
+            await asyncio.Event().wait()
+
+    w1 = ConnectionManager()
+    w1.attach_relay(_HangingRelay(FakeBus()))
+    local = ClosableSock()
+    w1.join("note", "team_challenge:t1:c", local, "removed")
+
+    task = asyncio.ensure_future(w1.close_user_sockets("removed"))
+    await asyncio.sleep(0)  # let it run up to the hanging publish
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    assert w1.is_revoked(local)
+    await w1._deliver_local("note", "team_challenge:t1:c", {"type": "note_update"})
+    assert local.frames == []
+
+
+async def test_leave_clears_the_revoked_mark():
+    # The set must not grow forever: once the socket's receive loop unwinds and
+    # leaves, the mark goes with it.
+    w = ConnectionManager()
+    ws = ClosableSock()
+    w.join("scoreboard", "c1", ws, "u")
+    await w.close_user_sockets("u")
+    assert w.is_revoked(ws)
+    w.leave("scoreboard", "c1", ws)
+    assert not w.is_revoked(ws)

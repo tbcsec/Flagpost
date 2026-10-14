@@ -143,3 +143,89 @@ async def test_role_updated_evicts_affected_holders_only_on_permission_change():
     finally:
         _global_manager.leave("note", "ticket:f4b", holder)
         _global_manager.leave("note", "ticket:f4b", bystander)
+
+
+# --- GHSA-p679: revocation must hold even when a close stalls ---------------
+
+
+class _HangingWS(_FakeWS):
+    """A half-open peer: its close never completes."""
+
+    async def close(self, code: int = 1000) -> None:
+        import asyncio
+
+        await asyncio.Event().wait()
+
+
+async def test_role_updated_is_not_held_up_by_one_stalled_peer(monkeypatch):
+    """The old handler closed each holder in turn with no bound on the close,
+    so one half-open peer first in line ran it into the bus timeout and every
+    later holder kept the pre-edit permissions. Now all are revoked before any
+    close is awaited, and closes run concurrently, each bounded."""
+    from config import settings
+
+    monkeypatch.setattr(settings, "ws_send_timeout_seconds", 0.05)
+    stalled, second, third = _HangingWS(), _FakeWS(), _FakeWS()
+    _global_manager.join("note", "ticket:p679a", stalled, "holder-a")
+    _global_manager.join("note", "ticket:p679a", second, "holder-b")
+    _global_manager.join("note", "ticket:p679a", third, "holder-c")
+    try:
+        await event_bus.emit(
+            "role.updated",
+            {"user_id": "admin", "role_id": "r", "name": "Senior Judge",
+             "affected_user_ids": ["holder-a", "holder-b", "holder-c"]},
+        )
+        await event_bus.wait_for_background()
+
+        assert second.closed_code == 4403 and third.closed_code == 4403
+        # The stalled one never finished closing, but has no access left.
+        assert stalled.closed_code is None
+        assert _global_manager.is_revoked(stalled)
+    finally:
+        for ws in (stalled, second, third):
+            _global_manager.leave("note", "ticket:p679a", ws)
+
+
+async def test_revoked_socket_cannot_keep_acting_when_its_close_stalls(
+    client, monkeypatch
+):
+    """End-to-end, at the router. Simulate a close that never lands (a
+    half-open peer, or a revocation relayed from another worker whose close is
+    still in flight): the socket must still stop being served — the next frame
+    it sends ends the session instead of being handled."""
+    admin = await admin_token(client)
+    comp = (
+        await client.post(
+            "/api/competitions",
+            json={"name": "CTF", "participation_mode": "individual", "visibility": "public"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    token = await _register(client, "stalled@example.com")
+    await client.post(f"/api/competitions/{comp}/join", headers=_auth(token))
+    uid = (await client.get("/api/auth/me", headers=_auth(token))).json()["id"]
+
+    async def _close_never_lands(targets, code):
+        return None
+
+    monkeypatch.setattr(_global_manager, "_close_bounded", _close_never_lands)
+
+    async with WsTestClient(main.app, f"/ws/announcements/{comp}") as ws:
+        await ws.send_json({"token": token})
+        assert (await ws.receive_json())["type"] == "auth_ok"
+        assert (await ws.receive_json())["type"] == "announcements"
+
+        # Served normally before revocation.
+        await ws.send_json({"type": "ping"})
+        assert (await ws.receive_json())["type"] == "pong"
+
+        banned = await client.post(f"/api/users/{uid}/ban", headers=_auth(admin))
+        assert banned.status_code == 200
+        await event_bus.wait_for_background()
+
+        # The eviction's close never reached the client — yet its next frame is
+        # refused: the session ends with the eviction code instead of a pong.
+        await ws.send_json({"type": "ping"})
+        message = await ws.next_message()
+        assert message["type"] == "websocket.close", message
+        assert message.get("code") == 4403

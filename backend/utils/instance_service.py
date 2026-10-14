@@ -54,6 +54,24 @@ from utils.provisioners import (
 
 logger = logging.getLogger(__name__)
 
+# Ceiling for one provision attempt on the event bus's background lane (#452).
+#
+# This is a **policy ceiling, not a derivation** — the operations underneath it
+# have no finite bound today. The Docker pull's ``_TIMEOUT_PULL`` is an httpx
+# per-read timeout, so it never fires while layer bytes keep flowing (the same
+# trap documented in ``utils/automation_actions``), and the Kubernetes readiness
+# budget is ``_READY_ATTEMPTS × (_TIMEOUT_QUICK + _READY_INTERVAL)`` = 720s on
+# its own. So rather than pretending to compute a worst case, this says: no
+# single provision may occupy the lane longer than ten minutes.
+#
+# Exceeding it is a *reported* failure, not a silent one: the handler is
+# cancelled, the row is left in ``provisioning``, and the reaper's stuck rule
+# marks it ``failed`` with a reason and emits
+# ``challenge.instance_provision_failed``. That is why
+# ``PROVISIONING_STUCK_SECONDS`` in ``utils/instance_reaper`` must sit *after*
+# this ceiling — see the comment there.
+PROVISION_HANDLER_TIMEOUT = 600.0
+
 # Final fallback lifetime when neither the deployment nor the competition sets
 # one (seconds). One hour: long enough for a session, short enough to reclaim.
 DEFAULT_LIFETIME_S = 3600

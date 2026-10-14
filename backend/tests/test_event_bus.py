@@ -169,3 +169,80 @@ async def test_wait_for_background_is_bounded_against_a_wedged_task():
     # Let the dropped task exit so it isn't destroyed-while-pending.
     release.set()
     await asyncio.sleep(0.05)
+
+
+async def test_subscription_timeout_overrides_the_bus_default():
+    """A handler whose real upper bound exceeds the bus default declares it and
+    runs to completion instead of being cancelled mid-run (#452)."""
+    bus = EventBus(handler_timeout=0.05)
+    finished: list[str] = []
+
+    @bus.on("x.y", timeout=5.0)
+    async def _slow_but_declared(name, payload):
+        # Comfortably longer than the bus default, well inside its own timeout.
+        await asyncio.sleep(0.2)
+        finished.append(name)
+
+    await bus.emit("x.y", {})
+    assert finished == ["x.y"], "declared timeout should not be clipped"
+
+
+async def test_subscription_timeout_still_bounds_a_wedged_handler():
+    """The override replaces the default, it doesn't disable the protection."""
+    bus = EventBus(handler_timeout=5.0)
+    finished: list[str] = []
+
+    @bus.on("x.y", timeout=0.05)
+    async def _wedged(name, payload):
+        await asyncio.sleep(5)
+        finished.append(name)
+
+    # Returns on the subscription's own (shorter) bound, not the bus default.
+    await asyncio.wait_for(bus.emit("x.y", {}), timeout=1.0)
+    assert finished == []
+
+
+async def test_undeclared_subscriptions_keep_the_bus_default():
+    bus = EventBus(handler_timeout=0.05)
+    finished: list[str] = []
+
+    @bus.on("x.y")
+    async def _slow(name, payload):
+        await asyncio.sleep(5)
+        finished.append(name)
+
+    await asyncio.wait_for(bus.emit("x.y", {}), timeout=1.0)
+    assert finished == []
+
+
+async def test_background_subscription_timeout_survives_the_bus_default():
+    """The #452 case exactly: the clipped handler was a *background* one. Drive
+    the task directly rather than via wait_for_background, whose drain is
+    deliberately bounded by the bus default and would itself clip it."""
+    bus = EventBus(handler_timeout=0.05)
+    finished: list[str] = []
+
+    @bus.on("x.y", background=True, timeout=5.0)
+    async def _slow_bg(name, payload):
+        await asyncio.sleep(0.2)  # 4x the bus default, well inside its own
+        finished.append(name)
+
+    await bus.emit("x.y", {})
+    assert finished == []  # fire-and-forget: not awaited by emit
+    await asyncio.wait(tuple(bus._background_tasks), timeout=2.0)
+    assert finished == ["x.y"], "background handler was clipped at the default"
+
+
+async def test_subscribe_accepts_a_timeout_like_the_decorator():
+    """`realtime/eviction` and `plugins/scoring` register via subscribe(), not
+    the decorator, so both entry points must carry the override."""
+    bus = EventBus(handler_timeout=0.05)
+    finished: list[str] = []
+
+    async def _slow(name, payload):
+        await asyncio.sleep(0.2)
+        finished.append(name)
+
+    bus.subscribe("x.y", _slow, timeout=5.0)
+    await bus.emit("x.y", {})
+    assert finished == ["x.y"]

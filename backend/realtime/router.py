@@ -54,6 +54,18 @@ router = APIRouter()
 # unparsed, as before).
 _PING_FRAME_MAX_BYTES = 512
 
+
+async def _close_quietly(websocket: WebSocket, code: int) -> None:
+    """Best-effort, bounded close for a socket we're refusing to serve. It may
+    already be closing or gone (Starlette raises on a double close), or be the
+    half-open peer whose close stalled — none of which may stop the caller."""
+    try:
+        await asyncio.wait_for(
+            websocket.close(code=code), timeout=settings.ws_send_timeout_seconds
+        )
+    except Exception:  # noqa: BLE001 — closing/gone/stalled: nothing more to do
+        pass
+
 # May this user join this room?
 Authorizer = Callable[[AsyncSession, User, str], Awaitable[bool]]
 # Optional initial frame sent right after auth_ok (e.g. the current scoreboard).
@@ -136,6 +148,15 @@ async def room_socket(
         await websocket.close(code=4401, reason="Invalid or expired token")
         return
 
+    # Snapshot the subject's revocation epoch BEFORE anything reads the DB to
+    # authorize (GHSA-p679). Between authorize and `manager.join` below there are
+    # several awaits (auth_ok, the snapshot read + send, presence) during which
+    # this socket is not yet indexed, so an eviction landing then can't mark it.
+    # Every revocation commits before it emits, so an eviction that ran before
+    # this snapshot is already visible to the authorize read; one that runs after
+    # it bumps the epoch, which is re-checked right after joining.
+    epoch = manager.revocation_epoch(str(payload.get("sub")))
+
     # Throttle the handshake per authenticated user (#178), before the DB lookup
     # + room authorize (+ any snapshot recompute) below — those are the cost an
     # abusive reconnect loop would amplify. Keyed on the token subject; a real
@@ -181,26 +202,34 @@ async def room_socket(
             member = await room.presence_member(db, user, room_id, mode)
 
     manager.join(room_type, room_id, websocket, user.id)
-    if member is not None:
-        await manager.presence_join(room_type, room_id, websocket, member)
+    in_presence = False
+    # join/presence_join sit inside the try so the cleanup below always runs —
+    # a presence_join that raised (e.g. a Redis error) used to skip it and leak
+    # the index entries.
     try:
+        # Synchronous with the join above — no await between them — so an
+        # eviction either bumped the epoch before this check, or runs after it
+        # and finds this socket indexed and marks it normally.
+        if manager.revocation_epoch(user.id) != epoch:
+            await _close_quietly(websocket, 4403)
+            return
+        if member is not None:
+            await manager.presence_join(room_type, room_id, websocket, member)
+            in_presence = True
         while True:
             raw = await websocket.receive_text()
-            # Access revoked mid-session (GHSA-p679): the eviction marks the
-            # socket before its close is attempted, so a close that stalled on a
-            # half-open peer — or a revocation relayed from another worker —
-            # still stops this loop acting on the client's frames: no pong, no
-            # CRDT write. Close with the eviction code (bounded, best-effort —
-            # it may be the very close that stalled) so a client that is
-            # listening learns why, then leave the loop for the cleanup below.
-            if manager.is_revoked(websocket):
-                try:
-                    await asyncio.wait_for(
-                        websocket.close(code=4403),
-                        timeout=settings.ws_send_timeout_seconds,
-                    )
-                except Exception:  # noqa: BLE001 — already closing/gone/stalled
-                    pass
+            # Stop serving a socket the manager won't vouch for (GHSA-p679):
+            # revoked — the eviction marks it before attempting the close, so a
+            # close that stalled on a half-open peer, or a revocation relayed
+            # from another worker, still takes effect here — or no longer
+            # tracked, i.e. dropped by a failed broadcast send and so invisible
+            # to eviction. Either way: no pong, no CRDT write. Close (bounded,
+            # best-effort — it may be the very close that stalled) so a
+            # listening client learns why, then leave for the cleanup below.
+            if not manager.may_serve(websocket):
+                await _close_quietly(
+                    websocket, 4403 if manager.is_revoked(websocket) else 1013
+                )
                 break
             # App-level keepalive (ADR-0031): browsers can't send protocol-level
             # WS pings, so an idle socket has zero traffic and gets culled by
@@ -226,7 +255,7 @@ async def room_socket(
     except WebSocketDisconnect:
         pass
     finally:
-        if member is not None:
+        if in_presence:
             await manager.presence_leave(
                 room_type,
                 room_id,

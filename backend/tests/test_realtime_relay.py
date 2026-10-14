@@ -31,7 +31,8 @@ class FakeRelay(RealtimeRelay):
     async def publish(self, payload: dict) -> None:
         await self._bus.publish(payload)
 
-    async def start(self, handler) -> None:
+    async def start(self, handler, *, on_gap=None) -> None:
+        self.on_gap = on_gap
         self._handler = handler
         self._bus.handlers.append(handler)
 
@@ -203,7 +204,10 @@ async def test_revoked_socket_gets_nothing_even_if_its_close_stalls(monkeypatch)
     stuck = ClosableSock(hang=True)
     w2.join("ticket", "t-internal", stuck, "banned")
 
-    await w1.close_user_sockets("banned")  # returns: the stalled close is bounded
+    import asyncio
+
+    # Bounded: a regression in the close bound fails here instead of hanging.
+    await asyncio.wait_for(w1.close_user_sockets("banned"), timeout=5.0)
     assert stuck.closed_code is None  # the TCP close never finished...
     assert w2.is_revoked(stuck)  # ...but access is gone regardless
 
@@ -249,3 +253,183 @@ async def test_leave_clears_the_revoked_mark():
     assert w.is_revoked(ws)
     w.leave("scoreboard", "c1", ws)
     assert not w.is_revoked(ws)
+
+
+# --- relay supervision + eviction hardening (GHSA-p679 review) ---------------
+
+
+class _FakePubSub:
+    """One pub/sub connection: yields ``messages`` then either drops (raises,
+    like a Redis restart) or idles until cancelled."""
+
+    def __init__(self, messages, *, drop: bool) -> None:
+        self._messages = messages
+        self._drop = drop
+
+    async def subscribe(self, channel) -> None:
+        return None
+
+    async def listen(self):
+        import asyncio
+
+        for m in self._messages:
+            yield {"type": "message", "data": m}
+        if self._drop:
+            raise ConnectionError("Connection closed by server.")
+        await asyncio.Event().wait()
+
+    async def unsubscribe(self, channel) -> None:
+        return None
+
+    async def aclose(self) -> None:
+        return None
+
+
+class _FakeRedis:
+    def __init__(self, pubsubs) -> None:
+        self._pubsubs = list(pubsubs)
+
+    def pubsub(self):
+        return self._pubsubs.pop(0)
+
+    async def aclose(self) -> None:
+        return None
+
+
+async def test_relay_resubscribes_after_a_dropped_connection(monkeypatch):
+    """The subscriber used to log and *return* on a dropped Redis connection,
+    and nothing restarted it: the worker silently stopped hearing its peers —
+    including their evictions — until it was restarted. It must resubscribe,
+    keep delivering, and report the gap."""
+    import asyncio
+    import json
+
+    import realtime.relay as relay_mod
+
+    monkeypatch.setattr(relay_mod, "_RESUBSCRIBE_INITIAL_S", 0.01)
+    relay = relay_mod.RedisRelay("redis://127.0.0.1:1/0")  # never connects
+    relay._redis = _FakeRedis([
+        _FakePubSub([json.dumps({"n": 1})], drop=True),  # Redis restarts...
+        _FakePubSub([json.dumps({"n": 2})], drop=False),  # ...and comes back
+    ])
+
+    got: list[dict] = []
+    gaps: list[int] = []
+    second = asyncio.Event()
+
+    async def handler(payload):
+        got.append(payload)
+        if payload["n"] == 2:
+            second.set()
+
+    async def on_gap():
+        gaps.append(1)
+
+    await relay.start(handler, on_gap=on_gap)
+    try:
+        await asyncio.wait_for(second.wait(), timeout=5.0)
+    finally:
+        await relay.stop()
+
+    assert got == [{"n": 1}, {"n": 2}]  # delivery resumed after the drop
+    assert gaps == [1]  # and the gap was reported exactly once
+
+
+async def test_relay_gap_closes_and_revokes_every_local_socket():
+    """Pub/sub is at-most-once: evictions published during the gap are gone, and
+    this worker can't know whose access changed. So every local socket is made
+    inert and closed; clients reconnect and re-handshake against current state."""
+    import asyncio
+
+    bus = FakeBus()
+    w = ConnectionManager()
+    relay = FakeRelay(bus)
+    w.attach_relay(relay)
+    await w.start_relay()
+
+    a, b = ClosableSock(), ClosableSock()
+    w.join("ticket", "t1", a, "u1")
+    w.join("scoreboard", "c1", b, "u2")
+    before = w.revocation_epoch("u1")
+
+    await relay.on_gap()
+    await asyncio.wait_for(asyncio.gather(*w._background), timeout=5.0)
+
+    assert a.closed_code == 1012 and b.closed_code == 1012
+    assert w.is_revoked(a) and w.is_revoked(b)
+    # An in-flight handshake for anyone is invalidated too.
+    assert w.revocation_epoch("u1") != before
+
+
+async def test_failed_publish_still_closes_local_sockets():
+    """Publish and local close used to be sequential, so a Redis error on the
+    publish skipped the local closes entirely."""
+    import asyncio
+
+    class _BrokenRelay(FakeRelay):
+        async def publish(self, payload: dict) -> None:
+            raise ConnectionError("redis down")
+
+    w = ConnectionManager()
+    w.attach_relay(_BrokenRelay(FakeBus()))
+    ws = ClosableSock()
+    w.join("ticket", "t1", ws, "banned")
+
+    await asyncio.wait_for(w.close_user_sockets("banned"), timeout=5.0)
+
+    assert ws.closed_code == 4403
+    assert w.is_revoked(ws)
+
+
+async def test_relayed_eviction_does_not_block_the_subscriber(monkeypatch):
+    """_on_relayed runs inside a worker's single subscriber task. Awaiting a
+    stalled peer's close there held up every other relayed frame behind it.
+    It must mark inline and close in the background."""
+    import asyncio
+
+    from config import settings
+
+    monkeypatch.setattr(settings, "ws_send_timeout_seconds", 5.0)
+    w = ConnectionManager()
+    stuck = ClosableSock(hang=True)
+    w.join("ticket", "t1", stuck, "banned")
+
+    # Returns well inside the 5s close bound: the close was not awaited here.
+    await asyncio.wait_for(
+        w._on_relayed(
+            {"origin": "other-worker", "kind": "evict", "user_ids": ["banned"],
+             "room_type": None, "room_id_prefix": None, "code": 4403}
+        ),
+        timeout=1.0,
+    )
+    assert w.is_revoked(stuck)
+    for task in list(w._background):
+        task.cancel()
+
+
+async def test_a_dropped_socket_is_closed_not_just_forgotten(monkeypatch):
+    """A broadcast send that timed out used to drop the socket from the indexes
+    without closing it — leaving a live connection eviction could no longer
+    find (a "ghost"). It must actually be closed."""
+    import asyncio
+
+    from config import settings
+
+    monkeypatch.setattr(settings, "ws_send_timeout_seconds", 0.05)
+
+    class _StallsOnSend(ClosableSock):
+        async def send_json(self, message: dict) -> None:
+            await asyncio.Event().wait()
+
+    w = ConnectionManager()
+    slow = _StallsOnSend()
+    w.join("note", "team_challenge:t1:c", slow, "attacker")
+
+    await asyncio.wait_for(
+        w.broadcast("note", "team_challenge:t1:c", {"type": "note_update"}),
+        timeout=5.0,
+    )
+    await asyncio.wait_for(asyncio.gather(*w._background), timeout=5.0)
+
+    assert not w.may_serve(slow)  # untracked: the router refuses its frames
+    assert slow.closed_code == 1013  # and it was told to go

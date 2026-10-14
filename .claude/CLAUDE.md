@@ -29,13 +29,17 @@ file, don't ignore it.
 ## Where the project is
 
 Tiers 0–3 are complete and the platform shipped **v1.0.0 on 2026-07-25**, then
-v1.1.0, v1.1.1, v1.2.0, v1.3.0, v1.4.0, v1.5.0, v1.5.1 (the Apache-2.0
-relicense — ADR-0035) and **v1.6.0 (2026-08-31: challenge instancing, brand
-themes, dashboard breadth, observability)**. **The latest tag is `v1.6.0`;
-`main` is now `1.6.0-src`**, accumulating the **v1.7.0** milestone — the module
-SDK + marketplace (ADR-0040, epic #385), largely landed on `main`
+v1.1.0 through v1.6.0 (v1.5.1 was the Apache-2.0 relicense — ADR-0035), **v1.7.0
+(2026-10-13: module SDK & marketplace, cross-competition skills web, challenge
+sharing links, RustFS)** and **v1.7.1 (2026-10-14: a security patch for
+cross-worker WebSocket revocation — GHSA-p679-w29c-326x — plus background-handler
+time-budget fixes)**. **The latest tag is `v1.7.1`; `main` is now `1.7.1-src`**
 (`SOURCE_BUILD_VERSION` in `backend/config.py`, bumped at tag time; see
-CONTRIBUTING → "Cutting a release").
+CONTRIBUTING → "Cutting a release"), accumulating the **v1.8.0** milestone:
+**programming challenges — a code-execution judge** (epic #446, sub-issues
+#447–#451). Its design is **ADR-0042**, and it is not built yet; read the ADR
+before starting any of it. The ICPC-style ranking mode is a *later* milestone and
+is deliberately not a module (ADR-0042 explains why).
 
 The tier/phase plans in `docs/claude_plans/` are **finished and historical** —
 don't work "the next phase". Work is tracked as **GitHub issues against version
@@ -102,8 +106,9 @@ Subsystem by subsystem, with the non-obvious bits called out:
   pings so clients refetch their own permission-filtered slice), and the CRDT
   relay. Presence is WS-level state only: no event, no REST, no migration.
   Single-worker is the default; **multi-worker is opt-in** (`WEB_CONCURRENCY>1`,
-  Redis required) and adds a cross-worker broadcast relay + TTL presence store so
-  rooms span workers, plus a scheduler sidecar (ADR-0025/0026, #189).
+  Redis required) and adds a cross-worker relay (broadcasts *and* socket
+  evictions, with a supervised subscriber) + TTL presence store so rooms span
+  workers, plus a scheduler sidecar (ADR-0025 and its amendment, ADR-0026, #189).
 - **Competitions** — the tenancy root. Team or individual mode, visibility,
   invite codes, schedule, a **status gameplay gate** (`not_started`/`running`/
   `ended`, default not-started — competitor challenge/scoreboard access is open
@@ -224,6 +229,13 @@ Hard-won, non-obvious, and not visible from reading the code you're changing.
   the code judge — belongs in a worker loop or the scheduler, not the bus. This
   bit four handlers at once (#452, #454–#456); one silently dropped every
   notification for an announcement.
+- **A WebSocket is authorized once, at the handshake, and never again** — not
+  even when its access token expires. So *any* new way of removing someone's
+  access must also evict their sockets (`manager.evict_users` /
+  `close_user_sockets`, wired in `realtime/eviction.py`), or they keep every
+  room they already joined, indefinitely. Eviction marks sockets revoked before
+  it awaits anything and reaches every worker through the relay — revoke
+  through it rather than by closing sockets directly (GHSA-p679-w29c-326x).
 
 ## Setup, dev, and demo
 
@@ -331,15 +343,17 @@ Explicitly deferred past MVP (`docs/ROADMAP.md`, "Explicitly Deferred"
 section). If a task seems to need one of these, flag it and ask rather
 than quietly building a scoped-down version:
 
-- Plugin marketplace / third-party modules — **largely landed in v1.7.0**
-  (ADR-0040, epic #385, specs in `docs/MODULES.md` + `docs/MODULE_SDK.md`): a
-  tiered trust model (content packs → declarative → signed code) over an open,
-  mirrorable registry protocol with code-based import, plus the authoring SDK
-  (`backend/sdk/`). Extend it *per that design*, not ad hoc. The module
-  *mechanism* was always used for required-core features; this opens it to
-  registry-distributed modules. **Still off-limits:** sandboxing genuinely
-  *untrusted* code (Tier 3, ARCHITECTURE §15) — the tiers are built so nothing
-  shipping now needs it.
+- Plugin marketplace / third-party modules — **shipped in v1.7.0, descoped to
+  v1** (ADR-0040, epic #385, specs in `docs/MODULES.md` +
+  `docs/MODULE_SDK.md`): the open, mirrorable registry protocol, **Tier-0 content
+  packs**, the code-based import client, and the authoring SDK
+  (`backend/sdk/`). **Tier 1 (declarative modules) and Tier 2 (signed code
+  modules) are designed in ADR-0040 but were closed not-planned** (owner
+  decision, 2026-10-13) — don't resume them unprompted. Extend what shipped
+  *per that design*, not ad hoc. **Still off-limits:** sandboxing genuinely
+  *untrusted* code (Tier 3, ARCHITECTURE §15). (The v1.8.0 code judge runs
+  competitor code under the posture challenge instancing already operates — see
+  ADR-0042 — which is not Tier 3.)
 - Multi-competition tenancy *consolidation views* — `competition_id`
   scoping is required from Tier 0; cross-site rollups are not. **Carve-out:**
   the cross-competition **skills web** (#364, ADR-0039) is a sanctioned,

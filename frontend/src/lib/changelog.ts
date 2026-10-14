@@ -29,6 +29,12 @@ function entry(
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  entry("v1.7.1", "2026-10-14", "Security & reliability fixes", [
+    "Security: revoking someone's access — a ban, account deletion, team removal or role change — now reliably closes their live connections on every server process, not just one. Multi-worker deployments should upgrade (advisory GHSA-p679-w29c-326x).",
+    "Reliability: slow background work is no longer cut off silently — challenge-instance provisioning, announcement notifications and automation rules each get a realistic time budget, and a large announcement can no longer fail to notify anyone.",
+    "Challenge instances report a clear reason when provisioning fails or takes too long, and clean up after themselves.",
+    "Admin skills matrix: participant search and a theme-aligned heat map.",
+  ]),
   entry("v1.7.0", "2026-10-13", "Module SDK & marketplace, cross-competition skills, challenge sharing", [
     "Module SDK & marketplace: import content packs (challenges, themes) from an open, mirrorable registry over a signed, trust-tiered protocol — code-based resolve → confirm → signature/digest verification → install, an admin import + settings UI, and an authoring SDK (build, sign, validate, scaffold).",
     "Cross-competition skills web: competitors get a personal skills radar and at-a-glance stats across every event they play; organisers get a users × skills matrix with difficulty-weighted scores, coverage, a percentile heat-map, efficiency and first-blood signals, activity windows, a per-user drill-down, and CSV export.",

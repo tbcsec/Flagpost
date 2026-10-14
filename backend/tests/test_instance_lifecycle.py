@@ -723,7 +723,9 @@ async def test_cancelled_provision_is_reported_with_its_own_reason(
     task.cancel()  # what the bus's wait_for does when the ceiling fires
     with contextlib.suppress(asyncio.CancelledError):
         await task
-    assert task.cancelled() or task.done()
+    # The cancellation propagated rather than being swallowed by the failure
+    # path (a `return` there instead of `raise` would leave this False).
+    assert task.cancelled()
 
     async with SessionLocal() as session:
         row = (
@@ -747,15 +749,17 @@ async def test_provision_ceiling_is_derived_from_the_backends_bounds():
         PROVISION_HANDLER_TIMEOUT,
     )
 
-    # Docker: pull + network + create + start + (endpoints | start-failure
-    # teardown). Teardown = inspect (quick) + delete (lifecycle) + network
-    # removal (quick).
+    # Docker: pull + network + create + start + endpoints that fails AND the
+    # teardown that follows it (they add — the teardown runs after endpoints
+    # has already spent its timeout). Teardown = inspect (quick) + delete
+    # (lifecycle) + network removal (quick).
     docker_teardown = docker._TIMEOUT_QUICK * 2 + docker._TIMEOUT_LIFECYCLE
     docker_worst = (
         docker._PULL_TOTAL
         + docker._TIMEOUT_QUICK  # per-instance network
         + docker._TIMEOUT_LIFECYCLE * 2  # create + start
-        + max(docker._TIMEOUT_QUICK, docker_teardown)  # endpoints, or teardown
+        + docker._TIMEOUT_QUICK  # endpoints, failing
+        + docker_teardown
     )
     assert docker_worst < PROVISION_HANDLER_TIMEOUT, docker_worst
 
@@ -775,3 +779,77 @@ async def test_provision_ceiling_is_derived_from_the_backends_bounds():
     # The failure path after a cancellation must fit in the slack, or the
     # reaper relabels a provision that is still recording its own reason.
     assert PROVISION_FAILURE_SLACK > max(docker_teardown, k8s_teardown)
+
+
+async def test_ceiling_hit_during_the_ordinary_failure_path_is_still_reported(
+    client, monkeypatch
+):
+    """Found in review of #456's first cut. The ordinary failure path (an error,
+    then a teardown) is exactly where a near-ceiling provision lands — and a
+    cancel arriving *inside* that handler isn't seen by a sibling
+    `except CancelledError`. Here endpoints() fails and the teardown then hangs;
+    cancel while it hangs. The specific reason must already be recorded,
+    because the failure is recorded before the backend is touched."""
+    import asyncio
+    import contextlib
+
+    from utils import instance_service
+    from utils.provisioners import ProvisionerError
+
+    destroying = asyncio.Event()
+    release = asyncio.Event()
+    running: dict = {}
+
+    class _FailThenHangProvisioner:
+        async def create(self, spec):
+            running["task"] = asyncio.current_task()
+            return "h-half"
+
+        async def endpoints(self, handle):
+            raise ProvisionerError("endpoints unreachable")
+
+        async def destroy(self, handle):
+            destroying.set()
+            await release.wait()  # a teardown against a wedged backend
+
+    monkeypatch.setattr(
+        instance_service,
+        "provisioner_for",
+        lambda settings, deployment, **kw: _FailThenHangProvisioner(),
+    )
+
+    admin = await admin_token(client)
+    comp = await _make_competition(client, admin)
+    chal = await _make_challenge(client, comp, admin)
+    await _put_deployment(client, comp, chal, admin)
+    token, _ = await _competitor(client, comp)
+
+    launched = await client.post(
+        f"/api/competitions/{comp}/challenges/{chal}/instance", headers=_auth(token)
+    )
+    assert launched.status_code == 201, launched.text
+
+    try:
+        await asyncio.wait_for(destroying.wait(), timeout=5.0)
+        task = running["task"]
+        task.cancel()  # the ceiling fires mid-teardown
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+        assert task.cancelled()
+
+        async with SessionLocal() as session:
+            row = (
+                await session.execute(
+                    select(ChallengeInstance).where(
+                        ChallengeInstance.challenge_id == chal
+                    )
+                )
+            ).scalar_one()
+        assert row.status == "failed"
+        # The *original* reason, recorded before the hang — not a generic one.
+        assert "endpoints unreachable" in (row.failure_reason or "")
+        assert await _events("challenge.instance_provision_failed")
+    finally:
+        # Let the shielded teardown finish so no task is left pending.
+        release.set()
+        await asyncio.sleep(0.05)

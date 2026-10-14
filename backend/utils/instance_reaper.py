@@ -59,10 +59,11 @@ REQUESTED_STUCK_MINUTES = 5
 # handler then completed at t=7min, found the row no longer ``provisioning``,
 # and destroyed the container it had just spent seven minutes building.
 #
-# It also sits after the failure path's own budget (``PROVISION_FAILURE_SLACK``)
-# — since #456 a cancelled provision cleans up and records its specific reason
-# itself, so this rule is now purely the backstop for a provision whose task is
-# *gone* (process restart, loop teardown), not the normal reporting path.
+# It also sits after ``PROVISION_FAILURE_SLACK`` — since #456 a cancelled
+# provision records its own specific reason (and does so before its teardown),
+# so this rule is now the backstop for a provision whose task is *gone*
+# (process restart, loop teardown) rather than the normal reporting path. See
+# the slack's comment for what happens in the rare case the two do overlap.
 PROVISIONING_STUCK_SECONDS = PROVISION_HANDLER_TIMEOUT + PROVISION_FAILURE_SLACK
 # Bound the work one tick does, so a large backlog can't stall the shared
 # scheduler; the next tick picks up the rest.

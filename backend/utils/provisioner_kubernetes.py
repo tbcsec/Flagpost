@@ -663,17 +663,19 @@ class KubernetesProvisioner(Provisioner):
             # Wait for a Ready replica so a bad image / crash-loop fails the
             # provision with a reason instead of parking a never-serving row.
             await self._await_ready(name, spec)
-        except BaseException:
+        except (Exception, asyncio.CancelledError):
             # Guarantee the create() contract: on ANY post-Deployment failure —
             # a create error, a transient blip in the readiness poll, or a
             # never-ready timeout — clean up every object that landed. Without
             # this, a transient poll error would escape leaving the Deployment
             # (+Service/+Ingress) orphaned until the reaper's GC.
             #
-            # BaseException, not Exception, so a *cancelled* create (the
-            # provision ceiling firing, #456) cleans up too — CancelledError is a
-            # BaseException and used to skip this entirely. Shielded so a second
-            # cancellation can't abandon the deletes half-done.
+            # CancelledError explicitly, so a *cancelled* create (the provision
+            # ceiling firing, #456) cleans up too — it is a BaseException and
+            # used to skip this entirely. Not BaseException wholesale:
+            # GeneratorExit from a closed coroutine must not try to await a
+            # cleanup. Shielded so a second cancellation can't abandon the
+            # deletes half-done.
             await asyncio.shield(self._safe_delete(name))
             raise
         return name

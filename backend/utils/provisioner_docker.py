@@ -501,12 +501,14 @@ class DockerProvisioner(Provisioner):
             started = await self._request(
                 "POST", f"/containers/{handle}/start", timeout=_TIMEOUT_LIFECYCLE
             )
-        except BaseException:
+        except (Exception, asyncio.CancelledError):
             # The container exists but create() hasn't returned its handle, so
             # the caller can't clean it up. A transport error or a cancellation
             # (the provision ceiling firing, #456) here used to leave it for the
             # two-tick orphan GC. Tear it down now — shielded so a repeated
             # cancellation can't abandon the teardown — and re-raise.
+            # (Exception + CancelledError, not BaseException: GeneratorExit from
+            # a coroutine being closed must not try to await a cleanup.)
             await asyncio.shield(self._safe_destroy(handle))
             raise
         # 204 = started; 304 = already started (idempotent). Anything else is a
@@ -514,7 +516,9 @@ class DockerProvisioner(Provisioner):
         # provision never leaks.
         if started.status_code not in (204, 304):
             detail = _daemon_detail(started)
-            await self._safe_destroy(handle)
+            # Shielded like the branch above: a cancel landing mid-teardown
+            # mustn't abandon the delete of a container nobody else can see.
+            await asyncio.shield(self._safe_destroy(handle))
             raise ProvisionerError(f"container start failed: {detail}")
         return handle
 
@@ -557,7 +561,12 @@ class DockerProvisioner(Provisioner):
         # already raising a different error and can't act on this one.
         try:
             await self.destroy(handle)
-        except ProvisionerError as exc:
+        except Exception as exc:  # noqa: BLE001 — best-effort, must never raise
+            # Not just ProvisionerError: destroy() → _instance_networks_of reads
+            # resp.json(), which raises ValueError/AttributeError on a 200 with
+            # a non-JSON or non-dict body. Callers run this from failure and
+            # cancellation paths (#456), where an escaping ValueError would
+            # *replace* the error or CancelledError being handled.
             logger.warning(
                 "instance cleanup failed, leaving a possible orphan (%s): %s",
                 handle,

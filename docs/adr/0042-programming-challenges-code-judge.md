@@ -1,6 +1,7 @@
 # ADR-0042: Programming challenges — judge execution model, queue, and grading integration
 
-**Status:** Proposed
+**Status:** Proposed (amended 2026-10-14 after the #448 gating spike — §7's
+container posture and the harness are revised; see the Amendment)
 **Date:** 2026-10-14
 **Tracking:** epic #446 (#447 schema/authoring, #448 executor/pipeline, #449
 competitor UX, #450 jury console, #451 problem packages)
@@ -222,3 +223,77 @@ Instancing events are namespaced under the challenge entity
 entity (`judging.queued`, `judging.completed`, …) because a judging is a
 first-class record with its own lifecycle, not a property of a challenge. This
 is a small, deliberate divergence from the instancing precedent.
+
+## Amendment: gating-spike outcome — container posture and the harness (2026-10-14)
+
+The executor's riskiest assumption — getting code and test data into a judge
+container and a result out, through the socket-proxy, with no exec, no volumes
+and no network — was spiked before any executor code, as #448 required. The
+channel works. Two of §7's assumptions did not survive contact, and one gap had
+to be closed. Full results, with the probe table, are on #448.
+
+**What held.** Create → `PUT /containers/{id}/archive` → start →
+`POST …/wait` → `GET …/logs` → delete, all through the production proxy
+allowlist (its `POST=1` covers `PUT`). Overhead per judging is ~10 ms to create,
+<10 ms to upload and ~0.3 s from start to exit, which confirms "one container
+per judging" (§5).
+
+**Revised: the judge container keeps a writable layer.** Docker rejects an
+archive upload into a read-only root filesystem (`400 "container rootfs is
+marked read-only"`), and copying into a tmpfs is unsupported (a tmpfs is
+mounted at start, so it would shadow the upload anyway). `ReadonlyRootfs` and
+the upload channel are mutually exclusive, so the writable layer stays — and
+its protective role moves to the uid split below. Everything in the rootfs is
+root-owned, so the submission cannot write it regardless.
+
+**Revised: the harness and the submission run as different users, which needs
+three capabilities.** §7 implied the instancing recipe's bare `CapDrop: ALL`.
+Under that, the harness and the submission share a uid, so a submission could
+read the test inputs or job file, overwrite the harness, or forge its result
+line — and the harness cannot switch uid at all. The judge container instead
+runs:
+
+- the **harness as uid 0 with only `CAP_SETUID`, `CAP_SETGID` and `CAP_KILL`**
+  (all else dropped, `no-new-privileges` on). `SETUID`/`SETGID` let it run each
+  test's submission as **uid 65534**; `KILL` lets it reap the submission's
+  process group, without which a submission that forks orphans holding its
+  output open stalls the harness until they exit (30 s in the spike; 17 ms with
+  `KILL`);
+- the **submission with no capabilities at all** (`CapEff`/`CapPrm` = 0,
+  `setuid(0)` refused), under `RLIMIT_CPU`/`RLIMIT_AS`, with CPU measured from
+  the child's rusage (killed by `SIGXCPU` at 0.999 s against a 1 s limit);
+- job data and test inputs in **root-only (`0700`) directories**, the source
+  world-readable, and scratch in a **`/work` tmpfs owned by uid 65534** with
+  `exec` allowed.
+
+A hostile submission was blocked from every probe that matters: reading inputs,
+writing the rootfs or the harness's directory, forging the harness's output via
+`/proc/1/fd/1`, signalling the harness, `setuid(0)`, network egress, an
+unbounded memory hog (`RLIMIT_AS`) and a fork bomb (`PidsLimit`). The uid split,
+not a read-only filesystem, is now the trust boundary inside the container.
+`AutoRemove` is off (logs are read after exit), the harness's result line
+carries a per-judging nonce from the root-only job file as defence in depth, and
+the harness reads submission output under a cap rather than buffering it whole.
+
+**Decided: the harness is a static Go binary, uploaded per judging.** The spike
+harness was Python, which stock compiler images (C/C++, Java) don't have. Of the
+three options — a static binary uploaded with each judging, Flagpost-published
+per-language judge images with a Python harness baked in, or requiring operators
+to build images that include Python — the owner chose the first. The harness is
+written in **Go** (statically linked, `CGO_ENABLED=0`), built in a stage of the
+backend image's Docker build for amd64 and arm64, and uploaded into each judge
+container alongside the source. Operators point a language at a **stock image**
+(`python:3.13-slim`, `gcc:14`, …) and Flagpost publishes no new images.
+
+This adds a language to the stack that ARCHITECTURE §2 fixes; the harness is a
+self-contained supervisor with no runtime role in the backend, and §2 is updated
+alongside its implementation in #448. The cost is a toolchain stage in the
+backend build and a second language to review.
+
+**Consequences.** Compared with Docker instancing, the judge container now
+deviates from the shared hardening recipe in four deliberate ways: no network,
+an exec-able scratch tmpfs, a writable layer, and three added capabilities. Each
+is justified above, and `THREAT_MODEL.md`'s judge section should record them as
+such rather than describing the judge as "the instancing posture". The
+"embedded executor needs no new infrastructure" property still holds: nothing is
+added to the deployment, only to the build.

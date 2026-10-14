@@ -1629,8 +1629,8 @@ Keep this section honest — update as decisions are made:
   *not* built — it remains an additive layer behind the same `background` lane
   if that requirement ever lands. The event bus dispatch model is unchanged by
   the multi-worker relay (ADR-0025 runs each event's handlers once, on the
-  emitting worker, and relays only the resulting frames — see "Horizontal scale"
-  below).
+  emitting worker, and relays only their results — broadcast frames, and since
+  the 2026-10-14 amendment WebSocket evictions — see "Horizontal scale" below).
 - **Scoreboard scale-out** (issue #87). **Partly built.** The read-heavy paths
   (WS join snapshot, REST read, public spectator + CTFtime feed) now go through
   a **cached read model** (`cached_scoreboard`, TTL + event-invalidated, #87)
@@ -1646,8 +1646,11 @@ Keep this section honest — update as decisions are made:
   (`WEB_CONCURRENCY=1`) remains the **shipped default** and the zero-infra
   story, but **multiple uvicorn workers on one box are now opt-in**: setting
   `WEB_CONCURRENCY>1` (which requires `REDIS_URL`) attaches a Redis broadcast
-  relay so a frame raised on one worker reaches clients on the others
-  (ADR-0025), a heartbeat-TTL Redis presence store so the "who's here" set no
+  relay so a frame raised on one worker reaches clients on the others — and so a
+  WebSocket revocation (ban, deletion, team removal, role change) reaches the
+  revoked user's sockets on every worker, not just the one that handled the
+  request; the relay's subscriber is supervised because of it (ADR-0025 and its
+  2026-10-14 amendment), a heartbeat-TTL Redis presence store so the "who's here" set no
   longer fragments across workers (ADR-0026), and a single scheduler sidecar
   process so time-triggered automations / the update check / retention purge
   fire once rather than once per worker. `JWT_SECRET` must be set explicitly so

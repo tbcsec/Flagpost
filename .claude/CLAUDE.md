@@ -214,6 +214,16 @@ Hard-won, non-obvious, and not visible from reading the code you're changing.
 - **`conftest` drains `event_bus.wait_for_background()` before `drop_all`**, or
   fire-and-forget automation tasks leak across the per-test schema and flake
   unrelated tests.
+- **The event bus cancels every handler after 10s — background ones too.**
+  `background=True` only means the request doesn't await it; `_run` still wraps
+  it in `wait_for(DEFAULT_HANDLER_TIMEOUT)`. The cancel is silent, and
+  `except Exception` won't see it (`CancelledError` is a `BaseException`). A
+  handler that can run longer declares `timeout=` on its subscription, with a
+  comment deriving the number, and should fail *partially* (commit in batches)
+  rather than lose everything. Genuinely long work — container provisioning,
+  the code judge — belongs in a worker loop or the scheduler, not the bus. This
+  bit four handlers at once (#452, #454–#456); one silently dropped every
+  notification for an announcement.
 
 ## Setup, dev, and demo
 

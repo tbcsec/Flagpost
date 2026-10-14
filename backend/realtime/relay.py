@@ -55,9 +55,21 @@ GapHandler = Callable[[], Awaitable[None]]
 # Resubscribe backoff after the pub/sub stream drops (GHSA-p679): quick first
 # retry for a blip, capped so a long Redis outage doesn't spin.
 _RESUBSCRIBE_INITIAL_S = 0.5
-_RESUBSCRIBE_MAX_S = 30.0
+# Capped low: a subscribe attempt is cheap, and every second spent waiting
+# after Redis is back is a second this worker misses peers' evictions.
+_RESUBSCRIBE_MAX_S = 5.0
 # How long a re-established stream must hold before the backoff resets.
 _RESUBSCRIBE_STABLE_S = 30.0
+
+# Liveness of the subscriber connection (GHSA-p679). A half-open TCP stream —
+# a NAT / load-balancer / conntrack idle timeout that drops a quiet flow with no
+# FIN or RST — never errors a blocking read, so a plain ``listen()`` waited on
+# it forever: the worker went deaf with no gap reported. Instead poll, and
+# after this much silence send a PING; no PONG within the timeout means the
+# connection is dead, which the supervisor then treats as a drop.
+_POLL_S = 1.0
+_IDLE_PING_S = 15.0
+_PING_TIMEOUT_S = 5.0
 
 
 class RealtimeRelay(Protocol):
@@ -94,6 +106,8 @@ class RedisRelay:
         acquire_timeout_seconds: float = 10.0,
     ) -> None:
         from redis.asyncio import BlockingConnectionPool, Redis
+        from redis.asyncio.retry import Retry
+        from redis.backoff import NoBackoff
 
         pool = BlockingConnectionPool.from_url(
             redis_url,
@@ -101,6 +115,14 @@ class RedisRelay:
             timeout=acquire_timeout_seconds,
             encoding="utf-8",
             decode_responses=True,
+            # Pinned, not left to redis-py's defaults (GHSA-p679): with retries,
+            # PubSub reconnects and resubscribes *silently* — the supervisor
+            # never sees the drop, and whatever was published during it is lost
+            # with no gap reported. A failed publish is retried by the manager.
+            retry=Retry(NoBackoff(), 0),
+            # Kernel-level backstop for a dead peer; the idle PING in
+            # ``_listen`` is the primary detector.
+            socket_keepalive=True,
         )
         self._redis = Redis(connection_pool=pool)
         self._pubsub: Any = None
@@ -170,8 +192,29 @@ class RedisRelay:
                     logger.exception("relay: gap handler failed")
 
     async def _listen(self, handler: RelayHandler) -> None:
+        """Deliver messages until the stream drops — including a *silent* drop,
+        detected by the idle PING (see ``_IDLE_PING_S``). Returns on a drop."""
+        loop = asyncio.get_running_loop()
+        last_seen = loop.time()
+        ping_sent_at: float | None = None
         try:
-            async for msg in self._pubsub.listen():
+            while True:
+                msg = await self._pubsub.get_message(timeout=_POLL_S)
+                now = loop.time()
+                if msg is None:
+                    if ping_sent_at is not None:
+                        if now - ping_sent_at >= _PING_TIMEOUT_S:
+                            raise ConnectionError(
+                                "relay: no PONG from Redis — connection is dead"
+                            )
+                    elif now - last_seen >= _IDLE_PING_S:
+                        await self._pubsub.ping()
+                        ping_sent_at = now
+                    continue
+                # Any traffic — a message, a PONG, a subscribe ack — proves
+                # the connection is alive.
+                last_seen = now
+                ping_sent_at = None
                 if msg.get("type") != "message":
                     continue
                 try:

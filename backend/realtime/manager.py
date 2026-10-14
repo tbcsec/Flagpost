@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 from collections import defaultdict
 from collections.abc import Awaitable, Iterable
 from dataclasses import dataclass, field
@@ -38,6 +39,17 @@ logger = logging.getLogger("realtime")
 # few-hundred-socket room fans out in one wave, bounded so a huge room can't
 # open an unbounded burst of send tasks at once.
 _BROADCAST_CONCURRENCY = 64
+
+# Background retry for an eviction whose relay publish failed (GHSA-p679):
+# 1 + 2 + 4 + 8 + 16 + 30 s ≈ a minute of attempts before giving up loudly.
+_EVICT_RETRY_INITIAL_S = 1.0
+_EVICT_RETRY_MAX_S = 30.0
+_EVICT_RETRY_ATTEMPTS = 6
+
+# A relay gap closes every socket on the worker; spread those closes over this
+# window so the whole site doesn't reconnect into a just-restarted Redis in the
+# same second. The sockets are already marked revoked — inert — while they wait.
+_GAP_CLOSE_SPREAD_S = 5.0
 
 
 @dataclass
@@ -135,7 +147,17 @@ class ConnectionManager:
                 len(targets),
             )
         # 1012 "service restart": a reconnect is expected, not a rejection.
-        self._spawn(self._close_bounded(targets, 1012))
+        # Staggered so every worker's clients don't all reconnect at once.
+        self._spawn(self._close_staggered(targets, 1012, _GAP_CLOSE_SPREAD_S))
+
+    async def _close_staggered(
+        self, targets: list[WebSocket], code: int, spread: float
+    ) -> None:
+        async def _later(websocket: WebSocket) -> None:
+            await asyncio.sleep(random.uniform(0, spread))
+            await self._close_bounded([websocket], code)
+
+        await asyncio.gather(*(_later(ws) for ws in targets))
 
     async def stop_relay(self) -> None:
         """Tear down the relay subscriber. Safe no-op when none is attached."""
@@ -333,20 +355,48 @@ class ConnectionManager:
         return len(targets)
 
     async def _publish_eviction(self, payload: dict[str, Any]) -> None:
+        """Relay an eviction to peers; if that fails, keep retrying in the
+        background. Evictions are idempotent, so a retry is always safe.
+
+        The retry matters because a failed publish does not imply a gap on the
+        *subscribers*: a pool-acquire timeout (the relay's pool is shared with
+        every broadcast and presence publish), a reset on the publisher's own
+        connection, or this background handler being cut off by the event
+        bus while it waits for a pool slot all leave peers' subscriptions
+        healthy — so no gap fires and, without a retry, they never hear it."""
         if self._relay is None:
             return
         try:
             await self._relay.publish(payload)
-        except Exception:  # noqa: BLE001 — logged loudly; see below
-            # Peers didn't hear this eviction. Their own sockets for these users
-            # stay open until the relay recovers — at which point every worker's
-            # subscriber treats the outage as a gap and closes all its sockets,
-            # forcing a re-handshake (see ``_on_relay_gap``).
-            logger.error(
-                "eviction of %s could not be relayed to other workers",
-                payload.get("user_ids"),
-                exc_info=True,
+        except asyncio.CancelledError:
+            # Cut off mid-publish: hand it to a task that outlives us, then let
+            # the cancellation propagate.
+            self._spawn(self._retry_eviction_publish(payload))
+            raise
+        except Exception:  # noqa: BLE001 — retried below
+            logger.warning(
+                "eviction of %s not relayed; retrying", payload.get("user_ids")
             )
+            self._spawn(self._retry_eviction_publish(payload))
+
+    async def _retry_eviction_publish(self, payload: dict[str, Any]) -> None:
+        delay = _EVICT_RETRY_INITIAL_S
+        for _ in range(_EVICT_RETRY_ATTEMPTS):
+            await asyncio.sleep(delay)
+            try:
+                await self._relay.publish(payload)  # type: ignore[union-attr]
+                logger.info("eviction of %s relayed on retry", payload.get("user_ids"))
+                return
+            except Exception:  # noqa: BLE001 — keep trying, then give up loudly
+                delay = min(delay * 2, _EVICT_RETRY_MAX_S)
+        # Out of attempts: Redis has been unusable for over a minute, by which
+        # point peers' subscriptions have almost certainly dropped too — and a
+        # gap closes every socket on resubscribe (``_on_relay_gap``).
+        logger.error(
+            "eviction of %s could not be relayed to other workers after %d attempts",
+            payload.get("user_ids"),
+            _EVICT_RETRY_ATTEMPTS,
+        )
 
     def _mark_revoked(
         self,

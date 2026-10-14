@@ -214,8 +214,12 @@ async def room_socket(
             await _close_quietly(websocket, 4403)
             return
         if member is not None:
-            await manager.presence_join(room_type, room_id, websocket, member)
+            # Set *before* the await: presence_join records the member locally
+            # and only then talks to the shared store / publishes, so if that
+            # part raises, the local entry exists and must still be removed.
+            # presence_leave is safe on a partial or absent entry.
             in_presence = True
+            await manager.presence_join(room_type, room_id, websocket, member)
         while True:
             raw = await websocket.receive_text()
             # Stop serving a socket the manager won't vouch for (GHSA-p679):

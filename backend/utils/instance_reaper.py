@@ -34,13 +34,33 @@ from models.challenge_instancing import (
     ChallengeInstance,
 )
 from utils.event_bus import event_bus
-from utils.instance_service import load_settings, teardown, transition
+from utils.instance_service import (
+    PROVISION_HANDLER_TIMEOUT,
+    load_settings,
+    teardown,
+    transition,
+)
 
 logger = logging.getLogger(__name__)
 
-# A provision that hasn't reached ``running`` this long after the row was
-# created has lost its background task — provisioning is meant to take seconds.
-STUCK_MINUTES = 5
+# Stuck-row thresholds, one per pre-``running`` status, because the two states
+# mean different things (#452).
+#
+# A ``requested`` row should be claimed by the background provisioner within
+# milliseconds. Still ``requested`` after five minutes means its task never
+# started at all — the emit was lost, or the process restarted between the
+# commit and the schedule — so there is no live handler to race.
+REQUESTED_STUCK_MINUTES = 5
+# A ``provisioning`` row, by contrast, has a handler legitimately working on it,
+# bounded by ``PROVISION_HANDLER_TIMEOUT``. Reaping it must therefore sit
+# *after* that ceiling, or the reaper races a live provision: with a five-minute
+# rule, a seven-minute image pull was marked ``failed`` at t=5min, and the
+# handler then completed at t=7min, found the row no longer ``provisioning``,
+# and destroyed the container it had just spent seven minutes building. The
+# slack past the ceiling covers the handler's own failure path (destroy the
+# handle, mark the row, emit) so this rule only ever fires on a provision that
+# really has been abandoned or cancelled.
+PROVISIONING_STUCK_SECONDS = PROVISION_HANDLER_TIMEOUT + 120.0
 # Bound the work one tick does, so a large backlog can't stall the shared
 # scheduler; the next tick picks up the rest.
 REAP_BATCH = 25
@@ -83,8 +103,11 @@ async def reap_instances(db_factory, *, now: datetime | None = None) -> None:
         except Exception:  # noqa: BLE001 — one bad row must not stop the pass
             logger.exception("TTL reap of instance %s failed", instance_id)
 
-    # 2. Stuck provisioning → failed.
-    cutoff = now - timedelta(minutes=STUCK_MINUTES)
+    # 2. Stuck provisioning → failed. Each status gets its own cutoff: a
+    # `requested` row never started, a `provisioning` one may still be running
+    # under the handler ceiling and must not be raced (see the constants).
+    requested_cutoff = now - timedelta(minutes=REQUESTED_STUCK_MINUTES)
+    provisioning_cutoff = now - timedelta(seconds=PROVISIONING_STUCK_SECONDS)
     async with db_factory() as db:
         pending = (
             await db.execute(
@@ -93,9 +116,16 @@ async def reap_instances(db_factory, *, now: datetime | None = None) -> None:
                 )
             )
         ).scalars().all()
-        stuck = [i for i in pending if ensure_aware_utc(i.created_at) <= cutoff][
-            :REAP_BATCH
-        ]
+        stuck = [
+            i
+            for i in pending
+            if ensure_aware_utc(i.created_at)
+            <= (
+                requested_cutoff
+                if i.status == "requested"
+                else provisioning_cutoff
+            )
+        ][:REAP_BATCH]
         failed_payloads = []
         for instance in stuck:
             transition(instance, "failed")

@@ -18,7 +18,9 @@ and their costs from ADR-0005:
 - **Isolated failure + per-handler timeout.** A handler that raises or hangs
   is logged and dropped, never allowed to break sibling handlers, in either
   lane. The timeout addresses ADR-0005's flagged risk of a hung handler (e.g. a
-  webhook) that would otherwise never complete.
+  webhook) that would otherwise never complete. A subscription may **declare
+  its own timeout** (``timeout=``) when its real upper bound is legitimately
+  longer than the bus default — see the note on `DEFAULT_HANDLER_TIMEOUT`.
 - **Per-owner ownership.** Handlers may be tagged with an owner id so a
   plugin's handlers can be detached wholesale when it's disabled (§3.1). No
   plugin consumes this yet; the hook exists so the bus doesn't need reworking
@@ -47,6 +49,15 @@ Handler = Callable[[str, EventPayload], Awaitable[None]]
 
 DEFAULT_HANDLER_TIMEOUT = 10.0  # seconds
 
+# The default suits the handlers it was written for — audit writes, WS
+# broadcasts, webhook egress, email — where anything slower than ~10s is a
+# hang worth abandoning. It is *not* a universal upper bound: a handler that
+# legitimately takes minutes (container provisioning, whose own internals allow
+# a 300s image pull) was being cancelled mid-run, leaving a half-created
+# resource and an unexplained failure (#452). Such a subscription declares its
+# own bound with ``timeout=`` instead of being silently clipped; the default
+# stays protective for everything else.
+
 
 @dataclass
 class _Subscription:
@@ -57,6 +68,9 @@ class _Subscription:
     # are scheduled fire-and-forget so a slow one doesn't block the request
     # (ADR-0012).
     background: bool = False
+    # None ⇒ use the bus-wide default. Set only where the handler's real upper
+    # bound exceeds it (#452).
+    timeout: float | None = None
     _segments: list[str] = field(init=False)
 
     def __post_init__(self) -> None:
@@ -85,7 +99,12 @@ class EventBus:
         self._background_tasks: set[asyncio.Task] = set()
 
     def on(
-        self, pattern: str, *, owner: str | None = None, background: bool = False
+        self,
+        pattern: str,
+        *,
+        owner: str | None = None,
+        background: bool = False,
+        timeout: float | None = None,
     ) -> Callable[[Handler], Handler]:
         """Decorator registering ``handler`` for events matching ``pattern``.
 
@@ -93,10 +112,20 @@ class EventBus:
         ``*`` (e.g. ``challenge.*``), or the bare ``*`` to catch everything.
         ``background=True`` opts the handler into fire-and-forget dispatch
         (ADR-0012) — for slow/external work that must not block the request.
+        ``timeout`` overrides the bus-wide per-handler cap for this
+        subscription only (#452) — pass it when the handler's genuine upper
+        bound is longer than ``DEFAULT_HANDLER_TIMEOUT``, with a comment
+        deriving the number.
         """
 
         def decorator(handler: Handler) -> Handler:
-            self.subscribe(pattern, handler, owner=owner, background=background)
+            self.subscribe(
+                pattern,
+                handler,
+                owner=owner,
+                background=background,
+                timeout=timeout,
+            )
             return handler
 
         return decorator
@@ -108,9 +137,10 @@ class EventBus:
         *,
         owner: str | None = None,
         background: bool = False,
+        timeout: float | None = None,
     ) -> None:
         self._subscriptions.append(
-            _Subscription(pattern, handler, owner, background)
+            _Subscription(pattern, handler, owner, background, timeout)
         )
 
     def unsubscribe_owner(self, owner: str) -> None:
@@ -170,6 +200,13 @@ class EventBus:
         then is cancelled and dropped from tracking, so the drain always
         terminates. The common case — handlers finishing in milliseconds — is
         unchanged.
+
+        The bound stays the **bus-wide** default even where a subscription
+        declares a longer ``timeout`` (#452): honouring a 600s provisioning
+        bound here would put a 10-minute stall back into the per-test teardown,
+        and tests exercise those handlers against mocked backends that return
+        immediately. A test that genuinely needs to await slow background work
+        should await its effect directly rather than lengthen this drain.
         """
         while self._background_tasks:
             batch = tuple(self._background_tasks)
@@ -195,14 +232,17 @@ class EventBus:
     async def _run(
         self, sub: _Subscription, event_name: str, payload: EventPayload
     ) -> None:
+        timeout = (
+            sub.timeout if sub.timeout is not None else self._handler_timeout
+        )
         try:
             await asyncio.wait_for(
-                sub.handler(event_name, payload), timeout=self._handler_timeout
+                sub.handler(event_name, payload), timeout=timeout
             )
         except asyncio.TimeoutError:
             logger.error(
                 "event handler timed out after %ss: pattern=%s event=%s",
-                self._handler_timeout,
+                timeout,
                 sub.pattern,
                 event_name,
             )

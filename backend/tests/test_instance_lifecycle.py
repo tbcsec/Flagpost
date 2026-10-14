@@ -627,3 +627,50 @@ async def test_test_connection_reports_staged_legs(client, monkeypatch):
         "endpoint_reachable",
         "privilege_posture",
     ]
+
+
+async def test_provision_listener_declares_a_timeout_above_the_bus_default():
+    """Guard for #452: provisioning is far slower than the event bus's default
+    10s per-handler cap, so its subscription must declare its own bound — or a
+    cold image pull gets cancelled mid-run, leaving a half-created container and
+    an unexplained ``failed`` row."""
+    from unittest.mock import MagicMock
+
+    from plugins.instances import setup
+    from utils.event_bus import DEFAULT_HANDLER_TIMEOUT, EventBus
+    from utils.instance_service import PROVISION_HANDLER_TIMEOUT
+
+    bus = EventBus()
+    # MagicMock absorbs whatever app surface setup() touches, so this guard
+    # can't start failing (and misreporting as a timeout regression) the first
+    # time the module wires something new.
+    setup(MagicMock(), bus, SessionLocal)
+
+    subs = [
+        s
+        for s in bus._subscriptions
+        if s.pattern == "challenge.instance_requested"
+    ]
+    assert len(subs) == 1
+    sub = subs[0]
+    assert sub.background is True
+    assert sub.timeout == PROVISION_HANDLER_TIMEOUT
+    assert sub.timeout > DEFAULT_HANDLER_TIMEOUT
+
+
+async def test_reaper_cannot_race_a_live_provision():
+    """The assertion with teeth (#452). The handler ceiling and the reaper's
+    stuck rule are two bounds on the same work: if the reaper fires first, a
+    slow-but-succeeding provision is marked ``failed`` while still running, and
+    the handler then destroys the container it just finished building. The
+    ordering is the invariant, not either number."""
+    from utils import instance_reaper
+    from utils.instance_service import PROVISION_HANDLER_TIMEOUT
+
+    assert (
+        instance_reaper.PROVISIONING_STUCK_SECONDS > PROVISION_HANDLER_TIMEOUT
+    ), "the reaper must not reap a provision the handler is still allowed to run"
+    # A `requested` row has no live handler to race, so it keeps the short rule.
+    assert (
+        instance_reaper.REQUESTED_STUCK_MINUTES * 60 < PROVISION_HANDLER_TIMEOUT
+    )

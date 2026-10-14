@@ -1,0 +1,78 @@
+# Code judge — same-host socket-proxy sidecar (#446, ADR-0042).
+#
+# Opt-in overlay for the production stack. A default `docker compose up` has no
+# path to the host's Docker daemon at all; adding this overlay is the whole of
+# the judge's infrastructure step:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.judge.yml up -d
+#
+# Then Admin → Site settings → Code judge shows the endpoint as detected; pick
+# languages and enable. (Running challenge instances too? Add both overlays —
+# each feature keeps its own proxy.)
+#
+# It brings up:
+#
+#   * `judge-proxy` — a tecnativa/docker-socket-proxy in front of the host
+#     Docker daemon, exposing ONLY what the judge needs (containers / images +
+#     POST) and denying the dangerous verbs (exec, volumes, build, the raw
+#     socket). The backend never mounts /var/run/docker.sock; it talks HTTP to
+#     this proxy. Its port is published to NO host interface — only the backend
+#     reaches it, over the private `flagpost-judge-control` network. The setup
+#     flow's "Check connection" verifies exec/volumes/build are refused.
+#
+#   * `JUDGE_ENDPOINT_URL` on the backend, so the judge's endpoint is managed by
+#     this file rather than typed into the UI.
+#
+# Judge containers themselves run with no network at all (NetworkMode: none),
+# so unlike instancing there is no challenge network and no egress firewall to
+# set up.
+
+services:
+  judge-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    restart: unless-stopped
+    environment:
+      # --- allowed (the judge executor's whole surface) ---
+      CONTAINERS: 1      # create / start / wait / logs / archive / remove
+      IMAGES: 1          # pull language images
+      POST: 1            # create/start/pull/archive are writes — off by default
+      PING: 1            # GET /_ping (reachability leg)
+      VERSION: 1
+      # --- denied (defaults, pinned explicitly as documentation) ---
+      NETWORKS: 0        # judge containers have no network to manage
+      EXEC: 0            # no docker exec into a running judging
+      VOLUMES: 0         # no volume create/mount surface
+      BUILD: 0           # no image build
+      SWARM: 0
+      SECRETS: 0
+      CONFIGS: 0
+      SERVICES: 0
+      TASKS: 0
+      NODES: 0
+      SYSTEM: 0
+      INFO: 0
+      AUTH: 0
+      DISTRIBUTION: 0
+      PLUGINS: 0
+      SESSION: 0
+    volumes:
+      # Read-only mount of the host socket. The proxy — not the app — holds this.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - flagpost-judge-control
+    # Deliberately NO `ports:` — never published to a host interface.
+
+  backend:
+    environment:
+      JUDGE_ENDPOINT_URL: http://judge-proxy:2375
+    networks:
+      - default
+      - flagpost-judge-control
+    depends_on:
+      judge-proxy:
+        condition: service_started
+
+networks:
+  # Backend ↔ judge-proxy only. Not internet-facing.
+  flagpost-judge-control:
+    driver: bridge

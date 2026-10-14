@@ -23,6 +23,13 @@ AI provider config that itself isn't exported, so it resets to its safe defaults
 (assistant off, challenge-metadata off) on restore rather than travelling with a
 competition.
 
+Also excluded: the code judge's ``judge_settings`` and ``judge_languages``
+(#447, ADR-0042). The settings point at a host-specific container endpoint (the
+``instance_settings`` reasoning), and a language *is* an image plus commands the
+judge executes — exactly the kind of row GHSA-x8v4 showed must not be plantable
+through an import. An operator restoring onto new infrastructure re-registers
+languages, which is also when they should check the images.
+
 Also excluded, for the same credential reason: ``identity_providers``,
 ``user_external_identities`` and ``auth_login_states`` (#58, ADR-0022 §7), and
 ``ai_settings`` (#98, ADR-0023). A provider row holds a **secret** — an OIDC

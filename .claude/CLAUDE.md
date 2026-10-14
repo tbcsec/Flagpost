@@ -59,13 +59,14 @@ mechanism that already solves your problem. It names *where* things live; the
 authority on *how* they work is `docs/ARCHITECTURE.md` and the code.
 
 **Backend** is a small kernel (auth/RBAC, the Competition tenancy root, the
-event bus, the module loader) plus **26 modules** in `backend/plugins/`, each a
+event bus, the module loader) plus **27 modules** in `backend/plugins/`, each a
 `plugin.yaml` manifest + a `setup()` that mounts routers and subscribes
-listeners (§11.1). **Seven are optional** — per-competition toggleable via
+listeners (§11.1). **Eight are optional** — per-competition toggleable via
 `competition_modules`: **`automations`**, **`feedback`**, **`analytics`**,
-**`certificates`**, **`reports`**, **`instances`**, and **`ai`** (the last two
-additionally ship *inert* — they mount site-wide but do nothing until an
-operator configures them; see the AI and instancing bullets below). The other
+**`certificates`**, **`reports`**, **`instances`**, **`ai`**, and **`judge`**
+(the last three additionally ship *inert* — they mount site-wide but do nothing
+until an operator configures them; see the AI and instancing bullets below, and
+ADR-0042 for the code judge). The other
 nineteen are required-core (always loaded): `announcements`, `audit_log`,
 `challenges`, `collab`, `competitions`, `dashboard`, `hints`, `marketplace`,
 `notifications`, `pages`, `roles`, `scoring`, `setup`, `site_settings`,
@@ -92,12 +93,12 @@ Subsystem by subsystem, with the non-obvious bits called out:
   reset, email verification (admin-toggleable), self-service email change, a
   registration domain allowlist, and personal **API tokens** (`flp_`-prefixed,
   minting is self-only by route shape).
-- **RBAC** — permissions as data (ADR-0004), 51 of them in
+- **RBAC** — permissions as data (ADR-0004), 52 of them in
   `auth/permissions.py`, each with a category and a `global`/`competition`
   scope. System roles **re-sync from the catalog on every startup**
   (`seed_system_roles`), so a new permission reaches an already-migrated
   Administrator without a migration.
-- **Events** — `utils/event_bus`, 103 event types in `utils/event_catalog.py`.
+- **Events** — `utils/event_bus`, 107 event types in `utils/event_catalog.py`.
   `emit()` awaits foreground handlers (audit + WS broadcasts) and schedules
   `background=True` ones fire-and-forget (ADR-0012) — that's the lane
   webhooks/email use.

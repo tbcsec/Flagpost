@@ -8,6 +8,7 @@ import { SectionHeader } from "@/components/app/section-header";
 import { AiSettingsPanel } from "@/components/admin/ai-settings-panel";
 import { AppearancePanel } from "@/components/admin/appearance-panel";
 import { InstancesSettingsPanel } from "@/components/admin/instances-settings-panel";
+import { JudgeSettingsPanel } from "@/components/admin/judge-settings-panel";
 import { AuthProvidersPanel } from "@/components/admin/auth-providers-panel";
 import { BackupPanel } from "@/components/admin/backup-panel";
 import { RulesSettingsPanel } from "@/components/admin/rules-settings-panel";
@@ -36,15 +37,15 @@ import { toast } from "@/stores/toast";
 // Following the Competition Settings precedent, panels stay **mounted** and are
 // toggled with `hidden` rather than conditionally rendered, so an unsaved edit
 // in one tab survives a look at another.
-type Tab = "general" | "email" | "auth" | "rules" | "backup" | "appearance" | "ai" | "instances";
+type Tab = "general" | "email" | "auth" | "rules" | "backup" | "appearance" | "ai" | "instances" | "judge";
 
 /** The two tabs that are views of the one settings form. */
 type FormSection = Extract<Tab, "general" | "email">;
 
-const TAB_ORDER: Tab[] = ["general", "email", "auth", "rules", "backup", "appearance", "ai", "instances"];
+const TAB_ORDER: Tab[] = ["general", "email", "auth", "rules", "backup", "appearance", "ai", "instances", "judge"];
 
 /** Tab → message key in the admin.settings namespace. */
-const TAB_KEY: Record<Tab, "tabGeneral" | "tabEmail" | "tabAuth" | "tabRules" | "tabBackup" | "tabAppearance" | "tabAi" | "tabInstances"> = {
+const TAB_KEY: Record<Tab, "tabGeneral" | "tabEmail" | "tabAuth" | "tabRules" | "tabBackup" | "tabAppearance" | "tabAi" | "tabInstances" | "tabJudge"> = {
   general: "tabGeneral",
   email: "tabEmail",
   auth: "tabAuth",
@@ -53,6 +54,7 @@ const TAB_KEY: Record<Tab, "tabGeneral" | "tabEmail" | "tabAuth" | "tabRules" | 
   appearance: "tabAppearance",
   ai: "tabAi",
   instances: "tabInstances",
+  judge: "tabJudge",
 };
 
 function isFormSection(tab: Tab): tab is FormSection {
@@ -85,6 +87,8 @@ function AdminSettingsInner() {
   // Instancing infra is a higher-stakes grant again (a container-runtime
   // endpoint + registry credential), so it gets its own tab like auth/AI.
   const canManageInstances = access.has("manage_instance_infra");
+  // The code judge decides which images and commands run — its own grant too.
+  const canManageJudge = access.has("manage_judge_infra");
   const settings = useOperationalSettings();
   const data = settings.data;
   const router = useRouter();
@@ -92,7 +96,7 @@ function AdminSettingsInner() {
   const searchParams = useSearchParams();
 
   if (!access.ready) return <Skeleton className="h-64 w-full" />;
-  if (!canManage && !canManageAuth && !canManageAi && !canManageInstances) {
+  if (!canManage && !canManageAuth && !canManageAi && !canManageInstances && !canManageJudge) {
     return (
       <>
         <SectionHeader title={t("title")} subtitle={t("subtitleShort")} />
@@ -105,6 +109,7 @@ function AdminSettingsInner() {
     if (value === "auth") return canManageAuth;
     if (value === "ai") return canManageAi;
     if (value === "instances") return canManageInstances;
+    if (value === "judge") return canManageJudge;
     return canManage;
   }).map((value) => ({ value, label: t(TAB_KEY[value]) }));
 
@@ -203,6 +208,16 @@ function AdminSettingsInner() {
               {t("instancesHeadingDescription")}
             </p>
             <InstancesSettingsPanel />
+          </div>
+        )}
+
+        {canManageJudge && (
+          <div className={tab === "judge" ? "" : "hidden"}>
+            <h2 className="text-lg font-semibold">{t("judgeHeading")}</h2>
+            <p className="mb-4 mt-1 text-sm text-muted-foreground">
+              {t("judgeHeadingDescription")}
+            </p>
+            <JudgeSettingsPanel />
           </div>
         )}
       </div>

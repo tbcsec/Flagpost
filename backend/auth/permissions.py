@@ -168,6 +168,12 @@ PERMISSIONS: tuple[Permission, ...] = (
     Permission("instance_view", "Challenge Instances", Scope.COMPETITION),
     # Kill or extend any subject's instance (staff moderation).
     Permission("instance_manage", "Challenge Instances", Scope.COMPETITION),
+    # Code judge (#446, ADR-0042). Site judge configuration — the executor
+    # endpoint and the language registry, i.e. which images and commands the
+    # judge runs. Its own grant for the same reason as manage_instance_infra:
+    # it points the platform at a container runtime and decides what executes
+    # there. Administrator-only among the built-in roles.
+    Permission("manage_judge_infra", "Site Settings", Scope.GLOBAL),
     # Marketplace / content packs (#387, ADR-0040). Install a content pack —
     # packaged challenges (into a competition) or brand themes (site-wide) —
     # through the existing importers. Global + Administrator-only among the

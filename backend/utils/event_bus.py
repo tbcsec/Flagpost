@@ -155,12 +155,42 @@ class EventBus:
 
         Test-only helper: background dispatch is fire-and-forget (ADR-0012), so
         a test that asserts on a background handler's effect awaits this first
-        rather than sleeping and racing.
+        rather than sleeping and racing. (Production never calls this — there,
+        background handlers run detached, already bounded by the per-handler
+        timeout in ``_run``.)
+
+        **Bounded so a straggler can never hang the whole suite.** The per-test
+        conftest teardown drains here before ``drop_all``; intermittently a
+        background task scheduled during the test was still pending at teardown
+        and sat *un-driven* (e.g. its ``_run`` timeout timer belongs to the
+        test's event loop, which the fixture-finaliser loop no longer runs), so
+        a plain ``gather`` awaited it forever — a silent multi-minute CI hang
+        that only surfaced under 2-core contention. Each batch now waits at most
+        the per-handler timeout plus a small slack; a task that hasn't settled by
+        then is cancelled and dropped from tracking, so the drain always
+        terminates. The common case — handlers finishing in milliseconds — is
+        unchanged.
         """
         while self._background_tasks:
-            await asyncio.gather(
-                *tuple(self._background_tasks), return_exceptions=True
+            batch = tuple(self._background_tasks)
+            # ``asyncio.wait`` (unlike ``gather``/``wait_for``) returns after the
+            # timeout WITHOUT awaiting the tasks or their cancellation, so it can
+            # never itself hang on a task that won't settle — the key property
+            # ``wait_for`` lacks (it awaits the cancellation it requests).
+            _done, pending = await asyncio.wait(
+                batch, timeout=self._handler_timeout + 2
             )
+            if pending:
+                logger.error(
+                    "wait_for_background: %d task(s) did not settle; cancelling",
+                    len(pending),
+                )
+                for task in pending:
+                    task.cancel()
+            # Stop tracking this batch no matter what — a cancelled straggler
+            # finishes out of band and must not re-wedge the drain. New tasks
+            # scheduled meanwhile stay in the set and the loop drains them.
+            self._background_tasks.difference_update(batch)
 
     async def _run(
         self, sub: _Subscription, event_name: str, payload: EventPayload

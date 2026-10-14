@@ -835,3 +835,70 @@ async def test_registry_credential_is_never_forwarded_to_a_foreign_registry():
     }
     assert pulls["ghcr.io/example/pwn"].headers.get("X-Registry-Auth") == cfg.registry_auth
     assert "X-Registry-Auth" not in pulls["evil.attacker.com/x"].headers
+
+
+# --- provision bounds (#456) -------------------------------------------------
+
+
+class _TrickleStream(httpx.AsyncByteStream):
+    """A pull that never finishes but never *stalls* either — a progress line
+    every 50ms, forever. This is the case the per-read _TIMEOUT_PULL can't see:
+    bytes keep flowing, so no read ever waits long enough to time out."""
+
+    async def __aiter__(self):
+        import asyncio
+
+        while True:
+            await asyncio.sleep(0.05)
+            yield b'{"status":"Downloading","progress":"[=>   ]"}\n'
+
+
+async def test_pull_has_a_total_budget_not_just_a_per_read_timeout(monkeypatch):
+    import asyncio
+
+    import utils.provisioner_docker as docker_mod
+
+    monkeypatch.setattr(docker_mod, "_PULL_TOTAL", 0.3)
+    router = _Router().on(
+        "POST", "/images/create", httpx.Response(200, stream=_TrickleStream())
+    )
+    prov = DockerProvisioner(_cfg(), transport=router.transport())
+
+    # Without the total bound this never returns; the outer wait_for turns a
+    # regression into a failure instead of a hung suite.
+    ok, detail = await asyncio.wait_for(
+        prov._pull_image("ghcr.io/example/pwn:1"), timeout=5.0
+    )
+    assert ok is False
+    assert "did not finish within" in detail, detail
+
+
+async def test_cancelled_start_tears_down_the_created_container():
+    """Between /containers/create returning and create() returning the handle,
+    the container exists but the caller can't see it. A cancellation there (the
+    provision ceiling, #456) used to leave it for the two-tick orphan GC."""
+    import asyncio
+
+    start_seen = asyncio.Event()
+
+    async def _hang_on_start(request):
+        start_seen.set()
+        await asyncio.Event().wait()  # never returns
+
+    router = (
+        _Router()
+        .on("POST", "/containers/create", httpx.Response(201, json={"Id": "c-half"}))
+        .on("POST", "/containers/c-half/start", _hang_on_start)
+        .on("DELETE", "/containers/c-half", httpx.Response(204))
+    )
+    prov = DockerProvisioner(_cfg(), transport=router.transport())
+
+    task = asyncio.ensure_future(prov.create(_spec()))
+    await asyncio.wait_for(start_seen.wait(), timeout=5.0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert router.saw("DELETE", "/containers/c-half"), (
+        "a cancelled start must tear down the container it already created"
+    )

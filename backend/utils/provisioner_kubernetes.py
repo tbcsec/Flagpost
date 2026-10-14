@@ -36,9 +36,11 @@ adds the create side.
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import logging
 import ssl
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
@@ -121,6 +123,14 @@ _SSAR_PATH = "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews"
 # row — the docker kind gets this free (its create pulls first + start fails).
 _READY_ATTEMPTS = 60
 _READY_INTERVAL = 2.0
+# Wall-clock budget for the whole readiness wait (#456). The attempt count alone
+# read as "60 × 2s = 120s" but wasn't: each poll is itself a request bounded by
+# _TIMEOUT_QUICK, so a slow-but-answering API server stretched the worst case to
+# 60 × (10s + 2s) = 720s — longer than the entire provision ceiling. The loop
+# now stops at whichever comes first, so the budget is what it looks like (plus
+# at most one in-flight poll, which the derivation in utils/instance_service
+# accounts for).
+_READY_BUDGET = 120.0
 
 
 # Every instance/probe pod runs as this dedicated **zero-rights** ServiceAccount
@@ -221,16 +231,15 @@ class KubernetesProvisioner(Provisioner):
         tcp_probe: Callable[[str, int], Awaitable[bool]] | None = None,
         http_probe: Callable[[str], Awaitable[tuple[bool, str]]] | None = None,
         ready_attempts: int = _READY_ATTEMPTS,
+        clock: Callable[[], float] | None = None,
     ) -> None:
         self._cfg = config
         self._transport = transport
         self._ready_attempts = ready_attempts
-        if sleep is not None:
-            self._sleep = sleep
-        else:
-            import asyncio
-
-            self._sleep = asyncio.sleep
+        # Monotonic clock for the readiness budget; injectable beside `sleep`
+        # so a test can advance time without really waiting.
+        self._clock = clock or time.monotonic
+        self._sleep = sleep if sleep is not None else asyncio.sleep
         # The two non-API-server actions the staged validate() needs — a raw TCP
         # dial to the public NodePort, and the wildcard-DNS/ingress probe — are
         # injectable seams, so the whole validate() run is unit-testable against
@@ -654,13 +663,20 @@ class KubernetesProvisioner(Provisioner):
             # Wait for a Ready replica so a bad image / crash-loop fails the
             # provision with a reason instead of parking a never-serving row.
             await self._await_ready(name, spec)
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             # Guarantee the create() contract: on ANY post-Deployment failure —
             # a create error, a transient blip in the readiness poll, or a
             # never-ready timeout — clean up every object that landed. Without
             # this, a transient poll error would escape leaving the Deployment
             # (+Service/+Ingress) orphaned until the reaper's GC.
-            await self._safe_delete(name)
+            #
+            # CancelledError explicitly, so a *cancelled* create (the provision
+            # ceiling firing, #456) cleans up too — it is a BaseException and
+            # used to skip this entirely. Not BaseException wholesale:
+            # GeneratorExit from a closed coroutine must not try to await a
+            # cleanup. Shielded so a second cancellation can't abandon the
+            # deletes half-done.
+            await asyncio.shield(self._safe_delete(name))
             raise
         return name
 
@@ -669,7 +685,10 @@ class KubernetesProvisioner(Provisioner):
         a single poll is absorbed (keep polling); a genuinely never-ready pod
         exhausts the budget and raises with its failure reason. The caller
         (create) cleans up on any raise, so this never needs to itself."""
+        deadline = self._clock() + _READY_BUDGET
         for _ in range(self._ready_attempts):
+            if self._clock() >= deadline:
+                break
             try:
                 resp = await self._request(
                     "GET",

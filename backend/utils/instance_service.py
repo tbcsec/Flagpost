@@ -22,6 +22,7 @@ service stays reusable by the reaper and tests.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 from datetime import timedelta
@@ -56,21 +57,49 @@ logger = logging.getLogger(__name__)
 
 # Ceiling for one provision attempt on the event bus's background lane (#452).
 #
-# This is a **policy ceiling, not a derivation** — the operations underneath it
-# have no finite bound today. The Docker pull's ``_TIMEOUT_PULL`` is an httpx
-# per-read timeout, so it never fires while layer bytes keep flowing (the same
-# trap documented in ``utils/automation_actions``), and the Kubernetes readiness
-# budget is ``_READY_ATTEMPTS × (_TIMEOUT_QUICK + _READY_INTERVAL)`` = 720s on
-# its own. So rather than pretending to compute a worst case, this says: no
-# single provision may occupy the lane longer than ten minutes.
+# Calibrated against the backends' *nominal* worst case (#456). Two steps have
+# hard totals: the Docker pull (``_PULL_TOTAL``, via asyncio.timeout) and the
+# Kubernetes readiness wait (``_READY_BUDGET``, on wall-clock time). Before
+# #456 neither did — the pull's per-read timeout never fired while bytes
+# flowed, and the readiness loop could run 720s alone — so #452 had to ship
+# this as a bare policy number. Every *other* step is an ordinary request under
+# an httpx timeout, which is per-phase (connect, read, …), not total: realistic
+# for a daemon that hangs after accepting, but a slow accept plus a slow
+# response can take ~2× it, and a trickling body has no limit at all.
 #
-# Exceeding it is a *reported* failure, not a silent one: the handler is
-# cancelled, the row is left in ``provisioning``, and the reaper's stuck rule
-# marks it ``failed`` with a reason and emits
-# ``challenge.instance_provision_failed``. That is why
-# ``PROVISIONING_STUCK_SECONDS`` in ``utils/instance_reaper`` must sit *after*
-# this ceiling — see the comment there.
+# Nominal worst cases, each request at its stated timeout:
+#
+#   Docker:  pull 300 (hard) + network 10 + create 60 + start 60
+#            + endpoints 10 that fails, then its teardown 80
+#            (inspect 10 + delete 60 + network 10)                  = 520s
+#   K8s:     four creates (4 × 30) + readiness 120 (hard, plus one
+#            in-flight poll 10 + interval 2) + failure detail 10
+#            + teardown of all four objects (4 × 30)                 = 382s
+#
+# So ~80s of headroom over the nominal Docker case; at a pathological 2× per
+# request either backend can exceed the ceiling. The arithmetic is pinned by a
+# test in test_instance_lifecycle, so moving a constant past the ceiling fails
+# loudly instead of quietly reintroducing #452.
+#
+# Exceeding it is a *reported* failure, not a silent one: provision() catches
+# the cancellation, records the row ``failed`` with a specific reason, emits
+# ``challenge.instance_provision_failed``, then cleans up.
 PROVISION_HANDLER_TIMEOUT = 600.0
+
+# Margin the reaper leaves after the ceiling before relabelling a still-
+# ``provisioning`` row. Since _fail_provision records the failure *before* it
+# tears anything down, the race this guards is only the record itself — a DB
+# write and an emit, normally milliseconds — plus whatever a backend teardown
+# in a *pre*-cancel failure path was still doing when the ceiling fired
+# (nominally ≤ 120s: the four Kubernetes deletes at 4 × 30s; Docker's is 80s).
+#
+# If it is ever exceeded the outcome is benign: the reaper marks the row
+# ``failed`` with its generic "provisioning timed out" and emits;
+# _fail_provision then finds the row already ``failed`` and skips, so the
+# specific reason is lost but there is no double emit (both paths would have
+# to read ``provisioning`` within the same few milliseconds). Cleanup still
+# completes either way.
+PROVISION_FAILURE_SLACK = 180.0
 
 # Final fallback lifetime when neither the deployment nor the competition sets
 # one (seconds). One hour: long enough for a session, short enough to reclaim.
@@ -665,24 +694,51 @@ async def provision(db_factory, instance_id: str) -> None:
         # Prefer the backend's authoritative connection details (shared-static
         # returns its manifest's; docker confirms the bound host ports).
         resolved = await provisioner.endpoints(handle)
-    except Exception as exc:  # noqa: BLE001 — any backend failure is a failed provision
-        logger.warning("provision of instance %s failed: %s", instance_id, exc)
-        # Bounded reason (#351): a known provisioner error keeps its class name;
-        # anything else buckets under "error" so the label set can't explode.
-        metrics.record_provision_error(
-            type(exc).__name__ if isinstance(exc, ProvisionerError) else "error"
+    except (Exception, asyncio.CancelledError) as exc:  # noqa: BLE001 — any failure is a failed provision
+        # One handler for both an ordinary backend error and a cancellation (the
+        # handler ceiling firing, or shutdown — #456). CancelledError is a
+        # BaseException, so a plain `except Exception` never saw it: no
+        # failure_reason, no provision_failed emit, no metric, and the operator
+        # saw only a generic reaper relabel minutes later.
+        #
+        # It has to be ONE clause, not two siblings. A cancel that arrives
+        # while the ordinary failure path is already running is raised *inside*
+        # that handler, where a sibling `except CancelledError` can't catch it —
+        # and the ordinary path is exactly where a near-ceiling provision lands
+        # (endpoints fails, then the teardown runs).
+        cancelled = isinstance(exc, asyncio.CancelledError)
+        if cancelled:
+            logger.warning(
+                "provision of instance %s cancelled (ceiling %.0fs, or shutdown)",
+                instance_id,
+                PROVISION_HANDLER_TIMEOUT,
+            )
+            metrics.record_provision_error("cancelled")
+            reason = (
+                "provisioning was cancelled — it exceeded the "
+                f"{PROVISION_HANDLER_TIMEOUT:.0f}s ceiling, or the server shut "
+                "down mid-provision"
+            )
+        else:
+            logger.warning("provision of instance %s failed: %s", instance_id, exc)
+            # Bounded reason (#351): a known provisioner error keeps its class
+            # name; anything else buckets under "error" so the label set can't
+            # explode.
+            metrics.record_provision_error(
+                type(exc).__name__ if isinstance(exc, ProvisionerError) else "error"
+            )
+            reason = str(exc)
+        # Shielded in both cases, so a cancel landing mid-failure-path can't
+        # abandon it: the await raises at once but the inner task still records
+        # the failure. _fail_provision marks the row before it touches the
+        # backend, so the record never waits on a slow teardown.
+        await asyncio.shield(
+            _fail_provision(
+                db_factory, settings, deployment, instance_id, handle, reason=reason
+            )
         )
-        if handle is not None:
-            await _safe_destroy(settings, deployment, handle)
-        async with db_factory() as db:
-            row = await db.get(ChallengeInstance, instance_id)
-            if row is not None and row.status not in ("destroyed", "failed"):
-                transition(row, "failed")
-                row.failure_reason = str(exc)[:500]
-                await db.commit()
-                await event_bus.emit(
-                    "challenge.instance_provision_failed", _event_payload(row)
-                )
+        if cancelled:
+            raise  # cancellation is never swallowed
         return
 
     async with db_factory() as db:
@@ -711,6 +767,40 @@ async def provision(db_factory, instance_id: str) -> None:
             row.flag_salt = flag_salt
         await db.commit()
         await event_bus.emit("challenge.instance_started", _event_payload(row))
+
+
+async def _fail_provision(
+    db_factory,
+    settings,
+    deployment,
+    instance_id: str,
+    handle: str | None,
+    *,
+    reason: str,
+) -> None:
+    """The one failure path for :func:`provision` — shared by an ordinary
+    backend error and a cancellation (#456). Marks the row ``failed`` with
+    ``reason`` and emits, *then* destroys any half-created handle. Idempotent
+    against a row another path (a concurrent teardown, the reaper) already
+    moved on.
+
+    Record first, clean up second: a failure lands here precisely when the
+    backend is misbehaving, so the teardown is the step most likely to be slow.
+    Recording first means the operator sees the specific reason promptly
+    whatever the backend does next; a teardown that then fails or stalls leaves
+    an orphan the reaper's GC already handles (the handle is never stored on a
+    failed row, so the sweep sees it as unowned)."""
+    async with db_factory() as db:
+        row = await db.get(ChallengeInstance, instance_id)
+        if row is not None and row.status not in ("destroyed", "failed"):
+            transition(row, "failed")
+            row.failure_reason = reason[:500]
+            await db.commit()
+            await event_bus.emit(
+                "challenge.instance_provision_failed", _event_payload(row)
+            )
+    if handle is not None:
+        await _safe_destroy(settings, deployment, handle)
 
 
 async def _safe_destroy(settings, deployment, handle: str) -> None:

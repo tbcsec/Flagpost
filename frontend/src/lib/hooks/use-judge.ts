@@ -83,3 +83,17 @@ export function useDeleteJudgeLanguage() {
     onSuccess: invalidate,
   });
 }
+
+/** Run the setup flow's connection check against the saved endpoint. Not
+ *  cached — it makes live calls, so it only runs on an explicit click. */
+export function useCheckJudgeConnection() {
+  return useMutation({ mutationFn: () => judgeAdminApi.checkConnection() });
+}
+
+export function useApplyJudgeSetup() {
+  const invalidate = useInvalidateJudge();
+  return useMutation({
+    mutationFn: (presetKeys: string[]) => judgeAdminApi.applySetup(presetKeys),
+    onSuccess: invalidate,
+  });
+}

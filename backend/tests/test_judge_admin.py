@@ -312,3 +312,168 @@ async def test_endpoint_suggestion_prefers_the_instancing_proxy(client):
     second = (await client.get(f"{BASE}/settings", headers=_auth(admin))).json()
     assert second["endpoint_url"] is None
     assert second["suggested_endpoint_url"] == "http://chal-proxy:2375"
+
+
+# --- deployment-managed endpoint ---------------------------------------------
+
+
+async def test_a_deployment_endpoint_is_detected_and_not_editable(client, monkeypatch):
+    """The docker-compose.judge.yml overlay sets JUDGE_ENDPOINT_URL; the setup
+    flow then shows it as detected, and nothing can override it here."""
+    from config import settings as app_settings
+
+    monkeypatch.setattr(app_settings, "judge_endpoint_url", "http://judge-proxy:2375")
+    admin = await admin_token(client)
+
+    body = (await client.get(f"{BASE}/settings", headers=_auth(admin))).json()
+    assert body["endpoint_managed"] is True
+    assert body["endpoint_url"] == "http://judge-proxy:2375"
+
+    refused = await client.put(
+        f"{BASE}/settings", json={"endpoint_url": "http://elsewhere:2375"}, headers=_auth(admin)
+    )
+    assert refused.status_code == 400
+
+    # The managed endpoint satisfies the enable invariant on its own.
+    await client.post(f"{BASE}/languages", json=_python(), headers=_auth(admin))
+    on = await client.put(f"{BASE}/settings", json={"enabled": True}, headers=_auth(admin))
+    assert on.status_code == 200, on.text
+
+
+# --- connection check ---------------------------------------------------------
+
+
+def _docker_transport(*, restricted: bool):
+    import httpx
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/_ping":
+            return httpx.Response(200, text="OK", headers={"Api-Version": "1.47"})
+        # A restricted proxy refuses the dangerous verbs; a raw socket doesn't.
+        return httpx.Response(403 if restricted else 404, json={"message": "x"})
+
+    return httpx.MockTransport(handler)
+
+
+async def test_check_passes_a_restricted_proxy_and_fails_a_raw_socket():
+    from utils.judge_connection import check_endpoint
+
+    good = await check_endpoint(
+        "http://judge-proxy:2375", transport=_docker_transport(restricted=True)
+    )
+    assert [(leg.name, leg.ok) for leg in good] == [
+        ("endpoint_reachable", True),
+        ("proxy_restricted", True),
+    ]
+
+    # The security-critical leg: an endpoint that answers exec/volumes/build is
+    # effectively the host's Docker, and must not pass.
+    raw = await check_endpoint(
+        "http://docker:2375", transport=_docker_transport(restricted=False)
+    )
+    assert raw[1].name == "proxy_restricted" and raw[1].ok is False
+    assert "NOT blocked" in raw[1].detail
+
+
+async def test_check_reports_an_unreachable_endpoint():
+    import httpx
+
+    from utils.judge_connection import check_endpoint
+
+    def boom(request):
+        raise httpx.ConnectError("connection refused", request=request)
+
+    legs = await check_endpoint("http://nowhere:2375", transport=httpx.MockTransport(boom))
+    assert [(leg.name, leg.ok) for leg in legs] == [("endpoint_reachable", False)]
+
+
+async def test_check_only_ever_probes_the_saved_endpoint(client, monkeypatch):
+    """Never a URL from the request: otherwise the check would let the server
+    be pointed at arbitrary addresses."""
+    import routers.judge_admin as judge_admin
+
+    probed: list[str] = []
+
+    async def fake_check(endpoint):
+        probed.append(endpoint)
+        return []
+
+    monkeypatch.setattr(judge_admin, "_run_check", fake_check)
+    admin = await admin_token(client)
+
+    nothing_saved = await client.post(f"{BASE}/check", headers=_auth(admin))
+    assert nothing_saved.status_code == 400
+
+    await client.put(
+        f"{BASE}/settings", json={"endpoint_url": "http://judge-proxy:2375"}, headers=_auth(admin)
+    )
+    # A URL smuggled into the body is ignored.
+    await client.post(
+        f"{BASE}/check", json={"endpoint_url": "http://169.254.169.254/"}, headers=_auth(admin)
+    )
+    assert probed == ["http://judge-proxy:2375"]
+
+
+# --- atomic setup -------------------------------------------------------------
+
+
+async def test_setup_adds_ticked_languages_and_enables_the_judge(client):
+    admin = await admin_token(client)
+    await client.put(
+        f"{BASE}/settings", json={"endpoint_url": "http://judge-proxy:2375"}, headers=_auth(admin)
+    )
+    resp = await client.post(
+        f"{BASE}/setup", json={"preset_keys": ["python3", "cpp"]}, headers=_auth(admin)
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["settings"]["enabled"] is True
+    assert sorted((lang["key"], lang["enabled"]) for lang in body["languages"]) == [
+        ("cpp", True),
+        ("python3", True),
+    ]
+    assert await _events("judge.language_created")
+
+
+async def test_rerunning_setup_disables_unticked_builtins_but_keeps_pins_and_custom(client):
+    admin = await admin_token(client)
+    await client.put(
+        f"{BASE}/settings", json={"endpoint_url": "http://judge-proxy:2375"}, headers=_auth(admin)
+    )
+    first = await client.post(
+        f"{BASE}/setup", json={"preset_keys": ["python3", "cpp"]}, headers=_auth(admin)
+    )
+    py_id = next(l["id"] for l in first.json()["languages"] if l["key"] == "python3")
+    # The operator re-pins Python, and adds a custom language.
+    await client.patch(
+        f"{BASE}/languages/{py_id}", json={"image_ref": "python:3.13-slim"}, headers=_auth(admin)
+    )
+    await client.post(
+        f"{BASE}/languages", json=_python(key="py-numpy", name="NumPy"), headers=_auth(admin)
+    )
+
+    second = await client.post(f"{BASE}/setup", json={"preset_keys": ["cpp"]}, headers=_auth(admin))
+    assert second.status_code == 200, second.text
+    langs = {l["key"]: l for l in second.json()["languages"]}
+    assert langs["python3"]["enabled"] is False  # unticked built-in → off…
+    assert langs["python3"]["image_ref"] == "python:3.13-slim"  # …but the pin is kept
+    assert langs["cpp"]["enabled"] is True
+    assert langs["py-numpy"]["enabled"] is True  # custom languages untouched
+
+
+async def test_setup_is_atomic_when_it_cannot_complete(client):
+    """No endpoint yet: setup refuses — and adds no languages on the way."""
+    admin = await admin_token(client)
+    resp = await client.post(
+        f"{BASE}/setup", json={"preset_keys": ["python3"]}, headers=_auth(admin)
+    )
+    assert resp.status_code == 400
+    assert (await client.get(f"{BASE}/languages", headers=_auth(admin))).json() == []
+    assert (await client.get(f"{BASE}/settings", headers=_auth(admin))).json()["enabled"] is False
+
+
+async def test_setup_rejects_unknown_or_empty_language_lists(client):
+    admin = await admin_token(client)
+    for body in ({"preset_keys": []}, {"preset_keys": ["cobol"]}):
+        resp = await client.post(f"{BASE}/setup", json=body, headers=_auth(admin))
+        assert resp.status_code == 422, body

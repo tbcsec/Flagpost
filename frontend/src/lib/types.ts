@@ -2101,6 +2101,9 @@ export interface JudgeSettings {
   /** What the form prefills when no endpoint is stored: the instancing proxy
    *  if configured, else the compose default. Never stored by itself. */
   suggested_endpoint_url: string;
+  /** Set by the deployment (`JUDGE_ENDPOINT_URL`, from the
+   *  docker-compose.judge.yml overlay) — shown as detected, not editable. */
+  endpoint_managed: boolean;
 }
 
 /** Partial update. `endpoint_url: ""` clears it. */
@@ -2153,4 +2156,21 @@ export interface JudgeLanguagePreset {
   compile_command: string[] | null;
   run_command: string[];
   time_multiplier: number;
+}
+
+/** One leg of the setup flow's "Check connection". */
+export interface JudgeCheckLeg {
+  name: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface JudgeCheckResult {
+  ok: boolean;
+  legs: JudgeCheckLeg[];
+}
+
+export interface JudgeSetupResult {
+  settings: JudgeSettings;
+  languages: JudgeLanguage[];
 }

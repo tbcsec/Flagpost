@@ -65,6 +65,10 @@ class JudgeSettingsOut(BaseModel):
     # instancing proxy if one is configured, else the compose stack's default.
     # Only a suggestion — nothing is stored until the admin saves.
     suggested_endpoint_url: str = "http://socket-proxy:2375"
+    # True when the deployment sets the endpoint (JUDGE_ENDPOINT_URL, from the
+    # docker-compose.judge.yml overlay): ``endpoint_url`` is then that value and
+    # can't be changed here.
+    endpoint_managed: bool = False
 
 
 class JudgeSettingsUpdate(BaseModel):
@@ -187,3 +191,27 @@ class JudgeLanguagePreset(BaseModel):
     compile_command: list[str] | None
     run_command: list[str]
     time_multiplier: float
+
+
+class JudgeCheckLeg(BaseModel):
+    name: str
+    ok: bool
+    detail: str
+
+
+class JudgeCheckResult(BaseModel):
+    ok: bool
+    legs: list[JudgeCheckLeg]
+
+
+class JudgeSetupRequest(BaseModel):
+    """The setup flow's one atomic write: which built-in languages competitors
+    may use. Ticked presets are added (or re-enabled); unticked built-ins are
+    disabled; custom languages are left alone; the judge is switched on."""
+
+    preset_keys: list[str] = Field(min_length=1, max_length=64)
+
+
+class JudgeSetupResult(BaseModel):
+    settings: JudgeSettingsOut
+    languages: list[JudgeLanguageOut]

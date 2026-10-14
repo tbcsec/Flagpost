@@ -31,12 +31,14 @@ import type {
   AiConnectionResult,
   InstanceSettings,
   InstanceSettingsUpdate,
+  JudgeCheckResult,
   JudgeLanguage,
   JudgeLanguageCreate,
   JudgeLanguagePreset,
   JudgeLanguageUpdate,
   JudgeSettings,
   JudgeSettingsUpdate,
+  JudgeSetupResult,
   InviteLink,
   InviteLinkInput,
   InviteLinkJoinInput,
@@ -1405,6 +1407,15 @@ export const judgeAdminApi = {
     }),
   listLanguages: () => apiFetch<JudgeLanguage[]>("/api/admin/judge/languages"),
   listPresets: () => apiFetch<JudgeLanguagePreset[]>("/api/admin/judge/presets"),
+  // Probes the SAVED endpoint (never a URL from the client).
+  checkConnection: () =>
+    apiFetch<JudgeCheckResult>("/api/admin/judge/check", { method: "POST" }),
+  // The setup flow's one atomic write: the ticked built-ins, and switch on.
+  applySetup: (presetKeys: string[]) =>
+    apiFetch<JudgeSetupResult>("/api/admin/judge/setup", {
+      method: "POST",
+      body: JSON.stringify({ preset_keys: presetKeys }),
+    }),
   createLanguage: (input: JudgeLanguageCreate) =>
     apiFetch<JudgeLanguage>("/api/admin/judge/languages", {
       method: "POST",

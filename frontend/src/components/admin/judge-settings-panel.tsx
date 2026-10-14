@@ -22,7 +22,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   useCreateJudgeLanguage,
@@ -36,12 +35,15 @@ import {
 import type { JudgeLanguage, JudgeLanguagePreset, JudgeSettings } from "@/lib/types";
 import { toast } from "@/stores/toast";
 
-// Admin → Site settings → Code judge (#446, ADR-0042). The site-wide judge
-// config: the container-runtime endpoint (a least-privilege socket proxy, as
-// for instancing), how many judgings run at once, the default limits a problem
-// inherits, and the language registry — a stock image plus argv commands per
-// language. The judge ships inert: it can only be enabled once an endpoint and
-// at least one enabled language exist, mirrored here for instant feedback.
+import { JudgeSetupWizard } from "./judge-setup-wizard";
+
+// Admin → Site settings → Code judge (#446, ADR-0042). While the judge is off,
+// the tab *is* the guided setup (judge-setup-wizard.tsx): one overlay command,
+// a connection check, tick the languages, enable. Once it's on, a short
+// summary. Everything else — concurrency, default limits, custom languages,
+// re-pinning a built-in's image — lives under Advanced, which a typical
+// install never opens. The judge ships inert either way: the server refuses to
+// enable it without an endpoint and an enabled language.
 
 const TEXTAREA_CLASS =
   "flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
@@ -69,46 +71,145 @@ export function JudgeSettingsPanel() {
   const settings = useJudgeSettings();
   const languages = useJudgeLanguages();
   const presets = useJudgeLanguagePresets();
+  // Re-running setup on a judge that's already on.
+  const [rerun, setRerun] = useState(false);
   const [nonce, setNonce] = useState(0);
   if (settings.isLoading || !settings.data || languages.isLoading || presets.isLoading) {
     return <Skeleton className="h-64 w-full" />;
   }
+  const data = settings.data;
   const langs = languages.data ?? [];
+  const presetList = presets.data ?? [];
+
+  // Off (never set up, or switched off): the guided flow is the whole page.
+  // Advanced stays reachable for anyone who'd rather configure by hand.
+  if (!data.enabled || rerun) {
+    return (
+      <div className="grid gap-5">
+        <JudgeSetupWizard
+          settings={data}
+          presets={presetList}
+          languages={langs}
+          onDone={() => setRerun(false)}
+          onCancel={rerun ? () => setRerun(false) : undefined}
+        />
+        {!rerun && (
+          <AdvancedSection>
+            <JudgeSettingsForm key={nonce} data={data} onSaved={() => setNonce((n) => n + 1)} />
+            <LanguagesCard languages={langs} presets={presetList} judgeEnabled={data.enabled} />
+          </AdvancedSection>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="grid max-w-3xl gap-5">
-      <JudgeSettingsForm
-        key={nonce}
-        data={settings.data}
-        enabledLanguageCount={langs.filter((l) => l.enabled).length}
-        onSaved={() => setNonce((n) => n + 1)}
-      />
-      <LanguagesCard
-        languages={langs}
-        presets={presets.data ?? []}
-        judgeEnabled={settings.data.enabled}
-      />
+      <JudgeSummary data={data} languages={langs} onRerun={() => setRerun(true)} />
+      <AdvancedSection>
+        <JudgeSettingsForm key={nonce} data={data} onSaved={() => setNonce((n) => n + 1)} />
+        <LanguagesCard languages={langs} presets={presetList} judgeEnabled={data.enabled} />
+      </AdvancedSection>
     </div>
+  );
+}
+
+/** Everything a typical install never touches: concurrency, default limits,
+ *  custom languages, re-pinning a built-in's image. */
+function AdvancedSection({ children }: { children: React.ReactNode }) {
+  const t = useTranslations("admin.judge");
+  return (
+    <details className="max-w-3xl rounded-lg border border-border bg-card">
+      <summary className="cursor-pointer select-none px-6 py-4 text-sm font-medium">
+        {t("advanced")}
+      </summary>
+      <div className="grid gap-5 border-t border-border p-5">{children}</div>
+    </details>
+  );
+}
+
+function JudgeSummary({
+  data,
+  languages,
+  onRerun,
+}: {
+  data: JudgeSettings;
+  languages: JudgeLanguage[];
+  onRerun: () => void;
+}) {
+  const t = useTranslations("admin.judge");
+  const confirm = useConfirm();
+  const update = useUpdateJudgeSettings();
+  const enabled = languages.filter((l) => l.enabled);
+
+  async function turnOff() {
+    const ok = await confirm({
+      title: t("turnOffTitle"),
+      description: t("turnOffDescription"),
+      confirmLabel: t("turnOffConfirm"),
+    });
+    if (!ok) return;
+    update.mutate(
+      { enabled: false },
+      {
+        onSuccess: () => toast(t("turnedOff"), { variant: "success" }),
+        onError: (err) =>
+          toast(t("couldntSave"), { description: (err as Error).message, variant: "destructive" }),
+      },
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("summaryTitle")}</CardTitle>
+        <CardDescription>{t("summaryDescription")}</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4 text-sm">
+        <div className="grid gap-1">
+          <span className="text-xs text-muted-foreground">{t("endpointUrl")}</span>
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-xs">{data.endpoint_url}</span>
+            {data.endpoint_managed && (
+              <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
+                {t("fromDeployment")}
+              </span>
+            )}
+          </span>
+        </div>
+        <div className="grid gap-1">
+          <span className="text-xs text-muted-foreground">{t("languages")}</span>
+          <span>{enabled.map((l) => l.name).join(", ")}</span>
+        </div>
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Button type="button" variant="outline" size="sm" onClick={onRerun}>
+            {t("rerunSetup")}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={turnOff}
+            disabled={update.isPending}
+          >
+            {t("turnOff")}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
 function JudgeSettingsForm({
   data,
-  enabledLanguageCount,
   onSaved,
 }: {
   data: JudgeSettings;
-  enabledLanguageCount: number;
   onSaved: () => void;
 }) {
   const t = useTranslations("admin.judge");
   const update = useUpdateJudgeSettings();
-  const [enabled, setEnabled] = useState(data.enabled);
-  // Prefill a suggestion (the instancing proxy, or the compose default) when
-  // nothing is stored yet — saved only when the admin saves.
-  const suggested = data.endpoint_url === null;
-  const [endpointUrl, setEndpointUrl] = useState(
-    data.endpoint_url ?? data.suggested_endpoint_url,
-  );
+  const [endpointUrl, setEndpointUrl] = useState(data.endpoint_url ?? "");
   const [concurrency, setConcurrency] = useState(String(data.max_concurrent_judgings));
   const [timeMs, setTimeMs] = useState(String(data.default_time_limit_ms));
   const [memoryMb, setMemoryMb] = useState(String(data.default_memory_limit_mb));
@@ -116,19 +217,14 @@ function JudgeSettingsForm({
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    // Mirror the server's enable invariant for instant feedback.
-    if (enabled && !endpointUrl.trim()) {
+    if (data.enabled && !data.endpoint_managed && !endpointUrl.trim()) {
       toast(t("endpointBeforeEnabling"), { variant: "destructive" });
-      return;
-    }
-    if (enabled && enabledLanguageCount === 0) {
-      toast(t("languageBeforeEnabling"), { variant: "destructive" });
       return;
     }
     update.mutate(
       {
-        enabled,
-        endpoint_url: endpointUrl.trim(),
+        // A deployment-managed endpoint isn't ours to send.
+        ...(data.endpoint_managed ? {} : { endpoint_url: endpointUrl.trim() }),
         max_concurrent_judgings: clamp(concurrency, 1, 64, 1),
         default_time_limit_ms: clamp(timeMs, 100, 60_000, 2000),
         default_memory_limit_mb: clamp(memoryMb, 16, 8192, 256),
@@ -149,7 +245,7 @@ function JudgeSettingsForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="grid gap-5">
+    <form onSubmit={onSubmit}>
       <Card>
         <CardHeader>
           <CardTitle>{t("executor")}</CardTitle>
@@ -157,40 +253,20 @@ function JudgeSettingsForm({
         </CardHeader>
         <CardContent className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="judge-enabled">{t("status")}</Label>
-            <Select
-              id="judge-enabled"
-              value={enabled ? "on" : "off"}
-              onChange={(e) => setEnabled(e.target.value === "on")}
-              className="max-w-xs"
-            >
-              <option value="off">{t("statusOff")}</option>
-              <option value="on">{t("statusOn")}</option>
-            </Select>
-          </div>
-          <div className="grid gap-2">
             <Label htmlFor="judge-endpoint">{t("endpointUrl")}</Label>
             <Input
               id="judge-endpoint"
-              value={endpointUrl}
+              value={data.endpoint_managed ? (data.endpoint_url ?? "") : endpointUrl}
               onChange={(e) => setEndpointUrl(e.target.value)}
-              placeholder="http://socket-proxy:2375"
+              placeholder={data.suggested_endpoint_url}
+              disabled={data.endpoint_managed}
               autoComplete="off"
+              className="font-mono"
             />
             <p className="text-xs text-muted-foreground">
-              {suggested ? t("endpointSuggestedHint") : t("endpointHint")}
+              {data.endpoint_managed ? t("endpointManagedHint") : t("endpointHint")}
             </p>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Concurrency and default limits have sensible defaults; most installs
-          never touch them, so they sit behind a disclosure. */}
-      <details className="group rounded-lg border border-border bg-card">
-        <summary className="cursor-pointer select-none px-6 py-4 text-sm font-medium">
-          {t("advanced")}
-        </summary>
-        <div className="grid gap-5 border-t border-border px-6 py-5">
           <div className="grid gap-2">
             <Label htmlFor="judge-concurrency">{t("concurrency")}</Label>
             <Input
@@ -243,12 +319,11 @@ function JudgeSettingsForm({
               />
             </div>
           </div>
-        </div>
-      </details>
-
-      <Button type="submit" className="w-fit" disabled={update.isPending}>
-        {update.isPending ? t("saving") : t("saveChanges")}
-      </Button>
+          <Button type="submit" className="w-fit" disabled={update.isPending}>
+            {update.isPending ? t("saving") : t("saveChanges")}
+          </Button>
+        </CardContent>
+      </Card>
     </form>
   );
 }

@@ -167,6 +167,12 @@ class Settings(BaseSettings):
     # connection so exhaustion degrades to added latency, not a hang.
     redis_max_connections: int = 50
     redis_acquire_timeout_seconds: float = 10.0
+    # Code judge container endpoint (#446, ADR-0042), set by the opt-in
+    # docker-compose.judge.yml overlay alongside the proxy it provides. When set,
+    # the deployment owns the endpoint: the admin setup flow shows it as
+    # detected and won't let it be edited, so the overlay is the whole of the
+    # infrastructure step. Unset, the endpoint is an ordinary admin setting.
+    judge_endpoint_url: str | None = None
     # Number of uvicorn worker processes (reads the conventional WEB_CONCURRENCY
     # env var). 1 = single process: in-process broadcast, no Redis required —
     # today's behaviour and the dev/test/single-box default. >1 activates the

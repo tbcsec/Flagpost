@@ -26,14 +26,19 @@ from models.challenge_instancing import INSTANCE_SETTINGS_ID, InstanceSettings
 from models.judge import JUDGE_SETTINGS_ID, JudgeLanguage, JudgeSettings
 from models.user import User
 from schemas.judge import (
+    JudgeCheckLeg,
+    JudgeCheckResult,
     JudgeLanguageCreate,
     JudgeLanguageOut,
     JudgeLanguagePreset,
     JudgeLanguageUpdate,
     JudgeSettingsOut,
     JudgeSettingsUpdate,
+    JudgeSetupRequest,
+    JudgeSetupResult,
 )
 from utils.event_bus import event_bus
+from utils.judge_connection import check_endpoint, effective_endpoint
 from utils.judge_presets import LANGUAGE_PRESETS
 
 router = APIRouter(prefix="/api/admin/judge", tags=["judge-admin"])
@@ -78,7 +83,8 @@ async def _enabled_language_count(db: AsyncSession) -> int:
 async def _check_enable_invariant(db: AsyncSession, settings: JudgeSettings) -> None:
     if not settings.enabled:
         return
-    if not settings.endpoint_url:
+    endpoint, _managed = effective_endpoint(settings)
+    if not endpoint:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             "Set an endpoint URL before enabling the judge.",
@@ -98,6 +104,12 @@ async def _to_out(db: AsyncSession, settings: JudgeSettings) -> JudgeSettingsOut
     the challenge-instancing proxy is the common case — one least-privilege
     proxy can serve both — so offer that before the compose default."""
     out = JudgeSettingsOut.model_validate(settings)
+    endpoint, managed = effective_endpoint(settings)
+    out.endpoint_url = endpoint
+    out.endpoint_managed = managed
+    if managed:
+        out.suggested_endpoint_url = endpoint
+        return out
     instance = await db.get(InstanceSettings, INSTANCE_SETTINGS_ID)
     out.suggested_endpoint_url = (
         instance.endpoint_url
@@ -125,6 +137,13 @@ async def update_settings(
     if body.executor is not None:
         settings.executor = body.executor
     if body.endpoint_url is not None:
+        _endpoint, managed = effective_endpoint(settings)
+        if managed:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "The endpoint is set by your deployment (JUDGE_ENDPOINT_URL), "
+                "so it can't be changed here.",
+            )
         settings.endpoint_url = body.endpoint_url.strip() or None
     if body.max_concurrent_judgings is not None:
         settings.max_concurrent_judgings = body.max_concurrent_judgings
@@ -145,6 +164,93 @@ async def update_settings(
         {"actor_user_id": current_user.id, "enabled": settings.enabled},
     )
     return await _to_out(db, settings)
+
+
+@router.post("/check", response_model=JudgeCheckResult)
+async def check_connection(
+    current_user: User = Depends(require_permission(_PERM)),
+    db: AsyncSession = Depends(get_db),
+) -> JudgeCheckResult:
+    """Probe the **saved/effective** endpoint — never one supplied in the
+    request — so this can't be turned into a way to make the server reach
+    arbitrary addresses (the instancing test-the-saved-config posture)."""
+    settings = await _get_or_create(db)
+    endpoint, _managed = effective_endpoint(settings)
+    if not endpoint:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Save an endpoint before checking it."
+        )
+    legs = await _run_check(endpoint)
+    return JudgeCheckResult(
+        ok=bool(legs) and all(leg.ok for leg in legs),
+        legs=[JudgeCheckLeg(name=leg.name, ok=leg.ok, detail=leg.detail) for leg in legs],
+    )
+
+
+async def _run_check(endpoint: str) -> list:
+    """Seam tests monkeypatch; the legs themselves are exercised against a mock
+    transport in test_judge_admin."""
+    return await check_endpoint(endpoint)
+
+
+@router.post("/setup", response_model=JudgeSetupResult)
+async def apply_setup(
+    body: JudgeSetupRequest,
+    current_user: User = Depends(require_permission(_PERM)),
+    db: AsyncSession = Depends(get_db),
+) -> JudgeSetupResult:
+    """The setup flow's single atomic write. Doing it as one transaction means
+    a failure part-way can't leave the judge half-configured — e.g. enabled
+    with some languages added and others not — which a client making several
+    calls could."""
+    presets = {p["key"]: p for p in LANGUAGE_PRESETS}
+    unknown = sorted(set(body.preset_keys) - set(presets))
+    if unknown:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"Unknown built-in language(s): {', '.join(unknown)}.",
+        )
+    wanted = set(body.preset_keys)
+
+    settings = await _lock_settings(db)
+    existing = {
+        lang.key: lang
+        for lang in (
+            await db.execute(select(JudgeLanguage).where(JudgeLanguage.key.in_(presets)))
+        ).scalars()
+    }
+    created: list[JudgeLanguage] = []
+    changed: list[JudgeLanguage] = []
+    for key in presets:
+        row = existing.get(key)
+        if key in wanted and row is None:
+            row = JudgeLanguage(**presets[key], enabled=True)
+            db.add(row)
+            created.append(row)
+        elif row is not None and row.enabled != (key in wanted):
+            # Ticked → on; unticked built-in → off. The row (and the version the
+            # operator pinned) is kept either way.
+            row.enabled = key in wanted
+            changed.append(row)
+    settings.enabled = True
+    await db.flush()
+    await _check_enable_invariant(db, settings)
+    await db.commit()
+
+    for row in created:
+        await event_bus.emit("judge.language_created", _language_payload(current_user, row))
+    for row in changed:
+        await event_bus.emit("judge.language_updated", _language_payload(current_user, row))
+    await event_bus.emit(
+        "judge.settings_updated", {"actor_user_id": current_user.id, "enabled": True}
+    )
+    languages = (
+        await db.execute(select(JudgeLanguage).order_by(JudgeLanguage.name))
+    ).scalars().all()
+    return JudgeSetupResult(
+        settings=await _to_out(db, settings),
+        languages=[JudgeLanguageOut.model_validate(lang) for lang in languages],
+    )
 
 
 # --- languages ---------------------------------------------------------------

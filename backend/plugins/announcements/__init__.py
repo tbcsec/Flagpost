@@ -23,6 +23,25 @@ from __future__ import annotations
 
 RECENT_LIMIT = 20
 
+# Recipients per fan-out transaction (#454). The per-recipient work — a prefs
+# lookup and one ``Notification`` row each — is linear in audience size, and
+# this handler's own history is the evidence: the fan-out for an
+# all-participants announcement was measured at ~24s, which is why it moved to
+# the background lane in the first place. Committing per batch means a handler
+# that is cancelled part-way leaves the batches it finished both committed and
+# delivered, instead of rolling back every notification for the announcement.
+FANOUT_BATCH = 200
+
+# Declared per-subscription handler bound (#452 added the override; #454 is why
+# this handler needs one). The event-bus default is 10s — less than this
+# handler's own measured worst case, so delivery was being cancelled before its
+# single commit and every notification was lost while the announcement row
+# stayed durable: an operator published, saw it listed, and nobody was
+# notified. Sized to cover a large competition's fan-out with headroom;
+# batching means exceeding it now degrades to a partial delivery rather than a
+# total loss.
+DELIVER_HANDLER_TIMEOUT = 300.0
+
 
 def setup(app, event_bus, db_factory) -> None:
     from sqlalchemy import select
@@ -106,7 +125,12 @@ def setup(app, event_bus, db_factory) -> None:
     # block on the POST. The Announcement row itself is committed by the route
     # before this event is emitted, so it stays durable; only the per-user
     # notification rows + WS delivery are deferred (best-effort, ms later).
-    @event_bus.on("announcement.published", owner="announcements", background=True)
+    @event_bus.on(
+        "announcement.published",
+        owner="announcements",
+        background=True,
+        timeout=DELIVER_HANDLER_TIMEOUT,
+    )
     async def deliver_announcement(event_name: str, payload: dict) -> None:
         competition_id = payload.get("competition_id")
         announcement_id = payload.get("announcement_id")
@@ -117,27 +141,46 @@ def setup(app, event_bus, db_factory) -> None:
             announcement = await db.get(Announcement, announcement_id)
             if announcement is None:
                 return
-            recipients = await resolve_recipients(db, announcement)
+            # Sorted so batching is deterministic: a partial delivery is then
+            # reproducible rather than depending on set iteration order.
+            recipients = sorted(await resolve_recipients(db, announcement))
+            targeted = announcement.audience_type != "all"
+            frame = {"type": "announcement", "announcement": _frame(announcement)}
             # A critical announcement overrides a muted in-app category — the
             # one sanctioned bypass (§4.4), because the operator is saying
             # something the competition can't afford to miss.
-            notifications = await create_notifications(
-                db,
-                recipients,
-                type=f"announcement.{announcement.severity}",
-                title=announcement.title,
-                body=announcement.body,
-                competition_id=competition_id,
-                force=announcement.severity == "critical",
-            )
-            await db.commit()
-            targeted = announcement.audience_type != "all"
-            frame = {"type": "announcement", "announcement": _frame(announcement)}
+            notification_type = f"announcement.{announcement.severity}"
+            title = announcement.title
+            body = announcement.body
+            force = announcement.severity == "critical"
 
-        # Broadcast after commit, so a client refetching on the ping never sees
-        # a row the transaction could still roll back.
+        # The shared-room frame goes first and carries the announcement inline,
+        # and the row it describes was committed by the route before this event
+        # was emitted — so there is nothing uncommitted for it to expose. Doing
+        # it ahead of the fan-out means the live banner survives even if
+        # delivery is later cancelled. (The ordering that does matter — never
+        # pushing a notification frame for an uncommitted row — is preserved
+        # per batch below.)
         if not targeted:
             await manager.broadcast("announcements", competition_id, frame)
-        # Targeted announcements ride the per-user notification rooms only; the
-        # recipient's client turns that frame into a refetch of its filtered list.
-        await broadcast_notifications(notifications)
+
+        # Fan out in committed batches (#454): each batch is durable and
+        # delivered before the next starts, so a cancelled handler loses only
+        # the recipients it never reached.
+        for start in range(0, len(recipients), FANOUT_BATCH):
+            batch = recipients[start : start + FANOUT_BATCH]
+            async with db_factory() as db:
+                notifications = await create_notifications(
+                    db,
+                    batch,
+                    type=notification_type,
+                    title=title,
+                    body=body,
+                    competition_id=competition_id,
+                    force=force,
+                )
+                await db.commit()
+            # Targeted announcements ride the per-user notification rooms only;
+            # the recipient's client turns that frame into a refetch of its
+            # filtered list.
+            await broadcast_notifications(notifications)

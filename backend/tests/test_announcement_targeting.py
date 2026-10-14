@@ -303,3 +303,51 @@ async def test_muting_announcements_leaves_tickets_alone(client):
     assert [n["type"] for n in await _notifications(client, admin)] == [
         "ticket.created"
     ]
+
+
+# --- batched fan-out (#454) --------------------------------------------------
+
+
+async def test_delivery_subscription_declares_a_timeout_above_the_bus_default():
+    """Guard for #454. The fan-out's own history is ~24s for an
+    all-participants announcement, so under the bus's 10s default it was
+    cancelled before its single commit — losing *every* notification while the
+    announcement row stayed durable."""
+    from unittest.mock import MagicMock
+
+    from db import SessionLocal
+    from plugins.announcements import DELIVER_HANDLER_TIMEOUT, setup
+    from utils.event_bus import DEFAULT_HANDLER_TIMEOUT, EventBus
+
+    bus = EventBus()
+    setup(MagicMock(), bus, SessionLocal)
+
+    subs = [s for s in bus._subscriptions if s.pattern == "announcement.published"]
+    assert len(subs) == 1
+    assert subs[0].background is True
+    assert subs[0].timeout == DELIVER_HANDLER_TIMEOUT
+    assert subs[0].timeout > DEFAULT_HANDLER_TIMEOUT
+
+
+async def test_fanout_delivers_every_recipient_exactly_once_when_batched(
+    client, monkeypatch
+):
+    """The fan-out now commits per batch so a cancelled delivery is partial
+    rather than total (#454). Force a batch size of 1 so the slicing loop runs
+    once per recipient: every member must still get exactly one notification,
+    and no one a duplicate."""
+    import plugins.announcements as announcements_module
+
+    monkeypatch.setattr(announcements_module, "FANOUT_BATCH", 1)
+
+    admin = await admin_token(client)
+    comp = await _competition(client, admin, mode="individual")
+    members = [
+        await _joined(client, comp, f"batched{i}@example.com") for i in range(3)
+    ]
+
+    await _post(client, comp, admin, title="Everyone", audience_type="all")
+
+    for token in members:
+        titles = [n["title"] for n in await _notifications(client, token)]
+        assert titles == ["Everyone"], titles

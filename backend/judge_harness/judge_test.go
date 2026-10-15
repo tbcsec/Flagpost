@@ -75,6 +75,31 @@ func TestJudgeAcceptsAndStopsAtFirstFailure(t *testing.T) {
 	}
 }
 
+func TestRunAllJudgesEveryTestAndKeepsTheFirstFailure(t *testing.T) {
+	job := baseJob(writeTests(t, "1\n", "2\n", "3\n", "4\n"))
+	job.RunAll = true
+	r := &fakeRunner{outcomes: []*outcome{ok("1"), ok("9"), ok("3"), ok("8")}}
+	res := judge(job, r)
+	if res.Verdict != VerdictWrongAnswer || len(res.Tests) != 4 || r.calls != 4 {
+		t.Fatalf("got %+v after %d runs", res, r.calls)
+	}
+	got := []string{}
+	for _, tr := range res.Tests {
+		got = append(got, tr.Verdict)
+	}
+	want := []string{VerdictAccepted, VerdictWrongAnswer, VerdictAccepted, VerdictWrongAnswer}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("per-test verdicts %v, want %v", got, want)
+		}
+	}
+
+	r = &fakeRunner{outcomes: []*outcome{ok("1"), ok("2"), ok("3"), ok("4")}}
+	if res := judge(job, r); res.Verdict != VerdictAccepted || len(res.Tests) != 4 {
+		t.Fatalf("got %+v", res)
+	}
+}
+
 func TestOutputIsReturnedOnlyWhereAsked(t *testing.T) {
 	tests := writeTests(t, "1\n", "2\n")
 	tests[0].ShowOutput = true

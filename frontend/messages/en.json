@@ -121,7 +121,8 @@
       "rescheduledToast": "Announcement rescheduled",
       "publishedToast": "Announcement published",
       "cancelledToast": "Scheduled announcement cancelled"
-    }
+    },
+    "clarification": "Clarification"
   },
   "app": {
     "skipToContent": "Skip to content",
@@ -966,7 +967,35 @@
         "allLanguages": "Allow every language the judge offers",
         "noLanguages": "No languages are enabled on the code judge yet.",
         "saveOptions": "Save options",
-        "savedOptions": "Saved."
+        "savedOptions": "Saved.",
+        "reference": {
+          "title": "Check with a reference solution",
+          "description": "Run a solution you know is right against every test. It catches a wrong expected output, or a time limit that's too tight, before competitors do. Optional — it never stops you publishing.",
+          "start": "Test with a reference solution…",
+          "notReady": "The code judge isn't ready, so a check can't run right now.",
+          "meta": "{language} · run by {name} · {time}",
+          "runAgain": "Run again",
+          "change": "Change solution…",
+          "queued": "Waiting to be judged",
+          "queuedAt": "Waiting to be judged (number {position} in line)",
+          "judging": "Being judged…",
+          "couldNotRun": "The judge couldn't run it",
+          "passed": "{total, plural, one {Passed the test} other {Passed all # tests}}",
+          "failedCount": "{failed} of {total} tests failed",
+          "stale": "The test cases or limits changed after this check — run it again to be sure.",
+          "notRun": "Not run",
+          "dialogTitle": "Test with a reference solution",
+          "dialogDescription": "Paste or upload a solution you know is right. It's judged against every test — examples and hidden ones — and each result appears under your test cases. Nothing is scored.",
+          "language": "Language",
+          "upload": "Upload a file",
+          "editorLabel": "Reference solution",
+          "placeholder": "Paste your solution here, or upload a file.",
+          "fileTooBig": "That file is over 128 KB.",
+          "fileNotText": "That file isn't a text file.",
+          "cancel": "Cancel",
+          "run": "Run check",
+          "starting": "Starting…"
+        }
       },
       "readGuide": "Read the Judge guide"
     },
@@ -1054,7 +1083,32 @@
       "expected": "Expected output",
       "yourOutput": "Your output",
       "originRejudge": "Rejudged",
-      "originOverride": "Judge's decision"
+      "originOverride": "Judge's decision",
+      "clarifications": {
+        "title": "Clarifications from the judges",
+        "askPrompt": "Something unclear about this problem?",
+        "ask": "Ask the judges",
+        "yourQuestion": "Your question · {time}",
+        "messages": "{count, plural, one {# message} other {# messages}}",
+        "subject": "Question about {title}",
+        "askedToast": "Question sent — the judges' answer will appear here and in Support",
+        "askTitle": "Ask the judges",
+        "askDescription": "Your question goes privately to the judges. If the answer helps everyone, they may share it as a clarification — without your name.",
+        "questionLabel": "Your question",
+        "questionPlaceholder": "e.g. Can the input contain negative numbers?",
+        "cancel": "Cancel",
+        "sending": "Sending…",
+        "send": "Send question",
+        "yourQuestions": "{count, plural, one {Your question} other {Your questions (#)}}",
+        "q": "Q",
+        "a": "A",
+        "questionSr": "Question:",
+        "answerSr": "Answer:",
+        "askPrivacy": "Only the judges see your question.",
+        "count": "{count, plural, one {# clarification} other {# clarifications}}",
+        "statusWaiting": "Waiting for an answer",
+        "statusAnswered": "Answered"
+      }
     }
   },
   "instances": {
@@ -1146,7 +1200,27 @@
       "send": "Send",
       "replyPartialToast": "Reply sent, but {files} couldn't be attached",
       "staffNotes": "Staff notes",
-      "staffNotesDesc": "A shared working pad for staff on this ticket — never shown to the competitor, live as you type."
+      "staffNotesDesc": "A shared working pad for staff on this ticket — never shown to the competitor, live as you type.",
+      "sentToAll": "Sent to everyone",
+      "sentToAllToast": "Answer sent — and posted to everyone as a clarification",
+      "quickAnswers": "Quick answers:",
+      "quick": {
+        "noComment": "No comment.",
+        "readStatement": "Please read the problem statement carefully — the answer is there."
+      },
+      "quickLabel": {
+        "noComment": "No comment",
+        "readStatement": "Read the problem statement"
+      },
+      "toAllCheckbox": "Also send to everyone as a clarification",
+      "toAllQuestion": "The question, as everyone will see it",
+      "toAllHint": "Everyone sees this question with your answer, on the problem and as an announcement — without the asker's name. Remove anything that gives away who asked or how they're solving it.",
+      "sendToAll": "Send to everyone",
+      "questionWaiting": "Waiting for the judges' answer. Questions can't be replied to — to follow up, ask a new question.",
+      "questionAnswered": "Answered. To follow up, ask a new question.",
+      "askAgain": "Ask a new question",
+      "sendAnswer": "Send answer",
+      "answerPlaceholder": "Your answer…"
     },
     "attachments": {
       "previewUnavailable": "Preview unavailable",
@@ -1166,6 +1240,11 @@
       "hint": "PNG, JPEG or WebP · up to {max} each · {remaining} left",
       "limitReached": "Attachment limit reached for this ticket",
       "remove": "Remove"
+    },
+    "questionTag": "Question",
+    "questionStatus": {
+      "open": "unanswered",
+      "resolved": "answered"
     }
   },
   "feedback": {

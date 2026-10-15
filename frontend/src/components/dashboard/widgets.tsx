@@ -159,19 +159,22 @@ export function AnnouncementsWidget({ competitionId }: WidgetProps) {
                     {rel(an.created_at)}
                   </span>
                 </div>
-                {/* Only flag the elevated rungs — chipping every routine
-                    announcement would just add noise. */}
-                {an.severity !== "info" && (
+                {/* Only flag the elevated rungs (and clarifications) —
+                    chipping every routine announcement would just add noise. */}
+                {(an.severity !== "info" || an.kind === "clarification") && (
                   <span
                     className={cn(
                       "w-fit rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
                       style.chip,
                     )}
                   >
-                    {ts(`severity.${style.key}`)}
+                    {an.kind === "clarification" ? ts("clarification") : ts(`severity.${style.key}`)}
                   </span>
                 )}
-                <span className="text-[13px] text-muted-foreground">{an.body}</span>
+                {an.kind === "clarification" && an.question && (
+                  <span className="whitespace-pre-line text-[13px] text-muted-foreground">{an.question}</span>
+                )}
+                <span className="whitespace-pre-line text-[13px] text-muted-foreground">{an.body}</span>
               </li>
             );
           })}

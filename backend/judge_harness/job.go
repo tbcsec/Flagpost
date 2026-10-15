@@ -59,6 +59,9 @@ type Job struct {
 	Compare       string   `json:"compare"`
 	Tolerance     float64  `json:"tolerance"`
 	Tests         []Test   `json:"tests"`
+	// RunAll keeps going past a failing test (an author's reference-solution
+	// check); otherwise judging stops at the first failure.
+	RunAll bool `json:"run_all"`
 	// UID is the user this judging's submission runs as; 0 means the default.
 	UID int `json:"uid"`
 }

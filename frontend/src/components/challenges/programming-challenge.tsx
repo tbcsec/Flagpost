@@ -6,6 +6,10 @@ import Link from "next/link";
 import { useCallback, useMemo, useRef, useState, type DragEvent } from "react";
 
 import { ChallengeValue } from "@/components/challenges/challenge-value";
+import {
+  ClarificationsLink,
+  ProblemClarifications,
+} from "@/components/challenges/problem-clarifications";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,7 +29,7 @@ import {
 } from "@/lib/hooks/use-judge";
 import type {
   Challenge,
-  CodeSubmissionKind,
+  CodeSubmitInput,
   Judging,
   JudgingRun,
   ProblemView,
@@ -354,7 +358,7 @@ function Solver({
   const uploadDrag = dragHandlers((f) => void chooseUpload(f));
   const editorDrag = dragHandlers((f) => void dropIntoEditor(f));
 
-  function send(kind: CodeSubmissionKind) {
+  function send(kind: CodeSubmitInput["kind"]) {
     setSelected(null);
     setFileNote(null);
     submit.mutate({ language: draft.language, source, kind });
@@ -401,6 +405,7 @@ function Solver({
               seconds: (language?.time_limit_ms ?? problem.time_limit_ms) / 1000,
               memory: problem.memory_limit_mb,
             })}
+            <ClarificationsLink competitionId={competitionId} challengeId={challenge.id} />
           </p>
         </div>
         {lockedBy.length > 0 && (
@@ -416,6 +421,12 @@ function Solver({
               ) : (
                 <p className="text-sm text-muted-foreground">{t("noStatement")}</p>
               )}
+              {/* The judges' clarifications amend the statement, so they close it. */}
+              <ProblemClarifications
+                competitionId={competitionId}
+                challengeId={challenge.id}
+                challengeTitle={challenge.title}
+              />
             </div>
             {problem.examples.length > 0 && (
               <div className="min-w-0 space-y-3 lg:border-l lg:border-border lg:pl-6">

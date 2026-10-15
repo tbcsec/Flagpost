@@ -24,6 +24,7 @@ resolver in ``utils/announcements``, so read and delivery can't drift.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import require_permission
@@ -31,19 +32,27 @@ from db import ensure_aware_utc, get_db, utcnow
 from models.announcement import Announcement
 from models.competition import Competition
 from models.user import User
+from routers.challenges import load_visible_challenge
 from schemas.announcement import (
     AnnouncementCreate,
     AnnouncementOut,
     AnnouncementUpdate,
+    ClarificationOut,
 )
 from utils.announcements import (
     list_scheduled_announcements,
     list_visible_announcements,
+    published_event,
 )
+from utils.competition_status import require_playable
 from utils.event_bus import event_bus
 
 router = APIRouter(
     prefix="/api/competitions/{competition_id}/announcements", tags=["announcements"]
+)
+# A challenge's clarifications (#450), read where the challenge is.
+clarifications_router = APIRouter(
+    prefix="/api/competitions/{competition_id}", tags=["announcements"]
 )
 
 
@@ -54,23 +63,6 @@ async def list_announcements(
     db: AsyncSession = Depends(get_db),
 ) -> list[Announcement]:
     return await list_visible_announcements(db, competition_id, current_user)
-
-
-def _published_event(announcement: Announcement) -> dict:
-    """The ``announcement.published`` payload — identical whether an announcement
-    is posted immediately or released later by the scheduler (#349), so the
-    delivery module and any automation can't tell the two apart. Ids stay off the
-    event: the handler reads the row, and an audit entry shouldn't carry a
-    recipient list."""
-    return {
-        "competition_id": announcement.competition_id,
-        "announcement_id": announcement.id,
-        "title": announcement.title,
-        "body": announcement.body,
-        "severity": announcement.severity,
-        "audience_type": announcement.audience_type,
-        "created_at": announcement.created_at.isoformat(),
-    }
 
 
 async def _scoped_announcement(
@@ -134,7 +126,7 @@ async def create_announcement(
     # draft emits nothing now — the scheduler emits announcement.published when
     # publish_at arrives, so the broadcast + notifications fire then, not now.
     if not scheduled:
-        await event_bus.emit("announcement.published", _published_event(announcement))
+        await event_bus.emit("announcement.published", published_event(announcement))
     return announcement
 
 
@@ -184,7 +176,7 @@ async def update_announcement(
 
     # Commit before emit. Publishing rides the same event as an immediate post.
     if publish_now:
-        await event_bus.emit("announcement.published", _published_event(announcement))
+        await event_bus.emit("announcement.published", published_event(announcement))
     else:
         await event_bus.emit(
             "announcement.updated",
@@ -214,3 +206,34 @@ async def delete_announcement(
         "announcement.deleted",
         {"competition_id": competition_id, "announcement_id": announcement_id},
     )
+
+
+@clarifications_router.get(
+    "/challenges/{challenge_id}/clarifications", response_model=list[ClarificationOut]
+)
+async def list_clarifications(
+    competition_id: str,
+    challenge_id: str,
+    current_user: User = Depends(require_permission("challenge_view")),
+    db: AsyncSession = Depends(get_db),
+) -> list[Announcement]:
+    """The judges' clarifications about one challenge, newest first — gated
+    like the challenge itself (a draft or unreleased challenge is a 404, and
+    play must be open, as on its page)."""
+    competition = await db.get(Competition, competition_id)
+    if competition is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Competition not found")
+    await load_visible_challenge(db, competition_id, challenge_id, current_user)
+    await require_playable(db, competition, current_user.id)
+    rows = await db.scalars(
+        select(Announcement)
+        .where(
+            Announcement.competition_id == competition_id,
+            Announcement.challenge_id == challenge_id,
+            Announcement.kind == "clarification",
+            Announcement.audience_type == "all",
+            Announcement.hidden.is_(False),
+        )
+        .order_by(Announcement.created_at.desc())
+    )
+    return list(rows.all())

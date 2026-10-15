@@ -366,3 +366,37 @@ a new attempt) and makes revoking an award a state change rather than a row
 hunt. Revoking emits a new `challenge.solve_revoked` event, which moves the
 scoreboard exactly as `challenge.solved` does.
 
+
+## Amendment: reference checks and clarifications (2026-10-15, #450)
+
+**Reference-solution checks run through the queue, and judge every test.** An
+author's check is a judging of a third kind, `reference`, not a synchronous
+probe like the admin connection check: running it in the request would bypass
+the concurrency limit that keeps time limits meaningful (§5), and a large
+problem's check can outlast a request. It is the one exception to lazy judging:
+the job sets `run_all`, so the harness continues past a failure and the author
+sees every test (the verdict stays the first failure's). The competitor route
+never accepts the kind — judging every hidden test without stopping would reveal
+more about the hidden tests than a submission does. It never blocks publishing
+(owner decision: optional, encouraged). Judgings record a `problem_version`
+fingerprint (test-data key + effective limits) so a check can say when it no
+longer matches the problem.
+
+**Clarifications are private by default, with a deliberate "send to all".** The
+#450 issue asked for this to be scoped before building. A competitor's question
+is a support ticket linked to the challenge — the existing private channel,
+whose opener-or-staff visibility we keep intact rather than adding a public flag
+to tickets — of a distinct kind, `question`, because a question is not a
+conversation: one text message, read-only for the asker once sent (a follow-up
+is a new question, the owner's choice of the one-message-per-request model
+common to contest judges), and answered rather than resolved by hand. Broadcasting goes through **announcements**: a judge who may
+announce sends the answer as an announcement of kind `clarification` about the
+challenge, with the question re-worded by the judge for everyone. The
+announcement stores no ticket or asker, so anonymity holds by construction
+rather than by every reader remembering to filter. Reusing
+`announcement.published` and its batched delivery means no new event type, and
+clarifications live in required-core modules (tickets + announcements), so they
+don't depend on the optional judge module. Not done here: retracting a sent
+clarification (published announcements are immutable today), proactive
+clarifications without a question, and listing clarifications in the flag
+challenge dialog.

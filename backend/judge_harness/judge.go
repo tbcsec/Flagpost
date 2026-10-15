@@ -13,7 +13,10 @@ const shownOutputLimit = 16 * 1024
 
 // judge compiles once, then runs the tests in order — samples first, as the
 // executor lists them — stopping at the first that doesn't pass (ADR-0042 §5,
-// "lazy judging"). The overall verdict is that test's, or accepted.
+// "lazy judging"). The overall verdict is that test's, or accepted. A job with
+// RunAll (an author's reference-solution check, #450) runs every test anyway,
+// so the author sees each one's result; the verdict is still the first
+// failure's.
 func judge(job *Job, r runner) Result {
 	res := Result{Nonce: job.Nonce, Tests: []TestResult{}}
 
@@ -47,11 +50,17 @@ func judge(job *Job, r runner) Result {
 		}
 		res.Tests = append(res.Tests, tr)
 		if tr.Verdict != VerdictAccepted {
-			res.Verdict = tr.Verdict
-			return res
+			if res.Verdict == "" {
+				res.Verdict = tr.Verdict
+			}
+			if !job.RunAll {
+				return res
+			}
 		}
 	}
-	res.Verdict = VerdictAccepted
+	if res.Verdict == "" {
+		res.Verdict = VerdictAccepted
+	}
 	return res
 }
 

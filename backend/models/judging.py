@@ -11,9 +11,12 @@ alike. A judging that ran has one ``JudgingRun`` per test it executed.
 Keeping the judging apart from the submission is what lets #450 rejudge: a
 rejudge is a *new* judging of the same code, so history is never rewritten.
 
-Two kinds of submission (#449): ``submit`` is judged against every test and
-scored; ``run`` is judged against the examples only and never scored — the
-"try it on the samples" button.
+Three kinds of submission: ``submit`` is judged against every test and scored;
+``run`` is judged against the examples only and never scored — the "try it on
+the samples" button (#449); ``reference`` is an author checking the problem
+with a solution they know is right (#450): judged against every test without
+stopping at the first failure, never scored, and seen only on the authoring
+page — never in a competitor's history or the jury console.
 
 The container is opaque while it runs, so the lifecycle is the part the
 platform can observe: ``queued → running → done | failed``. ``done`` means a
@@ -34,7 +37,11 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base, CompetitionScopedMixin, TimestampMixin, UtcDateTime
 
-CODE_SUBMISSION_KINDS = ("submit", "run")
+CODE_SUBMISSION_KINDS = ("submit", "run", "reference")
+# What a competitor may ask for; ``reference`` is set only by the authoring
+# route (judging every hidden test without stopping would tell a competitor
+# more than a submission does).
+COMPETITOR_SUBMISSION_KINDS = ("submit", "run")
 # Why a judging exists (#450): the competitor submitted; staff asked for the
 # code to be judged again (a test case or limit was fixed); or a judge decided
 # the verdict by hand. History is never rewritten — each is a new row, and the
@@ -143,6 +150,10 @@ class Judging(Base, CompetitionScopedMixin, TimestampMixin):
     tests_total: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Why no verdict was reached, for staff. Never shown to the competitor.
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # A fingerprint of the test data and limits it ran against, set at claim
+    # (utils.judge_worker.problem_version): a reference check is out of date
+    # once the problem's current version differs (#450).
+    problem_version: Mapped[str | None] = mapped_column(String, nullable=True)
     # The Submission row this judging's verdict was recorded on (the code
     # submission's one row; see CodeSubmission.submission_id).
     submission_id: Mapped[str | None] = mapped_column(

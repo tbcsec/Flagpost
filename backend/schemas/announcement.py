@@ -70,9 +70,26 @@ class AnnouncementOut(BaseModel):
     # so the UI can badge "Scheduled for …".
     hidden: bool = False
     publish_at: datetime | None = None
+    # A clarification (#450) is about one challenge and answers a question
+    # (the body is the answer). Never carries who asked.
+    kind: str = "announcement"
+    challenge_id: str | None = None
+    question: str | None = None
 
     @field_validator("audience_ids", mode="before")
     @classmethod
     def _ids_default(cls, v: object) -> object:
         # Null for "all" rows — present it as an empty list.
         return v or []
+
+
+class ClarificationOut(BaseModel):
+    """A clarification as listed on its challenge's page (#450)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    question: str | None = None
+    # The judges' answer.
+    body: str
+    created_at: datetime

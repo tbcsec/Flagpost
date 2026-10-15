@@ -27,9 +27,66 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import user_has_permission, users_with_permission
+from db import ensure_aware_utc, utcnow
 from models.announcement import Announcement
+from models.challenge import Challenge
+from models.competition import Competition
 from models.team import TeamMembership
 from models.user import User
+from utils.competition_status import has_started
+
+
+def published_event(announcement: Announcement, **extra) -> dict:
+    """The ``announcement.published`` payload — one shape whether an
+    announcement is posted by hand, released by the scheduler (#349), posted by
+    an automation rule, or sent as a clarification (#450), so the delivery
+    module and any automation can't tell them apart. Ids of recipients stay off
+    the event (the handler reads the row), and so does anything about who asked
+    a clarification: it isn't stored on the announcement at all."""
+    return {
+        "competition_id": announcement.competition_id,
+        "announcement_id": announcement.id,
+        "title": announcement.title,
+        "body": announcement.body,
+        "severity": announcement.severity,
+        "audience_type": announcement.audience_type,
+        "created_at": announcement.created_at.isoformat(),
+        "kind": announcement.kind,
+        "challenge_id": announcement.challenge_id,
+        "question": announcement.question,
+        **extra,
+    }
+
+
+async def hidden_clarification_challenges(
+    db: AsyncSession, competition_id: str, rows: list[Announcement]
+) -> set[str]:
+    """Of the challenges these clarifications are about, the ones a competitor
+    can't see right now (a draft, a scheduled release not reached — say it was
+    unpublished after the clarification went out — or any challenge before the
+    competition starts). Their clarifications are left out of a competitor's
+    feed, as the challenge itself is."""
+    ids = {a.challenge_id for a in rows if a.kind == "clarification" and a.challenge_id}
+    if not ids:
+        return set()
+    competition = await db.get(Competition, competition_id)
+    if competition is None or not has_started(competition):
+        return ids
+    now = utcnow()
+    challenges = (
+        await db.scalars(
+            select(Challenge).where(
+                Challenge.competition_id == competition_id, Challenge.id.in_(ids)
+            )
+        )
+    ).all()
+    visible = {
+        c.id
+        for c in challenges
+        if c.state == "published"
+        and (c.release_at is None or ensure_aware_utc(c.release_at) <= now)
+    }
+    return ids - visible
 
 
 async def user_team_ids(
@@ -102,10 +159,12 @@ async def list_visible_announcements(
     if await user_has_permission(db, user.id, "announcement_create", competition_id):
         return rows
     team_ids = await user_team_ids(db, competition_id, user.id)
+    hidden = await hidden_clarification_challenges(db, competition_id, rows)
     return [
         a
         for a in rows
         if visible_to_user(a, user_id=user.id, team_ids=team_ids, is_staff=False)
+        and a.challenge_id not in hidden
     ]
 
 

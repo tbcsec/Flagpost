@@ -19,6 +19,7 @@ import type {
   JudgeProblemUpdate,
   JudgeSettingsUpdate,
   JudgeTestcaseInput,
+  ReferenceCheck,
 } from "@/lib/types";
 
 const judgeKeys = {
@@ -167,6 +168,8 @@ function useProblemWrite<TInput>(
           queryKey: problemKeys.problem(competitionId, challengeId),
         });
       }
+      // A changed test case or limit can put the reference check out of date.
+      queryClient.invalidateQueries({ queryKey: referenceKey(competitionId, challengeId) });
     },
   });
 }
@@ -205,6 +208,38 @@ export function useDeleteJudgeTestcase(competitionId: string, challengeId: strin
   return useProblemWrite(competitionId, challengeId, (id: string) =>
     judgeProblemApi.deleteTestcase(competitionId, challengeId, id),
   );
+}
+
+// --- the reference-solution check (#450) ------------------------------------------------
+
+// Under the ["judge", "judgings", cid] prefix, which a judging's live frame
+// refreshes (use-notifications) — so the author's own check updates as it runs.
+// The object segment can't collide with a challenge's history key.
+const referenceKey = (competitionId: string, challengeId: string) =>
+  ["judge", "judgings", competitionId, { reference: challengeId }] as const;
+
+const isActiveCheck = (data: ReferenceCheck | undefined) =>
+  data?.judging?.status === "queued" || data?.judging?.status === "running";
+
+/** The problem's latest reference check. Polled while it runs, as a fallback
+ *  for a co-author (the live frame goes to whoever started it). */
+export function useReferenceCheck(competitionId: string, challengeId: string) {
+  return useQuery({
+    queryKey: referenceKey(competitionId, challengeId),
+    queryFn: () => judgeProblemApi.reference(competitionId, challengeId),
+    enabled: Boolean(competitionId) && Boolean(challengeId),
+    refetchInterval: (query) => (isActiveCheck(query.state.data) ? 3_000 : false),
+  });
+}
+
+export function useRunReferenceCheck(competitionId: string, challengeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { language: string; source: string }) =>
+      judgeProblemApi.runReference(competitionId, challengeId, input),
+    onSuccess: (data) =>
+      queryClient.setQueryData(referenceKey(competitionId, challengeId), data),
+  });
 }
 
 // --- solving (#449) ------------------------------------------------------------------

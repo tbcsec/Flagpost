@@ -103,7 +103,8 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
         "competition_id", "challenge_id", "hint_id", "user_id", "team_id",
     ],
     "hint.published": ["competition_id", "challenge_id", "hint_id"],
-    "ticket.created": ["competition_id", "ticket_id", "opener_user_id", "subject"],
+    # kind: "support", or "question" — asked about a challenge from its page (#450).
+    "ticket.created": ["competition_id", "ticket_id", "opener_user_id", "subject", "kind"],
     "ticket.assigned": ["competition_id", "ticket_id", "assignee_user_id"],
     "ticket.resolved": ["competition_id", "ticket_id"],
     "ticket.message_posted": [
@@ -142,6 +143,8 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "announcement.published": [
         "competition_id", "announcement_id", "title", "body", "severity",
         "audience_type",
+        # A clarification (#450): the challenge it's about and the question.
+        "kind", "challenge_id", "question",
     ],
     # Edit/cancel of a still-scheduled announcement (#349) — id-only, like the
     # instance-lifecycle events; the row is the source of truth.

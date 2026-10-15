@@ -121,7 +121,8 @@
       "rescheduledToast": "Anuncio reprogramado",
       "publishedToast": "Anuncio publicado",
       "cancelledToast": "Anuncio programado cancelado"
-    }
+    },
+    "clarification": "Aclaración"
   },
   "app": {
     "skipToContent": "Ir al contenido",
@@ -965,7 +966,35 @@
         "allLanguages": "Permitir todos los lenguajes que ofrece el juez",
         "noLanguages": "Todavía no hay lenguajes activados en el juez de código.",
         "saveOptions": "Guardar opciones",
-        "savedOptions": "Guardado."
+        "savedOptions": "Guardado.",
+        "reference": {
+          "title": "Comprobar con una solución de referencia",
+          "description": "Ejecuta una solución que sabes que es correcta contra todas las pruebas. Detecta una salida esperada incorrecta, o un límite de tiempo demasiado ajustado, antes que los participantes. Opcional: nunca impide publicar.",
+          "start": "Probar con una solución de referencia…",
+          "notReady": "El juez de código no está listo, así que ahora no se puede ejecutar una comprobación.",
+          "meta": "{language} · ejecutada por {name} · {time}",
+          "runAgain": "Ejecutar de nuevo",
+          "change": "Cambiar solución…",
+          "queued": "Esperando a ser juzgada",
+          "queuedAt": "Esperando a ser juzgada (número {position} en la cola)",
+          "judging": "Juzgando…",
+          "couldNotRun": "El juez no pudo ejecutarla",
+          "passed": "{total, plural, one {Superó la prueba} other {Superó las # pruebas}}",
+          "failedCount": "Fallaron {failed} de {total} pruebas",
+          "stale": "Las pruebas o los límites cambiaron después de esta comprobación: vuelve a ejecutarla para asegurarte.",
+          "notRun": "No ejecutada",
+          "dialogTitle": "Probar con una solución de referencia",
+          "dialogDescription": "Pega o sube una solución que sabes que es correcta. Se juzga contra todas las pruebas —ejemplos y ocultas— y cada resultado aparece bajo tus casos de prueba. No se puntúa nada.",
+          "language": "Lenguaje",
+          "upload": "Subir un archivo",
+          "editorLabel": "Solución de referencia",
+          "placeholder": "Pega aquí tu solución o sube un archivo.",
+          "fileTooBig": "Ese archivo supera los 128 KB.",
+          "fileNotText": "Ese archivo no es de texto.",
+          "cancel": "Cancelar",
+          "run": "Ejecutar comprobación",
+          "starting": "Iniciando…"
+        }
       },
       "readGuide": "Read the Judge guide"
     },
@@ -1054,7 +1083,32 @@
       "expected": "Salida esperada",
       "yourOutput": "Tu salida",
       "originRejudge": "Vuelto a juzgar",
-      "originOverride": "Decisión de un juez"
+      "originOverride": "Decisión de un juez",
+      "clarifications": {
+        "title": "Aclaraciones de los jueces",
+        "askPrompt": "¿Algo de este problema no está claro?",
+        "ask": "Preguntar a los jueces",
+        "yourQuestion": "Tu pregunta · {time}",
+        "messages": "{count, plural, one {# mensaje} other {# mensajes}}",
+        "subject": "Pregunta sobre {title}",
+        "askedToast": "Pregunta enviada: la respuesta de los jueces aparecerá aquí y en Soporte",
+        "askTitle": "Preguntar a los jueces",
+        "askDescription": "Tu pregunta llega en privado a los jueces. Si la respuesta ayuda a todos, pueden compartirla como aclaración, sin tu nombre.",
+        "questionLabel": "Tu pregunta",
+        "questionPlaceholder": "p. ej. ¿Puede la entrada contener números negativos?",
+        "cancel": "Cancelar",
+        "sending": "Enviando…",
+        "send": "Enviar pregunta",
+        "yourQuestions": "{count, plural, one {Tu pregunta} other {Tus preguntas (#)}}",
+        "q": "P",
+        "a": "R",
+        "questionSr": "Pregunta:",
+        "answerSr": "Respuesta:",
+        "askPrivacy": "Solo los jueces ven tu pregunta.",
+        "count": "{count, plural, one {# aclaración} other {# aclaraciones}}",
+        "statusWaiting": "Esperando respuesta",
+        "statusAnswered": "Respondida"
+      }
     }
   },
   "instances": {
@@ -1146,7 +1200,27 @@
       "send": "Enviar",
       "replyPartialToast": "Responder enviado, pero no se pudo adjuntar {files}",
       "staffNotes": "Notas del personal",
-      "staffNotesDesc": "Un pad de trabajo compartido para el personal de este ticket — nunca se muestra al competidor, vive mientras escribe."
+      "staffNotesDesc": "Un pad de trabajo compartido para el personal de este ticket — nunca se muestra al competidor, vive mientras escribe.",
+      "sentToAll": "Enviado a todos",
+      "sentToAllToast": "Respuesta enviada y publicada para todos como aclaración",
+      "quickAnswers": "Respuestas rápidas:",
+      "quick": {
+        "noComment": "Sin comentarios.",
+        "readStatement": "Lee con atención el enunciado del problema: ahí está la respuesta."
+      },
+      "quickLabel": {
+        "noComment": "Sin comentarios",
+        "readStatement": "Leer el enunciado"
+      },
+      "toAllCheckbox": "Enviar también a todos como aclaración",
+      "toAllQuestion": "La pregunta, tal como la verán todos",
+      "toAllHint": "Todos ven esta pregunta con tu respuesta, en el problema y como anuncio, sin el nombre de quien la hizo. Quita cualquier cosa que delate quién preguntó o cómo lo está resolviendo.",
+      "sendToAll": "Enviar a todos",
+      "questionWaiting": "Esperando la respuesta de los jueces. No se puede responder a una pregunta: para continuar, haz una nueva.",
+      "questionAnswered": "Respondida. Para continuar, haz una nueva pregunta.",
+      "askAgain": "Hacer una nueva pregunta",
+      "sendAnswer": "Enviar respuesta",
+      "answerPlaceholder": "Tu respuesta…"
     },
     "attachments": {
       "previewUnavailable": "Vista previa no disponible",
@@ -1166,6 +1240,11 @@
       "hint": "PNG, JPEG o WebP · hasta {max} cada · {remaining} izquierda",
       "limitReached": "Límite de adjuntos alcanzado para este ticket",
       "remove": "Eliminar"
+    },
+    "questionTag": "Pregunta",
+    "questionStatus": {
+      "open": "sin responder",
+      "resolved": "respondida"
     }
   },
   "feedback": {

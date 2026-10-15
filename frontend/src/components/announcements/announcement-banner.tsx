@@ -100,14 +100,24 @@ export function AnnouncementBanner() {
             style.accent,
           )}
         >
-          {t(`severity.${style.key}`)}
+          {latest.kind === "clarification" ? t("clarification") : t(`severity.${style.key}`)}
         </div>
         <div className="mt-0.5 text-sm font-semibold leading-snug">
           {latest.title}
         </div>
-        <div className="mt-0.5 text-sm leading-snug text-muted-foreground">
-          {latest.body}
-        </div>
+        {latest.kind === "clarification" && latest.question ? (
+          // A clarification (#450): the question, then the judges' answer.
+          <>
+            <div className="mt-0.5 whitespace-pre-line text-sm leading-snug text-muted-foreground">
+              {latest.question}
+            </div>
+            <div className="mt-0.5 whitespace-pre-line text-sm leading-snug">{latest.body}</div>
+          </>
+        ) : (
+          <div className="mt-0.5 text-sm leading-snug text-muted-foreground">
+            {latest.body}
+          </div>
+        )}
       </div>
       <button
         onClick={() => setDismissedId(latest.id)}

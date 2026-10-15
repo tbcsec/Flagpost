@@ -35,6 +35,25 @@ describe("AnnouncementBanner", () => {
     vi.clearAllMocks();
   });
 
+  it("labels a judges' clarification and shows its question with the answer", () => {
+    mockUseAnnouncements.mockReturnValue({
+      data: [
+        {
+          ...announcement("c1", "A + B"),
+          kind: "clarification",
+          challenge_id: "p1",
+          question: "Can the numbers be negative?",
+          body: "Yes.",
+        },
+      ],
+    });
+    renderWithIntl(<AnnouncementBanner />);
+    expect(screen.getByText("Clarification")).toBeInTheDocument();
+    expect(screen.getByText("A + B")).toBeInTheDocument();
+    expect(screen.getByText("Can the numbers be negative?")).toBeInTheDocument();
+    expect(screen.getByText("Yes.")).toBeInTheDocument();
+  });
+
   it("shows the newest announcement", () => {
     mockUseAnnouncements.mockReturnValue({ data: [announcement("a1")] });
     renderWithIntl(<AnnouncementBanner />);

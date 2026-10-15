@@ -13,6 +13,12 @@ be missed by looking away while the banner is up.
 An announcement carries a **severity** (the urgency ladder) and an **audience**:
 either the whole competition, or a chosen set of teams/users. Targeting is
 enforced on read *and* on delivery — see ``utils/announcements``.
+
+A **clarification** (#450) is an announcement about one challenge: a judge's
+answer to a competitor's question, sent to everyone. It carries the challenge
+and the question as the judge worded it for everyone — never who asked (no
+ticket or asker is stored here at all, so nothing can leak it) — and is listed
+on that challenge's page as well as in the ordinary feed.
 """
 
 from datetime import datetime
@@ -34,6 +40,9 @@ DEFAULT_SEVERITY = "info"
 # shared WS broadcast); "teams"/"users" resolve `audience_ids` against membership.
 AUDIENCE_TYPES: tuple[str, ...] = ("all", "teams", "users")
 DEFAULT_AUDIENCE = "all"
+
+KINDS: tuple[str, ...] = ("announcement", "clarification")
+DEFAULT_KIND = "announcement"
 
 
 class Announcement(Base, CompetitionScopedMixin, TimestampMixin):
@@ -73,3 +82,13 @@ class Announcement(Base, CompetitionScopedMixin, TimestampMixin):
     )
     # When a scheduled announcement should go live (UTC). Null = post immediately.
     publish_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    # KINDS. A clarification is about ``challenge_id`` and answers ``question``
+    # (the body is the answer); deleting the challenge deletes its
+    # clarifications, which mean nothing without it.
+    kind: Mapped[str] = mapped_column(
+        String, nullable=False, default=DEFAULT_KIND, server_default=DEFAULT_KIND
+    )
+    challenge_id: Mapped[str | None] = mapped_column(
+        ForeignKey("challenges.id", ondelete="CASCADE"), index=True, nullable=True
+    )
+    question: Mapped[str | None] = mapped_column(Text, nullable=True)

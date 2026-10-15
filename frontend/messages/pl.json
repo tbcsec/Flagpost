@@ -121,7 +121,8 @@
       "rescheduledToast": "Zmieniono termin ogłoszenia",
       "publishedToast": "Ogłoszenie opublikowane",
       "cancelledToast": "Zaplanowane ogłoszenie anulowane"
-    }
+    },
+    "clarification": "Wyjaśnienie"
   },
   "app": {
     "skipToContent": "Przejdź do treści",
@@ -965,7 +966,35 @@
         "allLanguages": "Zezwalaj na wszystkie języki oferowane przez sędziego",
         "noLanguages": "Na sędzi kodu nie włączono jeszcze żadnych języków.",
         "saveOptions": "Zapisz opcje",
-        "savedOptions": "Zapisano."
+        "savedOptions": "Zapisano.",
+        "reference": {
+          "title": "Sprawdź rozwiązaniem wzorcowym",
+          "description": "Uruchom rozwiązanie, co do którego masz pewność, na wszystkich testach. Wychwyci błędne oczekiwane wyjście lub zbyt ciasny limit czasu, zanim zrobią to uczestnicy. Opcjonalne — nigdy nie blokuje publikacji.",
+          "start": "Sprawdź rozwiązaniem wzorcowym…",
+          "notReady": "Sędzia kodu nie jest gotowy, więc teraz nie można uruchomić sprawdzenia.",
+          "meta": "{language} · uruchomił(a) {name} · {time}",
+          "runAgain": "Uruchom ponownie",
+          "change": "Zmień rozwiązanie…",
+          "queued": "Czeka na ocenę",
+          "queuedAt": "Czeka na ocenę ({position}. w kolejce)",
+          "judging": "Trwa ocenianie…",
+          "couldNotRun": "Sędzia nie zdołał tego uruchomić",
+          "passed": "{total, plural, one {Test zaliczony} few {Zaliczone wszystkie # testy} many {Zaliczone wszystkie # testów} other {Zaliczone wszystkie # testu}}",
+          "failedCount": "Niezaliczone testy: {failed} z {total}",
+          "stale": "Testy lub limity zmieniły się po tym sprawdzeniu — uruchom je ponownie, aby mieć pewność.",
+          "notRun": "Nieuruchomiony",
+          "dialogTitle": "Sprawdź rozwiązaniem wzorcowym",
+          "dialogDescription": "Wklej lub prześlij rozwiązanie, co do którego masz pewność. Zostanie ocenione na wszystkich testach — przykładowych i ukrytych — a każdy wynik pojawi się pod twoimi testami. Nic nie jest punktowane.",
+          "language": "Język",
+          "upload": "Prześlij plik",
+          "editorLabel": "Rozwiązanie wzorcowe",
+          "placeholder": "Wklej tutaj rozwiązanie lub prześlij plik.",
+          "fileTooBig": "Ten plik ma ponad 128 KB.",
+          "fileNotText": "To nie jest plik tekstowy.",
+          "cancel": "Anuluj",
+          "run": "Uruchom sprawdzenie",
+          "starting": "Uruchamianie…"
+        }
       },
       "readGuide": "Read the Judge guide"
     },
@@ -1054,7 +1083,32 @@
       "expected": "Oczekiwane wyjście",
       "yourOutput": "Twoje wyjście",
       "originRejudge": "Oceniono ponownie",
-      "originOverride": "Decyzja sędziego"
+      "originOverride": "Decyzja sędziego",
+      "clarifications": {
+        "title": "Wyjaśnienia sędziów",
+        "askPrompt": "Coś w tym zadaniu jest niejasne?",
+        "ask": "Zapytaj sędziów",
+        "yourQuestion": "Twoje pytanie · {time}",
+        "messages": "{count, plural, one {# wiadomość} few {# wiadomości} many {# wiadomości} other {# wiadomości}}",
+        "subject": "Pytanie o {title}",
+        "askedToast": "Pytanie wysłane — odpowiedź sędziów pojawi się tutaj i w Pomocy",
+        "askTitle": "Zapytaj sędziów",
+        "askDescription": "Twoje pytanie trafia prywatnie do sędziów. Jeśli odpowiedź przyda się wszystkim, mogą ją udostępnić jako wyjaśnienie — bez twojego imienia.",
+        "questionLabel": "Twoje pytanie",
+        "questionPlaceholder": "np. Czy wejście może zawierać liczby ujemne?",
+        "cancel": "Anuluj",
+        "sending": "Wysyłanie…",
+        "send": "Wyślij pytanie",
+        "yourQuestions": "{count, plural, one {Twoje pytanie} few {Twoje pytania (#)} many {Twoje pytania (#)} other {Twoje pytania (#)}}",
+        "q": "P",
+        "a": "O",
+        "questionSr": "Pytanie:",
+        "answerSr": "Odpowiedź:",
+        "askPrivacy": "Twoje pytanie widzą tylko sędziowie.",
+        "count": "{count, plural, one {# wyjaśnienie} few {# wyjaśnienia} many {# wyjaśnień} other {# wyjaśnienia}}",
+        "statusWaiting": "Czeka na odpowiedź",
+        "statusAnswered": "Odpowiedziano"
+      }
     }
   },
   "instances": {
@@ -1146,7 +1200,27 @@
       "send": "Wyślij",
       "replyPartialToast": "Odpowiedź wysłana, ale {files} nie może zostać dołączona",
       "staffNotes": "Notatki personelu",
-      "staffNotesDesc": "Współdzielony dokument roboczy dla personelu na tym bilecie - nigdy nie pokazany konkurentowi, żyje jak pisasz."
+      "staffNotesDesc": "Współdzielony dokument roboczy dla personelu na tym bilecie - nigdy nie pokazany konkurentowi, żyje jak pisasz.",
+      "sentToAll": "Wysłano do wszystkich",
+      "sentToAllToast": "Odpowiedź wysłana — i opublikowana dla wszystkich jako wyjaśnienie",
+      "quickAnswers": "Szybkie odpowiedzi:",
+      "quick": {
+        "noComment": "Bez komentarza.",
+        "readStatement": "Przeczytaj uważnie treść zadania — odpowiedź tam jest."
+      },
+      "quickLabel": {
+        "noComment": "Bez komentarza",
+        "readStatement": "Przeczytaj treść zadania"
+      },
+      "toAllCheckbox": "Wyślij też wszystkim jako wyjaśnienie",
+      "toAllQuestion": "Pytanie w formie, w jakiej zobaczą je wszyscy",
+      "toAllHint": "Wszyscy zobaczą to pytanie z twoją odpowiedzią, przy zadaniu i jako ogłoszenie — bez nazwy pytającego. Usuń wszystko, co zdradza, kto pytał albo jak rozwiązuje zadanie.",
+      "sendToAll": "Wyślij wszystkim",
+      "questionWaiting": "Czeka na odpowiedź sędziów. Na pytanie nie można odpisać — aby dopytać, zadaj nowe pytanie.",
+      "questionAnswered": "Odpowiedziano. Aby dopytać, zadaj nowe pytanie.",
+      "askAgain": "Zadaj nowe pytanie",
+      "sendAnswer": "Wyślij odpowiedź",
+      "answerPlaceholder": "Twoja odpowiedź…"
     },
     "attachments": {
       "previewUnavailable": "Podgląd niedostępny",
@@ -1166,6 +1240,11 @@
       "hint": "PNG, JPEG lub WebP · do {max} każdy · {remaining} pozostało",
       "limitReached": "Osiągnięto limit załączników dla tego zgłoszenia",
       "remove": "Usuń"
+    },
+    "questionTag": "Pytanie",
+    "questionStatus": {
+      "open": "bez odpowiedzi",
+      "resolved": "z odpowiedzią"
     }
   },
   "feedback": {

@@ -18,7 +18,22 @@ const announcementKeys = {
   list: (competitionId: string) => ["announcements", competitionId] as const,
   scheduled: (competitionId: string) =>
     ["announcements", competitionId, "scheduled"] as const,
+  clarifications: (competitionId: string, challengeId: string) =>
+    ["announcements", competitionId, "clarifications", challengeId] as const,
 };
+
+/** The judges' clarifications about one challenge (#450), newest first. Its own
+ *  query rather than a filter over the feed: the room's reconnect snapshot
+ *  holds only the latest few announcements, and replaces the feed. Kept live by
+ *  the shell's announcements socket (see useAnnouncements). */
+export function useClarifications(competitionId: string, challengeId: string) {
+  const isAuthenticated = useAuthStore((s) => s.status === "authenticated");
+  return useQuery({
+    queryKey: announcementKeys.clarifications(competitionId, challengeId),
+    queryFn: () => announcementsApi.clarifications(competitionId, challengeId),
+    enabled: isAuthenticated && Boolean(competitionId) && Boolean(challengeId),
+  });
+}
 
 /** The competition's announcements: REST for the initial load, then the
  *  announcements WebSocket room prepends new ones live into the cache (§8).
@@ -57,6 +72,11 @@ export function useAnnouncements(
                 ? prev
                 : [incoming, ...(prev ?? [])],
           );
+          if (incoming.kind === "clarification" && incoming.challenge_id) {
+            queryClient.invalidateQueries({
+              queryKey: announcementKeys.clarifications(competitionId, incoming.challenge_id),
+            });
+          }
         } else if (frame.type === "announcements" && frame.announcements) {
           queryClient.setQueryData<Announcement[]>(
             announcementKeys.list(competitionId),

@@ -51,7 +51,10 @@ def setup(app, event_bus, db_factory) -> None:
     from models.competition import Competition
     from realtime import manager, register_room_type
     from routers.announcements import router as announcements_router
+    from models.challenge import Challenge
+    from routers.announcements import clarifications_router
     from utils.announcements import (
+        hidden_clarification_challenges,
         resolve_recipients,
         user_team_ids,
         visible_to_user,
@@ -59,6 +62,7 @@ def setup(app, event_bus, db_factory) -> None:
     from utils.notifications import broadcast_notifications, create_notifications
 
     app.include_router(announcements_router)
+    app.include_router(clarifications_router)
 
     def _frame(a: Announcement) -> dict:
         return {
@@ -69,6 +73,11 @@ def setup(app, event_bus, db_factory) -> None:
             "severity": a.severity,
             "audience_type": a.audience_type,
             "created_at": a.created_at.isoformat(),
+            # A clarification (#450): which challenge, and the question it
+            # answers — so the challenge's page can list it live.
+            "kind": a.kind,
+            "challenge_id": a.challenge_id,
+            "question": a.question,
         }
 
     async def _recent(db, user, competition_id: str) -> list[dict]:
@@ -95,12 +104,14 @@ def setup(app, event_bus, db_factory) -> None:
         )
         if not is_staff:
             team_ids = await user_team_ids(db, competition_id, user.id)
+            hidden = await hidden_clarification_challenges(db, competition_id, rows)
             rows = [
                 a
                 for a in rows
                 if visible_to_user(
                     a, user_id=user.id, team_ids=team_ids, is_staff=False
                 )
+                and a.challenge_id not in hidden
             ]
         return [_frame(a) for a in rows]
 
@@ -153,6 +164,22 @@ def setup(app, event_bus, db_factory) -> None:
             title = announcement.title
             body = announcement.body
             force = announcement.severity == "critical"
+            link = None
+            if announcement.kind == "clarification":
+                # Same mute category (announcement.*), its own chip in the
+                # bell, and a link to the challenge it's about: a programming
+                # problem has its own page, a flag challenge opens from the
+                # board.
+                notification_type = "announcement.clarification"
+                challenge = (
+                    await db.get(Challenge, announcement.challenge_id)
+                    if announcement.challenge_id
+                    else None
+                )
+                if challenge is not None and challenge.flag_type == "programming":
+                    link = f"/challenges/{challenge.id}"
+                elif challenge is not None:
+                    link = "/challenges"
 
         # The shared-room frame goes first and carries the announcement inline,
         # and the row it describes was committed by the route before this event
@@ -178,6 +205,7 @@ def setup(app, event_bus, db_factory) -> None:
                     body=body,
                     competition_id=competition_id,
                     force=force,
+                    link=link,
                 )
                 await db.commit()
             # Targeted announcements ride the per-user notification rooms only;

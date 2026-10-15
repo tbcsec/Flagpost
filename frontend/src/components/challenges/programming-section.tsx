@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { ReferenceCheckPanel } from "@/components/challenges/reference-check";
 import {
   useAddJudgeTestcase,
   useDeleteJudgeTestcase,
@@ -141,6 +142,14 @@ export function ProgrammingSection({
         <p role="alert" className="text-sm text-destructive">
           {(remove.error as Error).message}
         </p>
+      )}
+
+      {problem.data && cases.length > 0 && (
+        <ReferenceCheckPanel
+          competitionId={competitionId}
+          challengeId={challengeId}
+          problem={problem.data}
+        />
       )}
 
       {problem.data && (

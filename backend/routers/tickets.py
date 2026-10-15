@@ -22,8 +22,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth.deps import require_permission
-from db import get_db
+from auth.deps import require_permission, user_has_permission
+from db import ensure_aware_utc, get_db, utcnow
+from models.announcement import Announcement
 from models.challenge import Challenge
 from models.competition import Competition
 from models.team import TeamMembership
@@ -37,16 +38,21 @@ from ratelimit.base import RateLimiter
 # (GHSA-4wrj). A per-user cap generous enough never to bother a real reporter.
 _TICKET_CREATE_LIMIT = 20
 _TICKET_CREATE_WINDOW_S = 600  # 20 new tickets / 10 min / user
+from routers.challenges import load_visible_challenge
 from schemas.ticket import (
     TicketAssign,
+    TicketClarify,
     TicketCreate,
     TicketDetail,
     TicketOut,
     TicketReply,
 )
+from utils.announcements import published_event
+from utils.competition_status import is_playable
 from utils.event_bus import event_bus
 from utils.tickets import (
     can_see_internal as _can_see_internal,
+    is_staff,
     list_visible_tickets,
     ticket_detail as _ticket_detail,
     visible_ticket_row,
@@ -105,6 +111,16 @@ async def create_ticket(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many tickets opened — please wait before opening another",
         )
+    if body.kind == "question":
+        # A question about a challenge (#450): asked from its page, so the
+        # challenge must be one the asker can see — never a way to learn a
+        # draft's title.
+        if body.challenge_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A question has to be about a challenge",
+            )
+        await load_visible_challenge(db, competition_id, body.challenge_id, current_user)
     if body.challenge_id is not None:
         challenge = await db.scalar(
             select(Challenge).where(
@@ -130,6 +146,7 @@ async def create_ticket(
         challenge_id=body.challenge_id,
         opener_user_id=current_user.id,
         team_id=membership.team_id if membership else None,
+        kind=body.kind,
     )
     db.add(ticket)
     await db.flush()
@@ -151,6 +168,7 @@ async def create_ticket(
             "ticket_id": ticket.id,
             "opener_user_id": current_user.id,
             "subject": ticket.subject,
+            "kind": ticket.kind,
         },
     )
     return await _ticket_detail(db, competition_id, ticket.id, current_user)
@@ -182,6 +200,13 @@ async def reply_to_ticket(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can't post internal notes",
         )
+    staff = await is_staff(db, current_user, competition_id)
+    if ticket.kind == "question" and not staff:
+        # One message per question (#450): a follow-up is a new question.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="A question can't be replied to — ask a new question instead",
+        )
 
     db.add(
         TicketMessage(
@@ -192,8 +217,12 @@ async def reply_to_ticket(
             is_internal=body.is_internal,
         )
     )
+    if ticket.kind == "question":
+        # A judge's answer settles a question; an internal note doesn't.
+        if not body.is_internal:
+            ticket.status = "resolved"
     # A reply reopens a resolved ticket — the issue clearly isn't settled.
-    if ticket.status == "resolved":
+    elif ticket.status == "resolved":
         ticket.status = "open"
     await db.commit()
 
@@ -206,6 +235,92 @@ async def reply_to_ticket(
             "is_internal": body.is_internal,
         },
     )
+    return await _ticket_detail(db, competition_id, ticket_id, current_user)
+
+
+@router.post("/{ticket_id}/clarify", response_model=TicketDetail)
+async def clarify_ticket(
+    competition_id: str,
+    ticket_id: str,
+    body: TicketClarify,
+    current_user: User = Depends(require_permission("ticket_assign")),
+    db: AsyncSession = Depends(get_db),
+) -> TicketDetail:
+    """Answer a question about a challenge and send the answer to everyone as a
+    clarification (#450): one transaction adds the answer to the asker's thread
+    (as a reply would) and an announcement about the challenge carrying the
+    question as the judge worded it — never who asked. Clarifications are
+    private by default; this is the deliberate "send to all"."""
+    if not await user_has_permission(db, current_user.id, "announcement_create", competition_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can't send announcements in this competition",
+        )
+    row = await _load_visible_ticket(db, competition_id, ticket_id, current_user)
+    ticket = row[0]
+    challenge = (
+        await db.get(Challenge, ticket.challenge_id) if ticket.challenge_id else None
+    )
+    if challenge is None or challenge.competition_id != competition_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only a question about a challenge can be sent to everyone",
+        )
+    # Everyone can only be told about a challenge everyone can see: published,
+    # released, and the competition running (the status gate hides every
+    # challenge before the start and after the end).
+    competition = await db.get(Competition, competition_id)
+    if (
+        competition is None
+        or not is_playable(competition)
+        or challenge.state != "published"
+        or (challenge.release_at is not None and ensure_aware_utc(challenge.release_at) > utcnow())
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Competitors can't see that challenge right now — answer privately instead",
+        )
+
+    db.add(
+        TicketMessage(
+            competition_id=competition_id,
+            ticket_id=ticket_id,
+            author_user_id=current_user.id,
+            body=body.answer,
+            is_internal=False,
+            sent_to_all=True,
+        )
+    )
+    announcement = Announcement(
+        competition_id=competition_id,
+        kind="clarification",
+        challenge_id=challenge.id,
+        title=challenge.title[:200],
+        question=body.question,
+        body=body.answer,
+        severity="info",
+        audience_type="all",
+        created_by=current_user.id,
+    )
+    db.add(announcement)
+    if ticket.kind == "question":
+        ticket.status = "resolved"  # answered
+    elif ticket.status == "resolved":
+        ticket.status = "open"
+    await db.commit()
+    await db.refresh(announcement)
+
+    # Commit before emit; the reply first, then the broadcast.
+    await event_bus.emit(
+        "ticket.message_posted",
+        {
+            "competition_id": competition_id,
+            "ticket_id": ticket_id,
+            "author_user_id": current_user.id,
+            "is_internal": False,
+        },
+    )
+    await event_bus.emit("announcement.published", published_event(announcement))
     return await _ticket_detail(db, competition_id, ticket_id, current_user)
 
 

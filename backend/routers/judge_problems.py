@@ -22,7 +22,7 @@ from collections.abc import Callable
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import require_permission
@@ -38,9 +38,16 @@ from models.judge import (
     JudgeSettings,
 )
 from models.judge_problem import DEFAULT_FLOAT_TOLERANCE, JudgeProblem
+from models.judging import ACTIVE_JUDGING_STATUSES, CodeSubmission, Judging
 from models.user import User
 from plugins.loader import is_module_enabled
 from routers.challenges import _get_scoped_challenge
+from routers.judge_submissions import (
+    _out as judging_out,
+    available_language,
+    checked_source,
+    queue_code,
+)
 from schemas.judge import (
     JudgeProblemOut,
     JudgeProblemUpdate,
@@ -49,11 +56,14 @@ from schemas.judge import (
     JudgeTestcaseCreate,
     JudgeTestcaseOut,
     JudgeTestcaseUpdate,
+    ReferenceCheckOut,
+    ReferenceCheckRequest,
 )
 from storage import get_storage
 from storage.base import ObjectStorage
 from utils import judge_testdata as td
 from utils.event_bus import event_bus
+from utils.judge_worker import problem_version
 from utils.uploads import read_upload_capped
 
 router = APIRouter(prefix="/api/competitions/{competition_id}", tags=["judge-problems"])
@@ -439,3 +449,124 @@ async def delete_testcase(
 
     await _rewrite(db, storage, challenge, current_user, change)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- reference-solution check (#450) ----------------------------------------------
+#
+# An author runs a solution they know is right through the real judge, against
+# every test, to catch a wrong expected output or a too-tight limit before
+# competitors do. Optional and never a gate on publishing. It's an ordinary
+# judging of kind "reference": the same queue and worker (so it waits its turn
+# behind live submissions and keeps the judge's concurrency limit), never
+# scored, and kept out of competitors' history and the jury console.
+
+
+async def _latest_reference(db: AsyncSession, challenge: Challenge) -> Judging | None:
+    return await db.scalar(
+        select(Judging)
+        .where(
+            Judging.competition_id == challenge.competition_id,
+            Judging.challenge_id == challenge.id,
+            Judging.kind == "reference",
+        )
+        .order_by(Judging.created_at.desc(), Judging.id.desc())
+        .limit(1)
+    )
+
+
+async def _reference_out(
+    db: AsyncSession, storage: ObjectStorage, challenge: Challenge, judging: Judging | None
+) -> ReferenceCheckOut:
+    if judging is None:
+        return ReferenceCheckOut()
+    code = await db.get(CodeSubmission, judging.code_submission_id)
+    author = await db.get(User, judging.user_id)
+    try:
+        source = (await asyncio.to_thread(storage.get, code.source_object_key)).decode(
+            "utf-8", "replace"
+        )
+    except Exception:  # noqa: BLE001 — the results stand without it
+        source = None
+    stale = False
+    if judging.status == "done" and judging.problem_version:
+        problem = await _problem(db, challenge)
+        settings = await db.get(JudgeSettings, JUDGE_SETTINGS_ID)
+        stale = (
+            problem is None
+            or settings is None
+            or problem_version(problem, settings) != judging.problem_version
+        )
+    return ReferenceCheckOut(
+        judging=await judging_out(db, judging, staff=True),
+        run_by_name=author.display_name if author else None,
+        language_key=code.language_key,
+        source=source,
+        stale=stale,
+    )
+
+
+@router.get("/challenges/{challenge_id}/judge/reference", response_model=ReferenceCheckOut)
+async def get_reference_check(
+    competition_id: str,
+    challenge_id: str,
+    current_user: User = Depends(require_permission("challenge_edit")),
+    db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
+) -> ReferenceCheckOut:
+    """The problem's latest reference check, by any of its authors."""
+    challenge = await _programming_challenge(db, competition_id, challenge_id)
+    return await _reference_out(db, storage, challenge, await _latest_reference(db, challenge))
+
+
+@router.post(
+    "/challenges/{challenge_id}/judge/reference",
+    response_model=ReferenceCheckOut,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def run_reference_check(
+    competition_id: str,
+    challenge_id: str,
+    body: ReferenceCheckRequest,
+    current_user: User = Depends(require_permission("challenge_edit")),
+    db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
+) -> ReferenceCheckOut:
+    # Drafts and competitions that haven't started are exactly when authors
+    # check, so no playable/pause gate — but the judge must be on.
+    challenge = await _programming_challenge(db, competition_id, challenge_id)
+    settings = await db.get(JudgeSettings, JUDGE_SETTINGS_ID)
+    if settings is None or not settings.enabled:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "The code judge isn't running right now — try again shortly",
+        )
+    problem = await _problem(db, challenge)
+    if problem is None or not problem.testcases:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Add test cases first")
+    language = await available_language(db, problem, body.language)
+    source = checked_source(body.source)
+    # One check at a time per problem: each runs every test and holds a slot
+    # of the one site-wide judge queue. The problem row's lock (as _rewrite
+    # takes) makes two simultaneous requests see each other's check.
+    await db.execute(
+        select(JudgeProblem.id).where(JudgeProblem.id == problem.id).with_for_update()
+    )
+    active = await db.scalar(
+        select(func.count(Judging.id)).where(
+            Judging.competition_id == competition_id,
+            Judging.challenge_id == challenge.id,
+            Judging.kind == "reference",
+            Judging.status.in_(ACTIVE_JUDGING_STATUSES),
+        )
+    )
+    if active:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "A reference check of this problem is already running"
+        )
+    judging = await queue_code(
+        db, storage,
+        competition_id=competition_id, challenge_id=challenge.id,
+        user_id=current_user.id, team_id=None,
+        kind="reference", language=language, source=source,
+    )
+    return await _reference_out(db, storage, challenge, judging)

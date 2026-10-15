@@ -320,10 +320,10 @@ class CodeSubmitRequest(BaseModel):
     @field_validator("kind")
     @classmethod
     def _kind(cls, v: str) -> str:
-        from models.judging import CODE_SUBMISSION_KINDS
+        from models.judging import COMPETITOR_SUBMISSION_KINDS
 
-        if v not in CODE_SUBMISSION_KINDS:
-            raise ValueError(f"kind must be one of: {', '.join(CODE_SUBMISSION_KINDS)}")
+        if v not in COMPETITOR_SUBMISSION_KINDS:
+            raise ValueError(f"kind must be one of: {', '.join(COMPETITOR_SUBMISSION_KINDS)}")
         return v
 
 
@@ -369,6 +369,27 @@ class JudgingOut(BaseModel):
     # Staff only: who asked for a rejudge/override, and an override's reason.
     requested_by_name: str | None = None
     note: str | None = None
+
+
+class ReferenceCheckRequest(BaseModel):
+    """An author's reference solution, to check the problem with (#450)."""
+
+    language: str = Field(min_length=1, max_length=64)
+    source: str = Field(min_length=1, max_length=200_000)
+
+
+class ReferenceCheckOut(BaseModel):
+    """A problem's latest reference-solution check, for its authors: every
+    test's result (the check doesn't stop at the first failure), and the
+    source, so it can be run again after a fix."""
+
+    judging: JudgingOut | None = None
+    run_by_name: str | None = None
+    language_key: str | None = None
+    source: str | None = None
+    # The test cases or limits changed after it ran: its results may no longer
+    # hold.
+    stale: bool = False
 
 
 class CodeSourceOut(BaseModel):

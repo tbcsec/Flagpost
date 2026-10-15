@@ -125,7 +125,7 @@ async def upload_ticket_attachment(
     db: AsyncSession = Depends(get_db),
     storage: ObjectStorage = Depends(get_storage),
 ) -> TicketAttachment:
-    await _load_visible_ticket(db, competition_id, ticket_id, current_user)
+    ticket, *_ = await _load_visible_ticket(db, competition_id, ticket_id, current_user)
     message = await _message_or_404(db, competition_id, ticket_id, message_id)
     # Only the author of a message may attach to it — otherwise a participant
     # could bolt an image onto a judge's reply (or an internal note).
@@ -133,6 +133,13 @@ async def upload_ticket_attachment(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only attach to your own message",
+        )
+    # A question about a challenge (#450) is text both ways — the asking, the
+    # answer, and a clarification sent to everyone.
+    if ticket.kind == "question":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="A question and its answers can't carry attachments",
         )
 
     # Bounded read (F6): read at most the cap so the peak allocation is the cap,

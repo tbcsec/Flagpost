@@ -68,6 +68,7 @@ def _row_to_out(row, count: int) -> TicketOut:
         team_name=team_name,
         assignee_name=assignee_name,
         message_count=count,
+        kind=ticket.kind,
         created_at=ticket.created_at,
     )
 
@@ -174,6 +175,7 @@ async def ticket_detail(
             author_name=name,
             body=m.body,
             is_internal=m.is_internal,
+            sent_to_all=m.sent_to_all,
             created_at=m.created_at,
             attachments=by_message.get(m.id, []),
         )

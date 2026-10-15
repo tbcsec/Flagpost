@@ -52,6 +52,7 @@ from utils.certificate_release import (
     release_template,
     spec_from_template,
 )
+from utils.announcements import published_event
 from utils.event_bus import event_bus
 from utils.notifications import broadcast_notifications
 
@@ -222,17 +223,7 @@ async def publish_scheduled_announcements(
         for announcement in announcements:
             if now >= ensure_aware_utc(announcement.publish_at):
                 announcement.hidden = False
-                to_emit.append(
-                    {
-                        "competition_id": announcement.competition_id,
-                        "announcement_id": announcement.id,
-                        "title": announcement.title,
-                        "body": announcement.body,
-                        "severity": announcement.severity,
-                        "audience_type": announcement.audience_type,
-                        "created_at": announcement.created_at.isoformat(),
-                    }
-                )
+                to_emit.append(published_event(announcement))
         if to_emit:
             await db.commit()
     # Emit after commit so the unhide is durable before any handler runs.

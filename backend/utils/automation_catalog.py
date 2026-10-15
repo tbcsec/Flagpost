@@ -77,6 +77,13 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "judge.language_created": ["actor_user_id", "language_id", "key"],
     "judge.language_updated": ["actor_user_id", "language_id", "key"],
     "judge.language_deleted": ["actor_user_id", "language_id", "key"],
+    "judging.queued": [
+        "competition_id", "challenge_id", "judging_id", "user_id", "team_id", "kind",
+    ],
+    "judging.completed": [
+        "competition_id", "challenge_id", "judging_id", "user_id", "team_id", "kind",
+        "verdict",
+    ],
     "challenge.hint_requested": [
         "competition_id", "challenge_id", "hint_id", "user_id", "team_id", "cost",
     ],
@@ -272,6 +279,10 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     "judge.language_created": "manage_judge_infra",
     "judge.language_updated": "manage_judge_infra",
     "judge.language_deleted": "manage_judge_infra",
+    # Code judgings — others' attempts and verdicts, so the staff grant that
+    # reads them (as challenge.attempted is gated on staff analytics).
+    "judging.queued": "judging_view",
+    "judging.completed": "judging_view",
     # Member-visible events (published challenges, solves, scoreboard-facing).
     "challenge.published": "challenge_view",
     "challenge.solved": "challenge_view",

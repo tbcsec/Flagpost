@@ -21,6 +21,8 @@ paths clean storage.
 
 from __future__ import annotations
 
+import asyncio
+
 import logging
 from datetime import datetime
 
@@ -30,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db import ensure_aware_utc, utcnow
 from models.attachment import Attachment
 from models.judge_problem import JudgeProblem
+from models.judging import CodeSubmission
 from models.report import CompetitionReport
 from models.competition import Competition
 from models.ticket_attachment import TicketAttachment
@@ -38,6 +41,17 @@ from storage.base import ObjectStorage
 from utils.event_bus import event_bus
 
 logger = logging.getLogger("retention")
+
+
+def delete_objects(storage: ObjectStorage, keys) -> None:
+    """Best-effort removal of stored objects (synchronous — call it through
+    ``asyncio.to_thread``). An unreachable store must not block deleting the
+    database rows; a leaked object is orphaned garbage, not a data leak."""
+    for key in keys:
+        try:
+            storage.delete(key)
+        except Exception:  # noqa: BLE001 — storage cleanup is best-effort
+            logger.warning("could not delete stored object %s", key, exc_info=True)
 
 
 async def delete_competition_tree(
@@ -85,6 +99,14 @@ async def delete_competition_tree(
             ).all()
             if key
         ),
+        # Submitted source code (#448).
+        *(
+            await db.scalars(
+                select(CodeSubmission.source_object_key).where(
+                    CodeSubmission.competition_id == competition_id
+                )
+            )
+        ).all(),
         # Generated post-event report artefacts (#134): the PDF + HTML per report,
         # both nullable, so drop the empties.
         *(
@@ -101,11 +123,10 @@ async def delete_competition_tree(
             if key
         ),
     ]
-    for key in object_keys:
-        try:
-            storage.delete(key)
-        except Exception:  # noqa: BLE001 — storage cleanup is best-effort
-            logger.warning("could not delete stored object %s", key, exc_info=True)
+    # Off the event loop: with code submissions this can be thousands of
+    # synchronous round trips, and in a single-worker deployment the loop is
+    # also the web server and the judge.
+    await asyncio.to_thread(delete_objects, storage, object_keys)
 
     await db.delete(competition)
     await db.commit()

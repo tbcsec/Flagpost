@@ -198,6 +198,7 @@ def test_archive_keeps_job_and_test_data_root_only():
     assert job["run_limits"]["memory_kb"] == 256 * 1024
     assert job["run_limits"]["output_bytes"] == 1024 * 1024
     assert job["scratch"] == ["/work", "/tmp", "/var/tmp", "/dev/shm"]
+    assert [t["show_output"] for t in job["tests"]] == [True, False, False]
     assert job["compile_limits"]["memory_kb"] > 0
 
 
@@ -385,3 +386,62 @@ async def test_validate_reports_a_failed_test_judging():
     legs = await executor.validate()
     assert legs[-1].name == "test_judging" and not legs[-1].ok
     assert "runtime_error" in legs[-1].detail
+
+
+def test_output_only_for_examples_before_any_hidden_test():
+    tests = [
+        JudgeTest(sample=True, input=b"1\n", answer=b"2\n"),
+        JudgeTest(sample=False, input=b"2\n", answer=b"4\n"),
+        JudgeTest(sample=True, input=b"3\n", answer=b"6\n"),
+    ]
+    job = _job(tests=tests)
+    files = _untar(build_archive(job, HARNESS, "n", 123456))
+    doc = json.loads(files["judge/job.json"][1])
+    # The example after a hidden test gets no output: tests share /work, so it
+    # could carry what the submission saw in the hidden one.
+    assert [t["show_output"] for t in doc["tests"]] == [True, False, False]
+    # And output reported against a hidden test is dropped on parsing anyway.
+    line = json.dumps({
+        "nonce": "n", "verdict": "accepted",
+        "tests": [{"verdict": "accepted", "output": "2"}, {"verdict": "accepted", "output": "leak"}],
+    }).encode()
+    result = parse_result(line, "n", job)
+    assert result.tests[0].output == "2" and result.tests[1].output is None
+
+
+async def test_cleanup_never_cuts_a_live_judging_short():
+    """The sweep may share its endpoint with another worker or another
+    install, so it removes only what can't be anyone's live judging."""
+    import time as _time
+
+    now = _time.time()
+    listed = [
+        # Live here: kept whatever its age.
+        {"Id": "live", "State": "running", "Created": now - 999_999, "Labels": {"io.flagpost.judging_id": "j-live"}},
+        # Running, not ours, young: maybe another install's judging — kept.
+        {"Id": "foreign", "State": "running", "Created": now - 600, "Labels": {"io.flagpost.judging_id": "x"}},
+        # Running for hours: wedged — removed.
+        {"Id": "wedged", "State": "running", "Created": now - 7 * 3600, "Labels": {"io.flagpost.judging_id": "y"}},
+        # Exited just now: its executor may be reading the logs — kept.
+        {"Id": "fresh", "State": "exited", "Created": now - 60, "Labels": {"io.flagpost.judging_id": "z"}},
+        # Exited long ago: a crashed worker's leftover — removed.
+        {"Id": "stale", "State": "exited", "Created": now - 3600, "Labels": {"io.flagpost.judging_id": "w"}},
+    ]
+    daemon = FakeDaemon()
+    inner = daemon.handler
+
+    def handler(request):
+        if request.method == "GET" and request.url.path == "/containers/json":
+            daemon.requests.append(request)
+            assert "io.flagpost.judge=true" in request.url.params["filters"]
+            return httpx.Response(200, json=listed)
+        return inner(request)
+
+    executor = DockerJudgeExecutor(
+        JudgeDockerConfig(endpoint_url="http://judge-proxy:2375"),
+        transport=httpx.MockTransport(handler),
+        harness_loader=lambda arch: HARNESS,
+    )
+    assert await executor.cleanup(keep={"j-live"}) == 2
+    removed = sorted(r.url.path for r in daemon.requests if r.method == "DELETE")
+    assert removed == ["/containers/stale", "/containers/wedged"]

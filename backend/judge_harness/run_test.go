@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -16,12 +17,20 @@ import (
 //
 // They're skipped otherwise.
 
+// testUID is the submission user for these tests: a dedicated high uid, as
+// the executor gives each judging, rather than the 65534 default. The kernel
+// counts a uid's processes host-wide, so on a host already running things as
+// "nobody" the default would leave the tests' process cap short (they failed
+// intermittently that way next to a 56-thread Erlang VM running as nobody).
+const testUID = 1_234_567
+
 func TestMain(m *testing.M) {
 	// The runner re-executes the current binary as the launcher; under
 	// `go test` that's this test binary, so route the launcher here too.
 	if len(os.Args) > 1 && os.Args[1] == launchArg {
 		launch(os.Args[2:])
 	}
+	submissionUID = testUID
 	os.Exit(m.Run())
 }
 
@@ -40,7 +49,7 @@ func workDir(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	os.Chown(dir, submissionUID, submissionUID)
+	os.Chown(dir, testUID, testUID)
 	os.Chmod(dir, 0o755)
 	t.Cleanup(func() { os.RemoveAll(dir) })
 	return dir
@@ -65,7 +74,8 @@ func TestRunsAsTheSubmissionUser(t *testing.T) {
 	needRoot(t)
 	out := runCmd(t, sh("id -u; id -G; grep CapEff /proc/self/status"), nil, runLimits())
 	got := string(out.output)
-	if !strings.HasPrefix(got, "65534\n65534\n") || !strings.Contains(got, "0000000000000000") {
+	want := strconv.Itoa(testUID) + "\n" + strconv.Itoa(testUID) + "\n"
+	if !strings.HasPrefix(got, want) || !strings.Contains(got, "0000000000000000") {
 		t.Fatalf("not dropped: %q", got)
 	}
 }
@@ -84,7 +94,7 @@ func TestJudgeRunsAsTheJobsUID(t *testing.T) {
 		"run":["id","-u"],"compare":"token",
 		"run_limits":{"cpu_ms":1000,"wall_ms":3000,"output_bytes":1024},
 		"tests":[{"name":"t","input":"`+write("in", "")+`","answer":"`+write("ans", "123456\n")+`"}]}`)
-	defer func() { submissionUID = 65534 }()
+	defer func() { submissionUID = testUID }()
 	res := judgeFile(jobPath)
 	if res.Verdict != VerdictAccepted || res.Nonce != "n1" {
 		t.Fatalf("got %+v", res)

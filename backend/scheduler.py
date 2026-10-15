@@ -34,7 +34,7 @@ import main  # noqa: F401 — import side effects: audit + eviction + plugin wir
 from config import settings
 from db import SessionLocal
 from realtime import start_realtime, stop_realtime
-from utils import automation_scheduler
+from utils import automation_scheduler, judge_worker
 
 logger = logging.getLogger("scheduler")
 
@@ -49,10 +49,14 @@ async def run() -> None:
     automation_scheduler.start(
         SessionLocal, settings.automation_scheduler_interval_seconds
     )
+    # The code judge's worker rides along (#448): one judging process, the
+    # same singleton guarantee as the scheduler.
+    judge_worker.start(SessionLocal)
     stop = asyncio.Event()
     try:
         await stop.wait()  # run until the process is signalled
     finally:
+        judge_worker.stop()
         automation_scheduler.stop()
         await stop_realtime()
 

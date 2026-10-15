@@ -174,6 +174,11 @@ PERMISSIONS: tuple[Permission, ...] = (
     # it points the platform at a container runtime and decides what executes
     # there. Administrator-only among the built-in roles.
     Permission("manage_judge_infra", "Site Settings", Scope.GLOBAL),
+    # Read every competitor's code submissions and judgings in a competition —
+    # source, per-test results, the judge's internal errors (#448/#450). Staff
+    # only: a competitor always reads their own (and their team's) through
+    # ownership, not this grant.
+    Permission("judging_view", "Code Judge", Scope.COMPETITION),
     # Marketplace / content packs (#387, ADR-0040). Install a content pack —
     # packaged challenges (into a competition) or brand themes (site-wide) —
     # through the existing importers. Global + Administrator-only among the
@@ -261,6 +266,8 @@ JUDGE_PERMISSIONS: list[str] = [
     "instance_manage",
     # A Judge may also launch (e.g. to test a challenge before publish).
     "instance_launch",
+    # Code judge (#448): every subject's code submissions and judgings.
+    "judging_view",
 ]
 
 # Participant: competitor-facing only — view challenges, view the scoreboard,

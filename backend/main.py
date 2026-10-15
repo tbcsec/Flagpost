@@ -21,7 +21,7 @@ from realtime import start_realtime, stop_realtime
 from realtime.eviction import register_ws_eviction
 from routers import auth as auth_router
 from routers import modules as modules_router
-from utils import automation_scheduler
+from utils import automation_scheduler, judge_worker
 from utils.audit_log import register_audit_log
 from utils.body_limit import BodySizeLimitMiddleware
 from utils.event_bus import event_bus
@@ -98,6 +98,10 @@ async def lifespan(app: FastAPI):
         automation_scheduler.start(
             SessionLocal, settings.automation_scheduler_interval_seconds
         )
+        # The code judge's worker (#448, ADR-0042 §2) lives wherever the
+        # scheduler does, so exactly one process judges. Idle until the judge
+        # is configured and something is queued.
+        judge_worker.start(SessionLocal)
     elif not settings.scheduler_enabled:
         logger.warning(
             "SCHEDULER_ENABLED=false — this process runs no background "
@@ -112,6 +116,7 @@ async def lifespan(app: FastAPI):
     await start_realtime()
     yield
     await stop_realtime()
+    judge_worker.stop()
     automation_scheduler.stop()
 
 

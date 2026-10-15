@@ -41,6 +41,7 @@ from models.hint import Hint, HintReveal
 from models.invite_link import InviteLink
 from models.judge import JudgeLanguage, JudgeSettings
 from models.judge_problem import JudgeProblem
+from models.judging import CodeSubmission, Judging, JudgingRun
 from models.marketplace import MarketplaceSettings
 from models.mc_guess_reset import MCGuessReset
 from models.notification import Notification
@@ -82,12 +83,15 @@ __all__ = [
     "CertificateFont",
     "CertificateTemplate",
     "Challenge",
+    "CodeSubmission",
     "ChallengeDeployment",
     "ChallengeInstance",
     "ChallengeRating",
     "InstanceSettings",
     "JudgeLanguage",
     "JudgeProblem",
+    "Judging",
+    "JudgingRun",
     "JudgeSettings",
     "CollabDocument",
     "Competition",

@@ -8,6 +8,7 @@ reference only the placeholders in ``models.judge.COMMAND_PLACEHOLDERS``.
 from __future__ import annotations
 
 import re
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -303,3 +304,66 @@ class JudgeStatusOut(BaseModel):
     judge_enabled: bool
     ready: bool
     languages: list[dict]
+
+
+# --- code submissions and judgings (#448) ------------------------------------------
+
+
+class CodeSubmitRequest(BaseModel):
+    language: str = Field(min_length=1, max_length=64)
+    # Characters here; the byte cap (MAX_SOURCE_BYTES) is checked on the UTF-8.
+    source: str = Field(min_length=1, max_length=200_000)
+    # "submit" is judged against every test and scored; "run" against the
+    # examples only, never scored (#449's Run button).
+    kind: str = "submit"
+
+    @field_validator("kind")
+    @classmethod
+    def _kind(cls, v: str) -> str:
+        from models.judging import CODE_SUBMISSION_KINDS
+
+        if v not in CODE_SUBMISSION_KINDS:
+            raise ValueError(f"kind must be one of: {', '.join(CODE_SUBMISSION_KINDS)}")
+        return v
+
+
+class JudgingRunOut(BaseModel):
+    """One test's result. For a hidden test a competitor sees only its position
+    and verdict; time, memory and output are examples-only (output always is —
+    the harness never returns it for a hidden test)."""
+
+    index: int
+    sample: bool
+    verdict: str
+    time_ms: int | None = None
+    memory_kb: int | None = None
+    output: str | None = None
+
+
+class JudgingOut(BaseModel):
+    id: str
+    challenge_id: str
+    user_id: str
+    team_id: str | None
+    kind: str
+    language_key: str
+    language_name: str
+    status: str
+    verdict: str | None
+    # Judgings ahead of this one plus one, while queued; otherwise null.
+    queue_position: int | None = None
+    created_at: datetime
+    finished_at: datetime | None
+    compile_output: str | None
+    max_time_ms: int | None
+    max_memory_kb: int | None
+    tests_passed: int | None
+    tests_total: int | None
+    tests: list[JudgingRunOut] = []
+    # Why no verdict was reached — staff (judging_view) only.
+    error: str | None = None
+
+
+class CodeSourceOut(BaseModel):
+    language_key: str
+    source: str

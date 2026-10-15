@@ -35,6 +35,11 @@ type Test struct {
 	Name   string `json:"name"`
 	Input  string `json:"input"`
 	Answer string `json:"answer"`
+	// ShowOutput returns the submission's output for this test (capped), so a
+	// competitor can compare it with an example's expected output. The executor
+	// sets it only on example tests that run before any hidden test, so the
+	// output can never reflect hidden input.
+	ShowOutput bool `json:"show_output"`
 }
 
 // Job is the root-only job file the executor uploads. Placeholders in the
@@ -61,17 +66,18 @@ type Job struct {
 // minSubmissionUID keeps the submission off root and the system accounts.
 const minSubmissionUID = 1000
 
-// TestResult is reported for every test that ran. It deliberately carries no
-// output: a submission's stdout/stderr on a hidden test could echo the hidden
-// input back to the competitor.
+// TestResult is reported for every test that ran. It carries output only for
+// a test marked ShowOutput: a submission's output on a hidden test could echo
+// the hidden input back to the competitor, and its stderr is never kept.
 type TestResult struct {
-	Name     string `json:"name"`
-	Verdict  string `json:"verdict"`
-	TimeMs   int64  `json:"time_ms"`
-	WallMs   int64  `json:"wall_ms"`
-	MemoryKB int64  `json:"memory_kb"`
-	ExitCode *int   `json:"exit_code"`
-	Signal   *int   `json:"signal"`
+	Name     string  `json:"name"`
+	Verdict  string  `json:"verdict"`
+	TimeMs   int64   `json:"time_ms"`
+	WallMs   int64   `json:"wall_ms"`
+	MemoryKB int64   `json:"memory_kb"`
+	ExitCode *int    `json:"exit_code"`
+	Signal   *int    `json:"signal"`
+	Output   *string `json:"output,omitempty"`
 }
 
 // Result is the single line the harness prints. The nonce comes from the

@@ -17,6 +17,8 @@ side is enforced in ``auth/deps.get_current_user``).
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -27,6 +29,7 @@ from auth.identity import display_name_taken, email_taken
 from auth.security import ahash_many, hash_password
 from db import get_db, utcnow
 from models.competition import Competition
+from models.judging import CodeSubmission
 from models.role import Role, RoleAssignment
 from models.user import RefreshSession, User
 from schemas.user import (
@@ -37,7 +40,10 @@ from schemas.user import (
     UserUpdate,
 )
 from utils.api_tokens import emit_revoked, revoke_user_api_tokens
+from storage import get_storage
+from storage.base import ObjectStorage
 from utils.event_bus import event_bus
+from utils.retention import delete_objects
 from utils.uploads import read_upload_capped
 from utils.user_import import (
     RowPlan,
@@ -420,6 +426,7 @@ async def delete_user(
     user_id: str,
     current_user: User = Depends(require_permission("manage_users")),
     db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
 ) -> None:
     user = await _get_user_or_404(db, user_id)
     if user.id == current_user.id:
@@ -427,8 +434,17 @@ async def delete_user(
             status_code=status.HTTP_409_CONFLICT, detail="You can't delete yourself"
         )
     await _guard_not_last_admin(db, user, "delete")
+    # Their code submissions cascade away with them; the stored source would
+    # not (#448), so collect it first and remove it after the commit.
+    source_keys = (
+        await db.scalars(
+            select(CodeSubmission.source_object_key).where(CodeSubmission.user_id == user.id)
+        )
+    ).all()
     await db.delete(user)
     await db.commit()
+    if source_keys:
+        await asyncio.to_thread(delete_objects, storage, source_keys)
     await event_bus.emit(
         "user.deleted", {"user_id": user_id, "actor_user_id": current_user.id}
     )

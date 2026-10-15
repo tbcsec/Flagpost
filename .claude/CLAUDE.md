@@ -93,12 +93,12 @@ Subsystem by subsystem, with the non-obvious bits called out:
   reset, email verification (admin-toggleable), self-service email change, a
   registration domain allowlist, and personal **API tokens** (`flp_`-prefixed,
   minting is self-only by route shape).
-- **RBAC** — permissions as data (ADR-0004), 52 of them in
+- **RBAC** — permissions as data (ADR-0004), 53 of them in
   `auth/permissions.py`, each with a category and a `global`/`competition`
   scope. System roles **re-sync from the catalog on every startup**
   (`seed_system_roles`), so a new permission reaches an already-migrated
   Administrator without a migration.
-- **Events** — `utils/event_bus`, 107 event types in `utils/event_catalog.py`.
+- **Events** — `utils/event_bus`, 109 event types in `utils/event_catalog.py`.
   `emit()` awaits foreground handlers (audit + WS broadcasts) and schedules
   `background=True` ones fire-and-forget (ADR-0012) — that's the lane
   webhooks/email use.

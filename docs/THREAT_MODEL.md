@@ -224,7 +224,12 @@ every 10 ms, with the
 container's cap behind it and the submission's OOM score raised so the kernel
 picks it, never the harness. Output is read through a capped pipe; a test's
 stderr is discarded and never returned (it could echo hidden input). Files are
-capped by `RLIMIT_FSIZE`. The compile step has its own CPU, wall and memory
+capped by `RLIMIT_FSIZE`. The harness returns a program's output only for
+example tests that run before any hidden test — tests share `/work`, so a later
+test's output could otherwise carry what the program saw in a hidden one — and
+the read API shows output, time and memory for examples only — including in a
+judging's maxima, which over every test would leak what the hidden tests cost
+(and through that, what the program saw). The compile step has its own CPU, wall and memory
 budget, so a source crafted to make the compiler balloon gets a compile error.
 A fork bomb hits its own `RLIMIT_NPROC` long before
 the container's pid limit, so the harness can still start the threads it needs
@@ -264,8 +269,15 @@ fork bomb, and orphans holding stdout.
   accounting removes most contention, but a submission within a few percent of
   its limit can flip under heavy host load. *Documented for operators.*
 
+**Submitted code** is stored in object storage under the competition's prefix,
+readable by the submitter (and their team) and by staff with `judging_view`,
+and deleted with its challenge, its competition or its author. An
+examples-only run's source is deleted as soon as it's judged.
+
 ## Backup / export boundary
 
+Code submissions and judgings are runtime state and never exported (an
+accepted judging's score rides the backup in its ordinary `Submission` row).
 Problems and their test data are portable authoring content and ride the backup
 (validated on import; a row is only ever pointed at its own re-stored zip). The
 judge's site configuration — the endpoint and the language registry (an image

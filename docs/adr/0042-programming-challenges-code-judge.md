@@ -320,3 +320,32 @@ The cost is that every test-case edit rewrites the whole zip. That is bounded
 lock so concurrent editors can't lose each other's changes, and the new zip is
 stored under a fresh key and the old one deleted only after commit, so a
 failure part-way never leaves the row pointing at a partial object.
+
+## Amendment: the queue and scoring as built (2026-10-15, #448)
+
+Three refinements of the issue text, made while building the pipeline.
+
+**States are `queued → running → done | failed`.** The issue listed
+`claimed`, `compiling` and `running` separately. The claim itself moves a
+judging to `running`, and the container is opaque while it runs, so compile
+and run aren't separately observable from outside it; extra states would be
+names for moments nobody can see. `done` means a verdict about the
+submission was reached; `failed` means none could be, after retries, and is
+reported as `internal_error`.
+
+**Every scored verdict is a `Submission` row, not only an accepted one.** §4
+specified an awarded row on Accepted. A wrong answer is recorded too, as an
+unawarded row (`is_correct = false`), through the same shared path. That keeps
+the flag path's invariant — every graded attempt is a row — so attempt counts,
+challenge health and analytics treat code and flags alike, and #450's rejudge
+can reconcile a row in either direction. `internal_error` is never recorded:
+it isn't a verdict about the submission.
+
+**Two kinds of submission.** `submit` is judged against every test and scored;
+`run` against the examples only and never recorded or scored — #449's "try it
+on the samples" button, which needs the program's actual output on an
+example. The harness returns output only for examples that run before any
+hidden test (tests share the scratch directory, so a later test's output could
+carry what the program saw in a hidden one), and the read API shows it for
+examples only.
+

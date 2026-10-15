@@ -75,6 +75,23 @@ func TestJudgeAcceptsAndStopsAtFirstFailure(t *testing.T) {
 	}
 }
 
+func TestOutputIsReturnedOnlyWhereAsked(t *testing.T) {
+	tests := writeTests(t, "1\n", "2\n")
+	tests[0].ShowOutput = true
+	job := baseJob(tests)
+	r := &fakeRunner{outcomes: []*outcome{ok("1\n"), ok("2\n")}}
+	res := judge(job, r)
+	if res.Tests[0].Output == nil || *res.Tests[0].Output != "1\n" || res.Tests[1].Output != nil {
+		t.Fatalf("got %+v", res.Tests)
+	}
+	// Shown even when the example fails — that's when it's most useful.
+	r = &fakeRunner{outcomes: []*outcome{ok("7\n")}}
+	res = judge(job, r)
+	if res.Verdict != VerdictWrongAnswer || *res.Tests[0].Output != "7\n" {
+		t.Fatalf("got %+v", res)
+	}
+}
+
 func TestJudgeCompileError(t *testing.T) {
 	job := baseJob(writeTests(t, "1\n"))
 	job.Compile = []string{"cc"}

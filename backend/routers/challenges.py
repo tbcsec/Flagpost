@@ -20,6 +20,8 @@ least one test case to be published.
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +35,7 @@ from models.challenge_instancing import ChallengeDeployment
 from models.competition import Competition
 from models.feedback import ChallengeRating
 from models.judge_problem import JudgeProblem
+from models.judging import CodeSubmission
 from models.mc_guess_reset import MCGuessReset
 from models.submission import Submission
 from models.team import Team
@@ -904,8 +907,18 @@ async def delete_challenge(
             JudgeProblem.competition_id == competition_id,
         )
     )
-    for key in [*keys, *([judge_key] if judge_key else [])]:
-        storage.delete(key)
+    # ...and every submission's source code (#448).
+    source_keys = (
+        await db.scalars(
+            select(CodeSubmission.source_object_key).where(
+                CodeSubmission.challenge_id == challenge_id,
+                CodeSubmission.competition_id == competition_id,
+            )
+        )
+    ).all()
+    all_keys = [*keys, *([judge_key] if judge_key else []), *source_keys]
+    # Off the event loop: a busy programming challenge has thousands of sources.
+    await asyncio.to_thread(lambda: [storage.delete(key) for key in all_keys])
 
     await db.delete(challenge)
     await db.commit()

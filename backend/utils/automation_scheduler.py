@@ -565,6 +565,7 @@ async def _loop(db_factory, interval_seconds: float) -> None:
     # which the pure rule-evaluation imports above shouldn't drag along.
     from utils import metrics
     from utils.instance_reaper import reap_instances
+    from utils.judge_worker import reap_judgings
     from utils.retention import purge_expired_competitions
     from utils.update_check import run_check
 
@@ -592,6 +593,10 @@ async def _loop(db_factory, interval_seconds: float) -> None:
             # provisions, and orphan containers. Rides the same tick and is a
             # cheap no-op when no instances exist / instancing isn't configured.
             await reap_instances(db_factory)
+            # Stuck code judgings (#448): the worker died mid-judging, or the
+            # runtime hung. Reclaimed for a retry past their deadline; a cheap
+            # no-op when nothing is running.
+            await reap_judgings(db_factory)
             # Update check + adoption count (#111). Self-rate-limiting to once
             # a day off its own persisted timestamps, so calling it every tick
             # costs one row read that almost always returns immediately.

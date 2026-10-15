@@ -619,3 +619,33 @@ async def test_backup_import_rejects_a_malformed_page(client):
         async with SessionLocal() as db:
             with pytest.raises(backup.ImportError_):
                 await backup.import_data(db, storage, _doc(bad), ["site_settings"])
+
+
+async def test_a_clarification_is_restored_against_its_challenge(client):
+    """#450: a clarification's challenge_id is remapped to the restored
+    challenge, like a ticket's."""
+    from models.announcement import Announcement
+
+    comp_id, chal_id, _ = await _seed()
+    async with SessionLocal() as db:
+        db.add(Announcement(competition_id=comp_id, kind="clarification", challenge_id=chal_id,
+                            title="C1", question="Negative numbers?", body="Yes."))
+        db.add(Announcement(competition_id=comp_id, title="Hello", body="Welcome"))
+        await db.commit()
+    storage = InMemoryStorage()
+    async with SessionLocal() as db:
+        doc = await backup.export_data(db, storage, ["users", "competitions"])
+    async with SessionLocal() as db:
+        await db.delete(await db.get(Competition, comp_id))
+        await db.commit()
+    async with SessionLocal() as db:
+        await backup.import_data(db, storage, doc, ["users", "competitions"])
+
+    async with SessionLocal() as db:
+        comp = await db.scalar(select(Competition).where(Competition.name == "Export Test"))
+        chal = await db.scalar(select(Challenge).where(Challenge.competition_id == comp.id))
+        rows = {a.title: a for a in (await db.scalars(
+            select(Announcement).where(Announcement.competition_id == comp.id))).all()}
+    assert rows["C1"].kind == "clarification" and rows["C1"].challenge_id == chal.id
+    assert rows["C1"].question == "Negative numbers?"
+    assert rows["Hello"].kind == "announcement" and rows["Hello"].challenge_id is None

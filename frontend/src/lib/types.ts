@@ -344,13 +344,20 @@ export interface TicketMessage {
   author_name: string;
   body: string;
   is_internal: boolean;
+  /** A staff answer also sent to everyone as a clarification (#450). */
+  sent_to_all: boolean;
   created_at: string;
   attachments: TicketAttachment[];
 }
 
+/** "question": a competitor's question about a challenge, asked from its page
+ *  (#450) — read-only for the asker once sent, resolved once answered. */
+export type TicketKind = "support" | "question";
+
 export interface Ticket {
   id: string;
   subject: string;
+  kind: TicketKind;
   status: TicketStatus;
   challenge_id: string | null;
   challenge_title: string | null;
@@ -1189,6 +1196,20 @@ export interface Announcement {
    *  false; the staff scheduled list carries hidden rows with a `publish_at`. */
   hidden: boolean;
   publish_at: string | null;
+  /** A clarification (#450) is about one challenge and answers `question`
+   *  (the body is the answer). It never says who asked. */
+  kind: "announcement" | "clarification";
+  challenge_id: string | null;
+  question: string | null;
+}
+
+/** A clarification as listed on its challenge's page (#450). */
+export interface Clarification {
+  id: string;
+  question: string | null;
+  /** The judges' answer. */
+  body: string;
+  created_at: string;
 }
 
 /** What the composer sends. `audience_ids` is ignored for "all". A future
@@ -2243,7 +2264,9 @@ export interface JudgeTestcaseInput {
 
 // --- solving programming challenges (#448/#449) ----------------------------------------
 
-export type CodeSubmissionKind = "submit" | "run";
+/** `reference` is an author's check of the problem (#450), never a
+ *  competitor's — see ReferenceCheck. */
+export type CodeSubmissionKind = "submit" | "run" | "reference";
 export type JudgingStatus = "queued" | "running" | "done" | "failed";
 export type JudgingVerdict =
   | "accepted"
@@ -2297,7 +2320,18 @@ export interface Judging {
 export interface CodeSubmitInput {
   language: string;
   source: string;
-  kind: CodeSubmissionKind;
+  kind: "submit" | "run";
+}
+
+/** A problem's latest reference-solution check (#450): every test's result,
+ *  plus the source so it can be run again. `stale` — the test cases or limits
+ *  changed after it ran. */
+export interface ReferenceCheck {
+  judging: Judging | null;
+  run_by_name: string | null;
+  language_key: string | null;
+  source: string | null;
+  stale: boolean;
 }
 
 /** What a competitor needs beside the statement — never the hidden tests. */

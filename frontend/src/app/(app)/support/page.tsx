@@ -133,7 +133,14 @@ export default function SupportPage() {
                   className="flex w-full items-center justify-between gap-3 border-b border-border py-3 text-left last:border-0 hover:bg-accent/40"
                 >
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">{t.subject}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-sm font-medium">{t.subject}</span>
+                      {t.kind === "question" && (
+                        <span className="shrink-0 rounded-full bg-primary/10 px-2 py-px text-[11px] font-medium text-primary">
+                          {tr("questionTag")}
+                        </span>
+                      )}
+                    </div>
                     <div className="truncate text-xs text-muted-foreground">
                       {isStaff ? (t.team_name ?? t.opener_name) : tr("you")}
                       {t.challenge_title && ` · ${t.challenge_title}`}
@@ -141,7 +148,9 @@ export default function SupportPage() {
                       {tr("messageCount", { count: t.message_count })}
                     </div>
                   </div>
-                  <Badge variant={t.status === "open" ? "destructive" : "muted"}>{tr(`status.${t.status}`)}</Badge>
+                  <Badge variant={t.status === "open" ? "destructive" : "muted"}>
+                    {t.kind === "question" ? tr(`questionStatus.${t.status}`) : tr(`status.${t.status}`)}
+                  </Badge>
                 </button>
               </li>
             ))}

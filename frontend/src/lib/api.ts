@@ -8,12 +8,14 @@
 
 import { useAuthStore } from "@/stores/auth";
 import type {
+  TicketKind,
   AuthProvider,
   AuthProviderPublic,
   DemoCredential,
   RichTextDoc,
   ProviderPreset,
   Announcement,
+  Clarification,
   AnnouncementCreate,
   AnnouncementUpdate,
   AppNotification,
@@ -38,6 +40,7 @@ import type {
   JudgeLanguageUpdate,
   JudgeProblem,
   JudgeProblemUpdate,
+  ReferenceCheck,
   JudgeSettings,
   JudgeSettingsUpdate,
   JudgeSetupResult,
@@ -977,7 +980,7 @@ export const ticketsApi = {
     apiFetch<TicketDetail>(`${ticketsApi.base(competitionId)}/${ticketId}`),
   create: (
     competitionId: string,
-    input: { subject: string; body: string; challenge_id?: string | null },
+    input: { subject: string; body: string; challenge_id?: string | null; kind?: TicketKind },
   ) =>
     apiFetch<TicketDetail>(ticketsApi.base(competitionId), {
       method: "POST",
@@ -1000,6 +1003,16 @@ export const ticketsApi = {
   resolve: (competitionId: string, ticketId: string) =>
     apiFetch<TicketDetail>(`${ticketsApi.base(competitionId)}/${ticketId}/resolve`, {
       method: "POST",
+    }),
+  // Staff: answer, and send the answer to everyone as a clarification (#450).
+  clarify: (
+    competitionId: string,
+    ticketId: string,
+    input: { question: string; answer: string },
+  ) =>
+    apiFetch<TicketDetail>(`${ticketsApi.base(competitionId)}/${ticketId}/clarify`, {
+      method: "POST",
+      body: JSON.stringify(input),
     }),
 };
 
@@ -1258,6 +1271,11 @@ export const announcementsApi = {
     apiFetch<void>(`/api/competitions/${competitionId}/announcements/${id}`, {
       method: "DELETE",
     }),
+  // The judges' clarifications about one challenge (#450).
+  clarifications: (competitionId: string, challengeId: string) =>
+    apiFetch<Clarification[]>(
+      `/api/competitions/${competitionId}/challenges/${challengeId}/clarifications`,
+    ),
 };
 
 export const hintsApi = {
@@ -1496,6 +1514,17 @@ export const judgeProblemApi = {
       `${judgeProblemApi.base(competitionId, challengeId)}/testcases/${encodeURIComponent(testcaseId)}`,
       { method: "DELETE" },
     ),
+  reference: (competitionId: string, challengeId: string) =>
+    apiFetch<ReferenceCheck>(`${judgeProblemApi.base(competitionId, challengeId)}/reference`),
+  runReference: (
+    competitionId: string,
+    challengeId: string,
+    input: { language: string; source: string },
+  ) =>
+    apiFetch<ReferenceCheck>(`${judgeProblemApi.base(competitionId, challengeId)}/reference`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
 };
 
 // Solving a programming challenge (#448/#449): the problem as a competitor

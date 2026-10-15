@@ -256,26 +256,8 @@ async def submit_code(
             status.HTTP_400_BAD_REQUEST, "This problem has no examples to run against"
         )
 
-    language = await db.scalar(
-        select(JudgeLanguage).where(
-            JudgeLanguage.key == body.language, JudgeLanguage.enabled.is_(True)
-        )
-    )
-    if language is None or (
-        problem.allowed_languages is not None and body.language not in problem.allowed_languages
-    ):
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, "That language isn't available for this problem"
-        )
-
-    source = body.source.encode("utf-8")
-    if not source.strip():
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "The source is empty")
-    if len(source) > MAX_SOURCE_BYTES:
-        raise HTTPException(
-            status.HTTP_413_CONTENT_TOO_LARGE,
-            f"Source code is limited to {MAX_SOURCE_BYTES // 1024} KB",
-        )
+    language = await available_language(db, problem, body.language)
+    source = checked_source(body.source)
 
     # The same per-subject throttle as flags, so alternating between the two
     # doesn't double the allowance.
@@ -300,8 +282,10 @@ async def submit_code(
             Judging.competition_id == competition_id,
             Judging.status.in_(ACTIVE_JUDGING_STATUSES),
             # Their own submissions only: rejudges staff queue (#450) mustn't
-            # lock a competitor out of submitting.
+            # lock a competitor out of submitting, nor an author's reference
+            # checks.
             Judging.origin == "submission",
+            Judging.kind != "reference",
             subject_filter,
         )
     )
@@ -312,15 +296,65 @@ async def submit_code(
             "wait for a verdict first",
         )
 
+    judging = await queue_code(
+        db, storage,
+        competition_id=competition_id, challenge_id=challenge_id,
+        user_id=current_user.id, team_id=subject.team_id,
+        kind=body.kind, language=language, source=source,
+    )
+    return await _out(db, judging, staff=False)
+
+
+async def available_language(db: AsyncSession, problem: JudgeProblem, key: str) -> JudgeLanguage:
+    """The enabled language ``key``, if this problem allows it — else 400."""
+    language = await db.scalar(
+        select(JudgeLanguage).where(JudgeLanguage.key == key, JudgeLanguage.enabled.is_(True))
+    )
+    if language is None or (
+        problem.allowed_languages is not None and key not in problem.allowed_languages
+    ):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "That language isn't available for this problem"
+        )
+    return language
+
+
+def checked_source(text: str) -> bytes:
+    source = text.encode("utf-8")
+    if not source.strip():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "The source is empty")
+    if len(source) > MAX_SOURCE_BYTES:
+        raise HTTPException(
+            status.HTTP_413_CONTENT_TOO_LARGE,
+            f"Source code is limited to {MAX_SOURCE_BYTES // 1024} KB",
+        )
+    return source
+
+
+async def queue_code(
+    db: AsyncSession,
+    storage: ObjectStorage,
+    *,
+    competition_id: str,
+    challenge_id: str,
+    user_id: str,
+    team_id: str | None,
+    kind: str,
+    language: JudgeLanguage,
+    source: bytes,
+) -> Judging:
+    """Store the source, add the code submission and its first judging, commit,
+    then announce it and wake the worker — for a competitor's submission or
+    run and an author's reference check alike."""
     key = _source_key(competition_id, challenge_id)
     await asyncio.to_thread(storage.put, key, source, "text/plain; charset=utf-8")
     try:
         code = CodeSubmission(
             competition_id=competition_id,
             challenge_id=challenge_id,
-            user_id=current_user.id,
-            team_id=subject.team_id,
-            kind=body.kind,
+            user_id=user_id,
+            team_id=team_id,
+            kind=kind,
             language_key=language.key,
             language_name=language.name,
             source_object_key=key,
@@ -332,9 +366,9 @@ async def submit_code(
             competition_id=competition_id,
             code_submission_id=code.id,
             challenge_id=challenge_id,
-            user_id=current_user.id,
-            team_id=subject.team_id,
-            kind=body.kind,
+            user_id=user_id,
+            team_id=team_id,
+            kind=kind,
             status="queued",
         )
         db.add(judging)
@@ -352,17 +386,17 @@ async def submit_code(
             "competition_id": competition_id,
             "challenge_id": challenge_id,
             "judging_id": judging.id,
-            "user_id": current_user.id,
-            "team_id": subject.team_id,
-            "kind": body.kind,
+            "user_id": user_id,
+            "team_id": team_id,
+            "kind": kind,
         },
     )
     await push_judging(
         competition_id=competition_id, challenge_id=challenge_id,
-        judging_id=judging.id, user_id=current_user.id, status="queued",
+        judging_id=judging.id, user_id=user_id, status="queued",
     )
     judge_worker.wake()
-    return await _out(db, judging, staff=False)
+    return judging
 
 
 # --- the problem, as a competitor sees it -------------------------------------------------
@@ -498,6 +532,8 @@ async def list_my_judgings(
                 Judging.competition_id == competition_id,
                 Judging.challenge_id == challenge_id,
                 owner,
+                # An author's reference checks live on the authoring page.
+                Judging.kind != "reference",
             )
             .order_by(Judging.created_at.desc(), Judging.id.desc())
             .limit(HISTORY_LIMIT)

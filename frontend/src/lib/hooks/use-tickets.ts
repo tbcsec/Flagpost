@@ -7,7 +7,8 @@ import { useEffect, useState } from "react";
 
 import { ticketAttachmentsApi, ticketsApi } from "@/lib/api";
 import { playTicketCue } from "@/lib/audio-cue";
-import type { TicketStatus } from "@/lib/types";
+import type {
+  TicketKind, TicketStatus } from "@/lib/types";
 import { openRoomSocket } from "@/lib/ws";
 import { useAuthStore } from "@/stores/auth";
 
@@ -19,12 +20,16 @@ const ticketKeys = {
     ["tickets", competitionId, "detail", ticketId] as const,
 };
 
-export function useTickets(competitionId: string, status?: TicketStatus) {
+export function useTickets(
+  competitionId: string,
+  status?: TicketStatus,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
   const isAuthenticated = useAuthStore((s) => s.status === "authenticated");
   return useQuery({
     queryKey: ticketKeys.list(competitionId, status),
     queryFn: () => ticketsApi.list(competitionId, status),
-    enabled: isAuthenticated && Boolean(competitionId),
+    enabled: enabled && isAuthenticated && Boolean(competitionId),
   });
 }
 
@@ -89,7 +94,7 @@ function useInvalidate(competitionId: string) {
 export function useCreateTicket(competitionId: string) {
   const invalidate = useInvalidate(competitionId);
   return useMutation({
-    mutationFn: (input: { subject: string; body: string; challenge_id?: string | null }) =>
+    mutationFn: (input: { subject: string; body: string; challenge_id?: string | null; kind?: TicketKind }) =>
       ticketsApi.create(competitionId, input),
     onSuccess: invalidate,
   });
@@ -100,6 +105,17 @@ export function useReplyTicket(competitionId: string, ticketId: string) {
   return useMutation({
     mutationFn: (input: { body: string; is_internal?: boolean }) =>
       ticketsApi.reply(competitionId, ticketId, input),
+    onSuccess: invalidate,
+  });
+}
+
+/** Staff: answer a question about a challenge and send the answer to everyone
+ *  as a clarification (#450). */
+export function useClarifyTicket(competitionId: string, ticketId: string) {
+  const invalidate = useInvalidate(competitionId);
+  return useMutation({
+    mutationFn: (input: { question: string; answer: string }) =>
+      ticketsApi.clarify(competitionId, ticketId, input),
     onSuccess: invalidate,
   });
 }

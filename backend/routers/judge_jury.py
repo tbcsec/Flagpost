@@ -19,7 +19,7 @@ override stands until someone asks for a fresh rejudge.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -102,7 +102,12 @@ async def list_judgings(
 ) -> StaffJudgingPage:
     await _competition_with_judge(db, competition_id)
     requester = aliased(User)
-    filters = [Judging.competition_id == competition_id]
+    filters = [
+        Judging.competition_id == competition_id,
+        # Authors' reference checks are problem authoring, not contest
+        # submissions — they're shown on the problem's Test cases section.
+        Judging.kind != "reference",
+    ]
     if challenge_id:
         filters.append(Judging.challenge_id == challenge_id)
     if verdict:
@@ -175,7 +180,9 @@ async def judging_queue(
     async def count(*where) -> int:
         return await db.scalar(select(func.count(Judging.id)).where(*where)) or 0
 
-    here = Judging.competition_id == competition_id
+    # This competition's contest work; an author's reference check (§17.5)
+    # still counts site-wide, where it is real judge load.
+    here = and_(Judging.competition_id == competition_id, Judging.kind != "reference")
     settings = await db.get(JudgeSettings, JUDGE_SETTINGS_ID)
     return JudgingQueueOut(
         queued=await count(here, Judging.status == "queued"),

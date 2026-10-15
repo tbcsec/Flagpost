@@ -4,7 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderWithIntl } from "@/test/intl";
 
 import { ProgrammingSection } from "@/components/challenges/programming-section";
-import type { JudgeProblem, JudgeTestcase } from "@/lib/types";
+import type { ComponentType } from "react";
+
+import type { JudgeProblem, JudgeTestcase, Judging, ReferenceCheck } from "@/lib/types";
 
 // The test-case editor for a programming challenge (#447): the common path is
 // "Add test case" with pasted text; limits/comparison/languages hide behind a
@@ -38,6 +40,10 @@ function problem(testcases: JudgeTestcase[], over: Partial<JudgeProblem> = {}): 
 }
 
 let current = problem([]);
+let reference: ReferenceCheck = {
+  judging: null, run_by_name: null, language_key: null, source: null, stale: false,
+};
+const runReference = vi.fn();
 const addMutate = vi.fn();
 const updateProblemMutate = vi.fn();
 const deleteMutate = vi.fn();
@@ -61,11 +67,28 @@ vi.mock("@/lib/hooks/use-judge", () => ({
   useUpdateJudgeTestcase: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteJudgeTestcase: () => ({ mutate: deleteMutate, isPending: false }),
   useUpdateJudgeProblem: () => ({ mutate: updateProblemMutate, isPending: false }),
+  useReferenceCheck: () => ({ data: reference }),
+  useRunReferenceCheck: () => ({ mutate: runReference, isPending: false, isError: false, reset: vi.fn() }),
+}));
+// The code editor (CodeMirror, loaded with next/dynamic) as a plain textarea.
+vi.mock("next/dynamic", () => ({
+  default: () =>
+    function Code(props: { value: string; onChange?: (v: string) => void; ariaLabel: string }) {
+      return (
+        <textarea
+          aria-label={props.ariaLabel}
+          value={props.value}
+          onChange={(e) => props.onChange?.(e.target.value)}
+        />
+      );
+    } as ComponentType,
 }));
 vi.mock("@/components/ui/confirm", () => ({ useConfirm: () => () => Promise.resolve(true) }));
 
 afterEach(() => {
   current = problem([]);
+  reference = { judging: null, run_by_name: null, language_key: null, source: null, stale: false };
+  runReference.mockClear();
   addMutate.mockClear();
   updateProblemMutate.mockClear();
   deleteMutate.mockClear();
@@ -136,5 +159,103 @@ describe("ProgrammingSection", () => {
       float_tolerance: null,
       allowed_languages: ["c"],
     });
+  });
+});
+
+
+const judging = (over: Partial<Judging> = {}): Judging => ({
+  id: "j1",
+  code_submission_id: "cs1",
+  origin: "submission",
+  challenge_id: "p",
+  user_id: "u1",
+  team_id: null,
+  kind: "reference",
+  language_key: "python3",
+  language_name: "Python 3",
+  status: "done",
+  verdict: "wrong_answer",
+  queue_position: null,
+  created_at: "2026-10-15T10:00:00Z",
+  finished_at: "2026-10-15T10:00:01Z",
+  compile_output: null,
+  max_time_ms: 30,
+  max_memory_kb: 9000,
+  tests_passed: 2,
+  tests_total: 3,
+  tests: [
+    { index: 0, sample: true, verdict: "accepted", time_ms: 10, memory_kb: 900, output: null },
+    { index: 1, sample: false, verdict: "wrong_answer", time_ms: 30, memory_kb: 9000, output: null },
+    { index: 2, sample: false, verdict: "accepted", time_ms: 20, memory_kb: 900, output: null },
+  ],
+  ...over,
+});
+
+describe("the reference-solution check", () => {
+  const three = [tc({ id: "a", sample: true }), tc({ id: "b" }), tc({ id: "c" })];
+
+  it("isn't offered until there are test cases", () => {
+    renderWithIntl(<ProgrammingSection competitionId="c" challengeId="p" />);
+    expect(screen.queryByText("Check with a reference solution")).toBeNull();
+  });
+
+  it("runs a pasted solution against every test", () => {
+    current = problem(three);
+    renderWithIntl(<ProgrammingSection competitionId="c" challengeId="p" />);
+    expect(screen.getByText(/it never stops you publishing/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Test with a reference solution…" }));
+    fireEvent.change(screen.getByLabelText("Reference solution"), {
+      target: { value: "print(sum(map(int, input().split())))" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Run check" }));
+    expect(runReference.mock.calls[0][0]).toEqual({
+      language: "python3",
+      source: "print(sum(map(int, input().split())))",
+    });
+  });
+
+  it("shows each test's result, numbered as in the list, and runs it again", () => {
+    current = problem(three);
+    reference = {
+      judging: judging(), run_by_name: "Ada", language_key: "python3", source: "print(1)", stale: false,
+    };
+    renderWithIntl(<ProgrammingSection competitionId="c" challengeId="p" />);
+    expect(screen.getByText("1 of 3 tests failed")).toBeInTheDocument();
+    const results = screen.getAllByText(/^(Accepted|Wrong answer)$/).map((n) => n.textContent);
+    expect(results).toEqual(["Accepted", "Wrong answer", "Accepted"]);
+    fireEvent.click(screen.getByRole("button", { name: "Run again" }));
+    expect(runReference.mock.calls[0][0]).toEqual({ language: "python3", source: "print(1)" });
+  });
+
+  it("says when the check is out of date, and what didn't run", () => {
+    current = problem(three);
+    reference = {
+      judging: judging({ tests: judging().tests.slice(0, 2) }),
+      run_by_name: "Ada", language_key: "python3", source: "print(1)", stale: true,
+    };
+    renderWithIntl(<ProgrammingSection competitionId="c" challengeId="p" />);
+    expect(screen.getByRole("status")).toHaveTextContent("changed after this check");
+    expect(screen.getByText("Not run")).toBeInTheDocument();
+  });
+
+  it("celebrates a clean pass", () => {
+    current = problem(three);
+    reference = {
+      judging: judging({ verdict: "accepted", tests_passed: 3 }),
+      run_by_name: "Ada", language_key: "python3", source: "print(1)", stale: false,
+    };
+    renderWithIntl(<ProgrammingSection competitionId="c" challengeId="p" />);
+    expect(screen.getByText("Passed all 3 tests")).toBeInTheDocument();
+  });
+
+  it("won't rerun in a language the problem no longer allows", () => {
+    current = problem(three, { allowed_languages: ["c"] });
+    reference = {
+      judging: judging(), run_by_name: "Ada", language_key: "python3", source: "print(1)", stale: true,
+    };
+    renderWithIntl(<ProgrammingSection competitionId="c" challengeId="p" />);
+    expect(screen.getByRole("button", { name: "Run again" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Change solution…" }));
+    expect(screen.getByLabelText("Language")).toHaveValue("c");
   });
 });

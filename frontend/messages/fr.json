@@ -121,7 +121,8 @@
       "rescheduledToast": "Annonce reprogrammée",
       "publishedToast": "Annonce publiée",
       "cancelledToast": "Annonce programmée annulée"
-    }
+    },
+    "clarification": "Clarification"
   },
   "app": {
     "skipToContent": "Passer au contenu",
@@ -965,7 +966,35 @@
         "allLanguages": "Autoriser tous les langages proposés par le juge",
         "noLanguages": "Aucun langage n'est encore activé sur le juge de code.",
         "saveOptions": "Enregistrer les options",
-        "savedOptions": "Enregistré."
+        "savedOptions": "Enregistré.",
+        "reference": {
+          "title": "Vérifier avec une solution de référence",
+          "description": "Exécutez une solution dont vous êtes sûr sur tous les tests. Cela révèle une sortie attendue erronée, ou une limite de temps trop serrée, avant les participants. Facultatif — cela n'empêche jamais la publication.",
+          "start": "Tester avec une solution de référence…",
+          "notReady": "Le juge de code n'est pas prêt : aucune vérification ne peut être lancée pour l'instant.",
+          "meta": "{language} · lancé par {name} · {time}",
+          "runAgain": "Relancer",
+          "change": "Changer de solution…",
+          "queued": "En attente de jugement",
+          "queuedAt": "En attente de jugement (n° {position} dans la file)",
+          "judging": "Jugement en cours…",
+          "couldNotRun": "Le juge n'a pas pu l'exécuter",
+          "passed": "{total, plural, one {Test réussi} other {Les # tests sont réussis}}",
+          "failedCount": "{failed} test(s) échoué(s) sur {total}",
+          "stale": "Les tests ou les limites ont changé depuis cette vérification — relancez-la pour en être sûr.",
+          "notRun": "Non exécuté",
+          "dialogTitle": "Tester avec une solution de référence",
+          "dialogDescription": "Collez ou importez une solution dont vous êtes sûr. Elle est jugée sur tous les tests — exemples et tests cachés — et chaque résultat s'affiche sous vos tests. Rien n'est noté.",
+          "language": "Langage",
+          "upload": "Importer un fichier",
+          "editorLabel": "Solution de référence",
+          "placeholder": "Collez votre solution ici, ou importez un fichier.",
+          "fileTooBig": "Ce fichier dépasse 128 Ko.",
+          "fileNotText": "Ce fichier n'est pas un fichier texte.",
+          "cancel": "Annuler",
+          "run": "Lancer la vérification",
+          "starting": "Lancement…"
+        }
       },
       "readGuide": "Read the Judge guide"
     },
@@ -1054,7 +1083,32 @@
       "expected": "Sortie attendue",
       "yourOutput": "Votre sortie",
       "originRejudge": "Rejugé",
-      "originOverride": "Décision d'un juge"
+      "originOverride": "Décision d'un juge",
+      "clarifications": {
+        "title": "Clarifications des juges",
+        "askPrompt": "Un point de ce problème n'est pas clair ?",
+        "ask": "Demander aux juges",
+        "yourQuestion": "Votre question · {time}",
+        "messages": "{count, plural, one {# message} other {# messages}}",
+        "subject": "Question sur {title}",
+        "askedToast": "Question envoyée — la réponse des juges apparaîtra ici et dans Support",
+        "askTitle": "Poser une question aux juges",
+        "askDescription": "Votre question est envoyée en privé aux juges. Si la réponse est utile à tous, ils peuvent la partager comme clarification — sans votre nom.",
+        "questionLabel": "Votre question",
+        "questionPlaceholder": "ex. : l'entrée peut-elle contenir des nombres négatifs ?",
+        "cancel": "Annuler",
+        "sending": "Envoi…",
+        "send": "Envoyer la question",
+        "yourQuestions": "{count, plural, one {Votre question} other {Vos questions (#)}}",
+        "q": "Q",
+        "a": "R",
+        "questionSr": "Question :",
+        "answerSr": "Réponse :",
+        "askPrivacy": "Seuls les juges voient votre question.",
+        "count": "{count, plural, one {# clarification} other {# clarifications}}",
+        "statusWaiting": "En attente de réponse",
+        "statusAnswered": "Répondu"
+      }
     }
   },
   "instances": {
@@ -1146,7 +1200,27 @@
       "send": "Envoyer",
       "replyPartialToast": "Réponse envoyée, mais {files} n'a pas pu être attachée",
       "staffNotes": "Notes du personnel",
-      "staffNotesDesc": "Un bloc de travail partagé pour le personnel de ce ticket — jamais montré au concurrent, en direct lorsque vous tapez."
+      "staffNotesDesc": "Un bloc de travail partagé pour le personnel de ce ticket — jamais montré au concurrent, en direct lorsque vous tapez.",
+      "sentToAll": "Envoyé à tous",
+      "sentToAllToast": "Réponse envoyée — et publiée pour tous comme clarification",
+      "quickAnswers": "Réponses rapides :",
+      "quick": {
+        "noComment": "Pas de commentaire.",
+        "readStatement": "Merci de relire attentivement l'énoncé — la réponse s'y trouve."
+      },
+      "quickLabel": {
+        "noComment": "Pas de commentaire",
+        "readStatement": "Relire l'énoncé"
+      },
+      "toAllCheckbox": "Envoyer aussi à tous comme clarification",
+      "toAllQuestion": "La question, telle que tout le monde la verra",
+      "toAllHint": "Tout le monde voit cette question avec votre réponse, sur le problème et en annonce — sans le nom de l'auteur. Retirez tout ce qui révèle qui l'a posée ou sa façon de résoudre le problème.",
+      "sendToAll": "Envoyer à tous",
+      "questionWaiting": "En attente de la réponse des juges. On ne peut pas répondre à une question — pour aller plus loin, posez-en une nouvelle.",
+      "questionAnswered": "Répondu. Pour aller plus loin, posez une nouvelle question.",
+      "askAgain": "Poser une nouvelle question",
+      "sendAnswer": "Envoyer la réponse",
+      "answerPlaceholder": "Votre réponse…"
     },
     "attachments": {
       "previewUnavailable": "Aperçu indisponible",
@@ -1166,6 +1240,11 @@
       "hint": "PNG, JPEG ou WebP · jusqu'à {max} chacun · {remaining} à gauche",
       "limitReached": "Limite de pièces jointes atteinte pour ce ticket",
       "remove": "Retirer"
+    },
+    "questionTag": "Question",
+    "questionStatus": {
+      "open": "sans réponse",
+      "resolved": "répondu"
     }
   },
   "feedback": {

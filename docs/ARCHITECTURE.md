@@ -147,7 +147,7 @@ identity.linked              identity.unlinked
 ticket.created               ticket.assigned            ticket.resolved
 ticket.message_posted        ticket.attachment_added    ticket.attachment_deleted
 survey.submitted             survey.opened
-announcement.published
+announcement.published       announcement.updated       announcement.deleted
 site.settings_updated
 judge.settings_updated       judge.language_created     judge.language_updated
 judge.language_deleted
@@ -328,6 +328,13 @@ chosen set of teams/users. Two rules follow from targeting:
   same way, so a reconnect can't reveal what the live path withheld. Audience
   resolution lives in one place (`utils/announcements`) so read and delivery
   can't drift.
+
+**Clarifications** (#450, §17.6) are announcements of kind `clarification` about
+one challenge: the judges' answer (the body) to a question, sent to the whole
+competition. They carry the challenge and the question but never who asked, ride
+the same delivery, and are additionally listed on the challenge's page. Every
+`announcement.published` payload — posted, scheduled, automation-made or a
+clarification — is built by one helper (`utils/announcements.published_event`).
 
 ### 4.4 In-App Notifications
 
@@ -1805,7 +1812,8 @@ container per judging** through the restricted socket proxy: create → upload a
 tar (harness, root-only job file and test data, world-readable source) → start
 → wait → read one result line from the log → delete. The container has no
 network. Its PID 1 is the **harness** (`backend/judge_harness`, Go), which
-compiles once and runs each test — samples first, stopping at the first failure —
+compiles once and runs each test — samples first, stopping at the first failure
+(unless the job sets `run_all`, as an author's reference check does, §17.5) —
 as an unprivileged user, enforcing CPU time, memory, output, file-size and
 process limits, comparing output (`token` / `exact` / `float`), and printing a
 nonce-tagged result. The posture, its deliberate deviations from §16's hardening
@@ -1825,8 +1833,9 @@ flag route's gates in its order — visibility, `require_playable`, pause, the
 scoring subject, prerequisites, the shared per-subject rate limiter — plus a
 source-size cap and a per-subject cap on unfinished judgings. It stores the
 source in object storage, inserts a `CodeSubmission` and a queued `Judging`,
-commits, and emits `judging.queued`. Two kinds: `submit` (every test, scored)
-and `run` (examples only, never scored).
+commits, and emits `judging.queued`. Two kinds a competitor can ask for:
+`submit` (every test, scored) and `run` (examples only, never scored). A third,
+`reference`, is set only by the authoring route (§17.5).
 
 **The `judgings` table is the queue.** A dedicated worker loop
 (`utils/judge_worker.py`) — not the event bus, whose 10-second handler timeout
@@ -1852,8 +1861,8 @@ flag submitted in time counts.
 
 **Scoring reuses the flag path.** A `submit` judging with a verdict is
 recorded through `utils/grading.record_grade` — the award path extracted from
-the flag route — as an ordinary `Submission` (`value = "code:<judging id>"`,
-correct only when accepted), so the scoreboard, decay, first blood, freeze,
+the flag route — as an ordinary `Submission` (`value = "code:<code submission
+id>"`, correct only when accepted), so the scoreboard, decay, first blood, freeze,
 skills and analytics need no change. The row is **backdated to the code's
 submission time**: `created_at` is the solve time everywhere, so on the board a
 queue never costs anyone first blood or a freeze cutoff. The `challenge.solved`
@@ -1917,3 +1926,52 @@ competitor sees that a verdict was a rejudge or a judge's decision, never the
 reason. Staff-queued rejudges don't count toward a competitor's in-flight
 submission cap.
 
+### 17.5 The reference-solution check
+
+An author can run a solution they know is right against **every** test of a
+problem — examples and hidden — through the real judge, to catch a wrong
+expected output or a too-tight limit before competitors do (`POST/GET
+…/challenges/{id}/judge/reference`, `challenge_edit`, `routers/judge_problems.py`).
+It is optional and never gates publishing; the authoring page shows it under the
+test cases as a nudge.
+
+A check is an ordinary judging of kind **`reference`**: it waits its turn in the
+one site-wide queue behind live submissions and respects the judge's concurrency
+limit (it isn't run inside the request, as the admin connection check is). The
+worker sets `run_all` on its job, so the harness keeps going past a failure and
+reports each test — the verdict is still the first failure's. It is never
+scored, is kept off a competitor's history, the jury console and the in-flight
+cap, and the competitor route refuses the kind outright (judging every hidden
+test without stopping would tell a competitor more than a submission does). One
+check per problem runs at a time; its source is kept so it can be run again.
+Every judging records a `problem_version` fingerprint at claim — the test-data
+object key (new on every edit) and the effective limits — so a check whose
+version no longer matches the problem is shown as out of date. A harness older
+than `run_all` stops at the first failure; the missing tests show as not run and
+the worker logs it.
+
+### 17.6 Clarifications
+
+A competitor asks about a problem **privately**, from its page: a support ticket
+of kind **`question`**, linked to the challenge (which must be one they can see).
+A question is **one text message** — no reply from the asker in its thread (a
+follow-up is a new question), and no screenshots on the question or on the
+judges' answers, all enforced server-side — and it is
+marked resolved ("answered") when a judge replies (an internal note doesn't).
+Ordinary support tickets keep their two-way thread. A judge answers in the
+ticket as usual; on a question about a published, released challenge,
+staff who may also post announcements (`ticket_assign` + `announcement_create`)
+can instead **send the answer to everyone** (`POST …/tickets/{id}/clarify`). One
+transaction adds the answer to the asker's thread (marked `sent_to_all`) and an
+announcement of kind **`clarification`** carrying the challenge and the question
+**as the judge worded it** — prefilled from the asker's message, for the judge to
+strip anything identifying. Nothing about who asked is stored on the
+announcement at all, so no read, frame or event can leak it. It reuses
+`announcement.published` and its delivery unchanged (banner, bell — linked to the
+problem — the WS room, automations), and is listed on the problem page
+(`GET …/challenges/{id}/clarifications`, gated like the challenge). A
+clarification is deleted with its challenge, and hidden from competitors while
+its challenge isn't visible. Quick answers ("No comment", "Read the problem
+statement") just fill the staff reply box. Clarifications are core (tickets +
+announcements), not part of the optional judge module, though only the
+programming problem page lists them today.

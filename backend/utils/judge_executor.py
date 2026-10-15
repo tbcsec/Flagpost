@@ -65,6 +65,9 @@ class JudgeJob:
     float_tolerance: float
     # Judging order: samples first (the problem zip's order).
     tests: tuple[JudgeTest, ...]
+    # Judge every test rather than stopping at the first failure — an author's
+    # reference-solution check (#450), which reports each test.
+    run_all: bool = False
 
 
 @dataclass(frozen=True)
@@ -201,6 +204,7 @@ def make_job(
     compare_mode: str,
     float_tolerance: float,
     tests: list[JudgeTest],
+    run_all: bool = False,
 ) -> JudgeJob:
     if "/" in source_filename or source_filename in ("", ".", ".."):
         raise JudgeExecutorError(f"bad source filename {source_filename!r}")
@@ -219,4 +223,5 @@ def make_job(
         compare_mode=compare_mode,
         float_tolerance=float_tolerance,
         tests=tuple(tests),
+        run_all=run_all,
     )

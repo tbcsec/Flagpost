@@ -41,6 +41,8 @@ its deadline may be the other's.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -244,10 +246,12 @@ async def run_judging(
         job, executor = await _prepare(db_factory, claim, storage, executor)
     except JudgeExecutorError as exc:
         await _give_up_or_retry(db_factory, claim, str(exc), retry=False)
+        await _discard_run_source(db_factory, claim, storage)
         return
     except Exception as exc:  # noqa: BLE001 — storage hiccup etc.: retry
         logger.exception("preparing judging %s failed", claim.judging_id)
         await _give_up_or_retry(db_factory, claim, f"preparing the judging failed: {exc}")
+        await _discard_run_source(db_factory, claim, storage)
         return
     if job is None:
         return  # lost the claim
@@ -266,7 +270,16 @@ async def run_judging(
 
     if result.verdict == "internal_error":
         await _give_up_or_retry(db_factory, claim, result.error or "the judge reported an internal error")
+        await _discard_run_source(db_factory, claim, storage)
         return
+    if job.run_all and result.verdict != "compile_error" and len(result.tests) < len(job.tests):
+        # The harness stopped early although asked not to: it predates #450.
+        # The check still reports what ran; the missing tests show as not run.
+        logger.warning(
+            "judging %s: the judge harness ran %d of %d tests — rebuild it "
+            "(make -C backend/judge_harness) for full reference checks",
+            claim.judging_id, len(result.tests), len(job.tests),
+        )
     try:
         await _finish(db_factory, claim, result, tests_total=len(job.tests))
     except Exception as exc:  # noqa: BLE001 — e.g. a lock timeout: retry, don't strand it
@@ -309,6 +322,7 @@ async def _prepare(db_factory, claim: Claim, storage, executor) -> tuple[JudgeJo
         if not cases:
             raise JudgeExecutorError("the problem has no tests to run")
 
+        limits = effective_limits(problem, settings)
         job = make_job(
             judging_id=judging.id,
             image_ref=language.image_ref,
@@ -317,12 +331,14 @@ async def _prepare(db_factory, claim: Claim, storage, executor) -> tuple[JudgeJo
             compile_command=language.compile_command,
             run_command=language.run_command,
             time_multiplier=language.time_multiplier,
-            time_limit_ms=problem.time_limit_ms or settings.default_time_limit_ms or DEFAULT_TIME_LIMIT_MS,
-            memory_limit_mb=problem.memory_limit_mb or settings.default_memory_limit_mb or DEFAULT_MEMORY_LIMIT_MB,
-            output_limit_kb=problem.output_limit_kb or settings.default_output_limit_kb or DEFAULT_OUTPUT_LIMIT_KB,
-            compare_mode=problem.compare_mode,
-            float_tolerance=problem.float_tolerance or DEFAULT_FLOAT_TOLERANCE,
+            time_limit_ms=limits["time_limit_ms"],
+            memory_limit_mb=limits["memory_limit_mb"],
+            output_limit_kb=limits["output_limit_kb"],
+            compare_mode=limits["compare_mode"],
+            float_tolerance=limits["float_tolerance"],
             tests=[JudgeTest(sample=c.sample, input=c.input, answer=c.answer) for c in cases],
+            # An author's reference check reports every test (#450).
+            run_all=judging.kind == "reference",
         )
         executor = executor or executor_for(settings)
         deadline = utcnow() + timedelta(seconds=executor.time_budget_s(job)) + DEADLINE_SLACK
@@ -333,12 +349,34 @@ async def _prepare(db_factory, claim: Claim, storage, executor) -> tuple[JudgeJo
                 Judging.status == "running",
                 Judging.attempts == claim.attempt,
             )
-            .values(deadline_at=deadline)
+            .values(deadline_at=deadline, problem_version=problem_version(problem, settings))
         )
         if moved.rowcount != 1:
             return None, executor
         await db.commit()
         return job, executor
+
+
+def effective_limits(problem: JudgeProblem, settings: JudgeSettings) -> dict:
+    """The limits and output check a judging of this problem runs under: the
+    problem's own, else the site defaults, else the built-in ones."""
+    return {
+        "time_limit_ms": problem.time_limit_ms or settings.default_time_limit_ms or DEFAULT_TIME_LIMIT_MS,
+        "memory_limit_mb": problem.memory_limit_mb or settings.default_memory_limit_mb or DEFAULT_MEMORY_LIMIT_MB,
+        "output_limit_kb": problem.output_limit_kb or settings.default_output_limit_kb or DEFAULT_OUTPUT_LIMIT_KB,
+        "compare_mode": problem.compare_mode,
+        "float_tolerance": problem.float_tolerance or DEFAULT_FLOAT_TOLERANCE,
+    }
+
+
+def problem_version(problem: JudgeProblem, settings: JudgeSettings) -> str:
+    """A short fingerprint of what a judging ran against: the test data (a new
+    object key on every edit) and the limits. A reference check whose version
+    differs from the problem's current one is out of date (#450)."""
+    basis = json.dumps(
+        {"testdata": problem.object_key, **effective_limits(problem, settings)}, sort_keys=True
+    )
+    return hashlib.sha256(basis.encode()).hexdigest()[:16]
 
 
 def _fenced(claim: Claim):

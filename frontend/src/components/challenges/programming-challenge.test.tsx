@@ -29,6 +29,11 @@ vi.mock("@/components/ui/rich-text-view", () => ({
   RichTextView: () => <div>Read two integers and print their sum.</div>,
 }));
 vi.mock("@/components/ui/confirm", () => ({ useConfirm: () => () => Promise.resolve(true) }));
+// Questions and clarifications have their own test (problem-clarifications).
+vi.mock("@/components/challenges/problem-clarifications", () => ({
+  ProblemClarifications: () => <div data-testid="clarifications" />,
+  ClarificationsLink: () => null,
+}));
 
 const challenge: Challenge = {
   id: "ch1",
@@ -140,6 +145,8 @@ describe("ProgrammingChallenge", () => {
     // How output is compared isn't the competitor's concern (owner decision).
     expect(screen.queryByText("Whitespace ignored")).toBeNull();
     expect(screen.getByText("Example 1 — input")).toBeInTheDocument();
+    // Questions and the judges' clarifications sit under the statement.
+    expect(screen.getByTestId("clarifications")).toBeInTheDocument();
   });
 
   it("submits and runs code written in the browser", () => {

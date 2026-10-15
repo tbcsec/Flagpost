@@ -51,6 +51,7 @@ from models.team import Team, TeamMembership
 from models.ticket import Ticket, TicketMessage
 from models.user import User
 from utils import mailer, webhook_security
+from utils.announcements import published_event
 from utils.event_bus import event_bus
 from utils.notifications import broadcast_notifications, create_notifications
 
@@ -431,6 +432,7 @@ async def _execute_create_ticket(db, rule, event_name, payload, config) -> None:
             "ticket_id": ticket.id,
             "opener_user_id": opener_user_id,
             "subject": subject,
+            "kind": "support",
             "rule_id": rule.id,
         },
     )
@@ -573,17 +575,7 @@ async def _execute_create_announcement(db, rule, event_name, payload, config) ->
     # Same event the announcements router emits, so it reaches the WS feed and
     # the bell notifications the same way a hand-posted one does.
     await event_bus.emit(
-        "announcement.published",
-        {
-            "competition_id": competition_id,
-            "announcement_id": announcement.id,
-            "title": announcement.title,
-            "body": announcement.body,
-            "severity": announcement.severity,
-            "audience_type": announcement.audience_type,
-            "created_at": announcement.created_at.isoformat(),
-            "rule_id": rule.id,
-        },
+        "announcement.published", published_event(announcement, rule_id=rule.id)
     )
 
 

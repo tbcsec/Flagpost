@@ -2,6 +2,8 @@
 
 from datetime import datetime
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -9,12 +11,25 @@ class TicketCreate(BaseModel):
     subject: str = Field(min_length=1, max_length=200)
     body: str = Field(min_length=1, max_length=5000)
     challenge_id: str | None = None
+    # "question": asked from a challenge's page (#450) — needs the challenge,
+    # and is read-only for the asker once sent.
+    kind: Literal["support", "question"] = "support"
 
 
 class TicketReply(BaseModel):
     body: str = Field(min_length=1, max_length=5000)
     # Staff-only note; setting this requires ticket_view_internal_notes.
     is_internal: bool = False
+
+
+class TicketClarify(BaseModel):
+    """A staff answer to a question about a challenge, sent to everyone as a
+    clarification (#450) as well as to the asker. ``question`` is the question
+    as the judge words it for everyone — prefilled from the asker's message,
+    edited so it doesn't identify them."""
+
+    question: str = Field(min_length=1, max_length=5000)
+    answer: str = Field(min_length=1, max_length=5000)
 
 
 class TicketAssign(BaseModel):
@@ -41,6 +56,8 @@ class TicketMessageOut(BaseModel):
     author_name: str
     body: str
     is_internal: bool
+    # Also sent to everyone as a clarification (#450).
+    sent_to_all: bool = False
     created_at: datetime
     # Nested under the message on purpose: the thread's internal-note filter
     # then hides a staff note's images along with its body (issue #80).
@@ -59,6 +76,7 @@ class TicketOut(BaseModel):
     team_name: str | None
     assignee_name: str | None
     message_count: int
+    kind: str = "support"
     created_at: datetime
 
 

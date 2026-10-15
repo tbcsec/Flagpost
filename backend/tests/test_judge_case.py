@@ -84,6 +84,30 @@ async def test_backup_validates_it():
     _validate_judge_problem_row(row)
 
 
+async def test_backup_validates_an_imported_reference_solution():
+    """#451 keeps a package's accepted solution on the problem; a backup row
+    can't smuggle in an oversized one, or a language key that would name a
+    file outside an export's submissions/ directory."""
+    import pytest
+
+    from utils.backup import ImportError_, _validate_judge_problem_row
+
+    def row(**kw):
+        return {"id": "x", "competition_id": "c", "challenge_id": "p", "compare_mode": "token",
+                "testcases": [], "object_key": None, **kw}
+
+    _validate_judge_problem_row(row(reference_language="python3", reference_source="print(1)\n"))
+    _validate_judge_problem_row(row(reference_language=None, reference_source=None))
+    for bad in (
+        row(reference_language="../../etc", reference_source="x"),
+        row(reference_language=5, reference_source="x"),
+        row(reference_language="python3", reference_source="x" * (128 * 1024 + 1)),
+        row(reference_language="python3", reference_source=["not", "text"]),
+    ):
+        with pytest.raises(ImportError_):
+            _validate_judge_problem_row(bad)
+
+
 async def test_problems_that_dont_use_it_keep_their_fingerprint(client, object_storage):
     """Adding the setting mustn't make every existing reference check look out
     of date: off, it isn't part of the fingerprint at all."""

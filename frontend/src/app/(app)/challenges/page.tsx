@@ -12,6 +12,7 @@ import { ChallengeConnection } from "@/components/challenges/challenge-connectio
 import { ChallengeHints } from "@/components/challenges/challenge-hints";
 import { ChallengeInstance } from "@/components/challenges/challenge-instance";
 import { ChallengeList } from "@/components/challenges/challenge-list";
+import { ChallengeFiles } from "@/components/challenges/challenge-files";
 import { ChallengeValue } from "@/components/challenges/challenge-value";
 import {
   ClarificationsLink,
@@ -474,6 +475,7 @@ function ChallengeDialogBody({
         <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">
           {richTextToPlain(challenge.description) || t("detail.noDescription")}
         </p>
+        <ChallengeFiles competitionId={competitionId} challengeId={challenge.id} />
         {/* The judges' clarifications amend the description, so they close
             it (#450) — read-only here: questions are asked from Support. */}
         <ProblemClarifications

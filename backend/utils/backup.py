@@ -447,6 +447,16 @@ def _validate_judge_problem_row(row: dict) -> None:
         )
     except ValidationError as exc:
         raise ImportError_(f"{where}: {exc}") from exc
+    # An imported package's accepted solution (#451): within the submission cap,
+    # and a language key fit to name an exported file.
+    from schemas.judge import _KEY_RE
+    from utils.problem_package import MAX_SOURCE_BYTES
+
+    language, source = row.get("reference_language"), row.get("reference_source")
+    if language is not None and not (isinstance(language, str) and _KEY_RE.fullmatch(language)):
+        raise ImportError_(f"{where}: reference_language must be a language key")
+    if source is not None and not (isinstance(source, str) and len(source.encode()) <= MAX_SOURCE_BYTES):
+        raise ImportError_(f"{where}: reference_source must be text within {MAX_SOURCE_BYTES // 1024} KB")
 
     own = f"{row.get('competition_id')}/judge/{row.get('challenge_id')}/"
     if not str(row.get("object_key") or "").startswith(own):

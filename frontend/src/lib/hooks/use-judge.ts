@@ -210,6 +210,28 @@ export function useDeleteJudgeTestcase(competitionId: string, challengeId: strin
   );
 }
 
+// --- problem packages (#451) ----------------------------------------------------------
+
+/** Import a problem package (or a contest zip of several) as draft challenges. */
+export function useImportProblemPackages(competitionId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ file, defaultTimeLimitMs }: { file: File; defaultTimeLimitMs: number | null }) =>
+      judgeProblemApi.importPackages(competitionId, file, defaultTimeLimitMs),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["challenges", competitionId] }),
+  });
+}
+
+export function useExportProblemPackage(competitionId: string, challengeId: string) {
+  return useMutation({
+    mutationFn: () => judgeProblemApi.exportPackage(competitionId, challengeId),
+  });
+}
+
+export function useExportProblemPackages(competitionId: string) {
+  return useMutation({ mutationFn: () => judgeProblemApi.exportPackages(competitionId) });
+}
+
 // --- the reference-solution check (#450) ------------------------------------------------
 
 // Under the ["judge", "judgings", cid] prefix, which a judging's live frame

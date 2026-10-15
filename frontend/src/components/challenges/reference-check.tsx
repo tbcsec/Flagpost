@@ -89,6 +89,14 @@ export function ReferenceCheckPanel({
         <p className="text-xs text-muted-foreground">{t("description")}</p>
       </div>
 
+      {!judging && data?.source && storedLanguage && (
+        <p className="text-sm">
+          {t("fromPackage", {
+            language: languages.find((l) => l.key === storedLanguage)?.name ?? storedLanguage,
+          })}
+        </p>
+      )}
+
       {judging && data && (
         <CheckResult
           judging={judging}

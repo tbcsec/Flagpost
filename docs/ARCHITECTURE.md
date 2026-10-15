@@ -1998,3 +1998,67 @@ told about a clarification whose challenge they can't currently see).
 Clarifications are core (tickets + announcements), not part of the optional
 judge module: they are listed in the programming problem page's statement and
 in a flag challenge's dialog (read-only there — questions come from Support).
+
+### 17.7 Problem packages
+
+Programming problems import and export in the open **ICPC/Kattis problem
+package format** (`utils/problem_package.py`; `POST …/judge/packages/import`
+under `challenge_create`, `GET …/challenges/{id}/judge/package` and `GET
+…/judge/packages/export` under `challenge_edit`), which makes the large body of
+public problem sets usable. Both live versions are read — "legacy" and "2025-09"
+— and directory names are looked up in both spellings whatever a package
+declares, since real archives mislabel them.
+
+Import is a **faithful subset**: pass/fail problems with the standard output
+check on stdin/stdout. A problem that needs more — its own output checker, an
+interactive, scoring or multi-pass type, `include/` code, files for the program,
+per-test arguments, secret tests checked with different settings — is **refused
+with the reason**, never judged with the standard check by mistake. A bundled
+copy of the standard checker (packages often ship one as their "custom"
+checker) is recognised **heuristically** — `default_validator` sources that
+handle the standard flags — with a note to the author. Checker flags are
+resolved per test as the reference tooling applies them — the nearest
+`testdata.yaml` / `test_group.yaml` (or a per-case `.yaml`) wins over its
+parents, and legacy `problem.yaml` `validator_flags` are *prepended* to it, a
+later value winning; Flagpost has one setting per problem, so every secret test
+must agree, and samples that differ are checked like the secret tests, with a
+note. They map onto the problem's
+settings (`case_sensitive` off → ignore letter case, the format's default;
+`space_change_sensitive` → exact; float tolerances → float, with a note when an
+absolute-only or relative-only tolerance is applied either way). A `languages`
+list keeps every language the site defines (enabled or not); if none exist
+here, the problem is left unrestricted and the author told. The time limit is the package's own (`problem.yaml`, a `.timelimit` file,
+or a root `.ini` `timelimit =` key) or, since most packages derive it from
+reference run times instead, the import form's answer. Statements are converted
+best-effort from Markdown or LaTeX to rich text (`utils/statement_convert.py`;
+maths stays as written) and the original — plus any PDF, the statement images
+its source names, and `attachments/` — is attached; competitors download a
+challenge's files from its page. An accepted solution in a language the site
+has *and the problem allows* is kept on the problem (`reference_language` /
+`reference_source`) and pre-filled into the reference check, so the author can
+confirm the tests and the limit in one click.
+
+Same containment as the challenge importer, and then some, because a package
+from the internet is untrusted input: bounded reads that never trust a declared
+size, an aggregate decompressed ceiling that counts every byte inflated, an
+entry cap counted from the entries' own signatures before `zipfile` builds its
+directory (the end records can lie), a problem-count cap, symlinks followed only inside their own problem, YAML whose aliases
+can't expand past a node budget, and the judge's own test-data caps (16 MB a
+file, 64 MB a problem — a package over them is refused, not truncated). A
+problem that fails in any unforeseen way is refused alone, not the whole zip.
+Parsing is pure and runs in a thread — but CPython's regex engine holds the GIL,
+so **a thread does not protect the event loop from a slow regex**: every pattern
+run over package text is linear (no `\s*` across lines under MULTILINE,
+possessive or length-bounded spans, look-behind-anchored openers), and the LaTeX
+scanner works against a character budget. The import creates **draft**
+challenges in one transaction with no per-row events (atomic authoring), and
+deletes anything it stored if it fails. Export writes a 2025-09 package per
+problem: `problem.yaml` with the effective limits, a Markdown statement, the
+stored test data (renumbered so name order is judging order), the checker
+settings as `output_validator_args`, attachments, and the kept or newest
+accepted reference solution under `submissions/accepted/`. It streams each
+problem's files from storage into a temporary file, so a contest's test data is
+never in memory at once, and a problem whose stored test data is missing fails
+the export by name. The ctfcli exporter skips programming challenges, which it
+can't represent.
+

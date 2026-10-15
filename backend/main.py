@@ -128,6 +128,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # A download's server-chosen name (an exported problem package, #451) —
+    # readable by the frontend only when it's served from another origin.
+    expose_headers=["Content-Disposition"],
 )
 # Compress the larger JSON reads (scoreboard, challenge list, audit log — all
 # highly repetitive JSON that deflates ~10x). Small responses skip it so the

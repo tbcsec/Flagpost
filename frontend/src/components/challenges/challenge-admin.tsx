@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import { AttachmentsSection } from "@/components/challenges/attachments-section";
+import { ProblemPackageActions } from "@/components/challenges/problem-packages";
 import { ChallengeGuessesSection } from "@/components/challenges/challenge-guesses-section";
 import { DeploymentSection } from "@/components/challenges/deployment-section";
 import { HintsSection } from "@/components/challenges/hints-section";
@@ -209,6 +210,11 @@ export function ChallengeAdmin({ competitionId }: { competitionId: string }) {
               />
             </label>
           </div>
+          <ProblemPackageActions
+            competitionId={competitionId}
+            hasProgramming={list.some((c) => c.flag_type === "programming")}
+            onOpen={setSelected}
+          />
         </CardHeader>
 
         <CardContent className="p-0">

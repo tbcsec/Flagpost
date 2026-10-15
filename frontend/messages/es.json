@@ -994,12 +994,36 @@
           "fileNotText": "Ese archivo no es de texto.",
           "cancel": "Cancelar",
           "run": "Ejecutar comprobación",
-          "starting": "Iniciando…"
+          "starting": "Iniciando…",
+          "fromPackage": "La solución aceptada del paquete ({language}) está lista: ejecútala para comprobar las pruebas y el límite de tiempo."
         },
         "ignoreCase": "Ignorar mayúsculas y minúsculas",
-        "ignoreCaseHint": "«YES» y «yes» cuentan como la misma respuesta: la regla habitual en los problemas de concursos tipo ICPC."
+        "ignoreCaseHint": "«YES» y «yes» cuentan como la misma respuesta: la regla habitual en los problemas de concursos tipo ICPC.",
+        "exportPackage": "Exportar paquete"
       },
-      "readGuide": "Read the Judge guide"
+      "readGuide": "Read the Judge guide",
+      "packages": {
+        "import": "Importar paquete de problema…",
+        "exportAll": "Exportar paquetes de problemas",
+        "exportFailed": "La exportación falló",
+        "title": "Importar un paquete de problema",
+        "description": "Un paquete de problema en formato ICPC/Kattis (.zip), o un zip de concurso con varios. Cada problema se añade como borrador para que lo revises antes de publicarlo.",
+        "file": "Archivo del paquete",
+        "chooseFile": "Elegir un .zip…",
+        "noFile": "Ningún archivo elegido",
+        "timeLimit": "Límite de tiempo para problemas cuyo paquete no lo fija (segundos)",
+        "timeLimitHint": "La mayoría de los paquetes no indican un límite de tiempo. Ejecuta la comprobación de referencia en cada problema importado para confirmar que el límite es adecuado.",
+        "cancel": "Cancelar",
+        "importButton": "Importar",
+        "importing": "Importando…",
+        "importAnother": "Importar otro",
+        "done": "Hecho",
+        "createdCount": "{count, plural, one {# problema importado como borrador} other {# problemas importados como borradores}}",
+        "nothingCreated": "No se importó nada.",
+        "tests": "{count, plural, one {# prueba} other {# pruebas}}",
+        "refusedTitle": "No se pudieron importar",
+        "skippedTitle": "Omitidos"
+      }
     },
     "backToChallenges": "Back to challenges",
     "code": {
@@ -1127,6 +1151,10 @@
         "postSend": "Enviar a todos",
         "postedToast": "Aclaración enviada a todos"
       }
+    },
+    "files": {
+      "title": "Archivos",
+      "download": "Descargar {name}"
     }
   },
   "instances": {

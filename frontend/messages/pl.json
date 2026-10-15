@@ -994,12 +994,36 @@
           "fileNotText": "To nie jest plik tekstowy.",
           "cancel": "Anuluj",
           "run": "Uruchom sprawdzenie",
-          "starting": "Uruchamianie…"
+          "starting": "Uruchamianie…",
+          "fromPackage": "Zaakceptowane rozwiązanie z pakietu ({language}) jest gotowe — uruchom je, aby sprawdzić testy i limit czasu."
         },
         "ignoreCase": "Ignoruj wielkość liter",
-        "ignoreCaseHint": "„YES” i „yes” liczą się jako ta sama odpowiedź — zwykła zasada w zadaniach z konkursów typu ICPC."
+        "ignoreCaseHint": "„YES” i „yes” liczą się jako ta sama odpowiedź — zwykła zasada w zadaniach z konkursów typu ICPC.",
+        "exportPackage": "Eksportuj pakiet"
       },
-      "readGuide": "Read the Judge guide"
+      "readGuide": "Read the Judge guide",
+      "packages": {
+        "import": "Importuj pakiet zadania…",
+        "exportAll": "Eksportuj pakiety zadań",
+        "exportFailed": "Eksport nie powiódł się",
+        "title": "Importuj pakiet zadania",
+        "description": "Pakiet zadania w formacie ICPC/Kattis (.zip) lub zip konkursu z kilkoma zadaniami. Każde zadanie zostanie dodane jako szkic do przejrzenia przed publikacją.",
+        "file": "Plik pakietu",
+        "chooseFile": "Wybierz .zip…",
+        "noFile": "Nie wybrano pliku",
+        "timeLimit": "Limit czasu dla zadań, których pakiet go nie podaje (sekundy)",
+        "timeLimitHint": "Większość pakietów nie podaje limitu czasu. Uruchom sprawdzenie wzorcowe dla każdego zaimportowanego zadania, aby potwierdzić, że limit jest odpowiedni.",
+        "cancel": "Anuluj",
+        "importButton": "Importuj",
+        "importing": "Importowanie…",
+        "importAnother": "Importuj kolejny",
+        "done": "Gotowe",
+        "createdCount": "{count, plural, one {# zadanie zaimportowane jako szkic} few {# zadania zaimportowane jako szkice} many {# zadań zaimportowanych jako szkice} other {# zadania zaimportowane jako szkice}}",
+        "nothingCreated": "Nic nie zaimportowano.",
+        "tests": "{count, plural, one {# test} few {# testy} many {# testów} other {# testu}}",
+        "refusedTitle": "Nie udało się zaimportować",
+        "skippedTitle": "Pominięte"
+      }
     },
     "backToChallenges": "Back to challenges",
     "code": {
@@ -1127,6 +1151,10 @@
         "postSend": "Wyślij wszystkim",
         "postedToast": "Wyjaśnienie wysłane do wszystkich"
       }
+    },
+    "files": {
+      "title": "Pliki",
+      "download": "Pobierz {name}"
     }
   },
   "instances": {

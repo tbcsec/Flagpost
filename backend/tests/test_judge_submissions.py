@@ -326,7 +326,8 @@ async def test_accepted_awards_points_backdated(client, object_storage):
     assert sub.is_correct and sub.points_awarded == 100 and not sub.is_duplicate
     # Backdated to submission time, so the queue never costs first blood.
     assert abs((sub.created_at - submitted_at).total_seconds()) < 1
-    assert sub.value == f"code:{judging_id}"
+    # One row per code submission, whatever its judgings (#450).
+    assert sub.value == f"code:{judging.code_submission_id}"
     assert len(runs) == 3
     assert solved and solved[0]["is_first_blood"] is True
 

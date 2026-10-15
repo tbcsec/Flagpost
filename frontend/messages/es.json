@@ -153,7 +153,8 @@
       "instances": "Instances",
       "settings": "Ajustes",
       "lobby": "Lobby",
-      "admin": "Admin"
+      "admin": "Admin",
+      "judging": "Juzgado"
     },
     "adminNav": {
       "dashboard": "Tablero",
@@ -1051,7 +1052,9 @@
       "failedExample": "Ejemplo {n}: {verdict}.",
       "input": "Entrada",
       "expected": "Salida esperada",
-      "yourOutput": "Tu salida"
+      "yourOutput": "Tu salida",
+      "originRejudge": "Vuelto a juzgar",
+      "originOverride": "Decisión de un juez"
     }
   },
   "instances": {
@@ -3279,5 +3282,67 @@
   },
   "skills": {
     "radarAria": "Skills web across {count, plural, one {# category} other {# categories}}"
+  },
+  "judging": {
+    "title": "Juzgado",
+    "subtitle": "Todos los envíos de código, a medida que se juzgan — vuelve a juzgar o corrige el veredicto cuando haga falta.",
+    "noAccessTitle": "Sin acceso",
+    "noAccessDescription": "Ver los juzgados requiere el permiso para verlos.",
+    "statusQueued": "En espera",
+    "statusRunning": "Juzgando",
+    "originRejudge": "Nuevo juzgado",
+    "originOverride": "Decisión de un juez",
+    "queueLine": "{queued} en espera · {running} juzgándose",
+    "queueSite": "{count} en espera en todo el sitio",
+    "judgeOff": "El juez de código está desactivado — no se está juzgando nada.",
+    "filterProblem": "Problema",
+    "allProblems": "Todos los problemas",
+    "filterResult": "Resultado",
+    "allResults": "Todos los resultados",
+    "pending": "En espera o juzgándose",
+    "includeRuns": "Incluir pruebas con ejemplos",
+    "rejudgeProblem": "Volver a juzgar este problema…",
+    "emptyTitle": "Aún no hay envíos",
+    "emptyDescription": "Los envíos de código aparecerán aquí a medida que lleguen.",
+    "colTime": "Enviado",
+    "colWho": "Participante",
+    "colProblem": "Problema",
+    "colLanguage": "Lenguaje",
+    "colResult": "Resultado",
+    "colTests": "Pruebas",
+    "colUsage": "Tiempo · Memoria",
+    "runTag": "(prueba con ejemplos)",
+    "noun": "envíos",
+    "showingLatest": "Mostrando los {shown} más recientes de {total}. Filtra para acotar.",
+    "rejudgeProblemTitle": "Volver a juzgar «{title}»",
+    "rejudgeProblemDescription": "Cada envío se juzga de nuevo con el problema tal como está ahora. Los puntos cambian a medida que llegan los nuevos resultados, y no se pierde nada de los anteriores. Los veredictos que un juez fijó a mano no se tocan.",
+    "scope": {
+      "all": "Todos los envíos",
+      "accepted": "Solo los envíos aceptados (comprobar que un arreglo no los rompió)",
+      "not_accepted": "Solo los envíos no aceptados (tras corregir una prueba que estaba mal)"
+    },
+    "cancel": "Cancelar",
+    "rejudgeQueued": "{count, plural, one {# envío en cola para volver a juzgarse} other {# envíos en cola para volver a juzgarse}}",
+    "rejudgeSkipped": "{count, plural, one {# ya estaba en espera, así que no se encoló dos veces} other {# ya estaban en espera, así que no se encolaron dos veces}}",
+    "rejudgeKeptOverrides": "{count, plural, one {# decidido por un juez se dejó como estaba: rejuzgalo por separado para reemplazar la decisión.} other {# decididos por un juez se dejaron como estaban: rejuzgalos uno a uno para reemplazar las decisiones.}}",
+    "rejudgeConfirm": "Volver a juzgar",
+    "detailMeta": "{language} · enviado {time}",
+    "overrideNote": "Veredicto fijado por {name}: «{note}»",
+    "test": "Prueba",
+    "exampleN": "Ejemplo {n}",
+    "hiddenN": "Prueba oculta {n}",
+    "compilerOutput": "Mensajes del compilador",
+    "alreadyQueued": "Este envío ya está esperando a ser juzgado",
+    "rejudge": "Volver a juzgar",
+    "actionFailed": "No funcionó",
+    "override": "Corregir el veredicto…",
+    "overridden": "Veredicto corregido",
+    "overrideHint": "Tu veredicto sustituye al del juez de inmediato y queda registrado con tu nombre y tu motivo. Un nuevo juzgado posterior lo volvería a sustituir.",
+    "overrideVerdict": "Veredicto",
+    "overrideReason": "Motivo (visible para la organización)",
+    "overrideSave": "Guardar veredicto",
+    "code": "Código enviado",
+    "history": "Historial",
+    "byName": "por {name}"
   }
 }

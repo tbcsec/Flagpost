@@ -35,6 +35,11 @@ from sqlalchemy.orm import Mapped, mapped_column
 from db import Base, CompetitionScopedMixin, TimestampMixin, UtcDateTime
 
 CODE_SUBMISSION_KINDS = ("submit", "run")
+# Why a judging exists (#450): the competitor submitted; staff asked for the
+# code to be judged again (a test case or limit was fixed); or a judge decided
+# the verdict by hand. History is never rewritten — each is a new row, and the
+# latest finished one is what counts for the submission.
+JUDGING_ORIGINS = ("submission", "rejudge", "override")
 
 JUDGING_STATUSES = ("queued", "running", "done", "failed")
 ACTIVE_JUDGING_STATUSES = ("queued", "running")
@@ -80,6 +85,12 @@ class CodeSubmission(Base, CompetitionScopedMixin, TimestampMixin):
     language_name: Mapped[str] = mapped_column(String, nullable=False)
     source_object_key: Mapped[str] = mapped_column(String, nullable=False)
     source_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    # The Submission row a scored submission is recorded as. One row per code
+    # submission, whatever its judgings: a rejudge or override updates it (and
+    # reconciles the award) rather than adding another (#450).
+    submission_id: Mapped[str | None] = mapped_column(
+        ForeignKey("submissions.id", ondelete="SET NULL"), nullable=True
+    )
     # created_at (TimestampMixin) is the submission time — the solve time an
     # accepted judging is backdated to (ADR-0042 §4).
 
@@ -103,6 +114,15 @@ class Judging(Base, CompetitionScopedMixin, TimestampMixin):
         ForeignKey("teams.id", ondelete="SET NULL"), index=True, nullable=True
     )
     kind: Mapped[str] = mapped_column(String, nullable=False, default="submit")
+    origin: Mapped[str] = mapped_column(
+        String, nullable=False, default="submission", server_default="submission"
+    )
+    # The staff member behind a rejudge or override, and their reason for an
+    # override — both shown wherever the judging is (#450).
+    requested_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String, nullable=False, default="queued")
     # One of utils.judge_executor.VERDICTS once done (internal_error if failed).
     verdict: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -123,7 +143,8 @@ class Judging(Base, CompetitionScopedMixin, TimestampMixin):
     tests_total: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Why no verdict was reached, for staff. Never shown to the competitor.
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # The Submission row a scored judging was recorded as (awarded or not).
+    # The Submission row this judging's verdict was recorded on (the code
+    # submission's one row; see CodeSubmission.submission_id).
     submission_id: Mapped[str | None] = mapped_column(
         ForeignKey("submissions.id", ondelete="SET NULL"), nullable=True
     )

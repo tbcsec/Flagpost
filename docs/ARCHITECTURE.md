@@ -151,7 +151,8 @@ announcement.published
 site.settings_updated
 judge.settings_updated       judge.language_created     judge.language_updated
 judge.language_deleted
-judging.queued               judging.completed
+judging.queued               judging.completed          judging.rejudge_requested
+judging.overridden           challenge.solve_revoked
 score.adjusted               achievement.awarded
 scoreboard.frozen            scoreboard.unfrozen
 module.enabled               module.disabled
@@ -633,7 +634,9 @@ Site Settings             manage_site_settings  (global — the site-wide
                           images and commands it runs; issue #446/ADR-0042)
 Code Judge                judging_view  (every competitor's code submissions
                           and judgings — source, per-test results; a competitor
-                          reads their own through ownership, issue #448)
+                          reads their own through ownership, issue #448),
+                          judging_rejudge  (rejudge submissions and override
+                          verdicts with a recorded reason, issue #450)
 AI Assistants             ai_view_transcripts  (read others' assistant
                           conversation history, issue #98/ADR-0023, §12)
 Analytics                 view_competition_analytics, view_global_analytics,
@@ -1882,3 +1885,35 @@ judging is queued, starts, retries or finishes, and the one socket the app
 already holds for notifications (`useNotifications`) invalidates the judging
 queries, so no second socket is opened. A slow poll covers a dropped socket
 while a judging is in flight.
+
+### 17.4 The jury console
+
+Staff with `judging_view` get a **Judging** page (`/judging`): the queue's
+state, every judging in the competition (filterable by problem and result), and
+per submission its tests, compiler output, code and history. With
+`judging_rejudge` they can **rejudge** one submission, or every scored
+submission to a problem after fixing a test case or limit, and **override** a
+verdict with a required reason (`routers/judge_jury.py`).
+
+Both add a judging rather than editing one (`origin` = `rejudge` /
+`override`, with who asked and why), and **the newest finished judging of a
+submission is the one that counts** — so an override stands until someone asks
+for a fresh rejudge, and an older rejudge finishing late changes nothing. A
+code submission's score lives on **one** `Submission` row: the first verdict
+creates it through the shared award path; a later one updates it through
+`utils/grading.regrade`, which reconciles the subject's award — the earliest
+correct submission holds it, so losing it promotes the next, gaining it on an
+earlier one moves it — and re-values the challenge for dynamic scoring.
+Granting emits `challenge.solved` (with `regrade: true`, so an automation rule
+can tell it from a live solve); revoking emits `challenge.solve_revoked`, which
+moves the scoreboard, activity feed and skills web the same way (and is
+suppressed the same way while the board is frozen). A revoke does **not** undo
+what an automation already did on the original solve — a sent webhook or email
+stays sent; a rule that must react subscribes to `challenge.solve_revoked`. A
+bulk rejudge leaves submissions a judge overrode alone and reports how many —
+replacing an override is a deliberate, one-at-a-time act. Each staff action's
+event carries the staff member as `user_id`, so the audit log attributes it; the
+competitor sees that a verdict was a rejudge or a judge's decision, never the
+reason. Staff-queued rejudges don't count toward a competitor's in-flight
+submission cap.
+

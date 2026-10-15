@@ -69,6 +69,8 @@ const submitMutate = vi.fn();
 function judging(over: Partial<Judging>): Judging {
   return {
     id: "j1",
+    code_submission_id: "cs1",
+    origin: "submission",
     challenge_id: "ch1",
     user_id: "u1",
     team_id: null,

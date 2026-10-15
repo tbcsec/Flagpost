@@ -179,6 +179,10 @@ PERMISSIONS: tuple[Permission, ...] = (
     # only: a competitor always reads their own (and their team's) through
     # ownership, not this grant.
     Permission("judging_view", "Code Judge", Scope.COMPETITION),
+    # Rejudge submissions (one, or every submission to a problem, after a test
+    # case or limit is fixed) and override a verdict with a recorded reason
+    # (#450). Every use is audited and shown on the judging.
+    Permission("judging_rejudge", "Code Judge", Scope.COMPETITION),
     # Marketplace / content packs (#387, ADR-0040). Install a content pack —
     # packaged challenges (into a competition) or brand themes (site-wide) —
     # through the existing importers. Global + Administrator-only among the
@@ -266,8 +270,10 @@ JUDGE_PERMISSIONS: list[str] = [
     "instance_manage",
     # A Judge may also launch (e.g. to test a challenge before publish).
     "instance_launch",
-    # Code judge (#448): every subject's code submissions and judgings.
+    # Code judge (#448/#450): every subject's code submissions and judgings,
+    # and rejudging / overriding them.
     "judging_view",
+    "judging_rejudge",
 ]
 
 # Participant: competitor-facing only — view challenges, view the scoreboard,

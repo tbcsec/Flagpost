@@ -33,7 +33,10 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "challenge.solved": [
         "competition_id", "challenge_id", "user_id", "team_id", "points",
         "is_first_blood",
+        # True when a rejudge/override granted it (#450), so a rule can skip.
+        "regrade",
     ],
+    "challenge.solve_revoked": ["competition_id", "challenge_id", "user_id", "team_id"],
     "challenge.published": ["competition_id", "challenge_id", "user_id", "title"],
     "challenge.created": ["competition_id", "challenge_id", "user_id", "title"],
     "challenge.updated": ["competition_id", "challenge_id"],
@@ -83,6 +86,15 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     "judging.completed": [
         "competition_id", "challenge_id", "judging_id", "user_id", "team_id", "kind",
         "verdict",
+    ],
+    # Staff actions: user_id is the staff member (the audit log's actor), the
+    # competitor whose code it is is submitter_user_id.
+    "judging.rejudge_requested": [
+        "competition_id", "challenge_id", "judging_id", "user_id", "count",
+    ],
+    "judging.overridden": [
+        "competition_id", "challenge_id", "judging_id", "user_id",
+        "submitter_user_id", "team_id", "verdict", "reason",
     ],
     "challenge.hint_requested": [
         "competition_id", "challenge_id", "hint_id", "user_id", "team_id", "cost",
@@ -283,9 +295,12 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     # reads them (as challenge.attempted is gated on staff analytics).
     "judging.queued": "judging_view",
     "judging.completed": "judging_view",
+    "judging.rejudge_requested": "judging_view",
+    "judging.overridden": "judging_view",
     # Member-visible events (published challenges, solves, scoreboard-facing).
     "challenge.published": "challenge_view",
     "challenge.solved": "challenge_view",
+    "challenge.solve_revoked": "challenge_view",
     "challenge.rated": "feedback_view_responses",
     "challenge.hint_requested": "challenge_view",
     "hint.released": "challenge_view",

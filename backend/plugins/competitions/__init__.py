@@ -31,6 +31,7 @@ ACTIVITY_EVENTS: tuple[str, ...] = (
     "challenge.published",
     "challenge.deleted",
     "challenge.solved",
+    "challenge.solve_revoked",
     "challenge.attempted",
     "challenge.guesses_reset",
     "challenge.rated",
@@ -186,7 +187,12 @@ def setup(app, event_bus, db_factory) -> None:
         # REST path via visible_solve_cutoff ("one unfiltered path defeats the
         # whole feature"). Suppress the whole ping for these events until
         # unfreeze; staff read the REST board (unfrozen for them) as the live view.
-        if event_name in ("challenge.solved", "score.adjusted", "achievement.awarded"):
+        if event_name in (
+            "challenge.solved",
+            "challenge.solve_revoked",
+            "score.adjusted",
+            "achievement.awarded",
+        ):
             async with db_factory() as db:
                 competition = await db.get(Competition, competition_id)
                 if competition is not None and freeze_cutoff(competition) is not None:

@@ -40,5 +40,7 @@ def setup(app, event_bus, db_factory) -> None:
         # graded attempt or a reveal must drop the cache like a solve does.
         "challenge.attempted",
         "hint.released",
+        # A rejudge or override taking a solve away (#450) moves it back.
+        "challenge.solve_revoked",
     ):
         event_bus.subscribe(event_type, _invalidate, owner="skills")

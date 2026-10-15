@@ -349,3 +349,20 @@ hidden test (tests share the scratch directory, so a later test's output could
 carry what the program saw in a hidden one), and the read API shows it for
 examples only.
 
+## Amendment: rejudging and overrides (2026-10-15, #450)
+
+A rejudge or a judge's override is a **new judging** of the same code
+(`origin`: `rejudge` / `override`, with who asked and, for an override, why);
+history is never rewritten, and **the newest finished judging of a submission
+is the one that counts**.
+
+That refines the previous amendment's "every scored verdict is a `Submission`
+row": it is one row **per code submission**, not per judging. The first verdict
+creates it through the shared award path; a later one *updates* it and
+reconciles the award (`utils/grading.regrade`) — the subject's earliest correct
+submission holds the award, the rest are duplicates, and a dynamic challenge is
+re-valued. One row per submission keeps attempt counts honest (a rejudge isn't
+a new attempt) and makes revoking an award a state change rather than a row
+hunt. Revoking emits a new `challenge.solve_revoked` event, which moves the
+scoreboard exactly as `challenge.solved` does.
+

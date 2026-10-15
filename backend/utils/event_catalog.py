@@ -50,6 +50,9 @@ EVENT_TYPES: tuple[str, ...] = (
     "challenge.published",
     "challenge.deleted",
     "challenge.solved",
+    # A solve taken back — a code submission rejudged or overridden away from
+    # Accepted (#450). Moves the scoreboard exactly as a solve does.
+    "challenge.solve_revoked",
     # Every *graded* flag submission, right or wrong (§13.2 logs the row; this
     # is its event half). Wrong guesses previously emitted nothing, leaving
     # attempt-counting surfaces (dashboard stats, challenge health, analytics)
@@ -179,6 +182,8 @@ EVENT_TYPES: tuple[str, ...] = (
     # judging has a lifecycle of its own). ids + verdict only — never source.
     "judging.queued",
     "judging.completed",
+    "judging.rejudge_requested",
+    "judging.overridden",
     "score.adjusted",
     "achievement.awarded",
     "scoreboard.frozen",

@@ -60,6 +60,15 @@ const ACTIVITY_INVALIDATIONS: Record<string, (cid: string) => QueryKey[]> = {
   // The solver still refreshes its own per-user state (solved/locked) via the
   // submit mutation. Under a freeze the delta is omitted and use-activity falls
   // back to refetching ["challenges", cid].
+  // A solve taken back by a rejudge or override (#450): no delta to patch the
+  // list with, so the list refetches too.
+  "challenge.solve_revoked": (cid) => [
+    ["challenges", cid],
+    ...dashboardData(cid),
+    ["analytics", cid],
+    ["participants", cid],
+    ["scoreboard-timeline", cid],
+  ],
   "challenge.solved": (cid) => [
     ...dashboardData(cid),
     ["analytics", cid],

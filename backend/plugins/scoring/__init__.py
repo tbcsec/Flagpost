@@ -93,6 +93,7 @@ def setup(app, event_bus, db_factory) -> None:
     # board. These recompute + rebroadcast the shared board.
     scoring_events = (
         "challenge.solved",
+        "challenge.solve_revoked",  # a rejudge/override took a solve back (#450)
         "challenge.hint_requested",
         "score.adjusted",
         "achievement.awarded",

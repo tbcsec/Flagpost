@@ -2265,8 +2265,16 @@ export interface JudgingRun {
   output: string | null;
 }
 
+export type JudgingOrigin = "submission" | "rejudge" | "override";
+
 export interface Judging {
   id: string;
+  code_submission_id: string;
+  origin: JudgingOrigin;
+  /** Staff only: who asked for a rejudge/override, and an override's reason. */
+  requested_by_name?: string | null;
+  note?: string | null;
+  error?: string | null;
   challenge_id: string;
   user_id: string;
   team_id: string | null;
@@ -2303,3 +2311,54 @@ export interface ProblemView {
   examples: { index: number; input: string; answer: string; truncated: boolean }[];
   judge_ready: boolean;
 }
+
+// --- the jury console (#450) -------------------------------------------------------------
+
+export interface StaffJudgingRow {
+  id: string;
+  code_submission_id: string;
+  challenge_id: string;
+  challenge_title: string;
+  user_id: string;
+  user_name: string;
+  team_id: string | null;
+  team_name: string | null;
+  kind: CodeSubmissionKind;
+  origin: JudgingOrigin;
+  language_name: string;
+  status: JudgingStatus;
+  verdict: JudgingVerdict | null;
+  submitted_at: string;
+  created_at: string;
+  finished_at: string | null;
+  max_time_ms: number | null;
+  max_memory_kb: number | null;
+  tests_passed: number | null;
+  tests_total: number | null;
+  requested_by_name: string | null;
+  note: string | null;
+}
+
+export interface StaffJudgingPage {
+  items: StaffJudgingRow[];
+  total: number;
+}
+
+export interface JudgingQueue {
+  queued: number;
+  running: number;
+  site_queued: number;
+  site_running: number;
+  judge_enabled: boolean;
+  /** Programming problems in the competition, drafts included. */
+  problems: number;
+}
+
+export interface JudgingListFilters {
+  challenge_id?: string;
+  verdict?: string;
+  status?: string;
+  kind?: CodeSubmissionKind;
+}
+
+export type RejudgeScope = "all" | "accepted" | "not_accepted";

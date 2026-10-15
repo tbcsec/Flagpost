@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from db import ensure_aware_utc, utcnow
 from models.attachment import Attachment
+from models.judge_problem import JudgeProblem
 from models.report import CompetitionReport
 from models.competition import Competition
 from models.ticket_attachment import TicketAttachment
@@ -56,7 +57,7 @@ async def delete_competition_tree(
     observe a durable deletion.
     """
     competition_id = competition.id
-    # Both object-backed tables — challenge files and ticket screenshots (#80).
+    # Every object-backed table — challenge files, ticket screenshots (#80), test data.
     object_keys = [
         *(
             await db.scalars(
@@ -72,6 +73,18 @@ async def delete_competition_tree(
                 )
             )
         ).all(),
+        # Programming problems' test-data zips (#447); null until a test case exists.
+        *(
+            key
+            for key in (
+                await db.scalars(
+                    select(JudgeProblem.object_key).where(
+                        JudgeProblem.competition_id == competition_id
+                    )
+                )
+            ).all()
+            if key
+        ),
         # Generated post-event report artefacts (#134): the PDF + HTML per report,
         # both nullable, so drop the empties.
         *(

@@ -297,3 +297,26 @@ is justified above, and `THREAT_MODEL.md`'s judge section should record them as
 such rather than describing the judge as "the instancing posture". The
 "embedded executor needs no new infrastructure" property still holds: nothing is
 added to the deployment, only to the build.
+
+## Amendment: problem test data is one zip per problem (2026-10-14, #447)
+
+The issue sketched a `JudgeTestcase` row per test case with its input and
+expected output as separate objects. Authoring (#447) instead stores **one
+test-data zip per problem** — the ICPC/Kattis package layout,
+`data/sample/NNN.in|.ans` then `data/secret/NNN.in|.ans` — as a single object
+referenced by the `judge_problems` row, which also caches a manifest (stable
+id, example flag, sizes) so listing never opens the zip.
+
+Three things decided it. The backup's object side-car carries **one object per
+row**, so a problem rides export/import, clone and the retention purge exactly
+as an attachment does, with no special-casing. The zip **is** the interchange
+format problem-package import (#451) reads. And the executor (#448) fetches
+**one object per judging** instead of 2 × N. File names inside the zip are
+re-derived from position on every write, so they always sort in judging order
+(examples first).
+
+The cost is that every test-case edit rewrites the whole zip. That is bounded
+(16 MB per file, 64 MB per problem) and authoring-time only; edits take a row
+lock so concurrent editors can't lose each other's changes, and the new zip is
+stored under a fresh key and the old one deleted only after commit, so a
+failure part-way never leaves the row pointing at a partial object.

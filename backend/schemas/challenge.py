@@ -11,7 +11,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-FlagType = Literal["static", "regex", "multiple_choice"]
+# "programming" (#447) has no flag: it is marked by running the competitor's
+# code against the problem's test data (the optional judge module).
+FlagType = Literal["static", "regex", "multiple_choice", "programming"]
 ChallengeState = Literal["draft", "published"]
 ScoringType = Literal["static", "dynamic"]
 

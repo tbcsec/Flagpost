@@ -1867,3 +1867,18 @@ source. The source of an examples-only run isn't kept once judged. Code submissi
 judgings are runtime state and **not in the backup**; their score is, in the
 `Submission` row.
 
+**The competitor's page** (#449) is a full-width route,
+`/challenges/[challengeId]` — a statement, examples and a code editor need more
+room than the board's dialog, and a problem should be deep-linkable; the board
+opens programming challenges there and keeps the dialog for flag challenges. It
+reads `GET …/challenges/{id}/problem` (effective limits, the languages this
+problem accepts with their own time limits, and the examples' text — never a
+hidden test). The editor is CodeMirror, loaded with `next/dynamic` (`ssr:
+false`) so it stays out of every other route's bundle, themed from the design
+tokens; drafts are kept per problem and language in `localStorage`. Verdicts
+arrive **live on the existing per-user room** (`user/<id>`): the route and the
+worker push a `{"type": "judging", …}` frame — ids and state only — whenever a
+judging is queued, starts, retries or finishes, and the one socket the app
+already holds for notifications (`useNotifications`) invalidates the judging
+queries, so no second socket is opened. A slow poll covers a dropped socket
+while a judging is in flight.

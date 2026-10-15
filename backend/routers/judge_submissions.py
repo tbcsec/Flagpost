@@ -18,6 +18,8 @@ mode, their team's — with per-test detail for the examples only. Staff with
 from __future__ import annotations
 
 import asyncio
+import math
+from pathlib import PurePosixPath
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -28,7 +30,14 @@ from auth.deps import require_permission, user_has_permission
 from config import settings as app_settings
 from db import get_db
 from models.competition import Competition
-from models.judge import JUDGE_SETTINGS_ID, JudgeLanguage, JudgeSettings
+from models.judge import (
+    DEFAULT_MEMORY_LIMIT_MB,
+    DEFAULT_OUTPUT_LIMIT_KB,
+    DEFAULT_TIME_LIMIT_MS,
+    JUDGE_SETTINGS_ID,
+    JudgeLanguage,
+    JudgeSettings,
+)
 from models.judge_problem import JudgeProblem
 from models.judging import ACTIVE_JUDGING_STATUSES, CodeSubmission, Judging, JudgingRun
 from models.user import User
@@ -36,13 +45,23 @@ from plugins.loader import is_module_enabled
 from ratelimit import get_rate_limiter
 from ratelimit.base import RateLimiter
 from routers.challenges import load_visible_challenge
-from schemas.judge import CodeSourceOut, CodeSubmitRequest, JudgingOut, JudgingRunOut
+from schemas.judge import (
+    CodeSourceOut,
+    CodeSubmitRequest,
+    JudgingOut,
+    JudgingRunOut,
+    ProblemExampleOut,
+    ProblemLanguageOut,
+    ProblemOut,
+)
 from storage import get_storage
 from storage.base import ObjectStorage
+from utils import judge_testdata as td
 from utils import judge_worker
 from utils.competition_status import require_playable
 from utils.event_bus import event_bus
 from utils.grading import lock_subject
+from utils.judge_live import push_judging
 from utils.scoring import resolve_subject, solved_challenge_ids
 
 router = APIRouter(prefix="/api/competitions/{competition_id}", tags=["judgings"])
@@ -326,8 +345,86 @@ async def submit_code(
             "kind": body.kind,
         },
     )
+    await push_judging(
+        competition_id=competition_id, challenge_id=challenge_id,
+        judging_id=judging.id, user_id=current_user.id, status="queued",
+    )
     judge_worker.wake()
     return await _out(db, judging, staff=False)
+
+
+# --- the problem, as a competitor sees it -------------------------------------------------
+
+# Example text shown on the problem page; larger examples are cut (their full
+# data is still what judging uses).
+EXAMPLE_DISPLAY_BYTES = 16 * 1024
+
+
+def _display_text(blob: bytes) -> tuple[str, bool]:
+    cut = len(blob) > EXAMPLE_DISPLAY_BYTES
+    text = blob[:EXAMPLE_DISPLAY_BYTES].decode("utf-8", errors="replace")
+    return text, cut or "\ufffd" in text
+
+
+@router.get("/challenges/{challenge_id}/problem", response_model=ProblemOut)
+async def get_problem_view(
+    competition_id: str,
+    challenge_id: str,
+    current_user: User = Depends(require_permission("challenge_view")),
+    db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
+) -> ProblemOut:
+    competition = await _competition_with_judge(db, competition_id)
+    challenge = await load_visible_challenge(db, competition_id, challenge_id, current_user)
+    if challenge.flag_type != "programming":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "This isn't a programming challenge")
+    # Same gate as reading a challenge (get_challenge): competitors see
+    # problems only while the competition is running.
+    await require_playable(db, competition, current_user.id)
+
+    judge = await db.get(JudgeSettings, JUDGE_SETTINGS_ID)
+    problem = await db.scalar(
+        select(JudgeProblem).where(
+            JudgeProblem.challenge_id == challenge_id,
+            JudgeProblem.competition_id == competition_id,
+        )
+    )
+    defaults = judge or JudgeSettings()
+    time_limit = (problem and problem.time_limit_ms) or defaults.default_time_limit_ms or DEFAULT_TIME_LIMIT_MS
+    languages = (
+        await db.scalars(
+            select(JudgeLanguage).where(JudgeLanguage.enabled.is_(True)).order_by(JudgeLanguage.name)
+        )
+    ).all()
+    allowed = problem.allowed_languages if problem else None
+    examples: list[ProblemExampleOut] = []
+    if problem is not None and any(t.get("sample") for t in problem.testcases or []):
+        cases = await asyncio.to_thread(td.load, storage, problem.object_key, problem.testcases)
+        for i, case in enumerate(c for c in cases if c.sample):
+            shown_in, cut_in = _display_text(case.input)
+            shown_ans, cut_ans = _display_text(case.answer)
+            examples.append(
+                ProblemExampleOut(index=i, input=shown_in, answer=shown_ans, truncated=cut_in or cut_ans)
+            )
+    return ProblemOut(
+        time_limit_ms=time_limit,
+        memory_limit_mb=(problem and problem.memory_limit_mb) or defaults.default_memory_limit_mb or DEFAULT_MEMORY_LIMIT_MB,
+        output_limit_kb=(problem and problem.output_limit_kb) or defaults.default_output_limit_kb or DEFAULT_OUTPUT_LIMIT_KB,
+        compare_mode=problem.compare_mode if problem else "token",
+        float_tolerance=problem.float_tolerance if problem else None,
+        languages=[
+            ProblemLanguageOut(
+                key=lang.key,
+                name=lang.name,
+                extension=PurePosixPath(lang.source_filename).suffix.lower(),
+                time_limit_ms=max(1, math.ceil(time_limit * lang.time_multiplier)),
+            )
+            for lang in languages
+            if allowed is None or lang.key in allowed
+        ],
+        examples=examples,
+        judge_ready=bool(judge and judge.enabled),
+    )
 
 
 # --- read ------------------------------------------------------------------------------

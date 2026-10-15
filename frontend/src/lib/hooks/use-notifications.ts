@@ -38,6 +38,20 @@ function maybeShowBrowserNotification(frame: {
   }
 }
 
+/** The caches a `judging` frame on the user room invalidates (#449). One of the
+ *  user's code judgings changed state; the frame is ids + state only, so the
+ *  judgings are refetched — and, on an accept, the challenges too, whose solved
+ *  flags it changes. */
+export function judgingFrameInvalidations(frame: {
+  competition_id?: string | null;
+  verdict?: string | null;
+}): string[][] {
+  if (!frame.competition_id) return [];
+  const keys = [["judge", "judgings", frame.competition_id]];
+  if (frame.verdict === "accepted") keys.push(["challenges", frame.competition_id]);
+  return keys;
+}
+
 /** The current user's notifications, subscribed to their per-user room: a new
  *  notification pushed there invalidates the list (and, with it, the bell), and
  *  surfaces an OS notification when the browser preference is on. */
@@ -62,7 +76,14 @@ export function useNotifications() {
           competition_id?: string | null;
           title?: string;
           body?: string | null;
+          verdict?: string | null;
         };
+        if (frame.type === "judging") {
+          for (const queryKey of judgingFrameInvalidations(frame)) {
+            queryClient.invalidateQueries({ queryKey });
+          }
+          return;
+        }
         if (frame.type === "notification") {
           queryClient.invalidateQueries({ queryKey: notificationKeys.all });
           // A ticket notification means the underlying ticket changed — refresh

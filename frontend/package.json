@@ -12,7 +12,18 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-cpp": "^6.0.3",
+    "@codemirror/lang-go": "^6.0.1",
+    "@codemirror/lang-java": "^6.0.2",
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/lang-python": "^6.2.1",
+    "@codemirror/lang-rust": "^6.0.2",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.14",
     "@fontsource/space-grotesk": "^5.3.0",
+    "@lezer/highlight": "^1.2.5",
     "@radix-ui/react-dialog": "^1.2.0",
     "@radix-ui/react-label": "^2.1.16",
     "@radix-ui/react-slot": "^1.1.1",

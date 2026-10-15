@@ -1,10 +1,16 @@
-# Threat model — challenge instancing
+# Threat model — code-executing subsystems
 
-Challenge instancing (#266/#320, ADR-0036) is the one Flagpost subsystem that
-**runs adversary-controlled, deliberately-vulnerable code**: a challenge author
-ships an image designed to be exploited, and competitors exploit it. Every other
-subsystem treats its inputs as data; here the *workload itself* is hostile. This
-document states what we defend, how, and what stays the operator's job.
+Two Flagpost subsystems run code an adversary controls; every other subsystem
+treats its inputs as data. This document states, for each, what we defend, how,
+and what stays the operator's job.
+
+- **Challenge instancing** (#266/#320, ADR-0036) runs **deliberately vulnerable**
+  images: an author ships something designed to be exploited, and competitors
+  exploit it. The sections below up to [the code judge](#the-code-judge) cover it.
+- **The code judge** (#446, ADR-0042) runs **code a competitor wrote**, against
+  test data the competitor must not see. See [the code judge](#the-code-judge).
+
+# Challenge instancing
 
 ## Assets & trust boundaries
 
@@ -141,3 +147,127 @@ never exported.** Secrets — the registry credential, the k8s bearer token — 
 on the site settings row, are encrypted at rest (ADR-0020), write-only over the
 API, and dropped from every export. Nothing secret crosses the portability
 boundary.
+
+# The code judge
+
+The code judge (#446, ADR-0042 and its amendment) compiles and runs a
+competitor's submission against a problem's test data. Unlike an instance, the
+workload is *written* by the adversary, and the most valuable asset is in the
+same container as it: the expected answers.
+
+## Assets & trust boundaries
+
+- **The hidden test data** — the inputs and expected outputs of non-example
+  tests. A submission that can read them can print the answers and "solve"
+  anything.
+- **The verdict** — a submission must not be able to report its own result.
+- **The judge host and control plane** — as for instancing: no breakout, no
+  route to Postgres/Redis/the object store, no orchestrator credential.
+- **Fair resource accounting** — a submission must not escape its time, memory
+  or output limits (a correctness property for the scoreboard, not a
+  confidentiality one).
+
+Two boundaries: the **container** (no network, the Docker posture below),
+and inside it the **uid split** between the harness and the submission.
+
+## How one judging runs
+
+One throwaway container per judging, through the same restricted socket proxy
+as instancing (`docker-compose.judge.yml`; exec, volumes and build denied, and
+"Check connection" verifies it). The backend creates the container, uploads a
+tar — the harness, a root-only job file, the test data and the source — starts
+it, waits, reads one result line from the log and deletes it. The harness
+(`backend/judge_harness`, a static Go binary) is PID 1.
+
+| Control | Judge container | vs. instancing |
+|---|---|---|
+| Network | `NetworkMode: none`, `NetworkDisabled` | stricter — no network at all |
+| Capabilities | `CapDrop: ALL`, `CapAdd: SETUID, SETGID, KILL` — for the harness only | **deviation** — see below |
+| Privilege escalation | `no-new-privileges` | same |
+| Root filesystem | writable layer, every file root-owned | **deviation** — an archive upload into a read-only rootfs is refused |
+| Scratch | tmpfs `/work` (exec, owned by the submission user), `/tmp`, `/var/tmp`, and a pinned 64 MB `/dev/shm` | **deviation** — `/work` is exec-able so a compiled program runs |
+| PID / fd exhaustion | `PidsLimit` 256, submission `RLIMIT_NPROC` 128, `nofile` 1024 | tighter |
+| Memory | container `Memory` = `MemorySwap` (no swap) as the hard backstop | same |
+| Labels | `io.flagpost.judge`, never instancing's `io.flagpost.managed` | instancing's orphan reaper deletes managed containers |
+
+**The uid split is the boundary inside the container.** The harness runs as uid
+0 holding only `SETUID`/`SETGID`/`KILL`. Every command it runs on the
+submission's behalf — the compile step and each test — goes through a launcher
+that applies rlimits, then drops to an unprivileged uid with no supplementary
+groups and no capabilities at all, then execs. Each judging gets its **own**
+uid, drawn from a reserved range above any real account: the kernel counts a
+uid's processes host-wide, so with a shared uid one judging's fork-heavy
+submission would eat into a concurrent judging's process cap. So the submission:
+
+- **can't read** the job file or the test data (`/judge` is `0700` root); it gets
+  its test input only as an already-open stdin;
+- **can't write** the rootfs or the harness (root-owned), only `/work` and the
+  temp tmpfs;
+- **can't forge the verdict**: its stdout is a pipe to the harness, it can't
+  reach the harness's own stdout (`/proc/1/fd/1` needs the harness's uid), and
+  the result line must carry a per-judging nonce from the root-only job file;
+- **can't signal the harness or regain privilege** (different uid, no caps,
+  `no-new-privileges`).
+
+`CAP_KILL` is what lets the harness kill every one of the submission's
+processes after each run — including ones that left the process group with
+`setsid()` — so an orphan can't hold the output pipe open or carry on into the
+next test. The harness is a child subreaper, so every orphan comes back to it to
+be reaped, and what each reaped process used is added to the test: CPU burnt in
+a child the submission never waits for still counts against its time limit.
+
+**Limits.** CPU time is the time limit (`RLIMIT_CPU`, measured from rusage),
+with a wall-clock backstop at 3× + 1s. Memory is the submission's summed
+resident set plus growth of every writable tmpfs — `/dev/shm` included — since
+the test began (so data can't be parked in files to dodge the limit), sampled
+every 10 ms, with the
+container's cap behind it and the submission's OOM score raised so the kernel
+picks it, never the harness. Output is read through a capped pipe; a test's
+stderr is discarded and never returned (it could echo hidden input). Files are
+capped by `RLIMIT_FSIZE`. The compile step has its own CPU, wall and memory
+budget, so a source crafted to make the compiler balloon gets a compile error.
+A fork bomb hits its own `RLIMIT_NPROC` long before
+the container's pid limit, so the harness can still start the threads it needs
+to report.
+
+All of this is exercised against a real daemon by
+`backend/tests/test_judge_executor_e2e.py` (opt-in), including the hostile
+probes: reading test data or the job file, writing the harness or rootfs,
+network egress, `setuid(0)`, signalling PID 1, forging a result line, CPU and
+sleep loops, memory hogs in RAM and in files, output floods, oversized files, a
+fork bomb, and orphans holding stdout.
+
+## Residual risks (accepted / operator-owned)
+
+- **Shared kernel.** As for instancing: a container breakout 0-day defeats the
+  posture. Recommended: run the judge's Docker host apart from the control
+  plane for a high-stakes event. *Mitigated, not eliminated.*
+- **Language images are trusted.** An administrator chooses each language's
+  image (`manage_judge_infra`); the image's own binaries run as the submission
+  user. A malicious image could misjudge. Images are pulled anonymously (the
+  instancing registry credential is never sent), so a private image must be
+  pre-pulled on the judge host. *Operator-owned, like any image.*
+- **The submission's process cap is per uid, host-wide.** Each judging draws
+  its own uid from a reserved range (100000–1099999), so two judgings colliding
+  only share that cap; nothing else is shared, since each container sees only
+  its own processes. *Accepted* — and keep other workloads off that range.
+- **Memory is sampled summed RSS.** Pages shared between a submission's
+  processes are counted once per process, so a multi-process submission is
+  measured generously against its limit; and a combined peak across several
+  processes lasting under the 10 ms sampling interval can slip past (a single
+  process's peak is always caught from its rusage). Typical contest code is a
+  single process, and the container's memory cap bounds the rest. *Accepted.*
+- **Tests share `/work`.** Files a submission writes during one test are still
+  there for the next. It can only see its own inputs, so this leaks nothing,
+  but tests aren't hermetic. *Accepted.*
+- **Timing is good, not finals-grade** (ADR-0042 consequences). CPU-time
+  accounting removes most contention, but a submission within a few percent of
+  its limit can flip under heavy host load. *Documented for operators.*
+
+## Backup / export boundary
+
+Problems and their test data are portable authoring content and ride the backup
+(validated on import; a row is only ever pointed at its own re-stored zip). The
+judge's site configuration — the endpoint and the language registry (an image
+plus commands the judge runs) — is never exported, so a backup can't plant a
+language (the GHSA-x8v4 class).

@@ -118,7 +118,11 @@ export function JudgeSetupWizard({
       ? t("legReachable")
       : name === "proxy_restricted"
         ? t("legRestricted")
-        : name;
+        : name === "harness_available"
+          ? t("legHarness")
+          : name === "test_judging"
+            ? t("legTestJudging")
+            : name;
 
   const chosen = presets.filter((p) => selected.includes(p.key));
 

@@ -394,8 +394,10 @@ async def test_check_only_ever_probes_the_saved_endpoint(client, monkeypatch):
 
     probed: list[str] = []
 
-    async def fake_check(endpoint):
-        probed.append(endpoint)
+    async def fake_check(settings):
+        from utils.judge_connection import effective_endpoint
+
+        probed.append(effective_endpoint(settings)[0])
         return []
 
     monkeypatch.setattr(judge_admin, "_run_check", fake_check)

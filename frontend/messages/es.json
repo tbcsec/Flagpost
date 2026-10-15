@@ -2886,6 +2886,8 @@
         "checkResults": "Connection check results",
         "legReachable": "Proxy reachable",
         "legRestricted": "Proxy locked down",
+        "legHarness": "Judge harness installed",
+        "legTestJudging": "Test judging ran",
         "checkFixHint": "Fix the failing item above, then check again. A proxy that isn't locked down would give submissions a path to your server's Docker, so setup won't continue until it is.",
         "checkFailed": "Couldn't check the connection",
         "languagesTitle": "Choose languages",

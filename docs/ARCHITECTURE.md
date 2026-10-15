@@ -63,6 +63,7 @@ into concrete technical commitments:
 | Object storage | RustFS (S3-compatible; vendor-neutral `S3_*` config — ADR-0041) | challenge files, evidence, avatars |
 | Internationalization | next-intl (non-routed, cookie locale) + Crowdin | UI chrome only; ICU messages, `messages/en.json` source of truth — ADR-0029 |
 | Deployment | Docker Compose (default), Kubernetes (future) | |
+| Code judge harness | Go (static binary, standard library only) | uploaded into each judge container, so stock language images work — §17, ADR-0042 amendment. The one non-Python backend component; it has no runtime role in the API |
 
 `VISION.md` suggests Next.js 14 / React 18 specifically; this table
 deliberately doesn't repeat those numbers. Frontend framework versions
@@ -1755,3 +1756,61 @@ in demo mode. Every transition emits a §3.2 catalogue event
 `TRIGGER_PERMISSIONS` entries, is audited, and pings the competition `activity`
 room so a subject's challenges view refetches live. Deploy recipe:
 `docs/CHALLENGE_INSTANCES.md`.
+
+---
+
+## 17. Programming Challenges (Code Judge)
+
+A challenge type graded by **running the competitor's code** against test data
+under time and memory limits (#446, ADR-0042). Shipped as the eighth **optional
+module** (`judge`), inert until an operator configures an executor and at least
+one language — the instancing posture (§16). Programming challenges sit on the
+ordinary points scoreboard beside flag challenges; an ICPC-style ranking mode is
+a later, separate competition-level decision (ADR-0042 §6).
+
+### 17.1 Configuration and authoring
+
+Site configuration (`JudgeSettings`, `JudgeLanguage`) is gated by the GLOBAL
+`manage_judge_infra` grant and **excluded from the backup**: a language is an
+image plus commands the judge executes, the class of thing a backup must not
+plant (GHSA-x8v4). Setup is a guided flow (one compose overlay supplies the
+endpoint; tick languages from a preset catalogue; "Check connection" runs a real
+test judging). Commands are argv lists with only `{source}` and `{work}`
+placeholders.
+
+A programming challenge (`flag_type = "programming"`) has no flag. Its
+`JudgeProblem` row holds optional limit / comparison / language overrides —
+null means the default — and **one test-data zip** in the ICPC/Kattis layout
+(`data/sample|secret/NNN.in|.ans`) plus a cached manifest, so it rides backup,
+clone and purge like an attachment (ADR-0042 amendment). Publishing requires a
+test case; flag submission to it is refused.
+
+### 17.2 Executors and the harness
+
+A `JudgeExecutor` (`utils/judge_executor.py`) is the sibling of §16's
+`Provisioner`: `run(job)→JudgeResult` and `validate()→[CheckResult]`, registered
+**by kind** and always looked up through the registry (`executor_for`). A
+`JudgeJob` is frozen and final: the language's time multiplier is applied and
+the placeholders substituted (`make_job`).
+
+The `docker` kind (`utils/judge_executor_docker.py`) runs **one throwaway
+container per judging** through the restricted socket proxy: create → upload a
+tar (harness, root-only job file and test data, world-readable source) → start
+→ wait → read one result line from the log → delete. The container has no
+network. Its PID 1 is the **harness** (`backend/judge_harness`, Go), which
+compiles once and runs each test — samples first, stopping at the first failure —
+as an unprivileged user, enforcing CPU time, memory, output, file-size and
+process limits, comparing output (`token` / `exact` / `float`), and printing a
+nonce-tagged result. The posture, its deliberate deviations from §16's hardening
+recipe, and the accepted residuals are in `docs/THREAT_MODEL.md`. Because the
+harness is uploaded per judging, operators point languages at **stock images**
+and Flagpost publishes none; the backend image builds the harness for amd64 and
+arm64 and picks the Docker host's.
+
+Verdicts: `accepted`, `wrong_answer`, `time_limit`, `memory_limit`,
+`output_limit`, `runtime_error`, `compile_error`, and `internal_error` for a
+judging that produced no verdict about the submission. The submission queue,
+the worker loop that drives judgings (not the event bus — its per-handler
+timeout would cancel them), stuck-judging reaping and the award path into
+`Submission` follow in #448's second part.
+

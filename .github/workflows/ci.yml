@@ -104,6 +104,19 @@ jobs:
           print("migrations + role seed OK on Postgres")
           PY
 
+  judge-harness:
+    name: Judge harness (Go)
+    runs-on: ubuntu-latest
+    # ~1 min: pull golang, vet, test.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: gofmt, vet and test (as root, in the build image)
+        # The tests drop privileges to the submission user, which needs root,
+        # so they run in the same golang image the backend Dockerfile builds
+        # the harness with rather than on the runner.
+        run: make -C backend/judge_harness test
+
   frontend:
     name: Frontend (types, lint, unit, build)
     runs-on: ubuntu-latest

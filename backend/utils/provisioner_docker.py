@@ -268,6 +268,80 @@ def _daemon_detail(resp: httpx.Response) -> str:
     return _truncate(resp.text) or f"HTTP {resp.status_code}"
 
 
+async def pull_image(
+    http: httpx.AsyncClient, image: str, *, registry_auth: str | None = None
+) -> tuple[bool, str]:
+    """Pull ``image`` through the proxy, draining the NDJSON stream and
+    requiring the terminal completion marker (not merely the absence of an
+    error). Used by instancing (the validate probe, and ``create`` —
+    ``/containers/create`` 404s on an absent image and a challenge image is
+    rarely pre-cached on the instance host) and by the code judge (#448)."""
+    name, _, tag = image.partition(":")
+    # Forward the operator's registry credential ONLY to the registry it is
+    # scoped to (its own serveraddress). image_ref is lower-trust authoring
+    # content (a challenge_edit holder sets it), so without this a Judge
+    # could point image_ref at an attacker-run registry and harvest the
+    # site-global credential from the X-Registry-Auth header (F1). A pull
+    # whose registry doesn't match goes out anonymous — a private image
+    # elsewhere simply fails to pull, which is the safe outcome.
+    cred_host = credential_registry_host(registry_auth)
+    headers = (
+        {"X-Registry-Auth": registry_auth}
+        if cred_host is not None and cred_host == image_registry_host(image)
+        else {}
+    )
+    try:
+        async with asyncio.timeout(_PULL_TOTAL), http.stream(
+            "POST",
+            "/images/create",
+            params={"fromImage": name, "tag": tag or "latest"},
+            headers=headers,
+        ) as resp:
+            if resp.status_code != 200:
+                await resp.aread()
+                return False, (
+                    f"pull of {image} failed: {_daemon_detail(resp)}"
+                )
+            # A pull opens with 200 then streams NDJSON; a mid-stream
+            # error, OR a stream that just ends early (connection reset
+            # after a partial layer), both mean the image is not ready.
+            # So require the terminal success marker — Docker closes a
+            # good pull with a "Status: Downloaded…" / "…up to date" line
+            # (or a Digest line) — not merely the absence of an error.
+            saw_terminal = False
+            async for line in resp.aiter_lines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except ValueError:
+                    continue
+                if obj.get("error"):
+                    return False, (
+                        f"pull of {image} errored: "
+                        f"{_truncate(str(obj['error']))}"
+                    )
+                status = str(obj.get("status", ""))
+                if status.startswith("Status:") or "Digest:" in status:
+                    saw_terminal = True
+    except TimeoutError:
+        # The total budget, not a stall — name it so an operator can
+        # tell "image too big for the link" from "registry unreachable".
+        return False, (
+            f"pull of {image} did not finish within {_PULL_TOTAL:.0f}s "
+            "— pre-pull large images on the instance host"
+        )
+    except httpx.HTTPError as exc:
+        return False, f"pull of {image} failed: {exc}"
+    if not saw_terminal:
+        return False, (
+            f"pull of {image} ended without a completion marker — the "
+            "stream was truncated (partial download)"
+        )
+    return True, f"pulled {image}"
+
+
 @register_provisioner
 class DockerProvisioner(Provisioner):
     kind: ClassVar[str] = "docker"
@@ -804,76 +878,10 @@ class DockerProvisioner(Provisioner):
         return await self._pull_image(self._cfg.probe_image)
 
     async def _pull_image(self, image: str) -> tuple[bool, str]:
-        """Pull ``image`` through the proxy, draining the NDJSON stream and
-        requiring the terminal completion marker (not merely the absence of an
-        error). Used by the validate probe AND by ``create`` — ``/containers/
-        create`` 404s on an absent image and a challenge image is rarely
-        pre-cached on the instance host; a present image is a fast no-op."""
-        name, _, tag = image.partition(":")
-        # Forward the operator's registry credential ONLY to the registry it is
-        # scoped to (its own serveraddress). image_ref is lower-trust authoring
-        # content (a challenge_edit holder sets it), so without this a Judge
-        # could point image_ref at an attacker-run registry and harvest the
-        # site-global credential from the X-Registry-Auth header (F1). A pull
-        # whose registry doesn't match goes out anonymous — a private image
-        # elsewhere simply fails to pull, which is the safe outcome.
-        cred_host = credential_registry_host(self._cfg.registry_auth)
-        headers = (
-            {"X-Registry-Auth": self._cfg.registry_auth}
-            if cred_host is not None and cred_host == image_registry_host(image)
-            else {}
-        )
         async with self._client(_TIMEOUT_PULL) as http:
-            try:
-                async with asyncio.timeout(_PULL_TOTAL), http.stream(
-                    "POST",
-                    "/images/create",
-                    params={"fromImage": name, "tag": tag or "latest"},
-                    headers=headers,
-                ) as resp:
-                    if resp.status_code != 200:
-                        await resp.aread()
-                        return False, (
-                            f"pull of {image} failed: {_daemon_detail(resp)}"
-                        )
-                    # A pull opens with 200 then streams NDJSON; a mid-stream
-                    # error, OR a stream that just ends early (connection reset
-                    # after a partial layer), both mean the image is not ready.
-                    # So require the terminal success marker — Docker closes a
-                    # good pull with a "Status: Downloaded…" / "…up to date" line
-                    # (or a Digest line) — not merely the absence of an error.
-                    saw_terminal = False
-                    async for line in resp.aiter_lines():
-                        line = line.strip()
-                        if not line:
-                            continue
-                        try:
-                            obj = json.loads(line)
-                        except ValueError:
-                            continue
-                        if obj.get("error"):
-                            return False, (
-                                f"pull of {image} errored: "
-                                f"{_truncate(str(obj['error']))}"
-                            )
-                        status = str(obj.get("status", ""))
-                        if status.startswith("Status:") or "Digest:" in status:
-                            saw_terminal = True
-            except TimeoutError:
-                # The total budget, not a stall — name it so an operator can
-                # tell "image too big for the link" from "registry unreachable".
-                return False, (
-                    f"pull of {image} did not finish within {_PULL_TOTAL:.0f}s "
-                    "— pre-pull large images on the instance host"
-                )
-            except httpx.HTTPError as exc:
-                return False, f"pull of {image} failed: {exc}"
-        if not saw_terminal:
-            return False, (
-                f"pull of {image} ended without a completion marker — the "
-                "stream was truncated (partial download)"
+            return await pull_image(
+                http, image, registry_auth=self._cfg.registry_auth
             )
-        return True, f"pulled {image}"
 
     async def _probe_run_and_dial(self) -> list[CheckResult]:
         legs: list[CheckResult] = []

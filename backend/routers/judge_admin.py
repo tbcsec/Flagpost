@@ -38,7 +38,8 @@ from schemas.judge import (
     JudgeSetupResult,
 )
 from utils.event_bus import event_bus
-from utils.judge_connection import check_endpoint, effective_endpoint
+from utils.judge_connection import effective_endpoint
+from utils.judge_executor import executor_for
 from utils.judge_presets import LANGUAGE_PRESETS
 
 router = APIRouter(prefix="/api/admin/judge", tags=["judge-admin"])
@@ -180,17 +181,19 @@ async def check_connection(
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, "Save an endpoint before checking it."
         )
-    legs = await _run_check(endpoint)
+    legs = await _run_check(settings)
     return JudgeCheckResult(
         ok=bool(legs) and all(leg.ok for leg in legs),
         legs=[JudgeCheckLeg(name=leg.name, ok=leg.ok, detail=leg.detail) for leg in legs],
     )
 
 
-async def _run_check(endpoint: str) -> list:
-    """Seam tests monkeypatch; the legs themselves are exercised against a mock
-    transport in test_judge_admin."""
-    return await check_endpoint(endpoint)
+async def _run_check(settings: JudgeSettings) -> list:
+    """The configured executor's staged check: the proxy is reachable and
+    restricted, the harness is installed, and a real test judging runs end to
+    end (#448). Built from the saved settings only. Seam tests monkeypatch; the
+    legs themselves are exercised against a fake daemon in test_judge_executor."""
+    return await executor_for(settings).validate()
 
 
 @router.post("/setup", response_model=JudgeSetupResult)

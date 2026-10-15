@@ -12,8 +12,8 @@ Two jobs:
   dangerous verbs. The second is the security-critical one: a raw Docker socket
   (or a proxy with its allowlist off) answers them, which would hand the judge —
   and so anyone who controls a submission's runtime — the host's Docker. The
-  executor (#448) extends this with a leg that actually runs a hardened probe
-  container.
+  executor's ``validate()`` (``utils/judge_executor_docker``) runs these first,
+  then checks the harness is installed and runs a real test judging.
 
 Only ever pointed at the **saved/effective** endpoint, never a URL supplied in
 the request — the instancing "test the saved config" posture — so the check

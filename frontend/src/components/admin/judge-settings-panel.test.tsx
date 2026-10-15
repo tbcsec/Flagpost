@@ -73,6 +73,8 @@ const passing: JudgeCheckResult = {
   legs: [
     { name: "endpoint_reachable", ok: true, detail: "reachable, Docker API 1.47" },
     { name: "proxy_restricted", ok: true, detail: "exec: blocked; volumes: blocked; build: blocked" },
+    { name: "harness_available", ok: true, detail: "judge harness for linux/amd64 is installed" },
+    { name: "test_judging", ok: true, detail: "ran a test judging in 0.8s" },
   ],
 };
 const unrestricted: JudgeCheckResult = {
@@ -149,6 +151,21 @@ describe("JudgeSettingsPanel — setup wizard (judge off)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Check connection" }));
     expect(screen.getByText(/Proxy locked down/)).toBeInTheDocument();
     expect(next).toBeDisabled();
+  });
+
+  it("labels every check leg in plain words, including the test judging", () => {
+    settings = baseSettings({ endpoint_url: "http://socket-proxy:2375" });
+    renderWithIntl(<JudgeSettingsPanel />);
+    fireEvent.click(screen.getByRole("button", { name: "Check connection" }));
+    for (const label of [
+      "Proxy reachable",
+      "Proxy locked down",
+      "Judge harness installed",
+      "Test judging ran",
+    ]) {
+      expect(screen.getByText(new RegExp(label))).toBeInTheDocument();
+    }
+    expect(screen.getByText("ran a test judging in 0.8s")).toBeInTheDocument();
   });
 
   it("pre-ticks Python, C++ and Java, and enables in one atomic call", () => {

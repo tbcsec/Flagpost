@@ -1,3 +1,16 @@
+# The code judge's harness (ADR-0042 amendment): a static Go binary uploaded
+# into each judge container, so judging works with stock language images. Built
+# for both Docker host architectures on the build machine's own platform (Go
+# cross-compiles without emulation); the backend picks the one matching the
+# Docker host it judges on.
+FROM --platform=$BUILDPLATFORM golang:1.27 AS judge-harness
+WORKDIR /src
+COPY judge_harness/go.mod judge_harness/*.go ./
+RUN for arch in amd64 arm64; do \
+      CGO_ENABLED=0 GOOS=linux GOARCH=$arch \
+        go build -trimpath -ldflags="-s -w" -o /out/harness-linux-$arch . ; \
+    done
+
 FROM python:3.14-slim
 
 WORKDIR /app
@@ -16,6 +29,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+COPY --from=judge-harness /out/ /app/judge_harness/bin/
 
 # Baked in by release-images.yml from the git tag (#111).
 #

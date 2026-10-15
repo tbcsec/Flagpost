@@ -173,6 +173,11 @@ class Settings(BaseSettings):
     # detected and won't let it be edited, so the overlay is the whole of the
     # infrastructure step. Unset, the endpoint is an ordinary admin setting.
     judge_endpoint_url: str | None = None
+    # Where the code judge's harness binaries live (harness-linux-amd64 /
+    # -arm64, uploaded into each judge container — ADR-0042 amendment). The
+    # backend image builds them into the default location; set this only for a
+    # source checkout that keeps them elsewhere.
+    judge_harness_dir: str | None = None
     # Number of uvicorn worker processes (reads the conventional WEB_CONCURRENCY
     # env var). 1 = single process: in-process broadcast, no Redis required —
     # today's behaviour and the dev/test/single-box default. >1 activates the

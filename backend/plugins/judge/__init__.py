@@ -5,11 +5,12 @@ judges until an operator configures an executor endpoint and at least one
 language and enables it (``JudgeSettings``), on top of the per-competition
 module toggle — the instancing / AI posture (ADR-0036, ADR-0023).
 
-#447 wires the site configuration surface and problem authoring (programming
-challenges and their test data). The executor and its worker loop (#448) arrive
-in a later slice; the
-worker deliberately does *not* run on the event bus, whose per-handler timeout
-would cut real judgings off (ADR-0042 §2).
+#447 wired the site configuration surface and problem authoring (programming
+challenges and their test data); #448 adds the executor
+(``utils/judge_executor*``, the Go harness in ``judge_harness/``) and then the
+submission queue and its worker loop. The worker deliberately does *not* run on
+the event bus, whose per-handler timeout would cut real judgings off (ADR-0042
+§2).
 """
 
 from __future__ import annotations

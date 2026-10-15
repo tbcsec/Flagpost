@@ -16,3 +16,6 @@ venv/
 *.db
 *.sqlite
 *.sqlite3
+
+# Locally built judge harness binaries: the image builds its own.
+judge_harness/bin/

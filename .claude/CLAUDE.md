@@ -11,7 +11,7 @@ call to make silently.
 ## Read these before you start — don't duplicate them here
 
 - `docs/VISION.md` — what and why.
-- `docs/ARCHITECTURE.md` — how. 16 sections; check the relevant one
+- `docs/ARCHITECTURE.md` — how. 17 sections; check the relevant one
   before designing anything new (event bus, RBAC, tenancy, automation,
   and the module system each have a section — don't reinvent a pattern
   that's already specified).
@@ -135,8 +135,9 @@ Subsystem by subsystem, with the non-obvious bits called out:
   fork). Ships *inert* like `ai`. The `ChallengeInstance` row *is* the
   provisioning job — a background-lane state machine (`requested`→…→
   `destroyed`); TTL/orphan reaping rides the shared scheduler, no new process.
-  `docs/CHALLENGE_INSTANCES.md`, `docs/THREAT_MODEL.md` (the one subsystem that
-  runs adversary-controlled code).
+  `docs/CHALLENGE_INSTANCES.md`, `docs/THREAT_MODEL.md` (one of the two
+  subsystems that run adversary-controlled code; the code judge, ARCHITECTURE
+  §17, is the other).
 - **Automation** — the §5 engine on the background lane, catalog-driven
   (`utils/automation_catalog.py`) so a new action is a backend-only change that
   the visual builder picks up automatically. Webhook egress is hardened per

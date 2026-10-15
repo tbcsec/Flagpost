@@ -175,6 +175,10 @@ EVENT_TYPES: tuple[str, ...] = (
     "judge.language_created",
     "judge.language_updated",
     "judge.language_deleted",
+    # Code judging (#448, ADR-0042 open question: its own entity, since a
+    # judging has a lifecycle of its own). ids + verdict only — never source.
+    "judging.queued",
+    "judging.completed",
     "score.adjusted",
     "achievement.awarded",
     "scoreboard.frozen",

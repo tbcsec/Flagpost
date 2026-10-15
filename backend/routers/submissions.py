@@ -24,10 +24,8 @@ from __future__ import annotations
 import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import case, func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from sqlalchemy.exc import IntegrityError
 
 from auth.deps import require_permission, user_has_permission
 from config import settings
@@ -35,7 +33,6 @@ from db import get_db
 from models.challenge import Challenge
 from models.competition import Competition
 from models.submission import Submission
-from models.team import Team
 from models.user import User
 from ratelimit import get_rate_limiter
 from ratelimit.base import RateLimiter
@@ -44,6 +41,7 @@ from schemas.submission import SubmitFlagRequest, SubmitResult
 from utils.competition_status import require_playable
 from utils.event_bus import event_bus
 from utils.flags import verify_regex_flag, verify_static_flag
+from utils.grading import emit_grade, lock_subject, record_grade
 from utils.instance_grading import deployment_flag_mode, grade_unique
 from utils.scoring import (
     challenge_value,
@@ -58,24 +56,6 @@ router = APIRouter(
     prefix="/api/competitions/{competition_id}/challenges/{challenge_id}",
     tags=["submissions"],
 )
-
-
-async def _lock_subject(db: AsyncSession, subject) -> None:
-    """Take a row lock on the scoring subject for the rest of this transaction.
-
-    Serialises concurrent submissions from the same team (or user) so a
-    check-then-insert sequence can't interleave with itself. The lock is on a row
-    that already exists and is never updated here, so it costs a row-level lock
-    and nothing else.
-
-    A no-op on SQLite, which has no ``FOR UPDATE`` — but SQLite serialises
-    writers globally, so the interleaving this prevents cannot occur there
-    either. Postgres is where it matters, and Postgres is production.
-    """
-    model, key = (Team, subject.team_id) if subject.kind == "team" else (User, subject.id)
-    if key is None:
-        return
-    await db.execute(select(model.id).where(model.id == key).with_for_update())
 
 
 def _flag_matches(challenge: Challenge, submitted: str) -> bool:
@@ -187,7 +167,7 @@ async def submit_flag(
         # get graded. That defeats the cap on precisely the challenge type it
         # exists for. Confined to multiple-choice, so static and regex flags
         # take no extra lock on the hot path.
-        await _lock_subject(db, subject)
+        await lock_subject(db, subject)
         if not await subject_has_solved(
             db, challenge_id, subject
         ) and await subject_attempt_count(db, challenge_id, subject) >= limit:
@@ -213,123 +193,31 @@ async def submit_flag(
         shared_flag_match = grade.shared_with
     else:
         correct = await asyncio.to_thread(_flag_matches, challenge, body.flag)
-    already_solved = correct and await subject_has_solved(db, challenge_id, subject)
-    award = correct and not already_solved
-
-    is_first_blood = False
-    points_awarded = 0
-    base_value = 0
-    mc_penalty = 0
-    if award:
-        # First blood = no subject has an awarded solve on this challenge yet.
-        prior_solves = await db.scalar(
-            select(func.count(Submission.id)).where(
-                Submission.challenge_id == challenge_id,
-                Submission.is_correct.is_(True),
-                Submission.is_duplicate.is_(False),
-            )
-        )
-        is_first_blood = prior_solves == 0
-        # This solve makes the count `prior_solves + 1`; a dynamic challenge is
-        # then worth less, and *every* solver converges to that current value.
-        base_value = challenge_value(challenge, prior_solves + 1)
-        points_awarded = base_value
-        # Multiple-choice wrong-guess penalty (#148): dock the award by
-        # mc_penalty_pct per prior incorrect guess. At this point every submission
-        # this subject has made against the challenge since its last reset is a
-        # wrong guess — the current correct one isn't inserted yet, and a prior
-        # correct one would have made this a duplicate (award would be False). So
-        # the reset-aware attempt count is exactly the wrong-guess count.
-        if challenge.flag_type == "multiple_choice" and competition.mc_penalty_pct:
-            wrong_guesses = await subject_attempt_count(db, challenge_id, subject)
-            points_awarded = penalised_value(
-                base_value, competition.mc_penalty_pct, wrong_guesses
-            )
-            mc_penalty = base_value - points_awarded
-
-    def _row(*, duplicate: bool, points: int, penalty: int = 0) -> Submission:
-        # Every attempt is logged — success, failure, or duplicate (§13.2).
-        return Submission(
-            competition_id=competition_id,
-            challenge_id=challenge_id,
-            user_id=current_user.id,
-            team_id=subject.team_id,
-            value=body.flag,
-            is_correct=correct,
-            is_duplicate=duplicate,
-            points_awarded=points,
-            mc_penalty=penalty,
-        )
-
-    if award:
-        # Insert inside a SAVEPOINT so losing the race is recoverable. The
-        # partial unique index on (challenge, subject) is what actually enforces
-        # "first correct submission wins" — the read-then-write above can't,
-        # since both requests query before either commits. Catching this at the
-        # outer commit instead would leave the session unusable and turn a lost
-        # race into a 500.
-        try:
-            async with db.begin_nested():
-                db.add(_row(duplicate=False, points=points_awarded, penalty=mc_penalty))
-                await db.flush()
-        except IntegrityError:
-            # Another submission for this subject got there first. Record what
-            # actually happened — a duplicate, worth nothing — rather than
-            # paying the flag out twice.
-            award = False
-            already_solved = True
-            is_first_blood = False
-            points_awarded = 0
-            db.add(_row(duplicate=True, points=0))
-    else:
-        db.add(_row(duplicate=correct and already_solved, points=points_awarded))
-
-    if award and challenge.scoring_type == "dynamic":
-        # Re-value the prior solvers to the new (lower) base worth so the board
-        # stays consistent — but preserve each solver's own multiple-choice
-        # penalty (#148) instead of collapsing everyone to a single value, which
-        # would overwrite a penalised solver's award with this solver's. For every
-        # non-penalised row mc_penalty is 0, so this stays exactly "converge to the
-        # new value", unchanged from before. Floored at 0 with a portable CASE
-        # (SQLite has no GREATEST); the current row nets back to points_awarded.
-        net = base_value - Submission.mc_penalty
-        await db.execute(
-            update(Submission)
-            .where(
-                Submission.challenge_id == challenge_id,
-                Submission.is_correct.is_(True),
-                Submission.is_duplicate.is_(False),
-            )
-            .values(points_awarded=case((net < 0, 0), else_=net))
-        )
-    await db.commit()
-
-    # Every graded submission emits challenge.attempted (right or wrong) — the
-    # event half of "every attempt is logged" above, and what keeps attempt
-    # counters (dashboard stats, challenge health, analytics) live. Refusals
-    # before grading (rate limit, MC cap, locked) emit nothing.
-    await event_bus.emit(
-        "challenge.attempted",
-        {
-            "competition_id": competition_id,
-            "challenge_id": challenge_id,
-            "user_id": current_user.id,
-            "team_id": subject.team_id,
-            "correct": correct,
-        },
+    # Record it — the shared award path (utils/grading), which the code judge
+    # uses too: duplicate check, first blood, value, race-safe insert, dynamic
+    # re-value. Commit, then emit.
+    grade = await record_grade(
+        db,
+        competition=competition,
+        challenge=challenge,
+        subject=subject,
+        user_id=current_user.id,
+        value=body.flag,
+        correct=correct,
     )
-    if award:
-        await event_bus.emit(
-            "challenge.solved",
-            {
-                "competition_id": competition_id,
-                "challenge_id": challenge_id,
-                "user_id": current_user.id,
-                "team_id": subject.team_id,
-                "points": points_awarded,
-                "is_first_blood": is_first_blood,
-            },
-        )
+    await db.commit()
+    await emit_grade(
+        grade,
+        competition_id=competition_id,
+        challenge_id=challenge_id,
+        user_id=current_user.id,
+        team_id=subject.team_id,
+    )
+    already_solved = grade.already_solved
+    points_awarded = grade.points_awarded
+    is_first_blood = grade.is_first_blood
+    base_value = grade.base_value
+    mc_penalty = grade.mc_penalty
     if shared_flag_match is not None:
         # A wrong submission carried another subject's live per-instance flag —
         # provable flag sharing (ADR-0036 §3). Signal only, for staff and

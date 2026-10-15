@@ -19,6 +19,8 @@ from __future__ import annotations
 def setup(app, event_bus, db_factory) -> None:
     from routers.judge_admin import router as judge_admin_router
     from routers.judge_problems import router as judge_problems_router
+    from routers.judge_submissions import router as judge_submissions_router
 
     app.include_router(judge_admin_router)
     app.include_router(judge_problems_router)
+    app.include_router(judge_submissions_router)

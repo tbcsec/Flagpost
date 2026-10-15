@@ -151,6 +151,7 @@ announcement.published
 site.settings_updated
 judge.settings_updated       judge.language_created     judge.language_updated
 judge.language_deleted
+judging.queued               judging.completed
 score.adjusted               achievement.awarded
 scoreboard.frozen            scoreboard.unfrozen
 module.enabled               module.disabled
@@ -630,6 +631,9 @@ Site Settings             manage_site_settings  (global — the site-wide
                           manage_judge_infra  (global — the code judge's
                           container endpoint and language registry, i.e. which
                           images and commands it runs; issue #446/ADR-0042)
+Code Judge                judging_view  (every competitor's code submissions
+                          and judgings — source, per-test results; a competitor
+                          reads their own through ownership, issue #448)
 AI Assistants             ai_view_transcripts  (read others' assistant
                           conversation history, issue #98/ADR-0023, §12)
 Analytics                 view_competition_analytics, view_global_analytics,
@@ -1809,8 +1813,57 @@ arm64 and picks the Docker host's.
 
 Verdicts: `accepted`, `wrong_answer`, `time_limit`, `memory_limit`,
 `output_limit`, `runtime_error`, `compile_error`, and `internal_error` for a
-judging that produced no verdict about the submission. The submission queue,
-the worker loop that drives judgings (not the event bus — its per-handler
-timeout would cancel them), stuck-judging reaping and the award path into
-`Submission` follow in #448's second part.
+judging that produced no verdict about the submission.
+
+### 17.3 Submissions, the queue and scoring
+
+`POST …/challenges/{id}/submit-code` (`routers/judge_submissions.py`) runs the
+flag route's gates in its order — visibility, `require_playable`, pause, the
+scoring subject, prerequisites, the shared per-subject rate limiter — plus a
+source-size cap and a per-subject cap on unfinished judgings. It stores the
+source in object storage, inserts a `CodeSubmission` and a queued `Judging`,
+commits, and emits `judging.queued`. Two kinds: `submit` (every test, scored)
+and `run` (examples only, never scored).
+
+**The `judgings` table is the queue.** A dedicated worker loop
+(`utils/judge_worker.py`) — not the event bus, whose 10-second handler timeout
+would cancel judgings — runs wherever the scheduler runs, so normally one
+process judges (two can briefly overlap in a rolling deploy; the fencing below
+keeps that safe). It claims the oldest queued judging with one conditional
+`UPDATE … WHERE status = 'queued'` (checking the row count), which also bumps
+`attempts`; that attempt number is a fencing token, so finishing or failing is
+another conditional update and a worker that lost its claim can't write a
+second result. Up to `max_concurrent_judgings` run at once (default 1).
+States: `queued → running → done | failed` — the container is opaque while it
+runs, so compile and run aren't separately observable. A judging with no
+verdict about the submission (runtime unreachable, harness `internal_error`)
+is retried up to three claims, then `failed` / `internal_error`; nothing is
+ever scored for the judge's own failure. A claim carries a deadline (the
+executor's time budget plus slack for image pulls and container calls);
+`reap_judgings` on the scheduler tick — and the worker as it starts — reclaims
+anything running past it, and sweeps containers no live judging owns, without
+ever touching one that could still be someone's (a shared endpoint, another
+install). A judging submitted while it was allowed is judged and scored even if
+the module is switched off or the challenge unpublished before it runs — as a
+flag submitted in time counts.
+
+**Scoring reuses the flag path.** A `submit` judging with a verdict is
+recorded through `utils/grading.record_grade` — the award path extracted from
+the flag route — as an ordinary `Submission` (`value = "code:<judging id>"`,
+correct only when accepted), so the scoreboard, decay, first blood, freeze,
+skills and analytics need no change. The row is **backdated to the code's
+submission time**: `created_at` is the solve time everywhere, so on the board a
+queue never costs anyone first blood or a freeze cutoff. The `challenge.solved`
+event decides first blood the same way, so with judgings running concurrently a
+later submission that finishes first can be announced before the true first
+blood is — which is then announced too.
+
+**Reads are by ownership.** A competitor (or their team) reads their judgings:
+verdicts per test, and for examples only, time, memory and the program's
+actual output (the judging's maxima are over the examples too — over every
+test they would leak what the hidden tests cost). Staff with `judging_view`
+read everything, including the judge's internal errors and every submission's
+source. The source of an examples-only run isn't kept once judged. Code submissions and
+judgings are runtime state and **not in the backup**; their score is, in the
+`Submission` row.
 

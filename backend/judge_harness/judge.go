@@ -8,6 +8,9 @@ import (
 // compileOutputLimit bounds the compiler message returned to the competitor.
 const compileOutputLimit = 16 * 1024
 
+// shownOutputLimit bounds the output returned for an example test.
+const shownOutputLimit = 16 * 1024
+
 // judge compiles once, then runs the tests in order — samples first, as the
 // executor lists them — stopping at the first that doesn't pass (ADR-0042 §5,
 // "lazy judging"). The overall verdict is that test's, or accepted.
@@ -73,6 +76,10 @@ func runTest(job *Job, t Test, r runner) (TestResult, error) {
 		MemoryKB: out.peakKB,
 		ExitCode: out.exitCode,
 		Signal:   out.signal,
+	}
+	if t.ShowOutput {
+		shown := truncateText(out.output, shownOutputLimit)
+		tr.Output = &shown
 	}
 	tr.Verdict = classify(out, job.RunLimits)
 	if tr.Verdict != VerdictAccepted {

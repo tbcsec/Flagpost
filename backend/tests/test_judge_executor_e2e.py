@@ -154,3 +154,68 @@ async def test_check_connection_runs_a_test_judging():
         ("harness_available", True),
         ("test_judging", True),
     ], legs
+
+
+# --- the whole pipeline: API → queue → worker → real judge → scoreboard (#448) -----------
+
+
+async def _real_judge(client):
+    from db import SessionLocal
+    from models.judge import JUDGE_SETTINGS_ID, JudgeSettings
+    from tests.test_judge_submissions import _setup
+
+    admin, comp, chal = await _setup(client, samples=1, secrets=2)
+    async with SessionLocal() as db:
+        (await db.get(JudgeSettings, JUDGE_SETTINGS_ID)).endpoint_url = ENDPOINT
+        await db.commit()
+    return admin, comp, chal
+
+
+async def test_pipeline_submit_to_scoreboard(client, object_storage):
+    from tests.test_judge_submissions import _judge_all, _player, _submit
+
+    admin, comp, chal = await _real_judge(client)
+    alice = await _player(client, comp, "alice")
+    bob = await _player(client, comp, "bob")
+    right = (await _submit(client, alice, comp, chal)).json()["id"]
+    wrong = (await _submit(client, bob, comp, chal, source="print(0)")).json()["id"]
+    await _judge_all(None, object_storage)  # the configured, real executor
+
+    def get(token, judging_id):
+        return client.get(f"/api/competitions/{comp}/judgings/{judging_id}", headers={"Authorization": f"Bearer {token}"})
+
+    ok = (await get(alice, right)).json()
+    assert ok["status"] == "done" and ok["verdict"] == "accepted", ok
+    assert ok["tests_passed"] == ok["tests_total"] == 3
+    # The example's actual output comes back; hidden tests show only a verdict.
+    assert ok["tests"][0]["output"] == "0\n" and ok["tests"][1]["output"] is None
+    bad = (await get(bob, wrong)).json()
+    # Example 0 0 -> 0 passes; the first hidden test (1 1 -> 2) fails.
+    assert bad["verdict"] == "wrong_answer" and bad["tests_passed"] == 1
+
+    board = (
+        await client.get(f"/api/competitions/{comp}/scoreboard", headers={"Authorization": f"Bearer {alice}"})
+    ).json()
+    assert [(e["name"], e["points"]) for e in board["entries"]][:1] == [("alice", 100)]
+
+
+async def test_pipeline_run_and_compile_error(client, object_storage):
+    from tests.test_judge_submissions import _judge_all, _player, _submit
+
+    admin, comp, chal = await _real_judge(client)
+    alice = await _player(client, comp, "alice")
+    run = (await _submit(client, alice, comp, chal, kind="run", source="print(42)")).json()["id"]
+    broken = (await _submit(client, alice, comp, chal, source="print(")).json()["id"]
+    await _judge_all(None, object_storage)
+
+    def get(judging_id):
+        return client.get(f"/api/competitions/{comp}/judgings/{judging_id}", headers={"Authorization": f"Bearer {alice}"})
+
+    tried = (await get(run)).json()
+    assert tried["verdict"] == "wrong_answer" and tried["tests_total"] == 1
+    assert tried["tests"][0]["output"] == "42\n"
+    compile_err = (await get(broken)).json()
+    # python3's preset has no compile step, so a syntax error is a runtime error.
+    assert compile_err["verdict"] == "runtime_error", compile_err
+    board = (await client.get(f"/api/competitions/{comp}/scoreboard", headers={"Authorization": f"Bearer {alice}"})).json()
+    assert all(e["points"] == 0 for e in board["entries"])

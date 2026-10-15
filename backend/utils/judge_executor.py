@@ -69,8 +69,9 @@ class JudgeJob:
 
 @dataclass(frozen=True)
 class JudgeTestResult:
-    """One test that ran. Carries no output: a submission's output on a hidden
-    test can echo the hidden input."""
+    """One test that ran. ``output`` is the submission's (capped) output, and
+    only ever for an example test that ran before any hidden one — a
+    submission's output on a hidden test could echo the hidden input."""
 
     index: int
     sample: bool
@@ -80,6 +81,7 @@ class JudgeTestResult:
     memory_kb: int
     exit_code: int | None = None
     signal: int | None = None
+    output: str | None = None
 
 
 @dataclass(frozen=True)
@@ -134,6 +136,19 @@ class JudgeExecutor(ABC):
     async def validate(self) -> list[CheckResult]:
         """The setup flow's staged "Check connection". Ordered; a failing leg
         may end the run early, and every leg carries actionable ``detail``."""
+
+    @abstractmethod
+    def time_budget_s(self, job: JudgeJob) -> float:
+        """How long ``run(job)`` may legitimately take, end to end. The worker
+        treats a judging still running past this (plus slack) as stuck."""
+
+    async def cleanup(self, keep: set[str]) -> int:
+        """Remove what crashed workers left behind — anything not belonging to a
+        judging in ``keep`` (those still running inside their deadline) — and
+        return how many. Must be safe when other processes, or other installs
+        sharing the runtime, are judging: it must never cut a live judging
+        short. Default: nothing to do."""
+        return 0
 
 
 _KINDS: dict[str, type[JudgeExecutor]] = {}

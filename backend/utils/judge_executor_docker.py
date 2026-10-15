@@ -114,6 +114,13 @@ _BUDGET_SLACK_S = 30.0
 
 _DEFAULT_PROBE_IMAGE = "alpine:3.20"
 
+# When cleanup may remove a judge container no live judging claims: a stopped
+# one after this long (its executor reads the logs as soon as it exits), and a
+# running one only once far past any judging's budget — the harness enforces
+# every limit itself, so a container still running this late is wedged.
+_ORPHAN_STOPPED_AGE_S = 10 * 60
+_ORPHAN_RUNNING_AGE_S = 6 * 60 * 60
+
 
 def default_harness_dir() -> Path:
     from config import settings
@@ -177,9 +184,19 @@ def submission_uid() -> int:
 
 def job_document(job: JudgeJob, nonce: str, uid: int) -> dict[str, Any]:
     tests = []
-    for i in range(len(job.tests)):
+    # Output comes back only for the leading run of example tests: once a
+    # hidden test has run, a later test's output could carry what the
+    # submission saw (tests share the scratch directory).
+    leading_examples = True
+    for i, test in enumerate(job.tests):
+        leading_examples = leading_examples and test.sample
         stem = f"{JOB_DIR}/data/{i:03d}"
-        tests.append({"name": _test_name(job, i), "input": f"{stem}.in", "answer": f"{stem}.ans"})
+        tests.append({
+            "name": _test_name(job, i),
+            "input": f"{stem}.in",
+            "answer": f"{stem}.ans",
+            "show_output": leading_examples,
+        })
     return {
         "nonce": nonce,
         "uid": uid,
@@ -356,6 +373,11 @@ def _result_from(doc: dict[str, Any], job: JudgeJob) -> JudgeResult:
                 memory_kb=int(t.get("memory_kb") or 0),
                 exit_code=t.get("exit_code"),
                 signal=t.get("signal"),
+                output=(
+                    str(t["output"])
+                    if job.tests[i].sample and t.get("output") is not None
+                    else None
+                ),
             )
         )
     return JudgeResult(
@@ -516,6 +538,37 @@ class DockerJudgeExecutor(JudgeExecutor):
                     "the judge container was killed (out of memory?) before reporting"
                 ) from None
             raise
+
+    def time_budget_s(self, job: JudgeJob) -> float:
+        return time_budget_s(job)
+
+    async def cleanup(self, keep: set[str]) -> int:
+        """Remove judge containers left by a crashed worker. Conservative,
+        because the endpoint may be shared — by another worker mid rolling
+        deploy, or another install entirely, whose judgings this database
+        knows nothing about: a *running* container is only removed once far
+        older than any judging could last, and a stopped one after a grace
+        period (its own executor reads the result the moment it exits)."""
+        resp = await self._request(
+            "GET",
+            "/containers/json",
+            params={"all": "1", "filters": json.dumps({"label": [f"{LABEL_JUDGE}=true"]})},
+            timeout=_TIMEOUT_QUICK,
+        )
+        if resp.status_code != 200:
+            raise JudgeExecutorError(f"listing judge containers failed: {_daemon_detail(resp)}")
+        now = time.time()
+        removed = 0
+        for c in resp.json():
+            if (c.get("Labels") or {}).get(LABEL_JUDGING) in keep:
+                continue
+            age = now - float(c.get("Created") or now)
+            limit = _ORPHAN_RUNNING_AGE_S if c.get("State") == "running" else _ORPHAN_STOPPED_AGE_S
+            if age < limit:
+                continue
+            await self._remove(c["Id"])
+            removed += 1
+        return removed
 
     # --- validate -------------------------------------------------------------------
 

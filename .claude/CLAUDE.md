@@ -231,6 +231,13 @@ Hard-won, non-obvious, and not visible from reading the code you're changing.
   the code judge — belongs in a worker loop or the scheduler, not the bus. This
   bit four handlers at once (#452, #454–#456); one silently dropped every
   notification for an announcement.
+- **`asyncio.to_thread` does not protect the event loop from a slow regex.**
+  CPython's regex engine holds the GIL for a whole match, so one quadratic
+  pattern over untrusted text (a package statement, an `.ini`) freezes every
+  request and WebSocket for as long as it runs. Patterns over untrusted input
+  must be linear: no `\s*` that can cross lines under MULTILINE, no two adjacent
+  overlapping quantifiers (make them possessive), anchored openers, bounded
+  spans. The adversarial review of #451 found five of these.
 - **A WebSocket is authorized once, at the handshake, and never again** — not
   even when its access token expires. So *any* new way of removing someone's
   access must also evict their sockets (`manager.evict_users` /

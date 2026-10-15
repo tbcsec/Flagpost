@@ -396,7 +396,10 @@ announcement stores no ticket or asker, so anonymity holds by construction
 rather than by every reader remembering to filter. Reusing
 `announcement.published` and its batched delivery means no new event type, and
 clarifications live in required-core modules (tickets + announcements), so they
-don't depend on the optional judge module. Not done here: retracting a sent
-clarification (published announcements are immutable today), proactive
-clarifications without a question, and listing clarifications in the flag
-challenge dialog.
+don't depend on the optional judge module. Follow-ups shipped with it (owner
+decisions): a judge can post a clarification without a question from the
+challenge itself; a sent clarification can be **withdrawn** — kept listed and
+marked withdrawn rather than deleted, so a reader who relied on it learns it no
+longer holds, its answer no longer served to competitors (only clarifications;
+ordinary announcements stay immutable once published); and a flag challenge's
+dialog lists its clarifications, read-only.

@@ -47,3 +47,9 @@ class Notification(Base, TimestampMixin):
     link: Mapped[str | None] = mapped_column(String, nullable=True)
     # Null = unread; set to the read timestamp when the user marks it read.
     read_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    # The announcement this notifies of, if any — so withdrawing a
+    # clarification can take its answer out of the bells it already reached
+    # (#450). CASCADE: it goes with the announcement.
+    announcement_id: Mapped[str | None] = mapped_column(
+        ForeignKey("announcements.id", ondelete="CASCADE"), index=True, nullable=True
+    )

@@ -56,8 +56,10 @@ class TicketMessageOut(BaseModel):
     author_name: str
     body: str
     is_internal: bool
-    # Also sent to everyone as a clarification (#450).
+    # Also sent to everyone as a clarification (#450) — and whether the judges
+    # have since withdrawn it (then a competitor no longer gets its text).
     sent_to_all: bool = False
+    withdrawn: bool = False
     created_at: datetime
     # Nested under the message on purpose: the thread's internal-note filter
     # then hides a staff note's images along with its body (issue #80).

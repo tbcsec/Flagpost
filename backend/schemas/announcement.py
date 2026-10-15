@@ -75,6 +75,9 @@ class AnnouncementOut(BaseModel):
     kind: str = "announcement"
     challenge_id: str | None = None
     question: str | None = None
+    # A clarification the judges took back: still listed, but for competitors
+    # without its answer (body is empty).
+    withdrawn_at: datetime | None = None
 
     @field_validator("audience_ids", mode="before")
     @classmethod
@@ -90,6 +93,16 @@ class ClarificationOut(BaseModel):
 
     id: str
     question: str | None = None
-    # The judges' answer.
+    # The judges' answer — empty for a competitor once withdrawn.
     body: str
     created_at: datetime
+    withdrawn_at: datetime | None = None
+
+
+class ClarificationPost(BaseModel):
+    """A clarification a judge posts about a challenge without a competitor's
+    question — a statement fix, say (#450 follow-up). ``question`` is optional:
+    what the clarification answers, if it answers something."""
+
+    body: str = Field(min_length=1, max_length=5000)
+    question: str | None = Field(default=None, max_length=5000)

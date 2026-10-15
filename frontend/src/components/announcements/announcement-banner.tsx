@@ -100,7 +100,11 @@ export function AnnouncementBanner() {
             style.accent,
           )}
         >
-          {latest.kind === "clarification" ? t("clarification") : t(`severity.${style.key}`)}
+          {latest.kind === "clarification"
+            ? latest.withdrawn_at
+              ? t("clarificationWithdrawn")
+              : t("clarification")
+            : t(`severity.${style.key}`)}
         </div>
         <div className="mt-0.5 text-sm font-semibold leading-snug">
           {latest.title}
@@ -111,7 +115,9 @@ export function AnnouncementBanner() {
             <div className="mt-0.5 whitespace-pre-line text-sm leading-snug text-muted-foreground">
               {latest.question}
             </div>
-            <div className="mt-0.5 whitespace-pre-line text-sm leading-snug">{latest.body}</div>
+            {latest.body && (
+              <div className="mt-0.5 whitespace-pre-line text-sm leading-snug">{latest.body}</div>
+            )}
           </>
         ) : (
           <div className="mt-0.5 text-sm leading-snug text-muted-foreground">

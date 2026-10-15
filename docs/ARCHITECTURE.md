@@ -148,6 +148,7 @@ ticket.created               ticket.assigned            ticket.resolved
 ticket.message_posted        ticket.attachment_added    ticket.attachment_deleted
 survey.submitted             survey.opened
 announcement.published       announcement.updated       announcement.deleted
+announcement.withdrawn
 site.settings_updated
 judge.settings_updated       judge.language_created     judge.language_updated
 judge.language_deleted
@@ -1972,6 +1973,20 @@ problem — the WS room, automations), and is listed on the problem page
 (`GET …/challenges/{id}/clarifications`, gated like the challenge). A
 clarification is deleted with its challenge, and hidden from competitors while
 its challenge isn't visible. Quick answers ("No comment", "Read the problem
-statement") just fill the staff reply box. Clarifications are core (tickets +
-announcements), not part of the optional judge module, though only the
-programming problem page lists them today.
+statement") just fill the staff reply box. Staff can also **post** a
+clarification with no question behind it, from the challenge itself (`POST
+…/challenges/{id}/clarifications`, `announcement_create`, same visibility rule),
+and **withdraw** one (`POST …/announcements/{id}/withdraw`,
+`announcement_delete`, clarifications only): it stays listed, marked withdrawn,
+so anyone who read it knows not to rely on it, but its answer is no longer
+served to competitors on any read (REST, the room's frames, the competitor
+assistant, the asker's own ticket thread) and is taken out of the bell
+notifications it already reached (`notifications.announcement_id`; a delivery
+still running checks between batches) — staff keep it in their history — and
+`announcement.withdrawn`
+(a staff-only trigger, since it names who withdrew) updates the room in place
+and sends everyone a bell notice through the same batched fan-out (no one is
+told about a clarification whose challenge they can't currently see).
+Clarifications are core (tickets + announcements), not part of the optional
+judge module: they are listed in the programming problem page's statement and
+in a flag challenge's dialog (read-only there — questions come from Support).

@@ -18,7 +18,9 @@ A **clarification** (#450) is an announcement about one challenge: a judge's
 answer to a competitor's question, sent to everyone. It carries the challenge
 and the question as the judge worded it for everyone — never who asked (no
 ticket or asker is stored here at all, so nothing can leak it) — and is listed
-on that challenge's page as well as in the ordinary feed.
+on that challenge's page as well as in the ordinary feed. A judge can also post
+one without a question, and withdraw one (it stays listed, marked withdrawn,
+without its answer).
 """
 
 from datetime import datetime
@@ -92,3 +94,7 @@ class Announcement(Base, CompetitionScopedMixin, TimestampMixin):
         ForeignKey("challenges.id", ondelete="CASCADE"), index=True, nullable=True
     )
     question: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # A clarification the judges took back. It stays listed, marked withdrawn,
+    # so anyone who read it knows not to rely on it — but its answer is no
+    # longer shown to competitors (``utils.announcements.shown_body``).
+    withdrawn_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)

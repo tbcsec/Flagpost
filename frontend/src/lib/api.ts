@@ -1276,6 +1276,22 @@ export const announcementsApi = {
     apiFetch<Clarification[]>(
       `/api/competitions/${competitionId}/challenges/${challengeId}/clarifications`,
     ),
+  // Staff: a clarification with no competitor's question behind it.
+  postClarification: (
+    competitionId: string,
+    challengeId: string,
+    input: { body: string; question?: string | null },
+  ) =>
+    apiFetch<Clarification>(
+      `/api/competitions/${competitionId}/challenges/${challengeId}/clarifications`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
+  // Staff: take a clarification back (it stays listed, marked withdrawn).
+  withdraw: (competitionId: string, id: string) =>
+    apiFetch<Announcement>(
+      `/api/competitions/${competitionId}/announcements/${id}/withdraw`,
+      { method: "POST" },
+    ),
 };
 
 export const hintsApi = {

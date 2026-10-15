@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithIntl } from "@/test/intl";
@@ -17,9 +17,14 @@ let grants: string[];
 const createTicket = vi.fn();
 const ticketsEnabled: boolean[] = [];
 
+const postClarification = vi.fn();
+const withdrawClarification = vi.fn();
 vi.mock("@/lib/hooks/use-announcements", () => ({
   useClarifications: () => ({ data: clarifications }),
+  usePostClarification: () => ({ mutate: postClarification, isPending: false, isError: false }),
+  useWithdrawClarification: () => ({ mutate: withdrawClarification, isPending: false }),
 }));
+vi.mock("@/components/ui/confirm", () => ({ useConfirm: () => () => Promise.resolve(true) }));
 vi.mock("@/lib/hooks/use-tickets", () => ({
   useTickets: (_cid: string, _status: unknown, opts: { enabled: boolean }) => {
     ticketsEnabled.push(opts.enabled);
@@ -64,6 +69,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   createTicket.mockClear();
+  postClarification.mockClear();
+  withdrawClarification.mockClear();
   ticketsEnabled.length = 0;
 });
 
@@ -159,6 +166,88 @@ describe("ClarificationsLink", () => {
 
   it("says nothing when there are none", () => {
     const { container } = renderWithIntl(<ClarificationsLink competitionId="c1" challengeId="p1" />);
+    expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("withdrawn clarifications", () => {
+  it("stay listed, marked withdrawn, without their answer", () => {
+    clarifications = [
+      {
+        id: "a1",
+        question: "Can the numbers be negative?",
+        body: "",
+        created_at: "2026-10-15T10:00:00Z",
+        withdrawn_at: "2026-10-15T11:00:00Z",
+      },
+    ];
+    panel();
+    expect(screen.getByText("Withdrawn by the judges")).toBeInTheDocument();
+    expect(screen.getByText("Can the numbers be negative?")).toBeInTheDocument();
+    expect(screen.queryByText("Answer:")).toBeNull();
+  });
+
+  it("don't count towards the info line's link", () => {
+    clarifications = [
+      { id: "a1", question: null, body: "", created_at: "2026-10-15T10:00:00Z", withdrawn_at: "2026-10-15T11:00:00Z" },
+    ];
+    const { container } = renderWithIntl(<ClarificationsLink competitionId="c1" challengeId="p1" />);
+    expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("for staff", () => {
+  beforeEach(() => {
+    grants = ["challenge_view", "ticket_view", "ticket_respond", "ticket_assign", "announcement_create", "announcement_delete"];
+  });
+
+  it("posts a clarification without a question", () => {
+    panel();
+    expect(screen.getByText("No clarifications yet.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Post a clarification" }));
+    fireEvent.change(screen.getByLabelText("Clarification"), {
+      target: { value: "The input ends with a newline." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send to everyone" }));
+    expect(postClarification.mock.calls[0][0]).toEqual({
+      body: "The input ends with a newline.",
+      question: null,
+    });
+  });
+
+  it("withdraws one, after confirming", async () => {
+    clarifications = [{ id: "a1", question: "Q?", body: "Yes.", created_at: "2026-10-15T10:00:00Z" }];
+    panel();
+    fireEvent.click(screen.getByRole("button", { name: "Withdraw" }));
+    await waitFor(() => expect(withdrawClarification.mock.calls[0][0]).toBe("a1"));
+  });
+
+  it("keeps a withdrawn answer in their history, struck through, and can't withdraw it twice", () => {
+    clarifications = [
+      { id: "a1", question: "Q?", body: "Yes.", created_at: "2026-10-15T10:00:00Z", withdrawn_at: "2026-10-15T11:00:00Z" },
+    ];
+    panel();
+    expect(screen.getByText("Yes.").closest("p")).toHaveClass("line-through");
+    expect(screen.queryByRole("button", { name: "Withdraw" })).toBeNull();
+  });
+});
+
+describe("in a flag challenge's dialog", () => {
+  it("shows clarifications but offers no asking", () => {
+    clarifications = [{ id: "a1", question: null, body: "Flags are case-sensitive.", created_at: "2026-10-15T10:00:00Z" }];
+    renderWithIntl(
+      <ProblemClarifications competitionId="c1" challengeId="p1" challengeTitle="Web 1" allowAsk={false} />,
+    );
+    expect(screen.getByText("Flags are case-sensitive.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ask the judges" })).toBeNull();
+    // A clarification with no question reads as a plain note, no Q/A labels.
+    expect(screen.queryByText("A")).toBeNull();
+  });
+
+  it("is nothing at all for a competitor when there are none", () => {
+    const { container } = renderWithIntl(
+      <ProblemClarifications competitionId="c1" challengeId="p1" challengeTitle="Web 1" allowAsk={false} />,
+    );
     expect(container).toBeEmptyDOMElement();
   });
 });

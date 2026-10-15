@@ -79,6 +79,7 @@ async def create_notifications(
     link: str | None = None,
     competition_id: str | None = None,
     force: bool = False,
+    announcement_id: str | None = None,
 ) -> list[Notification]:
     """Persist one notification per recipient (deduped), flushed but not committed.
 
@@ -115,6 +116,7 @@ async def create_notifications(
             title=title,
             body=body,
             link=link,
+            announcement_id=announcement_id,
         )
         db.add(notification)
         made.append(notification)

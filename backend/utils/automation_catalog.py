@@ -150,6 +150,10 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     # instance-lifecycle events; the row is the source of truth.
     "announcement.updated": ["competition_id", "announcement_id"],
     "announcement.deleted": ["competition_id", "announcement_id"],
+    # user_id is the staff member who withdrew it.
+    "announcement.withdrawn": [
+        "competition_id", "announcement_id", "challenge_id", "kind", "user_id",
+    ],
     "survey.submitted": ["competition_id", "user_id", "survey_id", "response_id"],
     "survey.opened": ["competition_id", "survey_id", "title"],
     "certificate.template_updated": ["competition_id", "certificate_template_id"],
@@ -317,6 +321,8 @@ TRIGGER_PERMISSIONS: dict[str, str] = {
     # visible), so gate their triggers on the authoring permission, not view.
     "announcement.updated": "announcement_create",
     "announcement.deleted": "announcement_create",
+    # Carries the staff member who withdrew it, so staff-only like the above.
+    "announcement.withdrawn": "announcement_create",
     "survey.opened": "challenge_view",
     "competition.member_joined": "challenge_view",
     # Same visibility tier as member_joined — a join-adjacent membership event.

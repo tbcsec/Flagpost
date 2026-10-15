@@ -77,6 +77,27 @@ export function useAnnouncements(
               queryKey: announcementKeys.clarifications(competitionId, incoming.challenge_id),
             });
           }
+        } else if (frame.type === "announcement_withdrawn" && frame.announcement) {
+          // A clarification the judges took back (#450): update it where it is.
+          const withdrawn = frame.announcement;
+          queryClient.setQueryData<Announcement[]>(announcementKeys.list(competitionId), (prev) =>
+            prev?.map((a) =>
+              a.id === withdrawn.id
+                ? { ...a, withdrawn_at: withdrawn.withdrawn_at, body: withdrawn.body }
+                : a,
+            ),
+          );
+          if (withdrawn.challenge_id) {
+            queryClient.invalidateQueries({
+              queryKey: announcementKeys.clarifications(competitionId, withdrawn.challenge_id),
+            });
+          }
+          // The frame (shared with everyone) carries no answer; refetch so
+          // staff get theirs back from the server's role-aware read.
+          queryClient.invalidateQueries({
+            queryKey: announcementKeys.list(competitionId),
+            exact: true,
+          });
         } else if (frame.type === "announcements" && frame.announcements) {
           queryClient.setQueryData<Announcement[]>(
             announcementKeys.list(competitionId),
@@ -151,5 +172,35 @@ export function useDeleteAnnouncement(competitionId: string) {
       queryClient.invalidateQueries({
         queryKey: announcementKeys.scheduled(competitionId),
       }),
+  });
+}
+
+function useInvalidateClarifications(competitionId: string, challengeId: string) {
+  const queryClient = useQueryClient();
+  return () => {
+    queryClient.invalidateQueries({
+      queryKey: announcementKeys.clarifications(competitionId, challengeId),
+    });
+    queryClient.invalidateQueries({ queryKey: announcementKeys.list(competitionId), exact: true });
+  };
+}
+
+/** Staff: post a clarification about a challenge with no competitor's
+ *  question behind it — a statement fix, say (#450 follow-up). */
+export function usePostClarification(competitionId: string, challengeId: string) {
+  const invalidate = useInvalidateClarifications(competitionId, challengeId);
+  return useMutation({
+    mutationFn: (input: { body: string; question?: string | null }) =>
+      announcementsApi.postClarification(competitionId, challengeId, input),
+    onSuccess: invalidate,
+  });
+}
+
+/** Staff: take back a clarification. It stays listed, marked withdrawn. */
+export function useWithdrawClarification(competitionId: string, challengeId: string) {
+  const invalidate = useInvalidateClarifications(competitionId, challengeId);
+  return useMutation({
+    mutationFn: (id: string) => announcementsApi.withdraw(competitionId, id),
+    onSuccess: invalidate,
   });
 }

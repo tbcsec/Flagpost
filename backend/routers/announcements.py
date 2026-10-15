@@ -27,9 +27,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth.deps import require_permission
+from auth.deps import require_permission, user_has_permission
 from db import ensure_aware_utc, get_db, utcnow
 from models.announcement import Announcement
+from models.challenge import Challenge
 from models.competition import Competition
 from models.user import User
 from routers.challenges import load_visible_challenge
@@ -38,11 +39,15 @@ from schemas.announcement import (
     AnnouncementOut,
     AnnouncementUpdate,
     ClarificationOut,
+    ClarificationPost,
 )
 from utils.announcements import (
+    clarifiable,
     list_scheduled_announcements,
     list_visible_announcements,
     published_event,
+    scrub_withdrawn_answer,
+    shown_body,
 )
 from utils.competition_status import require_playable
 from utils.event_bus import event_bus
@@ -61,8 +66,16 @@ async def list_announcements(
     competition_id: str,
     current_user: User = Depends(require_permission("challenge_view")),
     db: AsyncSession = Depends(get_db),
-) -> list[Announcement]:
-    return await list_visible_announcements(db, competition_id, current_user)
+) -> list[AnnouncementOut]:
+    rows = await list_visible_announcements(db, competition_id, current_user)
+    staff = await user_has_permission(db, current_user.id, "announcement_create", competition_id)
+    return [_out(a, staff=staff) for a in rows]
+
+
+def _out(announcement: Announcement, *, staff: bool) -> AnnouncementOut:
+    out = AnnouncementOut.model_validate(announcement)
+    body = shown_body(announcement, staff=staff)
+    return out if body == out.body else out.model_copy(update={"body": body})
 
 
 async def _scoped_announcement(
@@ -185,6 +198,43 @@ async def update_announcement(
     return announcement
 
 
+@router.post("/{announcement_id}/withdraw", response_model=AnnouncementOut)
+async def withdraw_clarification(
+    competition_id: str,
+    announcement_id: str,
+    current_user: User = Depends(require_permission("announcement_delete")),
+    db: AsyncSession = Depends(get_db),
+) -> AnnouncementOut:
+    """Take back a clarification the judges sent (#450 follow-up). It stays
+    listed, marked withdrawn — so anyone who read it knows not to rely on it —
+    but its answer is no longer shown to competitors, and everyone is told.
+    Ordinary announcements can't be withdrawn (owner decision)."""
+    announcement = await _scoped_announcement(db, competition_id, announcement_id)
+    if announcement.kind != "clarification":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Only a clarification can be withdrawn"
+        )
+    if announcement.withdrawn_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "This clarification was already withdrawn")
+    announcement.withdrawn_at = utcnow()
+    await scrub_withdrawn_answer(db, announcement.id)
+    await db.commit()
+    await db.refresh(announcement)
+    # Commit before emit. The staff member is the actor, for the audit log —
+    # which is why the trigger is staff-only (announcement_create).
+    await event_bus.emit(
+        "announcement.withdrawn",
+        {
+            "competition_id": competition_id,
+            "announcement_id": announcement.id,
+            "challenge_id": announcement.challenge_id,
+            "kind": announcement.kind,
+            "user_id": current_user.id,
+        },
+    )
+    return _out(announcement, staff=True)
+
+
 @router.delete("/{announcement_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_announcement(
     competition_id: str,
@@ -216,7 +266,7 @@ async def list_clarifications(
     challenge_id: str,
     current_user: User = Depends(require_permission("challenge_view")),
     db: AsyncSession = Depends(get_db),
-) -> list[Announcement]:
+) -> list[ClarificationOut]:
     """The judges' clarifications about one challenge, newest first — gated
     like the challenge itself (a draft or unreleased challenge is a 404, and
     play must be open, as on its page)."""
@@ -236,4 +286,62 @@ async def list_clarifications(
         )
         .order_by(Announcement.created_at.desc())
     )
-    return list(rows.all())
+    staff = await user_has_permission(db, current_user.id, "announcement_create", competition_id)
+    return [
+        ClarificationOut(
+            id=a.id,
+            question=a.question,
+            body=shown_body(a, staff=staff),
+            created_at=a.created_at,
+            withdrawn_at=a.withdrawn_at,
+        )
+        for a in rows.all()
+    ]
+
+
+@clarifications_router.post(
+    "/challenges/{challenge_id}/clarifications",
+    response_model=ClarificationOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_clarification(
+    competition_id: str,
+    challenge_id: str,
+    body: ClarificationPost,
+    current_user: User = Depends(require_permission("announcement_create")),
+    db: AsyncSession = Depends(get_db),
+) -> ClarificationOut:
+    """A judge's clarification about a challenge with no competitor's question
+    behind it — a statement fix, say (#450 follow-up). Sent to everyone, like
+    an answer sent from a question."""
+    competition = await db.get(Competition, competition_id)
+    challenge = await db.get(Challenge, challenge_id)
+    if competition is None or challenge is None or challenge.competition_id != competition_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Challenge not found")
+    if not clarifiable(competition, challenge):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Competitors can't see that challenge right now, so a clarification can't be sent",
+        )
+    question = (body.question or "").strip() or None
+    announcement = Announcement(
+        competition_id=competition_id,
+        kind="clarification",
+        challenge_id=challenge.id,
+        title=challenge.title[:200],
+        question=question,
+        body=body.body,
+        severity="info",
+        audience_type="all",
+        created_by=current_user.id,
+    )
+    db.add(announcement)
+    await db.commit()
+    await db.refresh(announcement)
+    await event_bus.emit("announcement.published", published_event(announcement))
+    return ClarificationOut(
+        id=announcement.id,
+        question=announcement.question,
+        body=announcement.body,
+        created_at=announcement.created_at,
+    )

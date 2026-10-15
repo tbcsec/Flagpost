@@ -72,6 +72,7 @@ from utils.judge_executor import (
     make_job,
 )
 from utils.grading import emit_grade, record_grade
+from utils.judge_live import push_judging
 from utils.scoring import Subject
 
 logger = logging.getLogger(__name__)
@@ -211,9 +212,20 @@ async def claim_next(db_factory, *, now: datetime | None = None) -> Claim | None
                 )
             )
             if claimed.rowcount == 1:
-                attempt = await db.scalar(select(Judging.attempts).where(Judging.id == judging_id))
+                row = (
+                    await db.execute(
+                        select(
+                            Judging.attempts, Judging.competition_id,
+                            Judging.challenge_id, Judging.user_id,
+                        ).where(Judging.id == judging_id)
+                    )
+                ).one()
                 await db.commit()
-                return Claim(judging_id, attempt)
+                await push_judging(
+                    competition_id=row.competition_id, challenge_id=row.challenge_id,
+                    judging_id=judging_id, user_id=row.user_id, status="running",
+                )
+                return Claim(judging_id, row.attempts)
         return None
 
 
@@ -468,9 +480,22 @@ async def _give_up_or_retry(db_factory, claim: Claim, error: str, *, retry: bool
         )
         if values["status"] == "failed":
             await _emit_completed(judging, "internal_error")
+        else:
+            await push_judging(
+                competition_id=judging.competition_id, challenge_id=judging.challenge_id,
+                judging_id=judging.id, user_id=judging.user_id, status="queued",
+            )
 
 
 async def _emit_completed(judging: Judging, verdict: str) -> None:
+    await push_judging(
+        competition_id=judging.competition_id,
+        challenge_id=judging.challenge_id,
+        judging_id=judging.id,
+        user_id=judging.user_id,
+        status="failed" if verdict == "internal_error" else "done",
+        verdict=verdict,
+    )
     await event_bus.emit(
         "judging.completed",
         {

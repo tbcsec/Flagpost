@@ -731,3 +731,72 @@ async def test_competition_purge_removes_sources(client, object_storage):
         key = (await db.scalar(select(CodeSubmission))).source_object_key
         await delete_competition_tree(db, object_storage, await db.get(Competition, comp))
     assert not object_storage.exists(key)
+
+
+# --- the problem page's API (#449) ------------------------------------------------------------
+
+
+async def test_problem_view_shows_examples_never_hidden_tests(client):
+    admin, comp, chal = await _setup(client, samples=1, secrets=2)
+    player = await _player(client, comp)
+    async with SessionLocal() as db:
+        lang = await db.scalar(select(JudgeLanguage).where(JudgeLanguage.key == "python3"))
+        lang.time_multiplier = 1.5
+        await db.commit()
+    body = (
+        await client.get(f"/api/competitions/{comp}/challenges/{chal}/problem", headers=_auth(player))
+    ).json()
+    assert body["time_limit_ms"] == 2000 and body["memory_limit_mb"] == 256
+    assert body["compare_mode"] == "token" and body["judge_ready"] is True
+    assert body["languages"] == [
+        {"key": "python3", "name": "Python3", "time_limit_ms": 3000, "extension": ".py"}
+    ]
+    # Only the example — the hidden tests' data never leaves the server.
+    assert body["examples"] == [{"index": 0, "input": "0 0\n", "answer": "0\n", "truncated": False}]
+
+
+async def test_problem_view_respects_allowed_languages_and_visibility(client):
+    admin, comp, chal = await _setup(client, publish=False)
+    player = await _player(client, comp)
+    url = f"/api/competitions/{comp}/challenges/{chal}/problem"
+    assert (await client.get(url, headers=_auth(player))).status_code == 404  # a draft
+    await _enable_judge(languages=("cpp",))
+    await client.put(
+        f"/api/competitions/{comp}/challenges/{chal}/judge",
+        json={"allowed_languages": ["cpp"]}, headers=_auth(admin),
+    )
+    body = (await client.get(url, headers=_auth(admin))).json()
+    assert [lang["key"] for lang in body["languages"]] == ["cpp"]
+
+    flag_chal = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges", json={"title": "f", "flag": "flag{f}"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    resp = await client.get(f"/api/competitions/{comp}/challenges/{flag_chal}/problem", headers=_auth(admin))
+    assert resp.status_code == 400
+
+
+async def test_submitter_gets_live_frames(client, object_storage, monkeypatch):
+    from realtime import manager
+
+    frames = []
+
+    async def record(room_type, room_id, message, **kw):
+        frames.append((room_type, room_id, message))
+
+    monkeypatch.setattr(manager, "broadcast", record)
+    admin, comp, chal = await _setup(client)
+    player = await _player(client, comp)
+    me = (await client.get("/api/auth/me", headers=_auth(player))).json()["id"]
+    judging_id = (await _submit(client, player, comp, chal)).json()["id"]
+    await _judge_all(FakeExecutor(_verdict("wrong_answer")), object_storage)
+
+    mine = [m for t, room, m in frames if t == "user" and room == me and m.get("type") == "judging"]
+    assert [(m["status"], m["verdict"]) for m in mine] == [
+        ("queued", None), ("running", None), ("done", "wrong_answer"),
+    ]
+    assert all(m["judging_id"] == judging_id and m["challenge_id"] == chal for m in mine)
+    # Ids and state only — what the competitor may see is the REST read's call.
+    assert set(mine[0]) == {"type", "competition_id", "challenge_id", "judging_id", "status", "verdict"}

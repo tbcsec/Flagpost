@@ -367,3 +367,37 @@ class JudgingOut(BaseModel):
 class CodeSourceOut(BaseModel):
     language_key: str
     source: str
+
+
+class ProblemLanguageOut(BaseModel):
+    key: str
+    name: str
+    # The file extension its source is saved with (".py", ".cpp"), so the
+    # problem page can pick the language for an uploaded file.
+    extension: str
+    # This language's time limit: the problem's, scaled by the language's
+    # multiplier.
+    time_limit_ms: int
+
+
+class ProblemExampleOut(BaseModel):
+    index: int
+    input: str
+    answer: str
+    # True when the text was cut for display (very large, or not UTF-8).
+    truncated: bool = False
+
+
+class ProblemOut(BaseModel):
+    """What a competitor needs beside the statement: the limits, the languages
+    they may submit in, and the example tests. Never the hidden tests."""
+
+    time_limit_ms: int
+    memory_limit_mb: int
+    output_limit_kb: int
+    compare_mode: str
+    float_tolerance: float | None
+    languages: list[ProblemLanguageOut]
+    examples: list[ProblemExampleOut]
+    # False while the judge is switched off: submitting would be refused.
+    judge_ready: bool

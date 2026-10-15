@@ -168,6 +168,11 @@ function ChallengeListRow({
                 {t("status.draft")}
               </Badge>
             )}
+            {ch.flag_type === "programming" && (
+              <Badge variant="outline" className="text-[10px]">
+                {t("status.code")}
+              </Badge>
+            )}
           </span>
           <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
             {ch.difficulty && <span className="capitalize">{ch.difficulty}</span>}

@@ -44,6 +44,9 @@ import type {
   JudgeStatus,
   JudgeTestcaseContent,
   JudgeTestcaseInput,
+  Judging,
+  CodeSubmitInput,
+  ProblemView,
   InviteLink,
   InviteLinkInput,
   InviteLinkJoinInput,
@@ -1488,6 +1491,26 @@ export const judgeProblemApi = {
     apiFetch<void>(
       `${judgeProblemApi.base(competitionId, challengeId)}/testcases/${encodeURIComponent(testcaseId)}`,
       { method: "DELETE" },
+    ),
+};
+
+// Solving a programming challenge (#448/#449): the problem as a competitor
+// sees it, submitting code, and reading one's own judgings.
+export const judgingsApi = {
+  problem: (competitionId: string, challengeId: string) =>
+    apiFetch<ProblemView>(`/api/competitions/${competitionId}/challenges/${challengeId}/problem`),
+  submit: (competitionId: string, challengeId: string, input: CodeSubmitInput) =>
+    apiFetch<Judging>(`/api/competitions/${competitionId}/challenges/${challengeId}/submit-code`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  listMine: (competitionId: string, challengeId: string) =>
+    apiFetch<Judging[]>(`/api/competitions/${competitionId}/challenges/${challengeId}/judgings`),
+  get: (competitionId: string, judgingId: string) =>
+    apiFetch<Judging>(`/api/competitions/${competitionId}/judgings/${encodeURIComponent(judgingId)}`),
+  source: (competitionId: string, judgingId: string) =>
+    apiFetch<{ language_key: string; source: string }>(
+      `/api/competitions/${competitionId}/judgings/${encodeURIComponent(judgingId)}/source`,
     ),
 };
 

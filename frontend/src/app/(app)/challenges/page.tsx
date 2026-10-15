@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { NoCompetition } from "@/components/app/no-competition";
 import { ChallengeConnection } from "@/components/challenges/challenge-connection";
@@ -69,6 +70,11 @@ export default function ChallengesPage() {
   const [filter, setFilter] = useState<string>("all");
   const [availability, setAvailability] = useState<"all" | "available" | "locked">("all");
   const [open, setOpen] = useState<Challenge | null>(null);
+  const router = useRouter();
+  // Programming challenges (#449) have their own full-width page; everything
+  // else opens in the dialog.
+  const openChallenge = (ch: Challenge) =>
+    ch.flag_type === "programming" ? router.push(`/challenges/${ch.id}`) : setOpen(ch);
 
   // Card grid (default) vs. the grouped list (#55) — a per-device preference.
   // Restore the saved choice once on mount, like the palette override; the
@@ -276,7 +282,7 @@ export default function ChallengesPage() {
         <ChallengeList
           challenges={visible}
           categories={categories.data ?? []}
-          onOpen={setOpen}
+          onOpen={openChallenge}
         />
       )}
 
@@ -286,7 +292,7 @@ export default function ChallengesPage() {
           {grid.rows.map((ch) => (
             <button
               key={ch.id}
-              onClick={() => setOpen(ch)}
+              onClick={() => openChallenge(ch)}
               className={cn(
                 "grid gap-2.5 rounded-lg border bg-card p-5 text-left shadow-sm transition-colors hover:border-primary/40",
                 ch.solved ? "border-success/45" : "border-border",
@@ -298,6 +304,10 @@ export default function ChallengesPage() {
                 </span>
                 <div className="flex gap-1.5">
                   {ch.state === "draft" && <Badge variant="outline">{t("status.draft")}</Badge>}
+                  {/* Solved by submitting code, on its own page (#449). */}
+                  {ch.flag_type === "programming" && (
+                    <Badge variant="outline">{t("status.code")}</Badge>
+                  )}
                   {ch.locked ? (
                     <Badge variant="outline">{t("status.lockedBadge")}</Badge>
                   ) : (

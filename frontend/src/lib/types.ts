@@ -2240,3 +2240,66 @@ export interface JudgeTestcaseInput {
   answer: string;
   sample: boolean;
 }
+
+// --- solving programming challenges (#448/#449) ----------------------------------------
+
+export type CodeSubmissionKind = "submit" | "run";
+export type JudgingStatus = "queued" | "running" | "done" | "failed";
+export type JudgingVerdict =
+  | "accepted"
+  | "wrong_answer"
+  | "time_limit"
+  | "memory_limit"
+  | "output_limit"
+  | "runtime_error"
+  | "compile_error"
+  | "internal_error";
+
+/** One test's result. For a hidden test only `index` and `verdict` are set. */
+export interface JudgingRun {
+  index: number;
+  sample: boolean;
+  verdict: JudgingVerdict;
+  time_ms: number | null;
+  memory_kb: number | null;
+  output: string | null;
+}
+
+export interface Judging {
+  id: string;
+  challenge_id: string;
+  user_id: string;
+  team_id: string | null;
+  kind: CodeSubmissionKind;
+  language_key: string;
+  language_name: string;
+  status: JudgingStatus;
+  verdict: JudgingVerdict | null;
+  queue_position: number | null;
+  created_at: string;
+  finished_at: string | null;
+  compile_output: string | null;
+  max_time_ms: number | null;
+  max_memory_kb: number | null;
+  tests_passed: number | null;
+  tests_total: number | null;
+  tests: JudgingRun[];
+}
+
+export interface CodeSubmitInput {
+  language: string;
+  source: string;
+  kind: CodeSubmissionKind;
+}
+
+/** What a competitor needs beside the statement — never the hidden tests. */
+export interface ProblemView {
+  time_limit_ms: number;
+  memory_limit_mb: number;
+  output_limit_kb: number;
+  compare_mode: JudgeCompareMode;
+  float_tolerance: number | null;
+  languages: { key: string; name: string; time_limit_ms: number; extension: string }[];
+  examples: { index: number; input: string; answer: string; truncated: boolean }[];
+  judge_ready: boolean;
+}

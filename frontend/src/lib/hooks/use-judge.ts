@@ -7,8 +7,10 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { judgeAdminApi, judgeProblemApi } from "@/lib/api";
+import { judgeAdminApi, judgeProblemApi, judgingsApi } from "@/lib/api";
 import type {
+  CodeSubmitInput,
+  Judging,
   JudgeLanguageCreate,
   JudgeLanguageUpdate,
   JudgeProblem,
@@ -201,4 +203,58 @@ export function useDeleteJudgeTestcase(competitionId: string, challengeId: strin
   return useProblemWrite(competitionId, challengeId, (id: string) =>
     judgeProblemApi.deleteTestcase(competitionId, challengeId, id),
   );
+}
+
+// --- solving (#449) ------------------------------------------------------------------
+
+export const judgingKeys = {
+  problem: (competitionId: string, challengeId: string) =>
+    ["judge", "problem-view", competitionId, challengeId] as const,
+  mine: (competitionId: string, challengeId: string) =>
+    ["judge", "judgings", competitionId, challengeId] as const,
+  /** Prefix for every judging read in a competition (live frames invalidate it). */
+  competition: (competitionId: string) => ["judge", "judgings", competitionId] as const,
+};
+
+const isActive = (j: Judging) => j.status === "queued" || j.status === "running";
+
+/** The problem as a competitor sees it: limits, languages, examples. */
+export function useProblemView(competitionId: string, challengeId: string) {
+  return useQuery({
+    queryKey: judgingKeys.problem(competitionId, challengeId),
+    queryFn: () => judgingsApi.problem(competitionId, challengeId),
+    enabled: Boolean(competitionId) && Boolean(challengeId),
+  });
+}
+
+/** This subject's judgings of a challenge, newest first. Live frames on the
+ *  user room keep it current (useNotifications); while one is still in flight
+ *  it also polls slowly, in case the socket is down. */
+export function useMyJudgings(competitionId: string, challengeId: string) {
+  return useQuery({
+    queryKey: judgingKeys.mine(competitionId, challengeId),
+    queryFn: () => judgingsApi.listMine(competitionId, challengeId),
+    enabled: Boolean(competitionId) && Boolean(challengeId),
+    refetchInterval: (query) => (query.state.data?.some(isActive) ? 5_000 : false),
+  });
+}
+
+export function useSubmitCode(competitionId: string, challengeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CodeSubmitInput) => judgingsApi.submit(competitionId, challengeId, input),
+    onSuccess: (judging) => {
+      queryClient.setQueryData<Judging[]>(judgingKeys.mine(competitionId, challengeId), (prev) => [
+        judging,
+        ...(prev ?? []).filter((j) => j.id !== judging.id),
+      ]);
+    },
+  });
+}
+
+/** A judging's source, fetched only when asked for (loading it into the editor). */
+export function useLoadJudgingSource(competitionId: string) {
+  return useMutation({
+    mutationFn: (judgingId: string) => judgingsApi.source(competitionId, judgingId),
+  });
 }

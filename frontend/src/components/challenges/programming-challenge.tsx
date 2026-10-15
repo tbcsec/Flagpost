@@ -618,6 +618,11 @@ function Solver({
                         {j.kind === "run" ? t("kindRun") : t("kindSubmit")}
                       </span>
                       <span className="truncate">{j.language_name}</span>
+                      {j.origin !== "submission" && (
+                        <span className="shrink-0 text-[11px] text-muted-foreground">
+                          {j.origin === "rejudge" ? t("originRejudge") : t("originOverride")}
+                        </span>
+                      )}
                       <span className="ml-auto shrink-0">
                         <StatusChip judging={j} />
                       </span>
@@ -703,6 +708,8 @@ function VerdictPanel({ judging, problem }: { judging: Judging; problem: Problem
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-sm text-muted-foreground">
             {judging.kind === "run" ? t("resultRun") : t("resultSubmit")} · {judging.language_name}
+            {judging.origin === "rejudge" && ` · ${t("originRejudge")}`}
+            {judging.origin === "override" && ` · ${t("originOverride")}`}
           </div>
           {!active && judging.tests_total != null && judging.verdict !== "compile_error" && (
             <div className="text-xs text-muted-foreground">

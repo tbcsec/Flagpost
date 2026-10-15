@@ -237,3 +237,169 @@ async def emit_grade(
                 "is_first_blood": outcome.is_first_blood,
             },
         )
+
+
+# --- changing a recorded verdict (#450) --------------------------------------------
+
+
+@dataclass
+class RegradeOutcome:
+    # The subject holds an award on the challenge now and didn't before…
+    granted: bool
+    # …or held one and no longer does.
+    revoked: bool
+    # The award they hold afterwards, if any (for the events).
+    points_awarded: int
+    is_first_blood: bool
+    # They held an award before and after, but on a different submission —
+    # its solve time (the board's tie-break) changed.
+    moved: bool = False
+
+
+def _subject_rows(subject):
+    """The subject's own rows — the same identity the awarded-row unique index
+    uses (team in team mode, the user alone otherwise)."""
+    if subject.kind == "team":
+        return Submission.team_id == subject.id
+    return (Submission.user_id == subject.id) & (Submission.team_id.is_(None))
+
+
+async def regrade(
+    db: AsyncSession,
+    *,
+    competition: Competition,
+    challenge: Challenge,
+    subject,
+    row: Submission,
+    correct: bool,
+) -> RegradeOutcome:
+    """Change an already-recorded submission's correctness — a rejudge or a
+    judge's override — and reconcile the subject's award on the challenge.
+
+    The award belongs to the subject's **earliest** correct submission (the
+    flag path's "first correct submission wins", now applied after the fact):
+    revoking it promotes their next correct one if they have one; making an
+    earlier one correct moves the award to it. Then every awarded row on the
+    challenge is re-valued, since a dynamic challenge's worth depends on how
+    many have solved it. Doesn't commit; the caller commits, then emits.
+    """
+    challenge_id = challenge.id
+    mine = (Submission.challenge_id == challenge_id) & _subject_rows(subject)
+    # Fresh from the database: a decision another session committed while we
+    # waited for the challenge lock must be what we change, not a stale copy
+    # (an unchanged-looking attribute set on a stale object emits no UPDATE).
+    await db.refresh(row)
+    previous_award = await db.scalar(
+        select(Submission.id).where(
+            mine, Submission.is_correct.is_(True), Submission.is_duplicate.is_(False)
+        )
+    )
+    had_award = previous_award is not None
+
+    row.is_correct = correct
+    # A row that becomes correct enters as a duplicate — never directly as an
+    # award, which would collide with the subject's current one under the
+    # one-award-per-subject index. Which row holds the award is decided below.
+    row.is_duplicate = correct
+    row.points_awarded = 0
+    await db.flush()
+
+    correct_rows = (
+        await db.scalars(
+            select(Submission)
+            .where(mine, Submission.is_correct.is_(True))
+            .order_by(Submission.created_at, Submission.id)
+        )
+    ).all()
+    winner = correct_rows[0] if correct_rows else None
+    # Demote first, then promote: the partial unique index allows one awarded
+    # row per subject at every statement, so the old award must go before the
+    # new one appears.
+    for r in correct_rows[1:]:
+        if not r.is_duplicate or r.points_awarded:
+            r.is_duplicate = True
+            r.points_awarded = 0
+    await db.flush()
+    if winner is not None and winner.is_duplicate:
+        winner.is_duplicate = False
+        await db.flush()
+
+    awarded = (
+        Submission.challenge_id == challenge_id,
+        Submission.is_correct.is_(True),
+        Submission.is_duplicate.is_(False),
+    )
+    solves = await db.scalar(select(func.count(Submission.id)).where(*awarded)) or 0
+    base = challenge_value(challenge, solves)
+    net = base - Submission.mc_penalty
+    await db.execute(
+        update(Submission).where(*awarded).values(points_awarded=case((net < 0, 0), else_=net))
+    )
+    await db.flush()
+
+    is_first_blood = False
+    points = 0
+    if winner is not None:
+        await db.refresh(winner)
+        points = winner.points_awarded
+        is_first_blood = not await db.scalar(
+            select(func.count(Submission.id)).where(
+                *awarded, Submission.created_at < winner.created_at
+            )
+        )
+    has_award = winner is not None
+    return RegradeOutcome(
+        granted=has_award and not had_award,
+        revoked=had_award and not has_award,
+        points_awarded=points,
+        is_first_blood=is_first_blood,
+        moved=has_award and had_award and winner.id != previous_award,
+    )
+
+
+async def emit_regrade(
+    outcome: RegradeOutcome,
+    *,
+    competition_id: str,
+    challenge_id: str,
+    user_id: str,
+    team_id: str | None,
+) -> None:
+    """The events for a committed regrade. A newly granted award is a solve
+    like any other; a revoked one is ``challenge.solve_revoked``, which moves
+    the scoreboard the same way. An award that only moved to an earlier
+    submission isn't news, but it changes the board's tie-break time, so the
+    cached board is dropped."""
+    if outcome.moved:
+        from utils.scoreboard import invalidate_scoreboard
+        from utils.scoreboard_timeline import invalidate_timeline
+
+        invalidate_scoreboard(competition_id)
+        invalidate_timeline(competition_id)
+    if outcome.granted:
+        await event_bus.emit(
+            "challenge.solved",
+            {
+                "competition_id": competition_id,
+                "challenge_id": challenge_id,
+                "user_id": user_id,
+                "team_id": team_id,
+                "points": outcome.points_awarded,
+                "is_first_blood": outcome.is_first_blood,
+                # Marks a solve granted by a rejudge/override rather than at
+                # submission, so an automation can skip it (e.g. a bonus that
+                # was already paid before the solve was revoked). Revoking a
+                # solve doesn't undo actions automations took on it.
+                "regrade": True,
+            },
+        )
+    elif outcome.revoked:
+        await event_bus.emit(
+            "challenge.solve_revoked",
+            {
+                "competition_id": competition_id,
+                "challenge_id": challenge_id,
+                "user_id": user_id,
+                "team_id": team_id,
+            },
+        )

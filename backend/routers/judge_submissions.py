@@ -132,8 +132,17 @@ async def _out(db: AsyncSession, judging: Judging, *, staff: bool) -> JudgingOut
         )
         for r in runs
     ]
+    requester = (
+        await db.get(User, judging.requested_by_user_id)
+        if staff and judging.requested_by_user_id
+        else None
+    )
     return JudgingOut(
         id=judging.id,
+        code_submission_id=judging.code_submission_id,
+        origin=judging.origin,
+        requested_by_name=requester.display_name if requester else None,
+        note=judging.note if staff else None,
         challenge_id=judging.challenge_id,
         user_id=judging.user_id,
         team_id=judging.team_id,
@@ -290,6 +299,9 @@ async def submit_code(
         select(func.count(Judging.id)).where(
             Judging.competition_id == competition_id,
             Judging.status.in_(ACTIVE_JUDGING_STATUSES),
+            # Their own submissions only: rejudges staff queue (#450) mustn't
+            # lock a competitor out of submitting.
+            Judging.origin == "submission",
             subject_filter,
         )
     )

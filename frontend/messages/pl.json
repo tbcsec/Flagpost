@@ -153,7 +153,8 @@
       "instances": "Instances",
       "settings": "Ustawienia",
       "lobby": "Lobby",
-      "admin": "Administrator"
+      "admin": "Administrator",
+      "judging": "Ocenianie"
     },
     "adminNav": {
       "dashboard": "Pulpit",
@@ -1051,7 +1052,9 @@
       "failedExample": "Przykład {n}: {verdict}.",
       "input": "Wejście",
       "expected": "Oczekiwane wyjście",
-      "yourOutput": "Twoje wyjście"
+      "yourOutput": "Twoje wyjście",
+      "originRejudge": "Oceniono ponownie",
+      "originOverride": "Decyzja sędziego"
     }
   },
   "instances": {
@@ -3279,5 +3282,67 @@
   },
   "skills": {
     "radarAria": "Skills web across {count, plural, one {# category} other {# categories}}"
+  },
+  "judging": {
+    "title": "Ocenianie",
+    "subtitle": "Wszystkie zgłoszenia kodu w trakcie oceniania — oceń ponownie lub zmień werdykt, gdy trzeba.",
+    "noAccessTitle": "Brak dostępu",
+    "noAccessDescription": "Przeglądanie ocen wymaga uprawnienia do ich wyświetlania.",
+    "statusQueued": "W kolejce",
+    "statusRunning": "Ocenianie",
+    "originRejudge": "Ponowna ocena",
+    "originOverride": "Decyzja sędziego",
+    "queueLine": "{queued} w kolejce · {running} w trakcie oceny",
+    "queueSite": "{count} w kolejce w całej witrynie",
+    "judgeOff": "Sędzia kodu jest wyłączony — nic nie jest oceniane.",
+    "filterProblem": "Zadanie",
+    "allProblems": "Wszystkie zadania",
+    "filterResult": "Wynik",
+    "allResults": "Wszystkie wyniki",
+    "pending": "W kolejce lub w trakcie",
+    "includeRuns": "Uwzględnij próby na przykładach",
+    "rejudgeProblem": "Oceń to zadanie ponownie…",
+    "emptyTitle": "Brak zgłoszeń",
+    "emptyDescription": "Zgłoszenia kodu pojawią się tutaj, gdy uczestnicy je wyślą.",
+    "colTime": "Wysłano",
+    "colWho": "Uczestnik",
+    "colProblem": "Zadanie",
+    "colLanguage": "Język",
+    "colResult": "Wynik",
+    "colTests": "Testy",
+    "colUsage": "Czas · Pamięć",
+    "runTag": "(próba na przykładach)",
+    "noun": "zgłoszeń",
+    "showingLatest": "Pokazano {shown} najnowszych z {total}. Użyj filtrów, aby zawęzić.",
+    "rejudgeProblemTitle": "Oceń ponownie „{title}”",
+    "rejudgeProblemDescription": "Każde zgłoszenie zostanie ocenione ponownie względem obecnej wersji zadania. Punkty zmieniają się w miarę napływu nowych wyników, a stare wyniki nie przepadają. Werdykty ustawione ręcznie przez sędziego pozostają bez zmian.",
+    "scope": {
+      "all": "Wszystkie zgłoszenia",
+      "accepted": "Tylko zaakceptowane (sprawdź, czy poprawka ich nie zepsuła)",
+      "not_accepted": "Tylko niezaakceptowane (po poprawieniu błędnego testu)"
+    },
+    "cancel": "Anuluj",
+    "rejudgeQueued": "{count, plural, one {# zgłoszenie w kolejce do ponownej oceny} few {# zgłoszenia w kolejce do ponownej oceny} many {# zgłoszeń w kolejce do ponownej oceny} other {# zgłoszenia w kolejce do ponownej oceny}}",
+    "rejudgeSkipped": "{count, plural, one {# już czekało, więc nie dodano go drugi raz} few {# już czekały, więc nie dodano ich drugi raz} many {# już czekało, więc nie dodano ich drugi raz} other {# już czekało, więc nie dodano ich drugi raz}}",
+    "rejudgeKeptOverrides": "{count, plural, one {# rozstrzygnięte przez sędziego pozostawiono bez zmian — oceń je ponownie osobno, aby zastąpić decyzję.} few {# rozstrzygnięte przez sędziego pozostawiono bez zmian — oceń je ponownie pojedynczo, aby zastąpić decyzje.} many {# rozstrzygniętych przez sędziego pozostawiono bez zmian — oceń je ponownie pojedynczo, aby zastąpić decyzje.} other {# rozstrzygniętych przez sędziego pozostawiono bez zmian — oceń je ponownie pojedynczo, aby zastąpić decyzje.}}",
+    "rejudgeConfirm": "Oceń ponownie",
+    "detailMeta": "{language} · wysłano {time}",
+    "overrideNote": "Werdykt ustawił(a) {name}: „{note}”",
+    "test": "Test",
+    "exampleN": "Przykład {n}",
+    "hiddenN": "Ukryty test {n}",
+    "compilerOutput": "Komunikaty kompilatora",
+    "alreadyQueued": "To zgłoszenie już czeka na ocenę",
+    "rejudge": "Oceń ponownie",
+    "actionFailed": "Nie udało się",
+    "override": "Zmień werdykt…",
+    "overridden": "Werdykt zmieniony",
+    "overrideHint": "Twój werdykt od razu zastępuje werdykt sędziego i jest zapisywany z twoim imieniem i uzasadnieniem. Późniejsza ponowna ocena znów by go zastąpiła.",
+    "overrideVerdict": "Werdykt",
+    "overrideReason": "Uzasadnienie (widoczne dla organizatorów)",
+    "overrideSave": "Zapisz werdykt",
+    "code": "Wysłany kod",
+    "history": "Historia",
+    "byName": "— {name}"
   }
 }

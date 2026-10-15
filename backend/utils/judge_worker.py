@@ -45,7 +45,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, func, or_, select, update
 
 from db import utcnow
 from models.challenge import Challenge
@@ -60,6 +60,7 @@ from models.judge import (
 )
 from models.judge_problem import DEFAULT_FLOAT_TOLERANCE, JudgeProblem
 from models.judging import CodeSubmission, Judging, JudgingRun
+from models.submission import Submission
 from utils import judge_testdata as td
 from utils.event_bus import event_bus
 from utils.judge_executor import (
@@ -71,7 +72,7 @@ from utils.judge_executor import (
     executor_for,
     make_job,
 )
-from utils.grading import emit_grade, record_grade
+from utils.grading import emit_grade, emit_regrade, record_grade, regrade
 from utils.judge_live import push_judging
 from utils.scoring import Subject
 
@@ -266,7 +267,12 @@ async def run_judging(
     if result.verdict == "internal_error":
         await _give_up_or_retry(db_factory, claim, result.error or "the judge reported an internal error")
         return
-    await _finish(db_factory, claim, result, tests_total=len(job.tests))
+    try:
+        await _finish(db_factory, claim, result, tests_total=len(job.tests))
+    except Exception as exc:  # noqa: BLE001 — e.g. a lock timeout: retry, don't strand it
+        logger.exception("recording judging %s failed", claim.judging_id)
+        await _give_up_or_retry(db_factory, claim, f"recording the verdict failed: {exc}")
+        return
     await _discard_run_source(db_factory, claim, storage)
 
 
@@ -408,49 +414,129 @@ async def _finish(db_factory, claim: Claim, result: JudgeResult, *, tests_total:
                 )
             )
 
-        grade = None
+        recorded = None
         if judging.kind == "submit":
-            grade = await _record(db, judging, result.verdict)
+            recorded = await record_verdict(db, judging, result.verdict)
         await db.commit()
 
         await _emit_completed(judging, result.verdict)
-        if grade is not None:
-            await emit_grade(
-                grade,
-                competition_id=judging.competition_id,
-                challenge_id=judging.challenge_id,
-                user_id=judging.user_id,
-                team_id=judging.team_id,
-            )
+        await emit_recorded(recorded, judging)
 
 
-async def _record(db, judging: Judging, verdict: str):
-    """Record a scored judging as a Submission through the shared award path,
-    backdated to the code's submission time."""
+async def _is_latest_finished(db, judging: Judging) -> bool:
+    """Whether this is the newest finished judging of its code submission —
+    the one whose verdict counts. An older rejudge finishing after a newer one
+    (or after a judge's override) must not overturn it."""
+    newer = await db.scalar(
+        select(func.count(Judging.id)).where(
+            Judging.code_submission_id == judging.code_submission_id,
+            Judging.status == "done",
+            Judging.id != judging.id,
+            or_(
+                Judging.created_at > judging.created_at,
+                and_(Judging.created_at == judging.created_at, Judging.id > judging.id),
+            ),
+        )
+    )
+    return not newer
+
+
+async def record_verdict(db, judging: Judging, verdict: str):
+    """Make a scored judging's verdict the code submission's score: the first
+    time, through the shared award path (``record_grade``), backdated to the
+    code's submission time; after a rejudge or override, by updating that same
+    row and reconciling the award (``regrade``). Returns what to emit after the
+    commit, or None when nothing changed (not the latest verdict, or nobody to
+    credit). Doesn't commit.
+
+    Serialised per challenge: recording a verdict reads the subject's rows and
+    re-values every award on the challenge, so two at once (concurrent
+    judgings, an override racing the worker) could deadlock, both promote an
+    award, or both create the code submission's row. Everything below runs
+    under a lock on the challenge row — ``FOR NO KEY UPDATE``, which doesn't
+    conflict with the key-share locks inserts referencing the challenge take —
+    and re-reads what it decides on, so a decision made by a session that
+    committed while this one waited is seen, not overwritten from stale state.
+    """
+    await db.execute(
+        select(Challenge.id)
+        .where(Challenge.id == judging.challenge_id)
+        .with_for_update(key_share=True)
+    )
+    if not await _is_latest_finished(db, judging):
+        return None
     competition = await db.get(Competition, judging.competition_id)
     challenge = await db.get(Challenge, judging.challenge_id)
-    code = await db.get(CodeSubmission, judging.code_submission_id)
-    if competition is None or challenge is None:
+    code = await db.get(CodeSubmission, judging.code_submission_id, populate_existing=True)
+    if competition is None or challenge is None or code is None:
         return None
-    if competition.participation_mode == "team":
-        if judging.team_id is None:
-            return None  # the team was deleted: nobody left to credit
-        subject = Subject(kind="team", id=judging.team_id, team_id=judging.team_id)
-    else:
-        subject = Subject(kind="user", id=judging.user_id, team_id=None)
-    grade = await record_grade(
-        db,
-        competition=competition,
-        challenge=challenge,
-        subject=subject,
-        user_id=judging.user_id,
-        value=f"code:{judging.id}",
-        correct=verdict == "accepted",
-        created_at=code.created_at,
+    correct = verdict == "accepted"
+    row = (
+        await db.get(Submission, code.submission_id, populate_existing=True)
+        if code.submission_id
+        else None
     )
-    await db.flush()
-    judging.submission_id = grade.submission.id
-    return grade
+    if row is None:
+        if competition.participation_mode == "team":
+            if judging.team_id is None:
+                return None  # the team was deleted: nobody left to credit
+            subject = Subject(kind="team", id=judging.team_id, team_id=judging.team_id)
+        else:
+            subject = Subject(kind="user", id=judging.user_id, team_id=None)
+        grade = await record_grade(
+            db,
+            competition=competition,
+            challenge=challenge,
+            subject=subject,
+            user_id=judging.user_id,
+            value=f"code:{code.id}",
+            correct=correct,
+            created_at=code.created_at,
+        )
+        await db.flush()
+        code.submission_id = judging.submission_id = grade.submission.id
+        moved = None
+        if grade.submission.is_correct and grade.submission.is_duplicate:
+            # Correct, but the subject already held the award — on a later
+            # submission than this backdated one, possibly. The earliest
+            # correct submission holds it, so reconcile.
+            moved = await regrade(
+                db, competition=competition, challenge=challenge, subject=subject,
+                row=grade.submission, correct=True,
+            )
+        return ("graded", grade, moved)
+    # Re-verdict: the subject is whoever the row credits — the key the
+    # awarded-row index uses — not the competition's current mode, which an
+    # organiser may have switched since.
+    subject = (
+        Subject(kind="team", id=row.team_id, team_id=row.team_id)
+        if row.team_id
+        else Subject(kind="user", id=row.user_id, team_id=None)
+    )
+    outcome = await regrade(
+        db, competition=competition, challenge=challenge, subject=subject, row=row, correct=correct
+    )
+    judging.submission_id = row.id
+    return ("regraded", outcome, None)
+
+
+async def emit_recorded(recorded, judging: Judging) -> None:
+    """The scoring events for a committed record_verdict."""
+    if recorded is None:
+        return
+    kind, result, moved = recorded
+    ids = dict(
+        competition_id=judging.competition_id,
+        challenge_id=judging.challenge_id,
+        user_id=judging.user_id,
+        team_id=judging.team_id,
+    )
+    if kind == "graded":
+        await emit_grade(result, **ids)
+        if moved is not None:
+            await emit_regrade(moved, **ids)
+    else:
+        await emit_regrade(result, **ids)
 
 
 async def _give_up_or_retry(db_factory, claim: Claim, error: str, *, retry: bool = True) -> None:

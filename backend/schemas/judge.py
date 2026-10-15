@@ -342,6 +342,7 @@ class JudgingRunOut(BaseModel):
 
 class JudgingOut(BaseModel):
     id: str
+    code_submission_id: str = ""
     challenge_id: str
     user_id: str
     team_id: str | None
@@ -362,6 +363,12 @@ class JudgingOut(BaseModel):
     tests: list[JudgingRunOut] = []
     # Why no verdict was reached — staff (judging_view) only.
     error: str | None = None
+    # Why this judging exists: the competitor's submission, a rejudge staff
+    # asked for, or a judge's override (#450).
+    origin: str = "submission"
+    # Staff only: who asked for a rejudge/override, and an override's reason.
+    requested_by_name: str | None = None
+    note: str | None = None
 
 
 class CodeSourceOut(BaseModel):
@@ -401,3 +408,106 @@ class ProblemOut(BaseModel):
     examples: list[ProblemExampleOut]
     # False while the judge is switched off: submitting would be refused.
     judge_ready: bool
+
+
+# --- the jury console (#450) ---------------------------------------------------------
+
+
+class StaffJudgingRow(BaseModel):
+    """One judging in the staff list."""
+
+    id: str
+    code_submission_id: str
+    challenge_id: str
+    challenge_title: str
+    user_id: str
+    user_name: str
+    team_id: str | None
+    team_name: str | None
+    kind: str
+    origin: str
+    language_name: str
+    status: str
+    verdict: str | None
+    # When the code was submitted (a rejudge's row is newer, its code isn't).
+    submitted_at: datetime
+    created_at: datetime
+    finished_at: datetime | None
+    max_time_ms: int | None
+    max_memory_kb: int | None
+    tests_passed: int | None
+    tests_total: int | None
+    requested_by_name: str | None
+    note: str | None
+
+
+class StaffJudgingPage(BaseModel):
+    items: list[StaffJudgingRow]
+    total: int
+
+
+class JudgingQueueOut(BaseModel):
+    """Judgings waiting and being judged — in this competition, and on the
+    whole site (the judge is one queue)."""
+
+    queued: int
+    running: int
+    site_queued: int
+    site_running: int
+    judge_enabled: bool
+    # Programming problems in this competition, drafts included — the sidebar
+    # shows the Judging entry only when there's at least one. Only judging_view
+    # holders (staff) can read this, so a draft's existence isn't revealed to
+    # competitors.
+    problems: int = 0
+
+
+class RejudgeAllRequest(BaseModel):
+    # Which of the problem's scored submissions to judge again.
+    only: str = "all"
+
+    @field_validator("only")
+    @classmethod
+    def _only(cls, v: str) -> str:
+        if v not in ("all", "accepted", "not_accepted"):
+            raise ValueError("only must be one of: all, accepted, not_accepted")
+        return v
+
+
+class RejudgeAllOut(BaseModel):
+    queued: int
+    # Already waiting to be judged, so not queued twice.
+    skipped: int
+    # Decided by a judge's override — a bulk rejudge leaves those alone
+    # (rejudge one individually to replace an override).
+    overridden: int = 0
+
+
+OVERRIDE_VERDICTS = (
+    "accepted",
+    "wrong_answer",
+    "time_limit",
+    "memory_limit",
+    "output_limit",
+    "runtime_error",
+    "compile_error",
+)
+
+
+class OverrideRequest(BaseModel):
+    verdict: str
+    reason: str = Field(min_length=3, max_length=1000)
+
+    @field_validator("verdict")
+    @classmethod
+    def _verdict(cls, v: str) -> str:
+        if v not in OVERRIDE_VERDICTS:
+            raise ValueError(f"verdict must be one of: {', '.join(OVERRIDE_VERDICTS)}")
+        return v
+
+    @field_validator("reason")
+    @classmethod
+    def _reason(cls, v: str) -> str:
+        if len(v.strip()) < 3:
+            raise ValueError("give a reason")
+        return v.strip()

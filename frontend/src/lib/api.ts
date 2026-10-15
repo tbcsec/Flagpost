@@ -47,6 +47,10 @@ import type {
   Judging,
   CodeSubmitInput,
   ProblemView,
+  JudgingQueue,
+  JudgingListFilters,
+  RejudgeScope,
+  StaffJudgingPage,
   InviteLink,
   InviteLinkInput,
   InviteLinkJoinInput,
@@ -1511,6 +1515,37 @@ export const judgingsApi = {
   source: (competitionId: string, judgingId: string) =>
     apiFetch<{ language_key: string; source: string }>(
       `/api/competitions/${competitionId}/judgings/${encodeURIComponent(judgingId)}/source`,
+    ),
+};
+
+// The jury console (#450): every judging, the queue, a submission's history,
+// rejudging and overriding.
+export const juryApi = {
+  list: (competitionId: string, filters: JudgingListFilters, limit = 500) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    for (const [k, v] of Object.entries(filters)) if (v) params.set(k, v);
+    return apiFetch<StaffJudgingPage>(`/api/competitions/${competitionId}/judgings?${params}`);
+  },
+  queue: (competitionId: string) =>
+    apiFetch<JudgingQueue>(`/api/competitions/${competitionId}/judging-queue`),
+  history: (competitionId: string, codeSubmissionId: string) =>
+    apiFetch<Judging[]>(
+      `/api/competitions/${competitionId}/code-submissions/${encodeURIComponent(codeSubmissionId)}/judgings`,
+    ),
+  rejudge: (competitionId: string, judgingId: string) =>
+    apiFetch<Judging>(
+      `/api/competitions/${competitionId}/judgings/${encodeURIComponent(judgingId)}/rejudge`,
+      { method: "POST" },
+    ),
+  rejudgeProblem: (competitionId: string, challengeId: string, only: RejudgeScope) =>
+    apiFetch<{ queued: number; skipped: number; overridden: number }>(
+      `/api/competitions/${competitionId}/challenges/${challengeId}/rejudge`,
+      { method: "POST", body: JSON.stringify({ only }) },
+    ),
+  override: (competitionId: string, judgingId: string, verdict: string, reason: string) =>
+    apiFetch<Judging>(
+      `/api/competitions/${competitionId}/judgings/${encodeURIComponent(judgingId)}/override`,
+      { method: "POST", body: JSON.stringify({ verdict, reason }) },
     ),
 };
 

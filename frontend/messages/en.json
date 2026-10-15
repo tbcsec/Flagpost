@@ -153,7 +153,8 @@
       "instances": "Instances",
       "settings": "Settings",
       "lobby": "Lobby",
-      "admin": "Admin"
+      "admin": "Admin",
+      "judging": "Judging"
     },
     "adminNav": {
       "dashboard": "Dashboard",
@@ -1051,7 +1052,9 @@
       "failedExample": "Example {n}: {verdict}.",
       "input": "Input",
       "expected": "Expected output",
-      "yourOutput": "Your output"
+      "yourOutput": "Your output",
+      "originRejudge": "Rejudged",
+      "originOverride": "Judge's decision"
     }
   },
   "instances": {
@@ -3279,5 +3282,67 @@
       "saved": "Details saved",
       "error": "Couldn't save"
     }
+  },
+  "judging": {
+    "title": "Judging",
+    "subtitle": "Every code submission, as it's judged — rejudge or override when you need to.",
+    "noAccessTitle": "No access",
+    "noAccessDescription": "Viewing judgings needs the judging-view permission.",
+    "statusQueued": "Waiting",
+    "statusRunning": "Judging",
+    "originRejudge": "Rejudge",
+    "originOverride": "Judge's decision",
+    "queueLine": "{queued} waiting · {running} being judged",
+    "queueSite": "{count} waiting across the whole site",
+    "judgeOff": "The code judge is switched off — nothing is being judged.",
+    "filterProblem": "Problem",
+    "allProblems": "All problems",
+    "filterResult": "Result",
+    "allResults": "All results",
+    "pending": "Waiting or judging",
+    "includeRuns": "Include example runs",
+    "rejudgeProblem": "Rejudge this problem…",
+    "emptyTitle": "No submissions yet",
+    "emptyDescription": "Code submissions will appear here as competitors send them.",
+    "colTime": "Submitted",
+    "colWho": "Participant",
+    "colProblem": "Problem",
+    "colLanguage": "Language",
+    "colResult": "Result",
+    "colTests": "Tests",
+    "colUsage": "Time · Memory",
+    "runTag": "(example run)",
+    "noun": "submissions",
+    "showingLatest": "Showing the latest {shown} of {total}. Filter to narrow it down.",
+    "rejudgeProblemTitle": "Rejudge “{title}”",
+    "rejudgeProblemDescription": "Each submission is judged again against the problem as it is now. Points change as the new results come in, and nothing about the old results is lost. Verdicts a judge set by hand are left alone.",
+    "scope": {
+      "all": "Every submission",
+      "accepted": "Only accepted submissions (check a fix didn't break them)",
+      "not_accepted": "Only submissions that weren't accepted (after fixing a test that was wrong)"
+    },
+    "cancel": "Cancel",
+    "rejudgeQueued": "{count, plural, one {# submission queued for rejudging} other {# submissions queued for rejudging}}",
+    "rejudgeSkipped": "{count, plural, one {# was already waiting, so it wasn't queued twice} other {# were already waiting, so they weren't queued twice}}",
+    "rejudgeKeptOverrides": "{count, plural, one {# decided by a judge's override was left alone — rejudge it on its own to replace the override.} other {# decided by a judge's override were left alone — rejudge them one at a time to replace the overrides.}}",
+    "rejudgeConfirm": "Rejudge",
+    "detailMeta": "{language} · submitted {time}",
+    "overrideNote": "Verdict set by {name}: “{note}”",
+    "test": "Test",
+    "exampleN": "Example {n}",
+    "hiddenN": "Hidden test {n}",
+    "compilerOutput": "Compiler messages",
+    "alreadyQueued": "This submission is already waiting to be judged",
+    "rejudge": "Rejudge",
+    "actionFailed": "That didn't work",
+    "override": "Override verdict…",
+    "overridden": "Verdict overridden",
+    "overrideHint": "Your verdict replaces the judge's straight away and is recorded with your name and reason. A later rejudge would replace it again.",
+    "overrideVerdict": "Verdict",
+    "overrideReason": "Reason (shown to staff)",
+    "overrideSave": "Save verdict",
+    "code": "Submitted code",
+    "history": "History",
+    "byName": "by {name}"
   }
 }

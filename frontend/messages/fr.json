@@ -153,7 +153,8 @@
       "instances": "Instances",
       "settings": "Réglages",
       "lobby": "Lobby",
-      "admin": "Administrateur"
+      "admin": "Administrateur",
+      "judging": "Jugement"
     },
     "adminNav": {
       "dashboard": "Tableau de bord",
@@ -1051,7 +1052,9 @@
       "failedExample": "Exemple {n} : {verdict}.",
       "input": "Entrée",
       "expected": "Sortie attendue",
-      "yourOutput": "Votre sortie"
+      "yourOutput": "Votre sortie",
+      "originRejudge": "Rejugé",
+      "originOverride": "Décision d'un juge"
     }
   },
   "instances": {
@@ -3279,5 +3282,67 @@
   },
   "skills": {
     "radarAria": "Skills web across {count, plural, one {# category} other {# categories}}"
+  },
+  "judging": {
+    "title": "Jugement",
+    "subtitle": "Toutes les soumissions de code, au fil du jugement — rejugez ou corrigez le verdict si besoin.",
+    "noAccessTitle": "Accès refusé",
+    "noAccessDescription": "Consulter les jugements nécessite la permission de voir les jugements.",
+    "statusQueued": "En attente",
+    "statusRunning": "En cours",
+    "originRejudge": "Rejugement",
+    "originOverride": "Décision d'un juge",
+    "queueLine": "{queued} en attente · {running} en cours de jugement",
+    "queueSite": "{count} en attente sur l'ensemble du site",
+    "judgeOff": "Le juge de code est désactivé — rien n'est jugé.",
+    "filterProblem": "Problème",
+    "allProblems": "Tous les problèmes",
+    "filterResult": "Résultat",
+    "allResults": "Tous les résultats",
+    "pending": "En attente ou en cours",
+    "includeRuns": "Inclure les tests sur les exemples",
+    "rejudgeProblem": "Rejuger ce problème…",
+    "emptyTitle": "Aucune soumission pour l'instant",
+    "emptyDescription": "Les soumissions de code apparaîtront ici au fur et à mesure.",
+    "colTime": "Soumis",
+    "colWho": "Participant",
+    "colProblem": "Problème",
+    "colLanguage": "Langage",
+    "colResult": "Résultat",
+    "colTests": "Tests",
+    "colUsage": "Temps · Mémoire",
+    "runTag": "(test sur les exemples)",
+    "noun": "soumissions",
+    "showingLatest": "Affichage des {shown} plus récentes sur {total}. Filtrez pour affiner.",
+    "rejudgeProblemTitle": "Rejuger « {title} »",
+    "rejudgeProblemDescription": "Chaque soumission est jugée à nouveau par rapport au problème actuel. Les points évoluent à mesure que les nouveaux résultats arrivent, et les anciens résultats sont conservés. Les verdicts fixés à la main par un juge restent inchangés.",
+    "scope": {
+      "all": "Toutes les soumissions",
+      "accepted": "Uniquement les soumissions acceptées (vérifier qu'une correction ne les a pas cassées)",
+      "not_accepted": "Uniquement les soumissions non acceptées (après correction d'un test erroné)"
+    },
+    "cancel": "Annuler",
+    "rejudgeQueued": "{count, plural, one {# soumission en file pour rejugement} other {# soumissions en file pour rejugement}}",
+    "rejudgeSkipped": "{count, plural, one {# était déjà en attente : elle n'a pas été ajoutée deux fois} other {# étaient déjà en attente : elles n'ont pas été ajoutées deux fois}}",
+    "rejudgeKeptOverrides": "{count, plural, one {# décidée par un juge a été laissée telle quelle — rejugez-la individuellement pour remplacer la décision.} other {# décidées par un juge ont été laissées telles quelles — rejugez-les une par une pour remplacer les décisions.}}",
+    "rejudgeConfirm": "Rejuger",
+    "detailMeta": "{language} · soumis {time}",
+    "overrideNote": "Verdict fixé par {name} : « {note} »",
+    "test": "Test",
+    "exampleN": "Exemple {n}",
+    "hiddenN": "Test caché {n}",
+    "compilerOutput": "Messages du compilateur",
+    "alreadyQueued": "Cette soumission attend déjà d'être jugée",
+    "rejudge": "Rejuger",
+    "actionFailed": "L'opération a échoué",
+    "override": "Corriger le verdict…",
+    "overridden": "Verdict corrigé",
+    "overrideHint": "Votre verdict remplace immédiatement celui du juge et est enregistré avec votre nom et votre motif. Un rejugement ultérieur le remplacerait à nouveau.",
+    "overrideVerdict": "Verdict",
+    "overrideReason": "Motif (visible par l'équipe d'organisation)",
+    "overrideSave": "Enregistrer le verdict",
+    "code": "Code soumis",
+    "history": "Historique",
+    "byName": "par {name}"
   }
 }

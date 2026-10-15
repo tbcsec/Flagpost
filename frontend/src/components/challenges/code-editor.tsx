@@ -93,12 +93,15 @@ export function CodeEditor({
   languageKey,
   ariaLabel,
   placeholder,
+  readOnly = false,
 }: {
   value: string;
-  onChange: (value: string) => void;
+  onChange?: (value: string) => void;
   languageKey: string;
   ariaLabel: string;
   placeholder?: string;
+  /** View-only (staff reading a submission). */
+  readOnly?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
@@ -131,9 +134,10 @@ export function CodeEditor({
           theme,
           language.current.of(languageExtension(languageKey)),
           placeholder ? placeholderExt(placeholder) : [],
+          readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [],
           EditorView.contentAttributes.of({ "aria-label": ariaLabel }),
           EditorView.updateListener.of((update) => {
-            if (update.docChanged) changed.current(update.state.doc.toString());
+            if (update.docChanged) changed.current?.(update.state.doc.toString());
           }),
         ],
       }),

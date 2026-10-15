@@ -11,6 +11,7 @@ import { DemoBanner } from "@/components/app/demo-banner";
 import { CertificateReleaseWatcher } from "@/components/certificates/certificate-release-watcher";
 import { UpdateNotice } from "@/components/admin/update-notice";
 import { HelpMenu } from "@/components/app/help-menu";
+import { shouldCheckProgrammingProblems, visibleCompNav } from "@/components/app/nav-visibility";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { LanguageMenu } from "@/components/app/language-menu";
 import { PageIcon } from "@/components/app/page-icons";
@@ -25,6 +26,7 @@ import { severityStyle } from "@/lib/announcement-severity";
 import { useActivityLive } from "@/lib/hooks/use-activity";
 import { useEnabledModules } from "@/lib/hooks/use-modules";
 import { usePageNav } from "@/lib/hooks/use-pages";
+import { useHasProgrammingProblems } from "@/lib/hooks/use-judge";
 import { useAccess } from "@/lib/hooks/use-permissions";
 import { useBrandSettings, useSiteSettings } from "@/lib/hooks/use-site-settings";
 import { useLogout } from "@/lib/hooks/use-users";
@@ -78,6 +80,10 @@ const transcriptIcon: Icon = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><path d="M8 8h8M8 12h5" /></svg>
 );
 
+const judgingIcon: Icon = (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m8 9-3 3 3 3" /><path d="m16 9 3 3-3 3" /><path d="m13 7-2 10" /></svg>
+);
+
 const instancesIcon: Icon = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="7" rx="1" /><rect x="3" y="13" width="18" height="7" rx="1" /><path d="M7 7.5h.01M7 16.5h.01" /></svg>
 );
@@ -102,6 +108,7 @@ type NavKey =
   | "automations"
   | "aiTranscripts"
   | "instances"
+  | "judging"
   | "settings";
 
 const COMP_NAV: {
@@ -126,6 +133,10 @@ const COMP_NAV: {
   // Running-instance ops (#266) — its own grant (instance_view), shown only when
   // the instances module is enabled for the competition.
   { href: "/instances", key: "instances", icon: instancesIcon, module: "instances", permission: "instance_view" },
+  // The jury console (#450) — its own grant (judging_view), shown only when the
+  // code judge module is on for the competition AND it has a programming
+  // problem (see `hasProgrammingProblems` below).
+  { href: "/judging", key: "judging", icon: judgingIcon, module: "judge", permission: "judging_view" },
   { href: "/settings", key: "settings", icon: settingsIcon, manage: true },
 ];
 
@@ -251,13 +262,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // backend event pings into query refreshes, so every page under the shell is
   // live. Gated like the modules query — a lobby user has no room access.
   useActivityLive(access.ready && !access.inLobby ? activeCompetitionId : null);
-  const compNav = COMP_NAV.filter((item) => {
-    if (item.manage && !access.canManageActiveCompetition) return false;
-    if (item.permission && !access.has(item.permission)) return false;
-    if (item.module && enabledModules.data && !enabledModules.data.includes(item.module))
-      return false;
-    return true;
-  });
+  // Judging shows only once the competition has a programming problem.
+  const hasProgrammingProblems = useHasProgrammingProblems(
+    activeCompetitionId ?? "",
+    shouldCheckProgrammingProblems(access, enabledModules.data),
+  );
+  const compNav = visibleCompNav(
+    COMP_NAV,
+    access,
+    enabledModules.data,
+    hasProgrammingProblems.data,
+  );
   const adminDenied = isAdminSection && access.ready && !access.isAdmin;
 
   // A lobby user (no competition access) has no competition-scoped pages to be

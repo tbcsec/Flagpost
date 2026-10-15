@@ -7,8 +7,10 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { judgeAdminApi, judgeProblemApi, judgingsApi } from "@/lib/api";
+import { judgeAdminApi, judgeProblemApi, judgingsApi, juryApi } from "@/lib/api";
 import type {
+  JudgingListFilters,
+  RejudgeScope,
   CodeSubmitInput,
   Judging,
   JudgeLanguageCreate,
@@ -256,5 +258,109 @@ export function useSubmitCode(competitionId: string, challengeId: string) {
 export function useLoadJudgingSource(competitionId: string) {
   return useMutation({
     mutationFn: (judgingId: string) => judgingsApi.source(competitionId, judgingId),
+  });
+}
+
+// --- the jury console (#450) ------------------------------------------------------------
+
+const juryKeys = {
+  all: (competitionId: string) => ["judge", "jury", competitionId] as const,
+  list: (competitionId: string, filters: JudgingListFilters) =>
+    ["judge", "jury", competitionId, "list", filters] as const,
+  queue: (competitionId: string) => ["judge", "jury", competitionId, "queue"] as const,
+  history: (competitionId: string, codeSubmissionId: string) =>
+    ["judge", "jury", competitionId, "history", codeSubmissionId] as const,
+};
+
+// Staff watch other people's judgings, which no socket pushes to them; a short
+// poll keeps the console current while it's open.
+const JURY_POLL_MS = 5_000;
+
+export function useJudgingList(competitionId: string, filters: JudgingListFilters) {
+  return useQuery({
+    queryKey: juryKeys.list(competitionId, filters),
+    queryFn: () => juryApi.list(competitionId, filters),
+    enabled: Boolean(competitionId),
+    refetchInterval: JURY_POLL_MS,
+  });
+}
+
+export function useJudgingQueue(competitionId: string) {
+  return useQuery({
+    queryKey: juryKeys.queue(competitionId),
+    queryFn: () => juryApi.queue(competitionId),
+    enabled: Boolean(competitionId),
+    refetchInterval: JURY_POLL_MS,
+  });
+}
+
+// Another staff member's draft problems send no live ping (a draft's
+// existence is kept off the activity room), so the sidebar check also
+// re-asks now and then — a cheap, staff-only count.
+const PROGRAMMING_PROBLEMS_REFRESH_MS = 60_000;
+
+/** Whether the sidebar's Judging entry is worth showing: the competition has
+ *  at least one programming problem (drafts included), so a flag-only CTF's
+ *  staff never see an empty console. Keyed under the challenge list on purpose
+ *  — your own authoring and published-challenge pings refresh that, and so
+ *  this, by prefix — with an object segment so it can never be mistaken for a
+ *  challenge's detail key (["challenges", cid, id]). */
+export function useHasProgrammingProblems(competitionId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["challenges", competitionId, { programmingProblems: true }],
+    queryFn: () => juryApi.queue(competitionId),
+    select: (queue) => queue.problems > 0,
+    enabled: enabled && Boolean(competitionId),
+    refetchInterval: PROGRAMMING_PROBLEMS_REFRESH_MS,
+  });
+}
+
+export function useSubmissionHistory(competitionId: string, codeSubmissionId: string | null) {
+  return useQuery({
+    queryKey: juryKeys.history(competitionId, codeSubmissionId ?? ""),
+    queryFn: () => juryApi.history(competitionId, codeSubmissionId!),
+    enabled: Boolean(competitionId) && Boolean(codeSubmissionId),
+    refetchInterval: JURY_POLL_MS,
+  });
+}
+
+function useJuryMutation<TInput, TOutput>(
+  competitionId: string,
+  fn: (input: TInput) => Promise<TOutput>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: juryKeys.all(competitionId) }),
+  });
+}
+
+export function useRejudge(competitionId: string) {
+  return useJuryMutation(competitionId, (judgingId: string) => juryApi.rejudge(competitionId, judgingId));
+}
+
+export function useRejudgeProblem(competitionId: string) {
+  return useJuryMutation(
+    competitionId,
+    ({ challengeId, only }: { challengeId: string; only: RejudgeScope }) =>
+      juryApi.rejudgeProblem(competitionId, challengeId, only),
+  );
+}
+
+export function useOverrideVerdict(competitionId: string) {
+  return useJuryMutation(
+    competitionId,
+    ({ judgingId, verdict, reason }: { judgingId: string; verdict: string; reason: string }) =>
+      juryApi.override(competitionId, judgingId, verdict, reason),
+  );
+}
+
+/** A judging's source, for reading it (staff, or the submitter). */
+export function useJudgingSource(competitionId: string, judgingId: string | null) {
+  return useQuery({
+    queryKey: ["judge", "source", competitionId, judgingId ?? ""] as const,
+    queryFn: () => judgingsApi.source(competitionId, judgingId!),
+    enabled: Boolean(competitionId) && Boolean(judgingId),
+    staleTime: Infinity, // a submission's code never changes
   });
 }

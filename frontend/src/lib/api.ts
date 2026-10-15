@@ -40,6 +40,7 @@ import type {
   JudgeLanguageUpdate,
   JudgeProblem,
   JudgeProblemUpdate,
+  PackageImportResult,
   ReferenceCheck,
   JudgeSettings,
   JudgeSettingsUpdate,
@@ -1532,6 +1533,24 @@ export const judgeProblemApi = {
     ),
   reference: (competitionId: string, challengeId: string) =>
     apiFetch<ReferenceCheck>(`${judgeProblemApi.base(competitionId, challengeId)}/reference`),
+  // Problem packages (#451): import a package (or a contest zip of several),
+  // export one problem or all of them.
+  importPackages: (competitionId: string, file: File, defaultTimeLimitMs: number | null) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (defaultTimeLimitMs != null) form.append("default_time_limit_ms", String(defaultTimeLimitMs));
+    return apiFetch<PackageImportResult>(
+      `/api/competitions/${competitionId}/judge/packages/import`,
+      { method: "POST", body: form },
+    );
+  },
+  // Named by the server after the problem (its slug), "problem-package.zip" failing that.
+  exportPackage: (competitionId: string, challengeId: string) =>
+    downloadFile(`${judgeProblemApi.base(competitionId, challengeId)}/package`, "problem-package.zip", {
+      serverName: true,
+    }),
+  exportPackages: (competitionId: string) =>
+    downloadFile(`/api/competitions/${competitionId}/judge/packages/export`, "problem-packages.zip"),
   runReference: (
     competitionId: string,
     challengeId: string,
@@ -1757,18 +1776,48 @@ export const notificationsApi = {
 
 /** Fetch a file with the access token and trigger a browser download. Used for
  *  the survey CSV export, which isn't JSON so it can't go through apiFetch. */
-async function downloadFile(path: string, filename: string): Promise<void> {
+/** The file name a response's Content-Disposition gives, if any. */
+function dispositionFilename(header: string | null): string | null {
+  if (!header) return null;
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1]);
+    } catch {
+      /* fall through to the plain form */
+    }
+  }
+  return /filename="([^"]+)"/i.exec(header)?.[1] ?? null;
+}
+
+/** Download ``path`` as a file named ``filename`` — or, with
+ *  ``serverName``, the name the server gives (``filename`` as the fallback).
+ *  A failure carries the server's message. */
+async function downloadFile(
+  path: string,
+  filename: string,
+  { serverName = false }: { serverName?: boolean } = {},
+): Promise<void> {
   const token = useAuthStore.getState().accessToken;
   const res = await fetch(`${API_URL}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     credentials: "include",
   });
-  if (!res.ok) throw new ApiError(res.status, "Export failed");
+  if (!res.ok) {
+    let message = "Export failed";
+    try {
+      const body = await res.json();
+      if (typeof body?.detail === "string") message = body.detail;
+    } catch {
+      /* not JSON */
+    }
+    throw new ApiError(res.status, message);
+  }
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename;
+  a.download = (serverName && dispositionFilename(res.headers.get("Content-Disposition"))) || filename;
   document.body.appendChild(a);
   a.click();
   a.remove();

@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useMemo, useRef, useState, type DragEvent } from "react";
 
+import { ChallengeFiles } from "@/components/challenges/challenge-files";
 import { ChallengeValue } from "@/components/challenges/challenge-value";
 import {
   ClarificationsLink,
@@ -421,6 +422,7 @@ function Solver({
               ) : (
                 <p className="text-sm text-muted-foreground">{t("noStatement")}</p>
               )}
+              <ChallengeFiles competitionId={competitionId} challengeId={challenge.id} />
               {/* The judges' clarifications amend the statement, so they close it. */}
               <ProblemClarifications
                 competitionId={competitionId}

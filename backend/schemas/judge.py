@@ -306,6 +306,9 @@ class JudgeStatusOut(BaseModel):
     judge_enabled: bool
     ready: bool
     languages: list[dict]
+    # The site's default time limit — what an imported problem package with no
+    # limit of its own would get (#451).
+    default_time_limit_ms: int = 2000
 
 
 # --- code submissions and judgings (#448) ------------------------------------------
@@ -378,6 +381,16 @@ class ReferenceCheckRequest(BaseModel):
 
     language: str = Field(min_length=1, max_length=64)
     source: str = Field(min_length=1, max_length=200_000)
+
+
+class PackageImportOut(BaseModel):
+    """What a problem-package import did (#451): the draft challenges made
+    (with what to check in each), titles skipped, and problems refused with
+    the reason."""
+
+    created: list[dict]
+    skipped: list[dict]
+    refused: list[dict]
 
 
 class ReferenceCheckOut(BaseModel):

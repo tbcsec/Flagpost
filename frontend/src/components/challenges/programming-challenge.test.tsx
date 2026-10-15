@@ -30,6 +30,7 @@ vi.mock("@/components/ui/rich-text-view", () => ({
 }));
 vi.mock("@/components/ui/confirm", () => ({ useConfirm: () => () => Promise.resolve(true) }));
 // Questions and clarifications have their own test (problem-clarifications).
+vi.mock("@/components/challenges/challenge-files", () => ({ ChallengeFiles: () => null }));
 vi.mock("@/components/challenges/problem-clarifications", () => ({
   ProblemClarifications: () => <div data-testid="clarifications" />,
   ClarificationsLink: () => null,

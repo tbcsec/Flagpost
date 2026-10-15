@@ -48,6 +48,8 @@ const runReference = vi.fn();
 const addMutate = vi.fn();
 const updateProblemMutate = vi.fn();
 const deleteMutate = vi.fn();
+const exportMutate = vi.fn();
+const toastSpy = vi.fn();
 
 vi.mock("@/lib/hooks/use-judge", () => ({
   useJudgeProblem: () => ({ data: current, isError: false }),
@@ -69,6 +71,7 @@ vi.mock("@/lib/hooks/use-judge", () => ({
   useDeleteJudgeTestcase: () => ({ mutate: deleteMutate, isPending: false }),
   useUpdateJudgeProblem: () => ({ mutate: updateProblemMutate, isPending: false }),
   useReferenceCheck: () => ({ data: reference }),
+  useExportProblemPackage: () => ({ mutate: exportMutate, isPending: false }),
   useRunReferenceCheck: () => ({ mutate: runReference, isPending: false, isError: false, reset: vi.fn() }),
 }));
 // The code editor (CodeMirror, loaded with next/dynamic) as a plain textarea.
@@ -85,6 +88,7 @@ vi.mock("next/dynamic", () => ({
     } as ComponentType,
 }));
 vi.mock("@/components/ui/confirm", () => ({ useConfirm: () => () => Promise.resolve(true) }));
+vi.mock("@/stores/toast", () => ({ toast: (...args: unknown[]) => toastSpy(...args) }));
 
 afterEach(() => {
   current = problem([]);
@@ -93,9 +97,25 @@ afterEach(() => {
   addMutate.mockClear();
   updateProblemMutate.mockClear();
   deleteMutate.mockClear();
+  exportMutate.mockReset();
+  toastSpy.mockClear();
 });
 
 describe("ProgrammingSection", () => {
+  it("exports the package, and says why when it can't", () => {
+    current = problem([tc({ id: "a" })]);
+    exportMutate.mockImplementation((_: unknown, opts: { onError: (e: Error) => void }) =>
+      opts.onError(new Error("The test data for “Sum” couldn't be read from storage")),
+    );
+    renderWithIntl(<ProgrammingSection competitionId="c" challengeId="p" />);
+    fireEvent.click(screen.getByRole("button", { name: "Export package" }));
+    expect(exportMutate).toHaveBeenCalledTimes(1);
+    expect(toastSpy).toHaveBeenCalledWith("Export failed", {
+      description: "The test data for “Sum” couldn't be read from storage",
+      variant: "destructive",
+    });
+  });
+
   it("prompts for a first test case", () => {
     renderWithIntl(<ProgrammingSection competitionId="c" challengeId="p" />);
     expect(screen.getByText(/No test cases yet/)).toBeInTheDocument();
@@ -267,5 +287,14 @@ describe("the reference-solution check", () => {
     expect(screen.getByRole("button", { name: "Run again" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Change solution…" }));
     expect(screen.getByLabelText("Language")).toHaveValue("c");
+  });
+
+  it("offers the package's own solution before any check has run", () => {
+    current = problem(three);
+    reference = { judging: null, run_by_name: null, language_key: "python3", source: "print(1)", stale: false };
+    renderWithIntl(<ProgrammingSection competitionId="c" challengeId="p" />);
+    expect(screen.getByText(/The package's accepted Python 3 solution is ready/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Test with a reference solution…" }));
+    expect(screen.getByLabelText("Reference solution")).toHaveValue("print(1)");
   });
 });

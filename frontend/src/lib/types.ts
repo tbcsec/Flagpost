@@ -2211,6 +2211,8 @@ export interface JudgeStatus {
   judge_enabled: boolean;
   ready: boolean;
   languages: { key: string; name: string }[];
+  /** The site default — what an imported package with no limit gets. */
+  default_time_limit_ms: number;
 }
 
 export type JudgeCompareMode = "token" | "exact" | "float";
@@ -2330,6 +2332,13 @@ export interface CodeSubmitInput {
   language: string;
   source: string;
   kind: "submit" | "run";
+}
+
+/** What a problem-package import did (#451). */
+export interface PackageImportResult {
+  created: { name: string; challenge_id: string; tests: number; warnings: string[] }[];
+  skipped: { name: string; reason: string }[];
+  refused: { name: string; reason: string }[];
 }
 
 /** A problem's latest reference-solution check (#450): every test's result,

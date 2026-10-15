@@ -199,6 +199,8 @@ async def clone_competition(
                 compare_mode=problem.compare_mode,
                 float_tolerance=problem.float_tolerance,
                 case_insensitive=problem.case_insensitive,
+                reference_language=problem.reference_language,
+                reference_source=problem.reference_source,
                 allowed_languages=problem.allowed_languages,
                 object_key=new_key,
                 testcases=testcases,

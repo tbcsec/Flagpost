@@ -420,8 +420,9 @@ async def test_status_endpoint(client):
     player = await _participant(client, comp)
     url = f"/api/competitions/{comp}/judge/status"
     body = (await client.get(url, headers=_auth(player))).json()
+    # The default time limit pre-fills the package import form (#451).
     assert body == {"module_enabled": True, "judge_enabled": False, "ready": False,
-                    "languages": []}
+                    "languages": [], "default_time_limit_ms": 2000}
 
     async with SessionLocal() as db:
         db.add(JudgeSettings(id=JUDGE_SETTINGS_ID, enabled=True))
@@ -433,7 +434,8 @@ async def test_status_endpoint(client):
     body = (await client.get(url, headers=_auth(player))).json()
     # Only enabled languages, and only key + name — never images or commands.
     assert body == {"module_enabled": True, "judge_enabled": True, "ready": True,
-                    "languages": [{"key": "python3", "name": "Python 3"}]}
+                    "languages": [{"key": "python3", "name": "Python 3"}],
+                    "default_time_limit_ms": 2000}
 
     await _set_module(client, admin, comp, False)
     body = (await client.get(url, headers=_auth(player))).json()

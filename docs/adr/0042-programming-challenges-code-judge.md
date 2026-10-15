@@ -424,3 +424,33 @@ time-limit verdict and none closes CPython's gap on loop-heavy code. ICPC-style
 events set them back to 1.0 per language. Presets stay a catalogue: no installed
 language changes.
 
+## Amendment: problem packages (2026-10-15, #451)
+
+**Import faithfully or refuse.** The ICPC/Kattis package format allows much more
+than Flagpost judges (custom checkers, interactive and scoring problems,
+include files). Judging such a problem with the standard check would produce
+wrong verdicts silently, so the importer refuses it with the reason; anything
+that doesn't affect verdicts is ignored with a note. Survey of a real regional
+archive: about 70% of problems use the standard checker (often as a bundled
+copy, recognised heuristically by name and contents, with a note), so the
+subset is still most of what's out there. Checker flags are resolved per test as
+the format inherits them; secret tests that disagree are refused, samples that
+differ are checked like the secret tests.
+
+**A package is untrusted input**, even from an author: it comes from the
+internet. Beyond the zip containment the challenge importer already has, every
+regex over package text is linear and the converters are budgeted, because
+CPython's regex engine holds the GIL — parsing in a thread does not keep the
+event loop responsive through a pathological pattern (the adversarial review of
+#451 found five such patterns before merge).
+
+**Owner decisions:** keep the judge's test-data caps and refuse packages over
+them (every judging copies all of a problem's tests, so raising them would cost
+every judging); take the time limit from the package where it has one, else ask
+in the import form (packages usually derive it from reference run times);
+convert statements best-effort and attach the original (Flagpost's rich text has
+no maths, and adding a parsing dependency wasn't warranted); keep the package's
+accepted solution for the reference check rather than run it automatically, so an
+import never fills the judge queue. A judge-specific `.ini` time limit is read by
+pattern, never by naming the judge.
+

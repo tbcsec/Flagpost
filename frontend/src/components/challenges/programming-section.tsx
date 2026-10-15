@@ -20,6 +20,7 @@ import { ReferenceCheckPanel } from "@/components/challenges/reference-check";
 import {
   useAddJudgeTestcase,
   useDeleteJudgeTestcase,
+  useExportProblemPackage,
   useJudgeProblem,
   useJudgeStatus,
   useJudgeTestcase,
@@ -29,6 +30,7 @@ import {
 } from "@/lib/hooks/use-judge";
 import type { JudgeCompareMode, JudgeProblem, JudgeTestcase } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { toast } from "@/stores/toast";
 
 const TEXTAREA =
   "flex w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
@@ -52,8 +54,10 @@ export function ProgrammingSection({
   challengeId: string;
 }) {
   const t = useTranslations("challenges.admin.programming");
+  const tPackages = useTranslations("challenges.admin.packages");
   const problem = useJudgeProblem(competitionId, challengeId);
   const remove = useDeleteJudgeTestcase(competitionId, challengeId);
+  const exportPackage = useExportProblemPackage(competitionId, challengeId);
   const confirm = useConfirm();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<JudgeTestcase | null>(null);
@@ -68,9 +72,30 @@ export function ProgrammingSection({
           <Label>{t("title")}</Label>
           <p className="text-xs text-muted-foreground">{t("description")}</p>
         </div>
-        <Button type="button" size="sm" onClick={() => setAdding(true)}>
-          {t("add")}
-        </Button>
+        <span className="flex shrink-0 gap-2">
+          {cases.length > 0 && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={exportPackage.isPending}
+              onClick={() =>
+                exportPackage.mutate(undefined, {
+                  onError: (err) =>
+                    toast(tPackages("exportFailed"), {
+                      description: (err as Error).message,
+                      variant: "destructive",
+                    }),
+                })
+              }
+            >
+              {t("exportPackage")}
+            </Button>
+          )}
+          <Button type="button" size="sm" onClick={() => setAdding(true)}>
+            {t("add")}
+          </Button>
+        </span>
       </div>
 
       {problem.isError && (

@@ -994,12 +994,36 @@
           "fileNotText": "Ce fichier n'est pas un fichier texte.",
           "cancel": "Annuler",
           "run": "Lancer la vérification",
-          "starting": "Lancement…"
+          "starting": "Lancement…",
+          "fromPackage": "La solution acceptée du paquet ({language}) est prête — lancez-la pour vérifier les tests et la limite de temps."
         },
         "ignoreCase": "Ignorer majuscules et minuscules",
-        "ignoreCaseHint": "« YES » et « yes » comptent comme la même réponse — la règle habituelle des problèmes de concours de type ICPC."
+        "ignoreCaseHint": "« YES » et « yes » comptent comme la même réponse — la règle habituelle des problèmes de concours de type ICPC.",
+        "exportPackage": "Exporter le paquet"
       },
-      "readGuide": "Read the Judge guide"
+      "readGuide": "Read the Judge guide",
+      "packages": {
+        "import": "Importer un paquet de problèmes…",
+        "exportAll": "Exporter les paquets de problèmes",
+        "exportFailed": "L'export a échoué",
+        "title": "Importer un paquet de problèmes",
+        "description": "Un paquet de problème au format ICPC/Kattis (.zip), ou un zip de concours qui en contient plusieurs. Chaque problème est ajouté en brouillon, à relire avant publication.",
+        "file": "Fichier du paquet",
+        "chooseFile": "Choisir un .zip…",
+        "noFile": "Aucun fichier choisi",
+        "timeLimit": "Limite de temps pour les problèmes dont le paquet n'en fixe pas (secondes)",
+        "timeLimitHint": "La plupart des paquets n'indiquent pas de limite de temps. Lancez la vérification de référence sur chaque problème importé pour confirmer que la limite convient.",
+        "cancel": "Annuler",
+        "importButton": "Importer",
+        "importing": "Import…",
+        "importAnother": "Importer un autre",
+        "done": "Terminé",
+        "createdCount": "{count, plural, one {# problème importé en brouillon} other {# problèmes importés en brouillon}}",
+        "nothingCreated": "Rien n'a été importé.",
+        "tests": "{count, plural, one {# test} other {# tests}}",
+        "refusedTitle": "Impossible à importer",
+        "skippedTitle": "Ignorés"
+      }
     },
     "backToChallenges": "Back to challenges",
     "code": {
@@ -1127,6 +1151,10 @@
         "postSend": "Envoyer à tous",
         "postedToast": "Clarification envoyée à tous"
       }
+    },
+    "files": {
+      "title": "Fichiers",
+      "download": "Télécharger {name}"
     }
   },
   "instances": {

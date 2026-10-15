@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from sqlalchemy import JSON, Boolean, Float, ForeignKey, Integer, String, false
+from sqlalchemy import JSON, Boolean, Float, ForeignKey, Integer, String, Text, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base, CompetitionScopedMixin, TimestampMixin
@@ -63,6 +63,12 @@ class JudgeProblem(Base, CompetitionScopedMixin, TimestampMixin):
     )
     # Language keys allowed for this problem. Null = every enabled language.
     allowed_languages: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    # A solution known to be right — an imported package's accepted solution
+    # (#451) — kept so the author can run it as a reference-solution check and
+    # an export carries it. Language by key, source as text (≤ the submission
+    # cap). Optional.
+    reference_language: Mapped[str | None] = mapped_column(String, nullable=True)
+    reference_source: Mapped[str | None] = mapped_column(Text, nullable=True)
     # The test-data zip (null until the first test case is added).
     object_key: Mapped[str | None] = mapped_column(String, nullable=True)
     # Cached manifest of the zip: [{id, sample, input_bytes, answer_bytes}].

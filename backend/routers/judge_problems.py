@@ -18,10 +18,14 @@ programming challenges are available here and in which languages.
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import os
+import tempfile
 from collections.abc import Callable
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -56,6 +60,7 @@ from schemas.judge import (
     JudgeTestcaseCreate,
     JudgeTestcaseOut,
     JudgeTestcaseUpdate,
+    PackageImportOut,
     ReferenceCheckOut,
     ReferenceCheckRequest,
 )
@@ -242,6 +247,8 @@ async def judge_status(
         ready=module_enabled and judge_enabled and bool(languages),
         # Key + display name only: images and commands are admin business.
         languages=[{"key": k, "name": n} for k, n in languages],
+        default_time_limit_ms=(settings.default_time_limit_ms if settings else None)
+        or DEFAULT_TIME_LIMIT_MS,
     )
 
 
@@ -481,6 +488,13 @@ async def _reference_out(
     db: AsyncSession, storage: ObjectStorage, challenge: Challenge, judging: Judging | None
 ) -> ReferenceCheckOut:
     if judging is None:
+        # No check has run yet: offer an imported package's accepted solution
+        # (#451), so the author's first check is one click.
+        problem = await _problem(db, challenge)
+        if problem is not None and problem.reference_source:
+            return ReferenceCheckOut(
+                language_key=problem.reference_language, source=problem.reference_source
+            )
         return ReferenceCheckOut()
     code = await db.get(CodeSubmission, judging.code_submission_id)
     author = await db.get(User, judging.user_id)
@@ -573,3 +587,187 @@ async def run_reference_check(
         kind="reference", language=language, source=source,
     )
     return await _reference_out(db, storage, challenge, judging)
+
+
+# --- problem packages (#451) -------------------------------------------------------
+#
+# Import and export the open ICPC/Kattis problem package format
+# (``utils/problem_package``). Import makes draft challenges in one transaction
+# with no per-row events (atomic authoring, like the challenge importer);
+# export writes 2025-09 packages.
+
+
+@router.post("/judge/packages/import", response_model=PackageImportOut)
+async def import_problem_packages(
+    competition_id: str,
+    file: UploadFile = File(...),
+    default_time_limit_ms: int | None = Form(default=None, ge=100, le=60_000),
+    current_user: User = Depends(require_permission("challenge_create")),
+    db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
+) -> PackageImportOut:
+    """Import one problem package, or a contest zip of several. Problems
+    Flagpost can't judge faithfully are refused with the reason; the rest
+    become draft programming challenges to review before publishing."""
+    from utils import problem_package as pp
+
+    await _guard(db, competition_id)
+    data = await read_upload_capped(file, pp.MAX_UPLOAD_BYTES)
+    languages = (await db.execute(select(JudgeLanguage.key, JudgeLanguage.enabled))).all()
+    try:
+        result = await asyncio.to_thread(
+            pp.parse_package,
+            data,
+            default_time_limit_ms=default_time_limit_ms,
+            language_keys={key for key, enabled in languages if enabled},
+            defined_language_keys={key for key, _ in languages},
+        )
+    except pp.PackageError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    report = await pp.create_problems(
+        db, storage, competition_id=competition_id, parsed=result.problems
+    )
+    return PackageImportOut(
+        created=report["created"], skipped=report["skipped"], refused=result.refused
+    )
+
+
+async def _export_problem(
+    db: AsyncSession, storage: ObjectStorage, challenge: Challenge, settings: JudgeSettings
+):
+    from models.attachment import Attachment
+    from utils import problem_package as pp
+    from utils.judge_worker import effective_limits
+
+    problem = await _problem(db, challenge)
+    if problem is None:
+        problem = JudgeProblem(competition_id=challenge.competition_id, challenge_id=challenge.id)
+    limits = effective_limits(problem, settings)
+    attachments = (
+        await db.scalars(
+            select(Attachment)
+            .where(
+                Attachment.competition_id == challenge.competition_id,
+                Attachment.challenge_id == challenge.id,
+            )
+            .order_by(Attachment.filename, Attachment.id)
+        )
+    ).all()
+    return pp.ExportProblem(
+        name=challenge.title,
+        uuid=problem.id or challenge.id,
+        statement=challenge.description or {"type": "doc", "content": []},
+        time_limit_ms=limits["time_limit_ms"],
+        memory_limit_mb=limits["memory_limit_mb"],
+        output_limit_kb=limits["output_limit_kb"],
+        compare_mode=problem.compare_mode or "token",
+        float_tolerance=problem.float_tolerance,
+        case_insensitive=bool(problem.case_insensitive),
+        allowed_languages=problem.allowed_languages,
+        testdata_key=problem.object_key,
+        files=[(a.filename, a.object_key) for a in attachments],
+        reference=await _export_reference(db, storage, challenge, problem),
+    )
+
+
+async def _export_reference(
+    db: AsyncSession, storage: ObjectStorage, challenge: Challenge, problem: JudgeProblem
+) -> tuple[str, str] | None:
+    """The newest accepted reference check's source, else the kept package
+    solution — named as the language saves it (Main.java, main.cpp…)."""
+    latest = await db.scalar(
+        select(Judging)
+        .where(
+            Judging.competition_id == challenge.competition_id,
+            Judging.challenge_id == challenge.id,
+            Judging.kind == "reference",
+            Judging.verdict == "accepted",
+        )
+        .order_by(Judging.created_at.desc(), Judging.id.desc())
+        .limit(1)
+    )
+    language_key = source = None
+    if latest is not None:
+        code = await db.get(CodeSubmission, latest.code_submission_id)
+        try:
+            source = (await asyncio.to_thread(storage.get, code.source_object_key)).decode("utf-8", "replace")
+            language_key = code.language_key
+        except Exception:  # noqa: BLE001
+            source = None
+    if source is None and problem.reference_source:
+        language_key, source = problem.reference_language, problem.reference_source
+    if source is None or language_key is None:
+        return None
+    language = await db.scalar(select(JudgeLanguage).where(JudgeLanguage.key == language_key))
+    filename = language.source_filename if language else f"solution.{language_key}"
+    return filename, source
+
+
+class _TempFileResponse(FileResponse):
+    """A FileResponse that deletes its file however the response ends — including
+    the early 400/416 returns for a bad Range header, which skip ``background``."""
+
+    async def __call__(self, scope, receive, send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(self.path)
+
+
+async def _export_response(problems: list, storage: ObjectStorage, filename: str) -> FileResponse:
+    """Build the export into a temporary file (fetching each problem's files as
+    it's written) and stream it back; the file goes once it's sent."""
+    from utils import problem_package as pp
+
+    handle = tempfile.NamedTemporaryFile(prefix="flagpost-export-", suffix=".zip", delete=False)
+    try:
+        with handle:
+            await asyncio.to_thread(pp.build_export, problems, storage, handle)
+    except pp.ExportError as exc:
+        os.unlink(handle.name)
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except BaseException:
+        os.unlink(handle.name)
+        raise
+    return _TempFileResponse(handle.name, media_type="application/zip", filename=filename)
+
+
+@router.get("/challenges/{challenge_id}/judge/package")
+async def export_problem_package(
+    competition_id: str,
+    challenge_id: str,
+    current_user: User = Depends(require_permission("challenge_edit")),
+    db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
+) -> Response:
+    """This problem as a 2025-09 problem package."""
+    from utils import problem_package as pp
+
+    challenge = await _programming_challenge(db, competition_id, challenge_id)
+    settings = await _site_defaults(db)
+    exported = await _export_problem(db, storage, challenge, settings)
+    return await _export_response([exported], storage, f"{pp._slug(challenge.title, set())}.zip")
+
+
+@router.get("/judge/packages/export")
+async def export_problem_packages(
+    competition_id: str,
+    current_user: User = Depends(require_permission("challenge_edit")),
+    db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
+) -> Response:
+    """Every programming problem in the competition, one package each."""
+    await _guard(db, competition_id)
+    challenges = (
+        await db.scalars(
+            select(Challenge)
+            .where(Challenge.competition_id == competition_id, Challenge.flag_type == "programming")
+            .order_by(Challenge.title)
+        )
+    ).all()
+    if not challenges:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "There are no programming problems to export")
+    settings = await _site_defaults(db)
+    exported = [await _export_problem(db, storage, c, settings) for c in challenges]
+    return await _export_response(exported, storage, "problem-packages.zip")

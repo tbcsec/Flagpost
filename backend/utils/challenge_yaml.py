@@ -141,6 +141,11 @@ async def export_challenges(
     taken: set[str] = set()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for ch in challenges:
+            if ch.flag_type == "programming":
+                # ctfcli has no programming challenges: written here it would
+                # come back as a flagless static challenge with no tests. Those
+                # export as problem packages instead (#451).
+                continue
             slug = _slug(ch.title, taken)
             data: dict = {
                 "name": ch.title,

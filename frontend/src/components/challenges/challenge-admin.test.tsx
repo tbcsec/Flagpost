@@ -91,6 +91,9 @@ vi.mock("@/lib/hooks/use-judge", () => ({
     data: id ? { testcases: Array.from({ length: testcaseCount }, (_, i) => ({ id: `t${i}` })) } : undefined,
   }),
 }));
+vi.mock("@/components/challenges/problem-packages", () => ({
+  ProblemPackageActions: () => null,
+}));
 vi.mock("@/components/challenges/programming-section", () => ({
   ProgrammingSection: () => <div data-testid="programming-section" />,
 }));

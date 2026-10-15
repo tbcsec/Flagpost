@@ -995,12 +995,36 @@
           "fileNotText": "That file isn't a text file.",
           "cancel": "Cancel",
           "run": "Run check",
-          "starting": "Starting…"
+          "starting": "Starting…",
+          "fromPackage": "The package's accepted {language} solution is ready — run it to check the tests and the time limit."
         },
         "ignoreCase": "Ignore upper/lower case",
-        "ignoreCaseHint": "“YES” and “yes” count as the same answer — the usual rule for problems from ICPC-style contests."
+        "ignoreCaseHint": "“YES” and “yes” count as the same answer — the usual rule for problems from ICPC-style contests.",
+        "exportPackage": "Export package"
       },
-      "readGuide": "Read the Judge guide"
+      "readGuide": "Read the Judge guide",
+      "packages": {
+        "import": "Import problem package…",
+        "exportAll": "Export problem packages",
+        "exportFailed": "Export failed",
+        "title": "Import a problem package",
+        "description": "A problem package in the ICPC/Kattis format (.zip), or a contest zip holding several. Each problem is added as a draft for you to review before publishing.",
+        "file": "Package file",
+        "chooseFile": "Choose a .zip…",
+        "noFile": "No file chosen",
+        "timeLimit": "Time limit for problems whose package doesn't set one (seconds)",
+        "timeLimitHint": "Most packages don't state a time limit. Run the reference check on each imported problem to confirm the limit suits it.",
+        "cancel": "Cancel",
+        "importButton": "Import",
+        "importing": "Importing…",
+        "importAnother": "Import another",
+        "done": "Done",
+        "createdCount": "{count, plural, one {# problem imported as a draft} other {# problems imported as drafts}}",
+        "nothingCreated": "Nothing was imported.",
+        "tests": "{count, plural, one {# test} other {# tests}}",
+        "refusedTitle": "Couldn't import",
+        "skippedTitle": "Skipped"
+      }
     },
     "code": {
       "notFound": "This challenge couldn't be found.",
@@ -1127,6 +1151,10 @@
         "postSend": "Send to everyone",
         "postedToast": "Clarification sent to everyone"
       }
+    },
+    "files": {
+      "title": "Files",
+      "download": "Download {name}"
     }
   },
   "instances": {

@@ -222,6 +222,8 @@ def job_document(job: JudgeJob, nonce: str, uid: int) -> dict[str, Any]:
         },
         "compare": job.compare_mode,
         "tolerance": job.float_tolerance,
+        # A harness older than #451 ignores this and compares case-sensitively.
+        "case_insensitive": job.case_insensitive,
         "tests": tests,
         # A harness older than #450 ignores this and stops at the first
         # failure; the worker notices the missing tests (see _finish).

@@ -995,7 +995,9 @@
           "cancel": "Annuler",
           "run": "Lancer la vérification",
           "starting": "Lancement…"
-        }
+        },
+        "ignoreCase": "Ignorer majuscules et minuscules",
+        "ignoreCaseHint": "« YES » et « yes » comptent comme la même réponse — la règle habituelle des problèmes de concours de type ICPC."
       },
       "readGuide": "Read the Judge guide"
     },

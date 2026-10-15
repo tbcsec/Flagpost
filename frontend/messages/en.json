@@ -996,7 +996,9 @@
           "cancel": "Cancel",
           "run": "Run check",
           "starting": "Starting…"
-        }
+        },
+        "ignoreCase": "Ignore upper/lower case",
+        "ignoreCaseHint": "“YES” and “yes” count as the same answer — the usual rule for problems from ICPC-style contests."
       },
       "readGuide": "Read the Judge guide"
     },

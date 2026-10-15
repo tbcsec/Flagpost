@@ -2242,6 +2242,8 @@ export interface JudgeProblem {
   output_limit_kb: number | null;
   compare_mode: JudgeCompareMode;
   float_tolerance: number | null;
+  /** Letters compare regardless of case (#451). */
+  case_insensitive: boolean;
   allowed_languages: string[] | null;
   testcases: JudgeTestcase[];
   default_time_limit_ms: number;
@@ -2258,6 +2260,7 @@ export type JudgeProblemUpdate = Partial<
     | "output_limit_kb"
     | "compare_mode"
     | "float_tolerance"
+    | "case_insensitive"
     | "allowed_languages"
   >
 >;

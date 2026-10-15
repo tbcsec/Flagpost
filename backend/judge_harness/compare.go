@@ -20,17 +20,46 @@ const (
 	CompareFloat = "float"
 )
 
-func compareOutput(out, answer []byte, mode string, tolerance float64) bool {
+// compareOutput reports whether the output matches the expected answer.
+// caseInsensitive makes letters compare without regard to case — ASCII A-Z
+// only, as the standard ICPC/Kattis output checker does — in every mode.
+func compareOutput(out, answer []byte, mode string, tolerance float64, caseInsensitive bool) bool {
+	equal := bytes.Equal
+	if caseInsensitive {
+		equal = asciiEqualFold
+	}
 	switch mode {
 	case CompareExact:
-		return bytes.Equal(out, answer)
+		return equal(out, answer)
 	case CompareFloat:
 		return compareTokens(out, answer, func(a, b []byte) bool {
-			return bytes.Equal(a, b) || floatsClose(a, b, tolerance)
+			return equal(a, b) || floatsClose(a, b, tolerance)
 		})
 	default:
-		return compareTokens(out, answer, bytes.Equal)
+		return compareTokens(out, answer, equal)
 	}
+}
+
+// asciiEqualFold is bytes.Equal ignoring the case of ASCII letters only: it
+// doesn't apply Unicode case folding (a 'ſ' never matches an 's'), so the
+// rule is exactly the documented one.
+func asciiEqualFold(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if lowerASCII(a[i]) != lowerASCII(b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func lowerASCII(c byte) byte {
+	if 'A' <= c && c <= 'Z' {
+		return c + ('a' - 'A')
+	}
+	return c
 }
 
 // isSpace is ASCII whitespace only: Unicode spaces (U+00A0 and friends) are

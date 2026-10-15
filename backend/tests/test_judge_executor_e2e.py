@@ -50,6 +50,8 @@ A_PLUS_B = {
     'println!("{}",v[0]+v[1]);}\n',
     "javascript": "const [a,b]=require('fs').readFileSync(0,'utf8').trim().split(/\\s+/)"
     ".map(BigInt);console.log((a+b).toString());\n",
+    "csharp": "var p=Console.ReadLine()!.Split(' ',StringSplitOptions.RemoveEmptyEntries);"
+    "Console.WriteLine(long.Parse(p[0])+long.Parse(p[1]));\n",
 }
 
 PRESETS = {p["key"]: p for p in LANGUAGE_PRESETS}
@@ -59,7 +61,14 @@ def _executor() -> DockerJudgeExecutor:
     return DockerJudgeExecutor(JudgeDockerConfig(endpoint_url=ENDPOINT))
 
 
-def _job(language: str, source: str, *, time_limit_ms: int = 2000, memory_mb: int = 256):
+def _job(
+    language: str,
+    source: str,
+    *,
+    time_limit_ms: int = 2000,
+    memory_mb: int = 256,
+    time_multiplier: float | None = None,
+):
     p = PRESETS[language]
     return make_job(
         judging_id=f"e2e-{language}",
@@ -68,7 +77,7 @@ def _job(language: str, source: str, *, time_limit_ms: int = 2000, memory_mb: in
         source=source.encode(),
         compile_command=p["compile_command"],
         run_command=p["run_command"],
-        time_multiplier=p["time_multiplier"],
+        time_multiplier=p["time_multiplier"] if time_multiplier is None else time_multiplier,
         time_limit_ms=time_limit_ms,
         memory_limit_mb=memory_mb,
         output_limit_kb=1024,
@@ -89,6 +98,32 @@ async def test_every_preset_accepts_a_correct_solution(language):
     result = await _executor().run(_job(language, A_PLUS_B[language], time_limit_ms=5000))
     assert result.verdict == "accepted", (result.verdict, result.compile_output, result.error)
     assert [t.verdict for t in result.tests] == ["accepted", "accepted"]
+
+
+@pytest.mark.parametrize("ignore_case, verdict", [(True, "accepted"), (False, "wrong_answer")])
+async def test_the_letter_case_setting_reaches_the_harness(ignore_case, verdict):
+    """#451: "yes" against an expected "YES" — accepted only when the problem
+    ignores letter case. A harness that predates the setting would judge both
+    wrong_answer."""
+    p = PRESETS["python3"]
+    job = make_job(
+        judging_id=f"e2e-case-{ignore_case}",
+        image_ref=p["image_ref"],
+        source_filename=p["source_filename"],
+        source=b"print('yes')\n",
+        compile_command=p["compile_command"],
+        run_command=p["run_command"],
+        time_multiplier=p["time_multiplier"],
+        time_limit_ms=2000,
+        memory_limit_mb=256,
+        output_limit_kb=1024,
+        compare_mode="token",
+        float_tolerance=1e-6,
+        tests=[JudgeTest(sample=True, input=b"", answer=b"YES\n")],
+        case_insensitive=ignore_case,
+    )
+    result = await _executor().run(job)
+    assert result.verdict == verdict, (result.verdict, result.error)
 
 
 HOSTILE = [
@@ -129,8 +164,10 @@ HOSTILE = [
 @pytest.mark.parametrize("label,source,verdict", HOSTILE, ids=[h[0] for h in HOSTILE])
 async def test_hostile_submissions(label, source, verdict):
     memory_mb = 24 if label.startswith("memory in") else 256
+    # The limits these cases are sized against are exact (multiplier 1.0):
+    # containment mustn't depend on how a preset is tuned (#451).
     result = await _executor().run(
-        _job("python3", source, time_limit_ms=1000, memory_mb=memory_mb)
+        _job("python3", source, time_limit_ms=1000, memory_mb=memory_mb, time_multiplier=1.0)
     )
     assert result.verdict == verdict, (label, result)
 

@@ -98,7 +98,7 @@ func runTest(job *Job, t Test, r runner) (TestResult, error) {
 	if err != nil {
 		return TestResult{}, err
 	}
-	if !compareOutput(out.output, answer, job.Compare, job.Tolerance) {
+	if !compareOutput(out.output, answer, job.Compare, job.Tolerance, job.CaseInsensitive) {
 		tr.Verdict = VerdictWrongAnswer
 	}
 	return tr, nil

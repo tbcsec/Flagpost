@@ -403,3 +403,24 @@ marked withdrawn rather than deleted, so a reader who relied on it learns it no
 longer holds, its answer no longer served to competitors (only clarifications;
 ordinary announcements stay immutable once published); and a flag challenge's
 dialog lists its clarifications, read-only.
+
+## Amendment: letter case and language multipliers (2026-10-15, #451)
+
+**Ignoring letter case is a per-problem setting.** The standard ICPC/Kattis
+output checker compares letters case-insensitively unless a problem asks
+otherwise; Flagpost compared exactly. Flipping the global behaviour would change
+verdicts on existing problems mid-event, so it is a per-problem flag
+(`case_insensitive`, ASCII letters only, in every comparison mode), off for
+existing problems and on for imported packages that don't ask for case
+sensitivity — so an imported problem judges as its authors intended. It is part
+of the problem's version fingerprint.
+
+**Preset multipliers are tiered, not 1.0.** The original decision (1.0 for every
+language, as ICPC-style judges do) suits an ICPC event but punishes a CTF
+audience writing Python against limits tuned for C++. Presets now carry
+multipliers by measured speed — C/C++/Rust 1.0, Go 1.5, Java/C#/JavaScript/PyPy
+2.0, CPython 3.0 — capped there because each multiplier costs judge time on a
+time-limit verdict and none closes CPython's gap on loop-heavy code. ICPC-style
+events set them back to 1.0 per language. Presets stay a catalogue: no installed
+language changes.
+

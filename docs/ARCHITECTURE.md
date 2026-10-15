@@ -1791,11 +1791,19 @@ image plus commands the judge executes, the class of thing a backup must not
 plant (GHSA-x8v4). Setup is a guided flow (one compose overlay supplies the
 endpoint; tick languages from a preset catalogue; "Check connection" runs a real
 test judging). Commands are argv lists with only `{source}` and `{work}`
-placeholders.
+placeholders. Presets use official images (Docker Hub Official Images, or the
+vendor's registry where that is the official source — C# on Microsoft's) and
+**tiered time multipliers** by measured speed relative to C/C++ (C/C++/Rust 1.0,
+Go 1.5, Java/C#/JavaScript/PyPy 2.0, CPython 3.0; #451); presets are a catalogue,
+so changing one never alters a language an operator already runs. A language
+without an official image (Kotlin) is added as a custom language over an image
+the operator chooses or builds.
 
 A programming challenge (`flag_type = "programming"`) has no flag. Its
 `JudgeProblem` row holds optional limit / comparison / language overrides —
-null means the default — and **one test-data zip** in the ICPC/Kattis layout
+null means the default; output can also be compared **ignoring letter case**
+(ASCII, in any mode — the standard ICPC/Kattis checker's default, off for
+existing problems; #451) — and **one test-data zip** in the ICPC/Kattis layout
 (`data/sample|secret/NNN.in|.ans`) plus a cached manifest, so it rides backup,
 clone and purge like an attachment (ADR-0042 amendment). Publishing requires a
 test case; flag submission to it is refused.

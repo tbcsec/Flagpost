@@ -252,6 +252,7 @@ class JudgeProblemOut(BaseModel):
     output_limit_kb: int | None
     compare_mode: str
     float_tolerance: float | None
+    case_insensitive: bool = False
     allowed_languages: list[str] | None
     testcases: list[JudgeTestcaseOut]
     default_time_limit_ms: int
@@ -268,6 +269,7 @@ class JudgeProblemUpdate(BaseModel):
     output_limit_kb: int | None = Field(default=None, ge=1, le=262_144)
     compare_mode: str | None = None
     float_tolerance: float | None = Field(default=None, gt=0, le=1)
+    case_insensitive: bool | None = None
     allowed_languages: list[str] | None = Field(default=None, max_length=64)
 
     @field_validator("compare_mode")

@@ -58,7 +58,9 @@ type Job struct {
 	RunLimits     Limits   `json:"run_limits"`
 	Compare       string   `json:"compare"`
 	Tolerance     float64  `json:"tolerance"`
-	Tests         []Test   `json:"tests"`
+	// CaseInsensitive compares letters regardless of case (ASCII only).
+	CaseInsensitive bool   `json:"case_insensitive"`
+	Tests           []Test `json:"tests"`
 	// RunAll keeps going past a failing test (an author's reference-solution
 	// check); otherwise judging stops at the first failure.
 	RunAll bool `json:"run_all"`

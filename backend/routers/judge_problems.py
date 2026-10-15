@@ -140,6 +140,7 @@ async def _out(
         output_limit_kb=problem.output_limit_kb if problem else None,
         compare_mode=problem.compare_mode if problem else "token",
         float_tolerance=problem.float_tolerance if problem else None,
+        case_insensitive=problem.case_insensitive if problem else False,
         allowed_languages=problem.allowed_languages if problem else None,
         testcases=[
             JudgeTestcaseOut(
@@ -279,6 +280,8 @@ async def update_problem(
         problem.compare_mode = body.compare_mode
     if "float_tolerance" in sent:
         problem.float_tolerance = body.float_tolerance
+    if body.case_insensitive is not None:
+        problem.case_insensitive = body.case_insensitive
     if problem.compare_mode == "float" and problem.float_tolerance is None:
         problem.float_tolerance = DEFAULT_FLOAT_TOLERANCE
     if "allowed_languages" in sent and body.allowed_languages is not None:

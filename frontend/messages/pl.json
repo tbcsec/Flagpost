@@ -995,7 +995,9 @@
           "cancel": "Anuluj",
           "run": "Uruchom sprawdzenie",
           "starting": "Uruchamianie…"
-        }
+        },
+        "ignoreCase": "Ignoruj wielkość liter",
+        "ignoreCaseHint": "„YES” i „yes” liczą się jako ta sama odpowiedź — zwykła zasada w zadaniach z konkursów typu ICPC."
       },
       "readGuide": "Read the Judge guide"
     },

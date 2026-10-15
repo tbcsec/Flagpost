@@ -161,6 +161,7 @@ export function ProgrammingSection({
             problem.data.output_limit_kb,
             problem.data.compare_mode,
             problem.data.float_tolerance,
+            problem.data.case_insensitive,
             problem.data.allowed_languages,
           ])}
           competitionId={competitionId}
@@ -493,6 +494,7 @@ function AdvancedOptions({
   const [outputLimit, setOutputLimit] = useState(asText(problem.output_limit_kb));
   const [compare, setCompare] = useState<JudgeCompareMode>(problem.compare_mode);
   const [tolerance, setTolerance] = useState(asText(problem.float_tolerance));
+  const [ignoreCase, setIgnoreCase] = useState(problem.case_insensitive);
   const [allLanguages, setAllLanguages] = useState(problem.allowed_languages === null);
   const [languages, setLanguages] = useState<string[]>(problem.allowed_languages ?? []);
   const available = status.data?.languages ?? [];
@@ -510,6 +512,7 @@ function AdvancedOptions({
         output_limit_kb: toNumber(outputLimit),
         compare_mode: compare,
         float_tolerance: compare === "float" ? toNumber(tolerance) : null,
+        case_insensitive: ignoreCase,
         allowed_languages: allLanguages ? null : languages,
       },
       { onSuccess: () => setSaved(true) },
@@ -586,6 +589,18 @@ function AdvancedOptions({
               />
             </div>
           )}
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={ignoreCase}
+              onChange={(e) => setIgnoreCase(e.target.checked)}
+            />
+            <span>
+              {t("ignoreCase")}
+              <span className="block text-xs text-muted-foreground">{t("ignoreCaseHint")}</span>
+            </span>
+          </label>
         </div>
 
         <div className="space-y-2">

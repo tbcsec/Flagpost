@@ -68,6 +68,8 @@ class JudgeJob:
     # Judge every test rather than stopping at the first failure — an author's
     # reference-solution check (#450), which reports each test.
     run_all: bool = False
+    # Compare letters regardless of case (#451).
+    case_insensitive: bool = False
 
 
 @dataclass(frozen=True)
@@ -205,6 +207,7 @@ def make_job(
     float_tolerance: float,
     tests: list[JudgeTest],
     run_all: bool = False,
+    case_insensitive: bool = False,
 ) -> JudgeJob:
     if "/" in source_filename or source_filename in ("", ".", ".."):
         raise JudgeExecutorError(f"bad source filename {source_filename!r}")
@@ -224,4 +227,5 @@ def make_job(
         float_tolerance=float_tolerance,
         tests=tuple(tests),
         run_all=run_all,
+        case_insensitive=case_insensitive,
     )

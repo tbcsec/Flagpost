@@ -43,6 +43,8 @@ export function languageExtension(key: string): Extension {
   if (key.startsWith("python") || key.startsWith("pypy")) return python();
   if (key === "c" || key.startsWith("cpp") || key.startsWith("c++")) return cpp();
   if (key.startsWith("java") && !key.startsWith("javascript")) return java();
+  // No C# grammar ships with CodeMirror; Java's C-family highlighting is close.
+  if (key.startsWith("csharp") || key === "cs") return java();
   if (key.startsWith("javascript") || key === "node" || key.startsWith("typescript")) return javascript();
   if (key.startsWith("go")) return go();
   if (key.startsWith("rust")) return rust();

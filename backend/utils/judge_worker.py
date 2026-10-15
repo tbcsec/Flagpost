@@ -336,6 +336,7 @@ async def _prepare(db_factory, claim: Claim, storage, executor) -> tuple[JudgeJo
             output_limit_kb=limits["output_limit_kb"],
             compare_mode=limits["compare_mode"],
             float_tolerance=limits["float_tolerance"],
+            case_insensitive=limits["case_insensitive"],
             tests=[JudgeTest(sample=c.sample, input=c.input, answer=c.answer) for c in cases],
             # An author's reference check reports every test (#450).
             run_all=judging.kind == "reference",
@@ -366,6 +367,7 @@ def effective_limits(problem: JudgeProblem, settings: JudgeSettings) -> dict:
         "output_limit_kb": problem.output_limit_kb or settings.default_output_limit_kb or DEFAULT_OUTPUT_LIMIT_KB,
         "compare_mode": problem.compare_mode,
         "float_tolerance": problem.float_tolerance or DEFAULT_FLOAT_TOLERANCE,
+        "case_insensitive": bool(problem.case_insensitive),
     }
 
 
@@ -373,9 +375,12 @@ def problem_version(problem: JudgeProblem, settings: JudgeSettings) -> str:
     """A short fingerprint of what a judging ran against: the test data (a new
     object key on every edit) and the limits. A reference check whose version
     differs from the problem's current one is out of date (#450)."""
-    basis = json.dumps(
-        {"testdata": problem.object_key, **effective_limits(problem, settings)}, sort_keys=True
-    )
+    limits = effective_limits(problem, settings)
+    if not limits["case_insensitive"]:
+        # Added in #451: absent when off, so a problem that doesn't use it
+        # keeps the fingerprint it had (no reference check goes stale).
+        limits.pop("case_insensitive")
+    basis = json.dumps({"testdata": problem.object_key, **limits}, sort_keys=True)
     return hashlib.sha256(basis.encode()).hexdigest()[:16]
 
 

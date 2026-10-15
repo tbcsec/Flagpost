@@ -479,3 +479,20 @@ async def test_setup_rejects_unknown_or_empty_language_lists(client):
     for body in ({"preset_keys": []}, {"preset_keys": ["cobol"]}):
         resp = await client.post(f"{BASE}/setup", json=body, headers=_auth(admin))
         assert resp.status_code == 422, body
+
+
+def test_preset_multipliers_are_tiered_and_csharp_is_offered():
+    """#451: interpreted and JIT languages get more time than C/C++ by default,
+    and C# ships on Microsoft's official image."""
+    from schemas.judge import JudgeLanguageCreate
+    from utils.judge_presets import LANGUAGE_PRESETS
+
+    by_key = {p["key"]: p for p in LANGUAGE_PRESETS}
+    assert {k: p["time_multiplier"] for k, p in by_key.items()} == {
+        "python3": 3.0, "pypy3": 2.0, "c": 1.0, "cpp": 1.0, "java": 2.0,
+        "go": 1.5, "rust": 1.0, "csharp": 2.0, "javascript": 2.0,
+    }
+    assert by_key["csharp"]["image_ref"].startswith("mcr.microsoft.com/dotnet/sdk:")
+    # Every preset is a valid language definition (placeholders, arg limits).
+    for preset in LANGUAGE_PRESETS:
+        JudgeLanguageCreate.model_validate(preset)

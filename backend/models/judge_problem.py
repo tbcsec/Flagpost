@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from sqlalchemy import JSON, Float, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, Float, ForeignKey, Integer, String, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base, CompetitionScopedMixin, TimestampMixin
@@ -54,6 +54,13 @@ class JudgeProblem(Base, CompetitionScopedMixin, TimestampMixin):
         String, nullable=False, default="token", server_default="token"
     )
     float_tolerance: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Compare letters regardless of case (ASCII), in any mode — the standard
+    # ICPC/Kattis checker's default, so an imported problem judges as its
+    # authors intended (#451). Off by default: existing problems keep exact
+    # letter matching.
+    case_insensitive: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
     # Language keys allowed for this problem. Null = every enabled language.
     allowed_languages: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     # The test-data zip (null until the first test case is added).

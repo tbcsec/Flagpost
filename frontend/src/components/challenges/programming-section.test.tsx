@@ -30,6 +30,7 @@ function problem(testcases: JudgeTestcase[], over: Partial<JudgeProblem> = {}): 
     output_limit_kb: null,
     compare_mode: "token",
     float_tolerance: null,
+    case_insensitive: false,
     allowed_languages: null,
     testcases,
     default_time_limit_ms: 2000,
@@ -157,8 +158,17 @@ describe("ProgrammingSection", () => {
       output_limit_kb: null,
       compare_mode: "token",
       float_tolerance: null,
+      case_insensitive: false,
       allowed_languages: ["c"],
     });
+  });
+
+  it("can ignore upper/lower case", () => {
+    current = problem([tc({ id: "a" })]);
+    renderWithIntl(<ProgrammingSection competitionId="c" challengeId="p" />);
+    fireEvent.click(screen.getByLabelText(/Ignore upper\/lower case/));
+    fireEvent.click(screen.getByRole("button", { name: "Save options" }));
+    expect(updateProblemMutate.mock.calls[0][0].case_insensitive).toBe(true);
   });
 });
 

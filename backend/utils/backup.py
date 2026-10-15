@@ -439,6 +439,7 @@ def _validate_judge_problem_row(row: dict) -> None:
                 for key in (
                     "time_limit_ms", "memory_limit_mb", "output_limit_kb",
                     "compare_mode", "float_tolerance", "allowed_languages",
+                    "case_insensitive",
                 )
                 if key in row
             },

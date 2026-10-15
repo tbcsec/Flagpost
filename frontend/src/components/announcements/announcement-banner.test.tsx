@@ -54,6 +54,24 @@ describe("AnnouncementBanner", () => {
     expect(screen.getByText("Yes.")).toBeInTheDocument();
   });
 
+  it("says when a clarification was withdrawn, without its answer", () => {
+    mockUseAnnouncements.mockReturnValue({
+      data: [
+        {
+          ...announcement("c1", "A + B"),
+          kind: "clarification",
+          challenge_id: "p1",
+          question: "Can the numbers be negative?",
+          body: "",
+          withdrawn_at: new Date().toISOString(),
+        },
+      ],
+    });
+    renderWithIntl(<AnnouncementBanner />);
+    expect(screen.getByText("Clarification withdrawn")).toBeInTheDocument();
+    expect(screen.getByText("Can the numbers be negative?")).toBeInTheDocument();
+  });
+
   it("shows the newest announcement", () => {
     mockUseAnnouncements.mockReturnValue({ data: [announcement("a1")] });
     renderWithIntl(<AnnouncementBanner />);

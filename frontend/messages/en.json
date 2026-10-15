@@ -122,7 +122,8 @@
       "publishedToast": "Announcement published",
       "cancelledToast": "Scheduled announcement cancelled"
     },
-    "clarification": "Clarification"
+    "clarification": "Clarification",
+    "clarificationWithdrawn": "Clarification withdrawn"
   },
   "app": {
     "skipToContent": "Skip to content",
@@ -1107,7 +1108,22 @@
         "askPrivacy": "Only the judges see your question.",
         "count": "{count, plural, one {# clarification} other {# clarifications}}",
         "statusWaiting": "Waiting for an answer",
-        "statusAnswered": "Answered"
+        "statusAnswered": "Answered",
+        "withdrawn": "Withdrawn by the judges",
+        "withdraw": "Withdraw",
+        "withdrawConfirmTitle": "Withdraw this clarification?",
+        "withdrawConfirmDescription": "It stays listed, marked withdrawn, but competitors no longer see its answer. Everyone is notified.",
+        "withdrawConfirm": "Withdraw it",
+        "withdrawnToast": "Clarification withdrawn",
+        "post": "Post a clarification",
+        "staffEmpty": "No clarifications yet.",
+        "postTitle": "Post a clarification",
+        "postDescription": "Sent to everyone and shown with this challenge — to fix or explain something in the statement.",
+        "postBody": "Clarification",
+        "postBodyPlaceholder": "e.g. The input ends with a newline.",
+        "postQuestion": "Question it answers (optional)",
+        "postSend": "Send to everyone",
+        "postedToast": "Clarification sent to everyone"
       }
     }
   },
@@ -1220,7 +1236,8 @@
       "questionAnswered": "Answered. To follow up, ask a new question.",
       "askAgain": "Ask a new question",
       "sendAnswer": "Send answer",
-      "answerPlaceholder": "Your answer…"
+      "answerPlaceholder": "Your answer…",
+      "sentToAllWithdrawn": "Sent to everyone, since withdrawn"
     },
     "attachments": {
       "previewUnavailable": "Preview unavailable",

@@ -42,6 +42,9 @@ FANOUT_BATCH = 200
 # total loss.
 DELIVER_HANDLER_TIMEOUT = 300.0
 
+# The bell notice for a withdrawn clarification (the title is the challenge's).
+WITHDRAWN_NOTICE = "The judges withdrew this clarification — don't rely on it."
+
 
 def setup(app, event_bus, db_factory) -> None:
     from sqlalchemy import select
@@ -54,7 +57,10 @@ def setup(app, event_bus, db_factory) -> None:
     from models.challenge import Challenge
     from routers.announcements import clarifications_router
     from utils.announcements import (
+        clarifiable,
         hidden_clarification_challenges,
+        scrub_withdrawn_answer,
+        shown_body,
         resolve_recipients,
         user_team_ids,
         visible_to_user,
@@ -64,12 +70,11 @@ def setup(app, event_bus, db_factory) -> None:
     app.include_router(announcements_router)
     app.include_router(clarifications_router)
 
-    def _frame(a: Announcement) -> dict:
+    def _frame(a: Announcement, *, staff: bool = False) -> dict:
         return {
             "id": a.id,
             "competition_id": a.competition_id,
             "title": a.title,
-            "body": a.body,
             "severity": a.severity,
             "audience_type": a.audience_type,
             "created_at": a.created_at.isoformat(),
@@ -78,6 +83,10 @@ def setup(app, event_bus, db_factory) -> None:
             "kind": a.kind,
             "challenge_id": a.challenge_id,
             "question": a.question,
+            # A withdrawn clarification travels without its answer — the
+            # shared room is everyone; a staff member's own snapshot keeps it.
+            "withdrawn_at": a.withdrawn_at.isoformat() if a.withdrawn_at else None,
+            "body": shown_body(a, staff=staff),
         }
 
     async def _recent(db, user, competition_id: str) -> list[dict]:
@@ -113,7 +122,7 @@ def setup(app, event_bus, db_factory) -> None:
                 )
                 and a.challenge_id not in hidden
             ]
-        return [_frame(a) for a in rows]
+        return [_frame(a, staff=is_staff) for a in rows]
 
     async def authorize(db, user, competition_id: str) -> bool:
         if await db.get(Competition, competition_id) is None:
@@ -143,6 +152,21 @@ def setup(app, event_bus, db_factory) -> None:
         timeout=DELIVER_HANDLER_TIMEOUT,
     )
     async def deliver_announcement(event_name: str, payload: dict) -> None:
+        await _fan_out(payload, withdrawn=False)
+
+    # A withdrawn clarification (#450 follow-up) is delivered like the
+    # original: the room updates it in place and everyone gets a bell notice,
+    # through the same batched fan-out (and so the same time budget).
+    @event_bus.on(
+        "announcement.withdrawn",
+        owner="announcements",
+        background=True,
+        timeout=DELIVER_HANDLER_TIMEOUT,
+    )
+    async def deliver_withdrawal(event_name: str, payload: dict) -> None:
+        await _fan_out(payload, withdrawn=True)
+
+    async def _fan_out(payload: dict, *, withdrawn: bool) -> None:
         competition_id = payload.get("competition_id")
         announcement_id = payload.get("announcement_id")
         if not competition_id or not announcement_id:
@@ -156,7 +180,10 @@ def setup(app, event_bus, db_factory) -> None:
             # reproducible rather than depending on set iteration order.
             recipients = sorted(await resolve_recipients(db, announcement))
             targeted = announcement.audience_type != "all"
-            frame = {"type": "announcement", "announcement": _frame(announcement)}
+            frame = {
+                "type": "announcement_withdrawn" if withdrawn else "announcement",
+                "announcement": _frame(announcement),
+            }
             # A critical announcement overrides a muted in-app category — the
             # one sanctioned bypass (§4.4), because the operator is saying
             # something the competition can't afford to miss.
@@ -180,6 +207,20 @@ def setup(app, event_bus, db_factory) -> None:
                     link = f"/challenges/{challenge.id}"
                 elif challenge is not None:
                     link = "/challenges"
+                if withdrawn:
+                    competition = await db.get(Competition, competition_id)
+                    if (
+                        challenge is None
+                        or competition is None
+                        or not clarifiable(competition, challenge)
+                    ):
+                        # Competitors can't see the challenge (or play is
+                        # closed), so they can't see the clarification either:
+                        # no one to tell — the feed shows it withdrawn if the
+                        # challenge comes back.
+                        return
+                    notification_type = "announcement.clarification_withdrawn"
+                    body = WITHDRAWN_NOTICE
 
         # The shared-room frame goes first and carries the announcement inline,
         # and the row it describes was committed by the route before this event
@@ -197,6 +238,10 @@ def setup(app, event_bus, db_factory) -> None:
         for start in range(0, len(recipients), FANOUT_BATCH):
             batch = recipients[start : start + FANOUT_BATCH]
             async with db_factory() as db:
+                # A clarification withdrawn mid-delivery (#450): stop — the
+                # withdrawal notifies everyone itself.
+                if not withdrawn and await _withdrawn(db, announcement_id):
+                    return
                 notifications = await create_notifications(
                     db,
                     batch,
@@ -206,9 +251,25 @@ def setup(app, event_bus, db_factory) -> None:
                     competition_id=competition_id,
                     force=force,
                     link=link,
+                    announcement_id=announcement_id,
                 )
                 await db.commit()
             # Targeted announcements ride the per-user notification rooms only;
             # the recipient's client turns that frame into a refetch of its
             # filtered list.
             await broadcast_notifications(notifications)
+            if not withdrawn:
+                async with db_factory() as db:
+                    # Withdrawn between that check and this batch's commit:
+                    # take the answer back out of what was just written.
+                    if await _withdrawn(db, announcement_id):
+                        await scrub_withdrawn_answer(db, announcement_id)
+                        await db.commit()
+                        return
+
+    async def _withdrawn(db, announcement_id: str) -> bool:
+        return (
+            await db.scalar(
+                select(Announcement.withdrawn_at).where(Announcement.id == announcement_id)
+            )
+        ) is not None

@@ -168,13 +168,19 @@ export function AnnouncementsWidget({ competitionId }: WidgetProps) {
                       style.chip,
                     )}
                   >
-                    {an.kind === "clarification" ? ts("clarification") : ts(`severity.${style.key}`)}
+                    {an.kind === "clarification"
+                      ? an.withdrawn_at
+                        ? ts("clarificationWithdrawn")
+                        : ts("clarification")
+                      : ts(`severity.${style.key}`)}
                   </span>
                 )}
                 {an.kind === "clarification" && an.question && (
                   <span className="whitespace-pre-line text-[13px] text-muted-foreground">{an.question}</span>
                 )}
-                <span className="whitespace-pre-line text-[13px] text-muted-foreground">{an.body}</span>
+                {an.body && (
+                  <span className="whitespace-pre-line text-[13px] text-muted-foreground">{an.body}</span>
+                )}
               </li>
             );
           })}

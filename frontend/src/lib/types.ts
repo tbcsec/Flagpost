@@ -344,8 +344,10 @@ export interface TicketMessage {
   author_name: string;
   body: string;
   is_internal: boolean;
-  /** A staff answer also sent to everyone as a clarification (#450). */
+  /** A staff answer also sent to everyone as a clarification (#450) — and
+   *  whether the judges since withdrew it (then a competitor gets no text). */
   sent_to_all: boolean;
+  withdrawn?: boolean;
   created_at: string;
   attachments: TicketAttachment[];
 }
@@ -1201,15 +1203,19 @@ export interface Announcement {
   kind: "announcement" | "clarification";
   challenge_id: string | null;
   question: string | null;
+  /** A clarification the judges took back: still listed, but for
+   *  competitors without its answer (`body` is empty). */
+  withdrawn_at?: string | null;
 }
 
 /** A clarification as listed on its challenge's page (#450). */
 export interface Clarification {
   id: string;
   question: string | null;
-  /** The judges' answer. */
+  /** The judges' answer — empty for a competitor once withdrawn. */
   body: string;
   created_at: string;
+  withdrawn_at?: string | null;
 }
 
 /** What the composer sends. `audience_ids` is ignored for "all". A future

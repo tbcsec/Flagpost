@@ -312,3 +312,228 @@ async def test_support_tickets_keep_their_conversation(client, object_storage):
     await client.post(msgs, json={"body": "Fixed."}, headers=_auth(admin))
     reply = await client.post(msgs, json={"body": "Thanks, works now."}, headers=_auth(mei))
     assert reply.status_code == 200 and reply.json()["status"] == "open"
+
+
+# --- withdrawing, and posting without a question (#450 follow-ups) ----------------------
+
+
+async def _sent(client, comp, admin, mei, chal) -> str:
+    await _clarify(client, comp, admin, await _ask(client, comp, mei, chal))
+    async with SessionLocal() as db:
+        return (await db.scalar(select(Announcement).where(Announcement.kind == "clarification"))).id
+
+
+def _withdraw(client, comp, token, announcement):
+    return client.post(
+        f"/api/competitions/{comp}/announcements/{announcement}/withdraw", headers=_auth(token)
+    )
+
+
+async def test_a_withdrawn_clarification_stays_listed_without_its_answer(client, object_storage):
+    admin, comp, chal = await _setup(client)
+    mei = await _player(client, comp, "mei")
+    omar = await _player(client, comp, "omar")
+    clar = await _sent(client, comp, admin, mei, chal)
+    await event_bus.wait_for_background()
+
+    async with WsTestClient(main.app, f"/ws/announcements/{comp}") as ws:
+        await ws.send_json({"token": omar})
+        assert (await ws.receive_json())["type"] == "auth_ok"
+        assert (await ws.receive_json())["type"] == "announcements"
+        with Events("announcement.withdrawn") as events:
+            resp = await _withdraw(client, comp, admin, clar)
+            await event_bus.wait_for_background()
+        frame = await ws.receive_json()
+    assert resp.status_code == 200 and resp.json()["withdrawn_at"]
+    # Everyone is told live, and the frame doesn't carry the answer.
+    assert frame["type"] == "announcement_withdrawn"
+    assert frame["announcement"]["withdrawn_at"] and frame["announcement"]["body"] == ""
+    # The audit actor is the staff member.
+    admin_id = (await client.get("/api/auth/me", headers=_auth(admin))).json()["id"]
+    [payload] = [p for _, p in events.seen]
+    assert payload["user_id"] == admin_id and payload["challenge_id"] == chal
+
+    # A competitor still sees it — marked withdrawn, question kept, answer gone.
+    [listed] = (await _clarifications(client, comp, chal, omar)).json()
+    assert listed["withdrawn_at"] and listed["body"] == ""
+    assert listed["question"] == "Can the numbers be negative?"
+    [feed] = (await client.get(f"/api/competitions/{comp}/announcements", headers=_auth(omar))).json()
+    assert feed["withdrawn_at"] and feed["body"] == ""
+    # Staff keep their sent history in full.
+    [staff_feed] = (await client.get(f"/api/competitions/{comp}/announcements", headers=_auth(admin))).json()
+    assert staff_feed["body"] == "Yes."
+
+    # And a bell notice, linked to the problem.
+    async with SessionLocal() as db:
+        omar_id = (await client.get("/api/auth/me", headers=_auth(omar))).json()["id"]
+        notes = (await db.scalars(select(Notification).where(Notification.user_id == omar_id))).all()
+    withdrawn = [n for n in notes if n.type == "announcement.clarification_withdrawn"]
+    assert len(withdrawn) == 1 and withdrawn[0].link == f"/challenges/{chal}"
+    # The answer is gone from every bell it reached, not just the new notice.
+    assert all("Yes." not in (n.body or "") for n in notes)
+    assert [n.type for n in notes if n.body is None] == ["announcement.clarification"]
+
+    # The asker's own thread says so too, without the text; staff keep it.
+    async with SessionLocal() as db:
+        from models.ticket import Ticket
+
+        ticket = (await db.scalars(select(Ticket))).first().id
+    mine = (await client.get(f"/api/competitions/{comp}/tickets/{ticket}", headers=_auth(mei))).json()
+    assert mine["messages"][-1]["withdrawn"] is True and mine["messages"][-1]["body"] == ""
+    theirs = (await client.get(f"/api/competitions/{comp}/tickets/{ticket}", headers=_auth(admin))).json()
+    assert theirs["messages"][-1]["withdrawn"] is True and theirs["messages"][-1]["body"] == "Yes."
+
+    # A staff member's own reconnect snapshot keeps the text; a competitor's doesn't.
+    for token, body in ((admin, "Yes."), (omar, "")):
+        async with WsTestClient(main.app, f"/ws/announcements/{comp}") as ws:
+            await ws.send_json({"token": token})
+            assert (await ws.receive_json())["type"] == "auth_ok"
+            [snap] = (await ws.receive_json())["announcements"]
+        assert snap["body"] == body and snap["withdrawn_at"]
+
+
+async def test_only_staff_who_may_delete_announcements_can_withdraw(client, object_storage):
+    admin, comp, chal = await _setup(client)
+    mei = await _player(client, comp, "mei")
+    clar = await _sent(client, comp, admin, mei, chal)
+    assert (await _withdraw(client, comp, mei, clar)).status_code == 403
+    poster = await _player(client, comp, "poster")
+    async with SessionLocal() as db:
+        role = Role(name="Poster", scope="competition", permissions=["challenge_view", "announcement_create"])
+        db.add(role)
+        await db.flush()
+        poster_id = (await client.get("/api/auth/me", headers=_auth(poster))).json()["id"]
+        db.add(RoleAssignment(user_id=poster_id, competition_id=comp, role_id=role.id))
+        await db.commit()
+    assert (await _withdraw(client, comp, poster, clar)).status_code == 403
+    assert (await _withdraw(client, comp, admin, clar)).status_code == 200
+    assert (await _withdraw(client, comp, admin, clar)).status_code == 409
+
+
+async def test_ordinary_announcements_cant_be_withdrawn(client, object_storage):
+    admin, comp, chal = await _setup(client)
+    plain = (
+        await client.post(
+            f"/api/competitions/{comp}/announcements", json={"title": "Hello", "body": "Welcome"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    assert (await _withdraw(client, comp, admin, plain)).status_code == 400
+
+
+async def test_the_assistant_never_quotes_a_withdrawn_answer(client, object_storage):
+    from models.user import User
+    from utils.ai.competitor_tools import _announcements
+
+    admin, comp, chal = await _setup(client)
+    mei = await _player(client, comp, "mei")
+    clar = await _sent(client, comp, admin, mei, chal)
+    await _withdraw(client, comp, admin, clar)
+    async with SessionLocal() as db:
+        user = await db.scalar(select(User).where(User.display_name == "mei"))
+        competition = await db.get(Competition, comp)
+        out = await _announcements(db, user, competition, {})
+    [a] = out["announcements"]
+    assert a["withdrawn"] is True and a["body"] == "" and a["kind"] == "clarification"
+
+
+def _post(client, comp, chal, token, **body):
+    return client.post(
+        f"/api/competitions/{comp}/challenges/{chal}/clarifications",
+        json={"body": "Input lines end with a newline.", **body},
+        headers=_auth(token),
+    )
+
+
+async def test_a_judge_posts_a_clarification_without_a_question(client, object_storage):
+    admin, comp, chal = await _setup(client)
+    mei = await _player(client, comp, "mei")
+    with Events("announcement.published") as events:
+        resp = await _post(client, comp, chal, admin)
+        await event_bus.wait_for_background()
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["question"] is None
+    [published] = [p for _, p in events.seen]
+    assert published["kind"] == "clarification" and published["challenge_id"] == chal
+    [listed] = (await _clarifications(client, comp, chal, mei)).json()
+    assert listed["body"] == "Input lines end with a newline." and listed["question"] is None
+    # A blank question is no question; a real one is kept.
+    await _post(client, comp, chal, admin, question="  ")
+    await _post(client, comp, chal, admin, question="Is input sorted?", body="No.")
+    questions = [c["question"] for c in (await _clarifications(client, comp, chal, mei)).json()]
+    assert sorted(q or "" for q in questions) == ["", "", "Is input sorted?"]
+
+
+async def test_posting_needs_permission_and_a_visible_challenge(client, object_storage):
+    admin, comp, chal = await _setup(client)
+    mei = await _player(client, comp, "mei")
+    assert (await _post(client, comp, chal, mei)).status_code == 403
+    async with SessionLocal() as db:
+        (await db.get(Challenge, chal)).state = "draft"
+        await db.commit()
+    assert (await _post(client, comp, chal, admin)).status_code == 400
+    async with SessionLocal() as db:
+        (await db.get(Challenge, chal)).state = "published"
+        (await db.get(Competition, comp)).status = "ended"
+        await db.commit()
+    assert (await _post(client, comp, chal, admin)).status_code == 400
+    assert (await _post(client, comp, "nope", admin)).status_code == 404
+
+
+async def test_withdrawn_mid_delivery_reaches_no_bell(client, object_storage):
+    """Posted and withdrawn before its fan-out ran: no notification ever
+    carries the answer."""
+    admin, comp, chal = await _setup(client)
+    for name in ("mei", "omar", "lena"):
+        await _player(client, comp, name)
+    resp = await _post(client, comp, chal, admin, body="SECRET ANSWER")
+    async with SessionLocal() as db:
+        clar = (await db.scalar(select(Announcement).where(Announcement.kind == "clarification"))).id
+    assert (await _withdraw(client, comp, admin, clar)).status_code == 200
+    await event_bus.wait_for_background()
+    async with SessionLocal() as db:
+        notes = (await db.scalars(select(Notification))).all()
+    assert resp.status_code == 201 and not any("SECRET" in (n.body or "") for n in notes)
+
+
+async def test_a_delivery_that_runs_after_the_withdrawal_sends_nothing(client, object_storage):
+    """The fan-out checks before each batch: once withdrawn, nothing more is
+    created — a created row would also be pushed live, answer and all."""
+    from utils.announcements import published_event
+
+    admin, comp, chal = await _setup(client)
+    await _player(client, comp, "mei")
+    await _post(client, comp, chal, admin, body="SECRET ANSWER")
+    await event_bus.wait_for_background()
+    async with SessionLocal() as db:
+        clar = await db.scalar(select(Announcement).where(Announcement.kind == "clarification"))
+    await _withdraw(client, comp, admin, clar.id)
+    await event_bus.wait_for_background()
+    async with SessionLocal() as db:
+        before = len((await db.scalars(select(Notification))).all())
+        clar = await db.get(Announcement, clar.id)
+        payload = published_event(clar)
+    # A late (e.g. retried or slow) delivery of the original publication.
+    await event_bus.emit("announcement.published", payload)
+    await event_bus.wait_for_background()
+    async with SessionLocal() as db:
+        after = (await db.scalars(select(Notification))).all()
+    assert len(after) == before
+    assert not any("SECRET" in (n.body or "") for n in after)
+
+
+async def test_withdrawing_a_hidden_challenges_clarification_tells_no_one(client, object_storage):
+    admin, comp, chal = await _setup(client)
+    mei = await _player(client, comp, "mei")
+    clar = await _sent(client, comp, admin, mei, chal)
+    await event_bus.wait_for_background()
+    async with SessionLocal() as db:
+        (await db.get(Challenge, chal)).state = "draft"
+        await db.commit()
+    late = await _player(client, comp, "late")
+    assert (await _withdraw(client, comp, admin, clar)).status_code == 200
+    await event_bus.wait_for_background()
+    async with SessionLocal() as db:
+        late_id = (await client.get("/api/auth/me", headers=_auth(late))).json()["id"]
+        notes = (await db.scalars(select(Notification).where(Notification.user_id == late_id))).all()
+    assert notes == []

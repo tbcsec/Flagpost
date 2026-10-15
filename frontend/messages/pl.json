@@ -122,7 +122,8 @@
       "publishedToast": "Ogłoszenie opublikowane",
       "cancelledToast": "Zaplanowane ogłoszenie anulowane"
     },
-    "clarification": "Wyjaśnienie"
+    "clarification": "Wyjaśnienie",
+    "clarificationWithdrawn": "Wyjaśnienie wycofane"
   },
   "app": {
     "skipToContent": "Przejdź do treści",
@@ -1107,7 +1108,22 @@
         "askPrivacy": "Twoje pytanie widzą tylko sędziowie.",
         "count": "{count, plural, one {# wyjaśnienie} few {# wyjaśnienia} many {# wyjaśnień} other {# wyjaśnienia}}",
         "statusWaiting": "Czeka na odpowiedź",
-        "statusAnswered": "Odpowiedziano"
+        "statusAnswered": "Odpowiedziano",
+        "withdrawn": "Wycofane przez sędziów",
+        "withdraw": "Wycofaj",
+        "withdrawConfirmTitle": "Wycofać to wyjaśnienie?",
+        "withdrawConfirmDescription": "Pozostanie na liście, oznaczone jako wycofane, ale uczestnicy nie zobaczą już odpowiedzi. Wszyscy zostaną powiadomieni.",
+        "withdrawConfirm": "Wycofaj je",
+        "withdrawnToast": "Wyjaśnienie wycofane",
+        "post": "Opublikuj wyjaśnienie",
+        "staffEmpty": "Brak wyjaśnień.",
+        "postTitle": "Opublikuj wyjaśnienie",
+        "postDescription": "Wysyłane do wszystkich i pokazywane przy tym zadaniu — aby poprawić lub wyjaśnić coś w treści.",
+        "postBody": "Wyjaśnienie",
+        "postBodyPlaceholder": "np. Wejście kończy się znakiem nowej linii.",
+        "postQuestion": "Pytanie, na które odpowiada (opcjonalnie)",
+        "postSend": "Wyślij wszystkim",
+        "postedToast": "Wyjaśnienie wysłane do wszystkich"
       }
     }
   },
@@ -1220,7 +1236,8 @@
       "questionAnswered": "Odpowiedziano. Aby dopytać, zadaj nowe pytanie.",
       "askAgain": "Zadaj nowe pytanie",
       "sendAnswer": "Wyślij odpowiedź",
-      "answerPlaceholder": "Twoja odpowiedź…"
+      "answerPlaceholder": "Twoja odpowiedź…",
+      "sentToAllWithdrawn": "Wysłano do wszystkich, później wycofano"
     },
     "attachments": {
       "previewUnavailable": "Podgląd niedostępny",

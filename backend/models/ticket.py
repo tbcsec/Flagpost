@@ -77,3 +77,8 @@ class TicketMessage(Base, CompetitionScopedMixin, TimestampMixin):
     sent_to_all: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=false()
     )
+    # The clarification it was sent as, so the thread can show it withdrawn
+    # (and stop showing the answer) once the judges take it back.
+    announcement_id: Mapped[str | None] = mapped_column(
+        ForeignKey("announcements.id", ondelete="SET NULL"), nullable=True
+    )

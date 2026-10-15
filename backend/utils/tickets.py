@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from auth.deps import user_has_permission
+from models.announcement import Announcement
 from models.challenge import Challenge
 from models.team import Team
 from models.ticket import Ticket, TicketMessage
@@ -168,14 +169,37 @@ async def ticket_detail(
                 TicketAttachmentOut.model_validate(a, from_attributes=True)
             )
 
+    # Answers sent to everyone that the judges have since withdrawn (#450): the
+    # thread says so, and a competitor no longer gets the text.
+    withdrawn_ids: set[str] = set()
+    linked = {m.announcement_id for m, _ in rows if m.announcement_id}
+    if linked:
+        withdrawn_ids = set(
+            (
+                await db.scalars(
+                    select(Announcement.id).where(
+                        Announcement.competition_id == competition_id,
+                        Announcement.id.in_(linked),
+                        Announcement.withdrawn_at.is_not(None),
+                    )
+                )
+            ).all()
+        )
+    staff = await is_staff(db, user, competition_id)
+
     messages = [
         TicketMessageOut(
             id=m.id,
             author_user_id=m.author_user_id,
             author_name=name,
-            body=m.body,
+            body=(
+                ""
+                if m.announcement_id in withdrawn_ids and not staff
+                else m.body
+            ),
             is_internal=m.is_internal,
             sent_to_all=m.sent_to_all,
+            withdrawn=m.announcement_id in withdrawn_ids,
             created_at=m.created_at,
             attachments=by_message.get(m.id, []),
         )

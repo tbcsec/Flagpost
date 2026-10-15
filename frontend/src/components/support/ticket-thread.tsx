@@ -197,14 +197,32 @@ export function TicketThread({
                 {m.author_name}
                 {m.is_internal && <span className="ml-2 text-[11px] text-warning">{tr("thread.internalNote")}</span>}
                 {m.sent_to_all && (
-                  <span className="ml-2 text-[11px] text-primary">{tr("thread.sentToAll")}</span>
+                  <span
+                    className={cn(
+                      "ml-2 text-[11px]",
+                      m.withdrawn ? "text-muted-foreground" : "text-primary",
+                    )}
+                  >
+                    {m.withdrawn ? tr("thread.sentToAllWithdrawn") : tr("thread.sentToAll")}
+                  </span>
                 )}
               </span>
               <span className="whitespace-nowrap text-[11px] text-muted-foreground">
                 {rel(m.created_at)}
               </span>
             </div>
-            <p className="mt-1 whitespace-pre-line text-sm text-foreground">{m.body}</p>
+            {/* A withdrawn answer: a competitor no longer gets the text; staff
+                see it struck through. */}
+            {m.body && (
+              <p
+                className={cn(
+                  "mt-1 whitespace-pre-line text-sm",
+                  m.withdrawn ? "text-muted-foreground line-through" : "text-foreground",
+                )}
+              >
+                {m.body}
+              </p>
+            )}
             <TicketAttachments
               competitionId={competitionId}
               ticketId={ticketId}

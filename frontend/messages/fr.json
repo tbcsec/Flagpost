@@ -122,7 +122,8 @@
       "publishedToast": "Annonce publiée",
       "cancelledToast": "Annonce programmée annulée"
     },
-    "clarification": "Clarification"
+    "clarification": "Clarification",
+    "clarificationWithdrawn": "Clarification retirée"
   },
   "app": {
     "skipToContent": "Passer au contenu",
@@ -1107,7 +1108,22 @@
         "askPrivacy": "Seuls les juges voient votre question.",
         "count": "{count, plural, one {# clarification} other {# clarifications}}",
         "statusWaiting": "En attente de réponse",
-        "statusAnswered": "Répondu"
+        "statusAnswered": "Répondu",
+        "withdrawn": "Retirée par les juges",
+        "withdraw": "Retirer",
+        "withdrawConfirmTitle": "Retirer cette clarification ?",
+        "withdrawConfirmDescription": "Elle reste affichée, marquée comme retirée, mais les participants n'en voient plus la réponse. Tout le monde est prévenu.",
+        "withdrawConfirm": "La retirer",
+        "withdrawnToast": "Clarification retirée",
+        "post": "Publier une clarification",
+        "staffEmpty": "Aucune clarification pour l'instant.",
+        "postTitle": "Publier une clarification",
+        "postDescription": "Envoyée à tous et affichée avec ce défi — pour corriger ou expliquer un point de l'énoncé.",
+        "postBody": "Clarification",
+        "postBodyPlaceholder": "ex. : l'entrée se termine par un saut de ligne.",
+        "postQuestion": "Question à laquelle elle répond (facultatif)",
+        "postSend": "Envoyer à tous",
+        "postedToast": "Clarification envoyée à tous"
       }
     }
   },
@@ -1220,7 +1236,8 @@
       "questionAnswered": "Répondu. Pour aller plus loin, posez une nouvelle question.",
       "askAgain": "Poser une nouvelle question",
       "sendAnswer": "Envoyer la réponse",
-      "answerPlaceholder": "Votre réponse…"
+      "answerPlaceholder": "Votre réponse…",
+      "sentToAllWithdrawn": "Envoyé à tous, puis retiré"
     },
     "attachments": {
       "previewUnavailable": "Aperçu indisponible",

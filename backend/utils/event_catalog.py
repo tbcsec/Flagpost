@@ -167,6 +167,9 @@ EVENT_TYPES: tuple[str, ...] = (
     # reached anyone), audited, and available as automation triggers.
     "announcement.updated",
     "announcement.deleted",
+    # The judges took back a clarification (#450 follow-up): it stays listed,
+    # marked withdrawn, without its answer.
+    "announcement.withdrawn",
     "site.settings_updated",
     # Instancing infrastructure config change (#266, ADR-0036 §5) — admin-domain
     # like ai.settings_updated; carries no endpoint/credential, only who + the

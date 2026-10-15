@@ -122,7 +122,8 @@
       "publishedToast": "Anuncio publicado",
       "cancelledToast": "Anuncio programado cancelado"
     },
-    "clarification": "Aclaración"
+    "clarification": "Aclaración",
+    "clarificationWithdrawn": "Aclaración retirada"
   },
   "app": {
     "skipToContent": "Ir al contenido",
@@ -1107,7 +1108,22 @@
         "askPrivacy": "Solo los jueces ven tu pregunta.",
         "count": "{count, plural, one {# aclaración} other {# aclaraciones}}",
         "statusWaiting": "Esperando respuesta",
-        "statusAnswered": "Respondida"
+        "statusAnswered": "Respondida",
+        "withdrawn": "Retirada por los jueces",
+        "withdraw": "Retirar",
+        "withdrawConfirmTitle": "¿Retirar esta aclaración?",
+        "withdrawConfirmDescription": "Sigue en la lista, marcada como retirada, pero los participantes ya no ven su respuesta. Se avisa a todos.",
+        "withdrawConfirm": "Retirarla",
+        "withdrawnToast": "Aclaración retirada",
+        "post": "Publicar una aclaración",
+        "staffEmpty": "Todavía no hay aclaraciones.",
+        "postTitle": "Publicar una aclaración",
+        "postDescription": "Se envía a todos y se muestra con este reto, para corregir o explicar algo del enunciado.",
+        "postBody": "Aclaración",
+        "postBodyPlaceholder": "p. ej. La entrada termina con un salto de línea.",
+        "postQuestion": "Pregunta que responde (opcional)",
+        "postSend": "Enviar a todos",
+        "postedToast": "Aclaración enviada a todos"
       }
     }
   },
@@ -1220,7 +1236,8 @@
       "questionAnswered": "Respondida. Para continuar, haz una nueva pregunta.",
       "askAgain": "Hacer una nueva pregunta",
       "sendAnswer": "Enviar respuesta",
-      "answerPlaceholder": "Tu respuesta…"
+      "answerPlaceholder": "Tu respuesta…",
+      "sentToAllWithdrawn": "Enviado a todos, luego retirado"
     },
     "attachments": {
       "previewUnavailable": "Vista previa no disponible",

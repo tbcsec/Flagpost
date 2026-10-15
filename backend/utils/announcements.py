@@ -23,7 +23,7 @@ it's their own sent history, not a leak.
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import user_has_permission, users_with_permission
@@ -31,9 +31,47 @@ from db import ensure_aware_utc, utcnow
 from models.announcement import Announcement
 from models.challenge import Challenge
 from models.competition import Competition
+from models.notification import Notification
 from models.team import TeamMembership
 from models.user import User
-from utils.competition_status import has_started
+from utils.competition_status import has_started, is_playable
+
+
+def shown_body(announcement: Announcement, *, staff: bool) -> str:
+    """The body as a reader may see it: a withdrawn clarification's answer is
+    no longer shown to competitors (staff keep their sent history)."""
+    if announcement.withdrawn_at is not None and not staff:
+        return ""
+    return announcement.body
+
+
+def is_visible_challenge(challenge: Challenge) -> bool:
+    """Published and released — what a competitor can see of a challenge (the
+    competition's status gate is checked separately)."""
+    return challenge.state == "published" and (
+        challenge.release_at is None or ensure_aware_utc(challenge.release_at) <= utcnow()
+    )
+
+
+async def scrub_withdrawn_answer(db: AsyncSession, announcement_id: str) -> None:
+    """Take a withdrawn clarification's answer out of the bell notifications it
+    already reached (the withdrawal sends its own notice). Idempotent, and not
+    committed — the caller's transaction is."""
+    await db.execute(
+        update(Notification)
+        .where(
+            Notification.announcement_id == announcement_id,
+            Notification.type == "announcement.clarification",
+        )
+        .values(body=None)
+    )
+
+
+def clarifiable(competition: Competition, challenge: Challenge) -> bool:
+    """Whether everyone can be told something about this challenge right now:
+    competitors can see it (published, released) and the competition is
+    running (the status gate hides every challenge otherwise)."""
+    return is_playable(competition) and is_visible_challenge(challenge)
 
 
 def published_event(announcement: Announcement, **extra) -> dict:
@@ -72,7 +110,6 @@ async def hidden_clarification_challenges(
     competition = await db.get(Competition, competition_id)
     if competition is None or not has_started(competition):
         return ids
-    now = utcnow()
     challenges = (
         await db.scalars(
             select(Challenge).where(
@@ -80,13 +117,7 @@ async def hidden_clarification_challenges(
             )
         )
     ).all()
-    visible = {
-        c.id
-        for c in challenges
-        if c.state == "published"
-        and (c.release_at is None or ensure_aware_utc(c.release_at) <= now)
-    }
-    return ids - visible
+    return ids - {c.id for c in challenges if is_visible_challenge(c)}
 
 
 async def user_team_ids(

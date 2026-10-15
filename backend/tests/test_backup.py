@@ -625,11 +625,20 @@ async def test_a_clarification_is_restored_against_its_challenge(client):
     """#450: a clarification's challenge_id is remapped to the restored
     challenge, like a ticket's."""
     from models.announcement import Announcement
+    from models.ticket import Ticket, TicketMessage
 
     comp_id, chal_id, _ = await _seed()
     async with SessionLocal() as db:
-        db.add(Announcement(competition_id=comp_id, kind="clarification", challenge_id=chal_id,
-                            title="C1", question="Negative numbers?", body="Yes."))
+        clar = Announcement(competition_id=comp_id, kind="clarification", challenge_id=chal_id,
+                            title="C1", question="Negative numbers?", body="Yes.")
+        db.add(clar)
+        user = await db.scalar(select(User).where(User.display_name == "player"))
+        ticket = Ticket(competition_id=comp_id, subject="Q", opener_user_id=user.id,
+                        challenge_id=chal_id, kind="question")
+        db.add(ticket)
+        await db.flush()
+        db.add(TicketMessage(competition_id=comp_id, ticket_id=ticket.id, author_user_id=user.id,
+                             body="Yes.", sent_to_all=True, announcement_id=clar.id))
         db.add(Announcement(competition_id=comp_id, title="Hello", body="Welcome"))
         await db.commit()
     storage = InMemoryStorage()
@@ -649,3 +658,7 @@ async def test_a_clarification_is_restored_against_its_challenge(client):
     assert rows["C1"].kind == "clarification" and rows["C1"].challenge_id == chal.id
     assert rows["C1"].question == "Negative numbers?"
     assert rows["Hello"].kind == "announcement" and rows["Hello"].challenge_id is None
+    # The answer sent from a ticket still points at its (restored) clarification.
+    async with SessionLocal() as db:
+        msg = await db.scalar(select(TicketMessage).where(TicketMessage.sent_to_all.is_(True)))
+    assert msg is not None and msg.announcement_id == rows["C1"].id

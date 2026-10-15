@@ -37,7 +37,7 @@ from models.challenge import Challenge
 from models.competition import Competition
 from models.user import User
 from schemas.challenge import ChallengeOut
-from utils.announcements import list_visible_announcements
+from utils.announcements import list_visible_announcements, shown_body
 from utils.richtext import doc_to_text
 from utils.scoreboard import compute_scoreboard
 from utils.scoring import resolve_subject, solved_challenge_ids
@@ -142,8 +142,12 @@ async def _announcements(db, user, competition, args) -> dict:
         "announcements": [
             {
                 "title": a.title,
-                "body": _truncate(a.body),
+                # A withdrawn clarification's answer isn't shown (#450).
+                "body": _truncate(shown_body(a, staff=False)),
                 "severity": a.severity,
+                "kind": a.kind,
+                "question": _truncate(a.question) if a.question else None,
+                "withdrawn": a.withdrawn_at is not None,
                 "created_at": a.created_at.isoformat() if a.created_at else None,
             }
             for a in rows[:_MAX_ITEMS]

@@ -679,8 +679,10 @@ function Topbar({
                   const announced = n.type.startsWith("announcement.")
                     ? severityStyle(n.type.slice("announcement.".length))
                     : null;
-                  // A judges' clarification (#450) rides the same category.
+                  // A judges' clarification (#450) rides the same category,
+                  // as does word that one was withdrawn.
                   const clarification = n.type === "announcement.clarification";
+                  const withdrawnNotice = n.type === "announcement.clarification_withdrawn";
                   const body = (
                     <div className="flex gap-2.5">
                       {/* Explicit per-row unread marker — the old faint row
@@ -706,7 +708,11 @@ function Topbar({
                               announced.chip,
                             )}
                           >
-                            {clarification ? ta("clarification") : ta(`severity.${announced.key}`)}
+                            {withdrawnNotice
+                              ? ta("clarificationWithdrawn")
+                              : clarification
+                                ? ta("clarification")
+                                : ta(`severity.${announced.key}`)}
                           </span>
                         )}
                         {n.body && (

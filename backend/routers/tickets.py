@@ -23,7 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import require_permission, user_has_permission
-from db import ensure_aware_utc, get_db, utcnow
+from db import get_db
 from models.announcement import Announcement
 from models.challenge import Challenge
 from models.competition import Competition
@@ -47,8 +47,7 @@ from schemas.ticket import (
     TicketOut,
     TicketReply,
 )
-from utils.announcements import published_event
-from utils.competition_status import is_playable
+from utils.announcements import clarifiable, published_event
 from utils.event_bus import event_bus
 from utils.tickets import (
     can_see_internal as _can_see_internal,
@@ -270,27 +269,12 @@ async def clarify_ticket(
     # released, and the competition running (the status gate hides every
     # challenge before the start and after the end).
     competition = await db.get(Competition, competition_id)
-    if (
-        competition is None
-        or not is_playable(competition)
-        or challenge.state != "published"
-        or (challenge.release_at is not None and ensure_aware_utc(challenge.release_at) > utcnow())
-    ):
+    if competition is None or not clarifiable(competition, challenge):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Competitors can't see that challenge right now — answer privately instead",
         )
 
-    db.add(
-        TicketMessage(
-            competition_id=competition_id,
-            ticket_id=ticket_id,
-            author_user_id=current_user.id,
-            body=body.answer,
-            is_internal=False,
-            sent_to_all=True,
-        )
-    )
     announcement = Announcement(
         competition_id=competition_id,
         kind="clarification",
@@ -303,6 +287,18 @@ async def clarify_ticket(
         created_by=current_user.id,
     )
     db.add(announcement)
+    await db.flush()
+    db.add(
+        TicketMessage(
+            competition_id=competition_id,
+            ticket_id=ticket_id,
+            author_user_id=current_user.id,
+            body=body.answer,
+            is_internal=False,
+            sent_to_all=True,
+            announcement_id=announcement.id,
+        )
+    )
     if ticket.kind == "question":
         ticket.status = "resolved"  # answered
     elif ticket.status == "resolved":

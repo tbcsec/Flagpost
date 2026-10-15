@@ -129,6 +129,14 @@ describe("answering a question about a problem", () => {
     expect(reply).not.toHaveBeenCalled();
   });
 
+  it("marks an answer whose clarification was withdrawn, and hides it from the asker", () => {
+    detail.messages.push(
+      message({ id: "m2", author_name: "judge", body: "", sent_to_all: true, withdrawn: true }),
+    );
+    thread(false);
+    expect(screen.getByText("Sent to everyone, since withdrawn")).toBeInTheDocument();
+  });
+
   it("marks an answer that went to everyone", () => {
     detail.messages.push(message({ id: "m2", author_name: "judge", body: "Yes.", sent_to_all: true }));
     thread();

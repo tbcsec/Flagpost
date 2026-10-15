@@ -13,6 +13,10 @@ import { ChallengeHints } from "@/components/challenges/challenge-hints";
 import { ChallengeInstance } from "@/components/challenges/challenge-instance";
 import { ChallengeList } from "@/components/challenges/challenge-list";
 import { ChallengeValue } from "@/components/challenges/challenge-value";
+import {
+  ClarificationsLink,
+  ProblemClarifications,
+} from "@/components/challenges/problem-clarifications";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // CollabNote pulls TipTap + Y.js (the team scratchpad) and loads on demand, so a
@@ -352,7 +356,9 @@ export default function ChallengesPage() {
       )}
 
       <Dialog open={!!open} onOpenChange={(o) => !o && setOpen(null)}>
-        <DialogContent>
+        {/* Scrolls: a long description, clarifications and notes can outgrow
+            the viewport, and the flag form must stay reachable. */}
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           {open && (
             <ChallengeDialogBody
               competitionId={competitionId}
@@ -455,6 +461,7 @@ function ChallengeDialogBody({
           {t("points", { value: worth })}
           {challenge.scoring_type === "dynamic" && ` ${t("dynamicSuffix")}`} ·{" "}
           {t("solvesCount", { count: challenge.solve_count })}
+          <ClarificationsLink competitionId={competitionId} challengeId={challenge.id} />
         </DialogDescription>
       </DialogHeader>
       {presence.others.length > 0 && (
@@ -463,9 +470,19 @@ function ChallengeDialogBody({
           label={t("detail.othersViewing", { count: presence.others.length })}
         />
       )}
-      <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">
-        {richTextToPlain(challenge.description) || t("detail.noDescription")}
-      </p>
+      <div>
+        <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">
+          {richTextToPlain(challenge.description) || t("detail.noDescription")}
+        </p>
+        {/* The judges' clarifications amend the description, so they close
+            it (#450) — read-only here: questions are asked from Support. */}
+        <ProblemClarifications
+          competitionId={competitionId}
+          challengeId={challenge.id}
+          challengeTitle={challenge.title}
+          allowAsk={false}
+        />
+      </div>
 
       {/* Null whenever the server withheld it — locked challenges included, so
           no client-side lock check here would add anything (#262). */}

@@ -220,3 +220,40 @@ def test_catalog_advertises_friendly_fields():
     # A trigger with a different id vocabulary derives its own names.
     assert "opener_user_name" in triggers["ticket.created"]
     assert "ticket_subject" in triggers["ticket.created"]
+
+
+async def test_personal_rule_runs_no_org_action(client, monkeypatch):
+    """GHSA-x8v4: a personal rule that somehow carries an org action (it can't
+    get through any schema) still doesn't run it — the engine re-checks the
+    personal limit when it executes."""
+    from models.automation import AutomationRule
+    from utils import automation_actions
+
+    ran: list[str] = []
+
+    async def recording(db, rule, event_name, payload, action):
+        ran.append(action["type"])
+
+    monkeypatch.setitem(
+        automation_actions.ACTIONS, "webhook", automation_actions.ActionSpec(recording)
+    )
+    monkeypatch.setitem(
+        automation_actions.ACTIONS,
+        "notify",
+        automation_actions.ActionSpec(recording, personal_allowed=True),
+    )
+    rule = AutomationRule(
+        id="r", name="planted", trigger_type="challenge.solved",
+        owner_user_id="u1", conditions=[], actions=[],
+    )
+    await automation_actions.execute_action(
+        None, rule, "challenge.solved", {}, {"type": "webhook", "url": "https://x.example"}
+    )
+    await automation_actions.execute_action(
+        None, rule, "challenge.solved", {}, {"type": "notify", "target": "role", "role_name": "Judge"}
+    )
+    assert ran == []
+    await automation_actions.execute_action(
+        None, rule, "challenge.solved", {}, {"type": "notify", "target": "self"}
+    )
+    assert ran == ["notify"]

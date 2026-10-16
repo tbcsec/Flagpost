@@ -265,8 +265,9 @@ async def _section_refusals(
     a global Administrator role assignment and self-escalate, or plant
     executable automation rules (webhook exfil, score tampering) they hold no
     automation permission for. Automation rules are executable and carry
-    outbound targets, and importing them is a create, so they need the global
-    automation_create grant (GHSA-x8v4). The competitions section needs every
+    outbound targets and secrets: importing them is a create and exporting
+    them a read, so the section needs both global automation_view and
+    automation_create (GHSA-x8v4). The competitions section needs every
     competition permission site-wide plus create_competition (above).
 
     Two sections differ by direction, and need the whole permission catalog —
@@ -289,9 +290,9 @@ async def _section_refusals(
             )
         elif "manage_users" not in held:
             refusals["users"] = "The users section requires the Manage users permission"
-    if "automations" in sections and "automation_create" not in held:
+    if "automations" in sections and not {"automation_view", "automation_create"} <= held:
         refusals["automations"] = (
-            "The automations section requires the Create automations permission"
+            "The automations section requires the View and Create automations permissions"
         )
     if "competitions" in sections and not _COMPETITIONS_SECTION_PERMISSIONS <= held:
         refusals["competitions"] = (

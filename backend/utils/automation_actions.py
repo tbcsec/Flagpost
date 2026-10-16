@@ -612,4 +612,17 @@ async def execute_action(
     if spec is None:
         logger.warning("unknown action type %r on rule %s", action_type, rule.id)
         return
+    # A personal rule runs only what the personal schema allows — notify, to
+    # its owner. The schema enforces this on every write path; refusing here too
+    # means a row that reached the table some other way still can't run org
+    # actions under one user's name (GHSA-x8v4-p7x5-v6c8).
+    if rule.owner_user_id is not None and (
+        not spec.personal_allowed or action.get("target") != "self"
+    ):
+        logger.warning(
+            "action %r refused on personal rule %s (personal rules notify self only)",
+            action_type,
+            rule.id,
+        )
+        return
     await spec.execute(db, rule, event_name, payload, action)

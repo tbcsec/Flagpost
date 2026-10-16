@@ -983,3 +983,90 @@ async def test_pages_ride_site_settings_only_with_manage_pages(client):
         headers={"Authorization": f"Bearer {token2}"},
     )
     assert [p["slug"] for p in exp2.json()["data"]["pages"]] == ["secret-draft"]
+
+
+def _automation_doc(rule: dict) -> dict:
+    return {
+        "flagpost_export": True,
+        "schema_version": backup.SCHEMA_VERSION,
+        "data": {"automation_rules": [rule]},
+    }
+
+
+_GLOBAL_RULE = {
+    "id": "rule-y", "competition_id": None, "owner_user_id": None,
+    "name": "Mirror", "trigger_type": "user.created", "conditions": [],
+    "actions": [{"type": "webhook", "url": "https://hooks.example.com/x"}],
+    "is_enabled": True,
+}
+
+
+async def test_import_cannot_automate_on_a_trigger_the_actor_cannot_observe(client):
+    """GHSA-x8v4: the interactive route refuses a rule on an event its creator
+    may not observe (_authorize_trigger); importing the same rule is held to
+    the same bound — user.created needs manage_users."""
+    token, uid = await _register(client, "ruleimporter")
+    await _grant_global_role(
+        uid,
+        "Rule importer",
+        ["manage_site_settings", "automation_view", "automation_create"],
+    )
+    resp = await client.post(
+        "/api/site-settings/import",
+        json={"sections": ["automations"], "payload": _automation_doc(_GLOBAL_RULE)},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 403, resp.text
+    assert "manage_users" in resp.json()["detail"]
+    async with SessionLocal() as db:
+        from models.automation import AutomationRule
+
+        assert await db.scalar(select(func.count()).select_from(AutomationRule)) == 0
+
+
+async def test_import_holds_personal_rules_to_the_personal_schema(client):
+    """GHSA-x8v4: a row with an owner is a personal rule — notify-self only —
+    however it arrives."""
+    await admin_token(client)
+    storage = InMemoryStorage()
+    personal = {
+        **_GLOBAL_RULE,
+        "id": "rule-z",
+        "owner_user_id": "old-admin",
+        "trigger_type": "challenge.solved",
+    }
+    doc = _automation_doc(personal)
+    # The owner maps onto the live administrator by natural key (email).
+    doc["data"]["users"] = [
+        {"id": "old-admin", "display_name": "admin", "email": "admin@example.com"}
+    ]
+    async with SessionLocal() as db:
+        with pytest.raises(backup.ImportError_):
+            await backup.import_data(db, storage, doc, ["users", "automations"])
+
+
+async def test_automations_export_needs_automation_view(client):
+    """GHSA-x8v4: exporting rules reads their configs (webhook URLs, headers),
+    so the section needs automation_view as well as automation_create."""
+    token, uid = await _register(client, "createonly")
+    await _grant_global_role(
+        uid, "Create only", ["manage_site_settings", "automation_create"]
+    )
+    auth = {"Authorization": f"Bearer {token}"}
+    exp = await client.post(
+        "/api/site-settings/export", json={"sections": ["automations"]}, headers=auth
+    )
+    assert exp.status_code == 403, exp.text
+
+    token2, uid2 = await _register(client, "viewcreate")
+    await _grant_global_role(
+        uid2,
+        "View and create",
+        ["manage_site_settings", "automation_view", "automation_create"],
+    )
+    ok = await client.post(
+        "/api/site-settings/export",
+        json={"sections": ["automations"]},
+        headers={"Authorization": f"Bearer {token2}"},
+    )
+    assert ok.status_code == 200, ok.text

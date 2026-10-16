@@ -394,10 +394,15 @@ def _validate_automation_rule_row(row: dict) -> None:
     additionally bounds *who* may import the automations section at all."""
     from pydantic import ValidationError
 
-    from schemas.automation import RuleCreate
+    from schemas.automation import PersonalRuleCreate, RuleCreate
 
+    # A personal rule (owner set) is held to the personal schema — notify-self
+    # only — exactly as the personal route holds it; validating it as an org
+    # rule would let a backup plant an owner-only rule nobody else can see that
+    # still runs org actions (GHSA-x8v4-p7x5-v6c8).
+    schema = PersonalRuleCreate if row.get("owner_user_id") else RuleCreate
     try:
-        RuleCreate.model_validate(
+        schema.model_validate(
             {
                 "name": row.get("name"),
                 "trigger_type": row.get("trigger_type"),
@@ -748,7 +753,8 @@ async def _assert_import_within_grant(
     db: AsyncSession, spec: "Spec", obj, actor_global: set[str]
 ) -> None:
     """Refuse to import a role or role-assignment carrying permissions beyond the
-    actor's own global set (backup escalation guard). Mirrors the bound in
+    actor's own global set, or an automation rule on a trigger they may not
+    observe (backup escalation guard). Mirrors the bound in
     ``routers.roles._assert_may_grant``; a full Administrator holds the whole
     catalog, so their restores are unaffected."""
     if spec.table == "roles":
@@ -758,6 +764,16 @@ async def _assert_import_within_grant(
         role = await db.get(Role, obj.role_id)
         excess = set(role.permissions or ()) - actor_global if role is not None else set()
         target = "a role assignment"
+    elif spec.table == "automation_rules":
+        # The interactive route only lets you automate on an event you may
+        # observe (_authorize_trigger). An import is a site-wide write, so the
+        # importer must hold the trigger's governing permission site-wide
+        # (GHSA-x8v4-p7x5-v6c8).
+        from utils.automation_catalog import required_permission
+
+        permission = required_permission(obj.trigger_type)
+        excess = {permission} - actor_global
+        target = f"automation rule {obj.name!r} (trigger {obj.trigger_type!r})"
     else:
         return
     if excess:
@@ -819,11 +835,13 @@ async def import_data(
     state = _State()
     result: dict[str, dict[str, int]] = {}
 
-    # The actor's global set bounds two things. Grant containment: no imported
+    # The actor's global set bounds three things. Grant containment: no imported
     # role or assignment may carry permissions beyond it — the same bound the
     # interactive role editor enforces, which the generic import would otherwise
-    # bypass. And Spec.permission: a table needing a grant the actor lacks is
-    # skipped. Neither applies when no actor is supplied (internal callers).
+    # bypass. Trigger authorization: an imported automation rule's trigger must
+    # be one the actor may observe. And Spec.permission: a table needing a grant
+    # the actor lacks is skipped. None applies when no actor is supplied
+    # (internal callers).
     actor_global = await _actor_global(db, actor)
 
     for spec in SPECS:

@@ -761,13 +761,27 @@ hold a judge role somewhere.
 The `None only valid for global-scope roles` comment above is an **invariant**,
 and it is enforced in three places rather than one. `routers.roles.assign_role`
 refuses to create any other shape; `deps.user_has_permission` and
-`membership.effective_permissions` / `has_global_role` each require the *role*
+`membership.effective_permissions` / `sees_every_competition` each require the *role*
 to be `scope="global"` before an unscoped assignment grants anything. The
 redundancy is deliberate. A `competition_id IS NULL` row is the site-wide
 grant, so a competition-scoped role written with a NULL — by a bug, a
 migration, or a restored backup — would otherwise silently promote its holder
 from one competition to every competition. Resolution treats such a row as
 malformed and grants nothing.
+
+**Seeing every competition.** A private competition is visible to its members
+and to anyone whose site-wide role *reaches into competitions* — one carrying at
+least one `competition`-scope permission, which then holds in every competition
+(`membership.sees_every_competition`). An Administrator is the usual case; any
+competition-scope key counts, however low-stakes, so a custom global role should
+carry one only for someone meant to see every competition. A site-wide role
+carrying only `global`-scope permissions (pages, auth providers, creating
+competitions…) reaches the Admin section, not competitions: the competition
+reads, joins, clones, role assignments (and their listing) and content-pack
+installs it can drive all go through the same visibility rule
+(`utils.competitions`). Oversight reads — the event log, the site overview —
+are governed by their own permissions and may name competitions the holder
+can't otherwise see.
 
 ### 7.6 Enforcement
 

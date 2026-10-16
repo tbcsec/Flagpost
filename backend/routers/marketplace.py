@@ -29,6 +29,7 @@ from schemas.marketplace import (
 from storage import get_storage
 from storage.base import ObjectStorage
 from utils import marketplace_registry as registry
+from utils.competitions import get_visible_competition
 from utils.content_packs import PackError, apply_pack
 from utils.event_bus import event_bus
 from utils.marketplace_verify import Signature, TrustedKey, VerificationError, evaluate
@@ -182,7 +183,9 @@ async def install_from_marketplace(
     settings = await _require_enabled(db)
     competition: Competition | None = None
     if body.competition_id:
-        competition = await db.get(Competition, body.competition_id)
+        # Only into a competition the actor can see (GHSA-q472-m9qw-8gq4):
+        # install_content_pack is a global grant, not a way into a private one.
+        competition = await get_visible_competition(db, body.competition_id, current_user)
         if competition is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"

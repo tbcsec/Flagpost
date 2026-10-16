@@ -23,7 +23,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth.deps import get_current_user, require_permission
 from auth.membership import (
     ensure_participant_role,
-    has_global_role,
     member_competition_ids,
 )
 from db import get_db, utcnow
@@ -45,7 +44,7 @@ from storage import get_storage
 from storage.base import ObjectStorage
 from utils.competition_clone import clone_competition
 from utils.competition_status import start_transition, stop_transition
-from utils.competitions import get_visible_competition
+from utils.competitions import get_visible_competition, visible_competitions_clause
 from utils.event_bus import event_bus
 from utils.registration_fields import (
     list_fields as list_registration_fields,
@@ -67,18 +66,15 @@ async def list_competitions(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[Competition]:
-    result = await db.execute(select(Competition).order_by(Competition.created_at))
-    competitions = list(result.scalars().all())
     # Enforce visibility on the listing: private competitions are hidden from
-    # anyone who isn't a member/organiser (a global admin sees all).
-    if await has_global_role(db, current_user.id):
-        return competitions
-    member_ids = await member_competition_ids(db, current_user.id)
-    return [
-        c
-        for c in competitions
-        if c.visibility == "public" or c.id in member_ids
-    ]
+    # anyone who isn't a member/organiser (an Administrator, or any site-wide
+    # role that reaches into competitions, sees all).
+    result = await db.execute(
+        select(Competition)
+        .where(await visible_competitions_clause(db, current_user))
+        .order_by(Competition.created_at)
+    )
+    return list(result.scalars().all())
 
 
 @router.get("/{competition_id}", response_model=CompetitionOut)
@@ -299,8 +295,11 @@ async def clone_competition_route(
 ) -> Competition:
     """Clone a competition's config into a fresh one (§`utils.competition_clone`).
     Copies settings/categories/challenges/hints/attachments/surveys/module state;
-    never the run's live data. Same permission as creating one from scratch."""
-    source = await db.get(Competition, competition_id)
+    never the run's live data. Same permission as creating one from scratch,
+    plus sight of the source — create_competition is a global-scope grant, and
+    the source must pass the same visibility rule as any other read
+    (GHSA-q472-m9qw-8gq4). 404 like every other read of an unseen competition."""
+    source = await get_visible_competition(db, competition_id, current_user)
     if source is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"

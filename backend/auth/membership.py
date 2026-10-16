@@ -13,6 +13,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from auth.permissions import Scope, is_known, scope_of
 from models.role import Role, RoleAssignment
 
 
@@ -90,9 +91,18 @@ async def member_competition_ids(db: AsyncSession, user_id: str) -> set[str]:
     return {competition_id for (competition_id,) in rows}
 
 
-async def has_global_role(db: AsyncSession, user_id: str) -> bool:
-    """Whether ``user_id`` holds a site-wide role — i.e. an Administrator, who
-    can see every competition (§7.3).
+async def sees_every_competition(db: AsyncSession, user_id: str) -> bool:
+    """Whether ``user_id`` may see every competition, private ones included
+    (§7.5) — an Administrator, or any site-wide role that reaches *into*
+    competitions.
+
+    That reach is a competition-scope permission held through a global
+    assignment: a global grant holds in every competition, so its holder
+    already acts in each one, and hiding any from them would be incoherent. A
+    site-wide role carrying only global-scope permissions — the event log,
+    pages, auth providers, creating competitions — reaches the Admin section,
+    not competitions. Its holder sees what any user sees: public competitions
+    and their own (GHSA-q472-m9qw-8gq4).
 
     The role must itself be ``scope="global"``. Checking only for a NULL
     ``competition_id`` would treat any unscoped row as administrator-equivalent,
@@ -100,13 +110,17 @@ async def has_global_role(db: AsyncSession, user_id: str) -> bool:
     code in ``CompetitionOut``) — so a malformed assignment would disclose every
     private competition on the install.
     """
-    found = await db.scalar(
-        select(RoleAssignment.id)
-        .join(Role, Role.id == RoleAssignment.role_id)
+    rows = await db.scalars(
+        select(Role.permissions)
+        .join(RoleAssignment, RoleAssignment.role_id == Role.id)
         .where(
             RoleAssignment.user_id == user_id,
             RoleAssignment.competition_id.is_(None),
             Role.scope == "global",
         )
     )
-    return found is not None
+    return any(
+        is_known(key) and scope_of(key) is Scope.COMPETITION
+        for permissions in rows
+        for key in permissions or ()
+    )

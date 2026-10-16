@@ -453,3 +453,61 @@ async def test_dry_run_emits_nothing(client):
     finally:
         event_bus.unsubscribe_owner("test-user-import-dry")
     assert captured == []
+
+
+async def test_import_resolves_only_competitions_the_actor_can_see(client):
+    # A delegate without reach into competitions can't land an account in a
+    # private one by name or by default id (GHSA-q472-m9qw-8gq4): the unseen
+    # competition reads as unknown, exactly as a missing one does.
+    admin = await admin_token(client)
+    secret = (
+        await client.post(
+            "/api/competitions",
+            json={"name": "Secret", "participation_mode": "individual", "visibility": "private"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    await _competition(client, admin, "Open")
+    async with SessionLocal() as db:
+        db.add(Role(name="Observer", scope="competition", permissions=[]))
+        await db.commit()
+    token, actor_id = await _register(client, "importer@example.com")
+    await _grant_global_role(actor_id, "Importer", ["manage_users", "manage_roles"])
+
+    resp = await _import(
+        client,
+        token,
+        "display_name,password,role,competition",
+        "yara,goodpassword1,Observer,Secret",
+        "zane,goodpassword2,Observer,Open",
+        dry_run=True,
+    )
+    report = resp.json()
+    assert "unknown competition" in _row(report, 2)["reason"]
+    assert _row(report, 3)["status"] == "create"
+
+    by_default = await _import(
+        client,
+        token,
+        "display_name,password,role",
+        "yara,goodpassword1,Observer",
+        data={"default_competition_id": secret},
+    )
+    assert by_default.status_code == 404, by_default.text
+
+    # The commit pass agrees with the preview, whatever the name's casing.
+    committed = await _import(
+        client,
+        token,
+        "display_name,password,role,competition",
+        "yara,goodpassword1,Observer,  SECRET  ",
+    )
+    assert "unknown competition" in _row(committed.json(), 2)["reason"]
+    async with SessionLocal() as db:
+        assert (
+            await db.scalar(
+                select(func.count())
+                .select_from(RoleAssignment)
+                .where(RoleAssignment.competition_id == secret)
+            )
+        ) == 0

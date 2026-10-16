@@ -40,6 +40,7 @@ from auth.membership import effective_permissions
 from models.competition import Competition
 from models.role import Role, RoleAssignment
 from models.user import User
+from utils.competitions import visible_competitions_clause
 
 # Bounds "how mass": argon2 hashing is deliberately CPU-slow — the 500-user
 # load test measured ~64 ms/row on a 4-vCPU box — and the commit pass costs
@@ -202,10 +203,13 @@ async def plan_user_import(
     wanted_comps = {r.competition.lower() for r in rows if r.competition}
     comps_by_name: dict[str, list[str]] = {}
     if wanted_comps:
+        # Only competitions the actor can see resolve — one they can't reads as
+        # unknown, like any other unseen competition (GHSA-q472-m9qw-8gq4).
         for comp_id, comp_name in (
             await db.execute(
                 select(Competition.id, Competition.name).where(
-                    func.lower(Competition.name).in_(wanted_comps)
+                    func.lower(Competition.name).in_(wanted_comps),
+                    await visible_competitions_clause(db, actor),
                 )
             )
         ).all():

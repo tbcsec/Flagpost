@@ -1,7 +1,8 @@
 """Competition reads shared beyond the competitions router (§6).
 
 The visibility rule — a competition is visible to a caller if it's public, the
-caller holds a role in it, or the caller is a global Administrator — lives here
+caller holds a role in it, or the caller's site-wide role reaches into every
+competition (an Administrator; ``sees_every_competition``) — lives here
 so every reader enforces it identically rather than re-deriving it. Extracted
 from ``routers/competitions`` (it was ``_can_see`` there) so consumers that
 aren't inside the competitions request path — the rules router, and later the
@@ -16,9 +17,10 @@ its context demands.
 from __future__ import annotations
 
 from fastapi import HTTPException, status
+from sqlalchemy import ColumnElement, or_, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth.membership import has_global_role, member_competition_ids
+from auth.membership import member_competition_ids, sees_every_competition
 from models.competition import Competition
 from models.user import User
 
@@ -39,12 +41,24 @@ async def can_see_competition(
     db: AsyncSession, competition: Competition, user: User
 ) -> bool:
     """Whether ``user`` may see ``competition`` (§6): public, a role in it, or a
-    global Administrator."""
+    site-wide role that reaches into every competition."""
     if competition.visibility == "public":
         return True
-    if await has_global_role(db, user.id):
+    if await sees_every_competition(db, user.id):
         return True
     return competition.id in await member_competition_ids(db, user.id)
+
+
+async def visible_competitions_clause(db: AsyncSession, user: User) -> ColumnElement[bool]:
+    """``can_see_competition`` as a SQL condition, for a query over many
+    competitions — so a listing or a by-name lookup can't drift from the
+    single-row gate."""
+    if await sees_every_competition(db, user.id):
+        return true()
+    return or_(
+        Competition.visibility == "public",
+        Competition.id.in_(await member_competition_ids(db, user.id)),
+    )
 
 
 async def assert_email_verified_to_join(

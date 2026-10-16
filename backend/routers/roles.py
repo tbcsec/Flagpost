@@ -24,7 +24,7 @@ Every mutation emits its §3.2 event (``role.created`` / ``role.updated`` /
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import require_permission
@@ -44,6 +44,7 @@ from schemas.role import (
     RoleOut,
     RoleUpdate,
 )
+from utils.competitions import get_visible_competition, visible_competitions_clause
 from utils.event_bus import event_bus
 
 router = APIRouter(prefix="/api/roles", tags=["roles"])
@@ -303,14 +304,23 @@ def _assignment_out(assignment: RoleAssignment, user: User, role: Role, competit
 async def list_assignments(
     role_id: str | None = None,
     competition_id: str | None = None,
-    _: User = Depends(require_permission("manage_roles")),
+    current_user: User = Depends(require_permission("manage_roles")),
     db: AsyncSession = Depends(get_db),
 ) -> list[AssignmentOut]:
+    # Site-wide assignments, plus those in competitions the actor can see: a
+    # private competition's roster is its members' business, not every role
+    # delegate's (GHSA-q472-m9qw-8gq4).
     stmt = (
         select(RoleAssignment, User, Role, Competition)
         .join(User, User.id == RoleAssignment.user_id)
         .join(Role, Role.id == RoleAssignment.role_id)
         .outerjoin(Competition, Competition.id == RoleAssignment.competition_id)
+        .where(
+            or_(
+                RoleAssignment.competition_id.is_(None),
+                await visible_competitions_clause(db, current_user),
+            )
+        )
         .order_by(Role.name, User.email)
     )
     if role_id is not None:
@@ -360,7 +370,14 @@ async def assign_role(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="A competition-scoped role needs a competition",
             )
-        competition = await db.get(Competition, body.competition_id)
+        # Only into a competition the actor can see: any role assignment makes
+        # its holder a member, so assigning even an empty role into an unseen
+        # private competition would hand its member view, invite code
+        # included, to someone outside it (GHSA-q472-m9qw-8gq4). 404, like
+        # every other read of an unseen competition.
+        competition = await get_visible_competition(
+            db, body.competition_id, current_user
+        )
         if competition is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"
@@ -406,7 +423,12 @@ async def unassign_role(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     assignment = await db.get(RoleAssignment, assignment_id)
-    if assignment is None:
+    # One in a competition the actor can't see is as absent as in the listing.
+    if assignment is None or (
+        assignment.competition_id is not None
+        and await get_visible_competition(db, assignment.competition_id, current_user)
+        is None
+    ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found"
         )

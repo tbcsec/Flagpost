@@ -281,3 +281,46 @@ async def test_direct_upload_blocked_when_marketplace_disabled(client):
     assert (
         await _install(client, token, _theme_pack([_theme_preset("unlocked")]))
     ).status_code == 200
+
+
+async def test_install_needs_the_target_competition_to_be_visible(client):
+    # install_content_pack is a global grant: it installs into competitions the
+    # holder can see, not into a private one by id (GHSA-q472-m9qw-8gq4).
+    from models.role import Role, RoleAssignment
+
+    admin = await admin_token(client)
+    private = (
+        await client.post(
+            "/api/competitions",
+            json={"name": "Private", "visibility": "private"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    public = (
+        await client.post(
+            "/api/competitions",
+            json={"name": "Public", "visibility": "public"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    token = await _register(client, "packer@example.com")
+    me = (await client.get("/api/auth/me", headers=_auth(token))).json()["id"]
+    async with SessionLocal() as db:
+        role = Role(name="Packer", scope="global", permissions=["install_content_pack"])
+        db.add(role)
+        await db.flush()
+        db.add(RoleAssignment(user_id=me, competition_id=None, role_id=role.id))
+        await db.commit()
+
+    pack = _challenge_pack(
+        [{"name": "Warmup", "category": "web", "description": "d", "value": 100, "flags": ["flag{a}"]}]
+    )
+    hidden = await _install(client, token, pack, private)
+    assert hidden.status_code == 404, hidden.text
+    async with SessionLocal() as s:
+        assert (
+            await s.scalar(select(Challenge).where(Challenge.competition_id == private))
+        ) is None
+
+    visible = await _install(client, token, pack, public)
+    assert visible.status_code == 200, visible.text

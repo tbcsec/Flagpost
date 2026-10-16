@@ -19,6 +19,7 @@ from schemas.content_pack import ContentPackInstallOut
 from storage import get_storage
 from storage.base import ObjectStorage
 from routers.marketplace import _require_enabled
+from utils.competitions import get_visible_competition
 from utils.content_packs import PackError, apply_pack
 from utils.event_bus import event_bus
 
@@ -50,7 +51,9 @@ async def install_content_pack(
 
     competition: Competition | None = None
     if competition_id:
-        competition = await db.get(Competition, competition_id)
+        # Only into a competition the actor can see (GHSA-q472-m9qw-8gq4):
+        # install_content_pack is a global grant, not a way into a private one.
+        competition = await get_visible_competition(db, competition_id, current_user)
         if competition is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"

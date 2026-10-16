@@ -202,3 +202,41 @@ async def test_bad_code_rejected(client):
         "/api/marketplace/install", json={"code": "../etc/passwd"}, headers=_auth(token)
     )
     assert resp.status_code == 422
+
+
+async def test_install_needs_the_target_competition_to_be_visible(client):
+    # install_content_pack is a global grant: a private competition it can't
+    # see is refused before anything is fetched (GHSA-q472-m9qw-8gq4).
+    from models.role import Role, RoleAssignment
+
+    admin = await admin_token(client)
+    private = (
+        await client.post(
+            "/api/competitions",
+            json={"name": "Private", "visibility": "private"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    token = await _register(client, "installer@example.com")
+    me = (await client.get("/api/auth/me", headers=_auth(token))).json()["id"]
+    async with SessionLocal() as s:
+        role = Role(name="Installer", scope="global", permissions=["install_content_pack"])
+        s.add(role)
+        await s.flush()
+        s.add(RoleAssignment(user_id=me, competition_id=None, role_id=role.id))
+        await s.commit()
+
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        return httpx.Response(500)
+
+    _use(httpx.MockTransport(handler))
+    resp = await client.post(
+        "/api/marketplace/install",
+        json={"code": "8fy17", "competition_id": private},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 404, resp.text
+    assert calls == []

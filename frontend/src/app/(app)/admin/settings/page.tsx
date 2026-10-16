@@ -36,7 +36,9 @@ import { toast } from "@/stores/toast";
 //
 // Following the Competition Settings precedent, panels stay **mounted** and are
 // toggled with `hidden` rather than conditionally rendered, so an unsaved edit
-// in one tab survives a look at another.
+// in one tab survives a look at another. Each panel mounts only for the grant
+// that opens its tab, though (#477): a delegate holding just the Auth grant
+// can never switch to Backup, and its mount-time fetch would only 403.
 type Tab = "general" | "email" | "auth" | "rules" | "backup" | "appearance" | "ai" | "instances" | "judge";
 
 /** The two tabs that are views of the one settings form. */
@@ -89,7 +91,7 @@ function AdminSettingsInner() {
   const canManageInstances = access.has("manage_instance_infra");
   // The code judge decides which images and commands run — its own grant too.
   const canManageJudge = access.has("manage_judge_infra");
-  const settings = useOperationalSettings();
+  const settings = useOperationalSettings(canManage);
   const data = settings.data;
   const router = useRouter();
   const pathname = usePathname();
@@ -168,28 +170,34 @@ function AdminSettingsInner() {
           </div>
         )}
 
-        <div className={tab === "rules" ? "max-w-2xl" : "hidden"}>
-          <h2 className="text-lg font-semibold">{t("rulesHeading")}</h2>
-          <p className="mb-4 mt-1 text-sm text-muted-foreground">
-            {t("rulesHeadingDescription")}
-          </p>
-          <RulesSettingsPanel />
-        </div>
+        {canManage && (
+          <div className={tab === "rules" ? "max-w-2xl" : "hidden"}>
+            <h2 className="text-lg font-semibold">{t("rulesHeading")}</h2>
+            <p className="mb-4 mt-1 text-sm text-muted-foreground">
+              {t("rulesHeadingDescription")}
+            </p>
+            <RulesSettingsPanel />
+          </div>
+        )}
 
-        <div className={tab === "backup" ? "" : "hidden"}>
-          <h2 className="text-lg font-semibold">{t("backupHeading")}</h2>
-          <p className="mb-4 mt-1 text-sm text-muted-foreground">
-            {t("backupHeadingDescription")}
-          </p>
-          <BackupPanel />
-        </div>
+        {canManage && (
+          <div className={tab === "backup" ? "" : "hidden"}>
+            <h2 className="text-lg font-semibold">{t("backupHeading")}</h2>
+            <p className="mb-4 mt-1 text-sm text-muted-foreground">
+              {t("backupHeadingDescription")}
+            </p>
+            <BackupPanel />
+          </div>
+        )}
 
-        <div className={showAppearance ? "" : "hidden"}>
-          {/* Told whether it's on screen so its live theme preview stops when
-              the admin looks at another tab — the panel stays mounted, so it
-              can't rely on unmount to clean up. */}
-          <AppearancePanel active={showAppearance} />
-        </div>
+        {canManage && (
+          <div className={showAppearance ? "" : "hidden"}>
+            {/* Told whether it's on screen so its live theme preview stops when
+                the admin looks at another tab — the panel stays mounted, so it
+                can't rely on unmount to clean up. */}
+            <AppearancePanel active={showAppearance} />
+          </div>
+        )}
 
         {canManageAi && (
           <div className={tab === "ai" ? "" : "hidden"}>

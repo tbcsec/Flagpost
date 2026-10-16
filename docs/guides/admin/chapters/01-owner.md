@@ -30,10 +30,9 @@ a chapter or section below: Dashboard, Skills, Competitions, Users, Roles,
 Event log, Automations, Pages, Marketplace, and Site settings.
 
 !!! note "Who sees the Admin section"
-    The section appears for anyone holding a global *manage users*, *manage
-    roles* or *create competition* grant. A colleague delegated only a
-    narrower global grant (say, the event log) needs one of those three as
-    well to reach it.
+    Anyone holding a global grant that unlocks one of its pages — and they
+    see only the pages they can open. A colleague delegated just the event
+    log gets an Admin section with just the Event log in it.
 
 ## Staying current
 

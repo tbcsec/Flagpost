@@ -2618,7 +2618,8 @@
       "unassigned": "Unassigned",
       "couldntUnassign": "Couldn't unassign",
       "roleAssigned": "Role assigned",
-      "couldntAssign": "Couldn't assign"
+      "couldntAssign": "Couldn't assign",
+      "userIdentifierPlaceholder": "Username or email"
     },
     "competitions": {
       "title": "Admin — Competitions",
@@ -2655,7 +2656,9 @@
       "newName": "New competition name",
       "cloning": "Cloning…",
       "cloneConfirm": "Clone competition",
-      "clonedToast": "Cloned to “{name}”"
+      "clonedToast": "Cloned to “{name}”",
+      "noAccessTitle": "No access",
+      "noAccessDescription": "You need a site-wide competition permission (create, edit or delete) to manage competitions here."
     },
     "events": {
       "title": "Admin — Event log",
@@ -2683,7 +2686,10 @@
       "colEvent": "Event",
       "colCompetition": "Competition",
       "colPayload": "Payload",
-      "noEvents": "No events match these filters."
+      "noEvents": "No events match these filters.",
+      "noAccessTitle": "No access",
+      "noAccessDescription": "You need the view-audit-log permission to read the event log.",
+      "actorIdPlaceholder": "Paste a user id"
     },
     "automations": {
       "title": "Admin — Automations",
@@ -2696,6 +2702,7 @@
       "couldntCreate": "Couldn't create",
       "saved": "Global rule saved",
       "couldntSave": "Couldn't save",
+      "couldntDelete": "Couldn't delete",
       "emptyState": "No global automations yet. Rules created here apply across every competition.",
       "badgeGlobal": "global",
       "badgeDisabled": "disabled",
@@ -2704,7 +2711,9 @@
       "edit": "Edit",
       "disable": "Disable",
       "enable": "Enable",
-      "delete": "Delete"
+      "delete": "Delete",
+      "noAccessTitle": "No access",
+      "noAccessDescription": "You need a site-wide automations permission to see global rules."
     },
     "settings": {
       "title": "Admin — Site settings",

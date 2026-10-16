@@ -41,9 +41,25 @@ import type { Role, RoleAssignment } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast";
 
+// Gated before any query fires (#477): the Admin section opens for any global
+// delegate now, and the role list and catalog would only 403 without the grant.
 export default function AdminRolesPage() {
   const t = useTranslations("admin.roles");
   const access = useAccess();
+  if (!access.ready) return <SkeletonCards count={3} />;
+  if (!access.hasGlobal("manage_roles")) {
+    return (
+      <>
+        <SectionHeader title={t("title")} subtitle={t("subtitle")} />
+        <p className="text-sm text-muted-foreground">{t("noAccess")}</p>
+      </>
+    );
+  }
+  return <RolesAdmin />;
+}
+
+function RolesAdmin() {
+  const t = useTranslations("admin.roles");
   const roles = useRoles();
   const catalog = useRoleCatalog();
 
@@ -56,15 +72,6 @@ export default function AdminRolesPage() {
   // derived, so there's no select-first effect to keep in sync.
   const selected =
     roles.data?.find((r) => r.id === selectedId) ?? roles.data?.[0] ?? null;
-
-  if (access.ready && !access.has("manage_roles")) {
-    return (
-      <>
-        <SectionHeader title={t("title")} subtitle={t("subtitle")} />
-        <p className="text-sm text-muted-foreground">{t("noAccess")}</p>
-      </>
-    );
-  }
 
   return (
     <>
@@ -337,7 +344,12 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
   const tn = useTranslations("common.nouns");
   const assignments = useRoleAssignments();
   const competitions = useCompetitions();
-  const users = useUsers("");
+  // Picking from the directory needs view_all_users; a roles-only delegate
+  // (#477) types a username or email instead — the assign endpoint resolves
+  // either — rather than facing an empty picker backed by a 403.
+  const access = useAccess();
+  const canPickUsers = access.hasGlobal("view_all_users");
+  const users = useUsers("", { enabled: canPickUsers });
   const assign = useAssignRole();
   const unassign = useUnassignRole();
   const confirm = useConfirm();
@@ -363,6 +375,13 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
     [users.data],
   );
   const selectedUser = users.data?.find((u) => u.id === userId) ?? null;
+  // What the assign endpoint resolves: the picked user's email (or username,
+  // keeping email-less accounts assignable), or whatever was typed.
+  const identifier = canPickUsers
+    ? selectedUser
+      ? (selectedUser.email ?? selectedUser.display_name)
+      : ""
+    : userId.trim();
 
   // One entry per user, listing all their role assignments (each still
   // individually removable), rather than a separate line per assignment.
@@ -405,10 +424,10 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
 
   function onAssign(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedUser) return;
+    if (!identifier) return;
     assign.mutate(
       {
-        email: selectedUser.email ?? selectedUser.display_name,
+        email: identifier,
         role_id: roleId,
         competition_id: needsCompetition ? competitionId : null,
       },
@@ -432,14 +451,24 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
         <form className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end" onSubmit={onAssign}>
           <div className="grid gap-1.5">
             <Label htmlFor="assign-user">{t("user")}</Label>
-            <EntityCombobox
-              id="assign-user"
-              options={userOptions}
-              value={userId}
-              onChange={setUserId}
-              placeholder={t("userSearchPlaceholder")}
-              emptyText={users.isLoading ? t("loadingUsers") : t("noMatchingUsers")}
-            />
+            {canPickUsers ? (
+              <EntityCombobox
+                id="assign-user"
+                options={userOptions}
+                value={userId}
+                onChange={setUserId}
+                placeholder={t("userSearchPlaceholder")}
+                emptyText={users.isLoading ? t("loadingUsers") : t("noMatchingUsers")}
+              />
+            ) : (
+              <Input
+                id="assign-user"
+                value={userId}
+                onChange={(e) => setUserId(e.target.value)}
+                placeholder={t("userIdentifierPlaceholder")}
+                autoComplete="off"
+              />
+            )}
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="assign-role">{t("role")}</Label>
@@ -466,7 +495,7 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
               <div className="flex h-9 items-center text-sm text-muted-foreground">{t("siteWide")}</div>
             </div>
           )}
-          <Button type="submit" disabled={assign.isPending || !roleId || !userId}>{t("assign")}</Button>
+          <Button type="submit" disabled={assign.isPending || !roleId || !identifier}>{t("assign")}</Button>
         </form>
 
         <div className="grid gap-2">

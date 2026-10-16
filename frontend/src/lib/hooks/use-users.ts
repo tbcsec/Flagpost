@@ -114,12 +114,15 @@ export function useLogout() {
 // --- Admin user management (Admin → Users, §7). The directory + lifecycle;
 // every mutation invalidates the ["users"] prefix so the table refreshes.
 
-export function useUsers(q: string) {
+/** The user directory. `enabled: false` for a caller without view_all_users
+ *  (a narrow delegate's picker), so it doesn't fire a request that can only
+ *  403 — the caller falls back to typing an identifier. */
+export function useUsers(q: string, { enabled = true }: { enabled?: boolean } = {}) {
   const authed = useAuthStore((s) => s.status === "authenticated");
   return useQuery({
     queryKey: ["users", q],
     queryFn: () => usersApi.list(q || undefined),
-    enabled: authed,
+    enabled: authed && enabled,
   });
 }
 

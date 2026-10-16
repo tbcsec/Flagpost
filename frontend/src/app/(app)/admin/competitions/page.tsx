@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -33,6 +35,7 @@ import {
   useCompetitions,
   useDeleteCompetition,
 } from "@/lib/hooks/use-competitions";
+import { useAccess } from "@/lib/hooks/use-permissions";
 import { useSiteSettings } from "@/lib/hooks/use-site-settings";
 import type { Competition } from "@/lib/types";
 import { toast } from "@/stores/toast";
@@ -52,7 +55,39 @@ function archiveDeletesOn(autoDelete: boolean, retentionDays: number): string | 
   return new Date(Date.now() + retentionDays * 86_400_000).toLocaleString();
 }
 
+/** Which row actions the viewer holds — each is its own global grant. */
+interface CompetitionActions {
+  /** New and Clone. */
+  create: boolean;
+  /** Archive and Unarchive. */
+  edit: boolean;
+  delete: boolean;
+}
+
+// Gated on its own grants (#477): the Admin section now opens for any global
+// delegate, so the page — not the shell — decides who may use it, and offers
+// only the actions the viewer holds rather than ones that would only 403.
 export default function AdminCompetitionsPage() {
+  const t = useTranslations("admin.competitions");
+  const access = useAccess();
+  if (!access.ready) return <Skeleton className="h-64 w-full" />;
+  const can: CompetitionActions = {
+    create: access.hasGlobal("create_competition"),
+    edit: access.hasGlobal("edit_competition"),
+    delete: access.hasGlobal("delete_competition"),
+  };
+  if (!can.create && !can.edit && !can.delete) {
+    return (
+      <>
+        <SectionHeader title={t("title")} subtitle={t("subtitle")} />
+        <EmptyState title={t("noAccessTitle")} description={t("noAccessDescription")} />
+      </>
+    );
+  }
+  return <CompetitionsAdmin can={can} />;
+}
+
+function CompetitionsAdmin({ can }: { can: CompetitionActions }) {
   const t = useTranslations("admin.competitions");
   const { data: competitions, isLoading, isError, error } = useCompetitions();
   const archive = useArchiveCompetition();
@@ -104,7 +139,7 @@ export default function AdminCompetitionsPage() {
             <CardTitle>{t("allCompetitions")}</CardTitle>
             <CardDescription>{t("totalCount", { count: competitions?.length ?? 0 })}</CardDescription>
           </div>
-          <CreateCompetitionDialog />
+          {can.create && <CreateCompetitionDialog />}
         </CardHeader>
         <CardContent className="space-y-4">
           {isLoading && <p className="text-sm text-muted-foreground">{t("loading")}</p>}
@@ -138,25 +173,31 @@ export default function AdminCompetitionsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="space-x-2 whitespace-nowrap text-right">
-                      <Button variant="ghost" size="sm" onClick={() => setCloning(c)}>
-                        {t("clone")}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={archive.isPending}
-                        onClick={() => onArchive(c)}
-                      >
-                        {c.archived_at ? t("unarchive") : t("archive")}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive"
-                        onClick={() => setDeleting(c)}
-                      >
-                        {t("delete")}
-                      </Button>
+                      {can.create && (
+                        <Button variant="ghost" size="sm" onClick={() => setCloning(c)}>
+                          {t("clone")}
+                        </Button>
+                      )}
+                      {can.edit && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={archive.isPending}
+                          onClick={() => onArchive(c)}
+                        >
+                          {c.archived_at ? t("unarchive") : t("archive")}
+                        </Button>
+                      )}
+                      {can.delete && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive"
+                          onClick={() => setDeleting(c)}
+                        >
+                          {t("delete")}
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

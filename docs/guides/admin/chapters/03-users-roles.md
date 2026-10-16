@@ -60,5 +60,4 @@ yours to grant — sign-in method never implies privilege.
     request. The Auth, AI, Instances and Code judge tabs each have their own
     grant, as do most Admin pages, so an Auth delegate needn't be a full
     administrator; General, Email, Rules, Backup and Appearance share
-    *manage site settings*. Reaching the Admin section at all needs *manage
-    users*, *manage roles* or *create competition* (chapter 1).
+    *manage site settings*.

@@ -19,7 +19,16 @@ vi.mock("@/lib/hooks/use-competitions", () => ({
   useCompetitions: () => ({ data: [{ id: "c1", name: "Spring CTF" }] }),
 }));
 vi.mock("@/lib/hooks/use-teams", () => ({ useTeams: () => ({ data: [] }) }));
-vi.mock("@/lib/hooks/use-users", () => ({ useUsers: () => ({ data: [] }) }));
+const mockUseUsers = vi.fn((..._args: unknown[]) => ({ data: [] }));
+vi.mock("@/lib/hooks/use-users", () => ({
+  useUsers: (...args: unknown[]) => mockUseUsers(...args),
+}));
+// The page gates itself on view_audit_log (#477); the actor picker needs the
+// user directory (view_all_users). Grants are swapped per test.
+let grants: string[] = ["view_audit_log", "view_all_users"];
+vi.mock("@/lib/hooks/use-permissions", () => ({
+  useAccess: () => ({ ready: true, hasGlobal: (p: string) => grants.includes(p) }),
+}));
 
 function entry(id: string, overrides: Partial<AuditLogEntry> = {}): AuditLogEntry {
   return {
@@ -122,5 +131,37 @@ describe("AdminEventLogPage payload expansion", () => {
     expect(document.getElementById(controls)).toBe(
       document.querySelector("pre")!.closest("td"),
     );
+  });
+});
+
+// #477: the Admin section opens for any global delegate, so the page decides.
+describe("AdminEventLogPage access", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    grants = ["view_audit_log", "view_all_users"];
+  });
+
+  it("shows no-access, and never queries the log, without view_audit_log", () => {
+    grants = ["manage_pages"];
+    renderPage([entry("e1")]);
+    expect(screen.getByText("No access")).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Search event name or payload…")).toBeNull();
+    expect(mockUseAuditLog).not.toHaveBeenCalled();
+    expect(mockUseUsers).not.toHaveBeenCalled();
+  });
+
+  it("filters by a pasted user id when the viewer can't read the directory", () => {
+    grants = ["view_audit_log"];
+    renderPage([entry("e1")]);
+    // The directory query is switched off rather than left to 403…
+    expect(mockUseUsers).toHaveBeenCalledWith("", { enabled: false });
+    // …and the actor filter is a plain id field.
+    expect(screen.getByPlaceholderText("Paste a user id")).toBeInTheDocument();
+  });
+
+  it("keeps the actor picker for a viewer with the directory", () => {
+    renderPage([entry("e1")]);
+    expect(mockUseUsers).toHaveBeenCalledWith("", { enabled: true });
+    expect(screen.queryByPlaceholderText("Paste a user id")).toBeNull();
   });
 });

@@ -37,13 +37,39 @@ import { toast } from "@/stores/toast";
 // Admin → Users. The account directory + lifecycle (§7): search, create, edit,
 // ban/unban, delete — all off /api/users, gated on view_all_users (read) and
 // manage_users (write). Per-competition role assignment stays on Admin → Roles.
+//
+// Token oversight (manage_api_tokens) is its own grant (#477): a delegate
+// holding only that sees the token panel without the directory, and the
+// directory's query never fires for someone who'd only get a 403.
 export default function AdminUsersPage() {
   const t = useTranslations("admin.users");
-  const tn = useTranslations("common.nouns");
   const access = useAccess();
+  if (!access.ready) return <Skeleton className="h-64 w-full" />;
+  const canTokens = access.hasGlobal("manage_api_tokens");
+  if (access.hasGlobal("view_all_users")) {
+    return (
+      <>
+        <UsersDirectory canManage={access.hasGlobal("manage_users")} />
+        {canTokens && <ApiTokensPanel />}
+      </>
+    );
+  }
+  return (
+    <>
+      <SectionHeader title={t("title")} subtitle={t("noAccessSubtitle")} />
+      {canTokens ? (
+        <ApiTokensPanel />
+      ) : (
+        <EmptyState title={t("noAccessTitle")} description={t("noAccessDescription")} />
+      )}
+    </>
+  );
+}
+
+function UsersDirectory({ canManage }: { canManage: boolean }) {
+  const t = useTranslations("admin.users");
+  const tn = useTranslations("common.nouns");
   const selfId = useAuthStore((s) => s.user?.id);
-  const canView = access.has("view_all_users");
-  const canManage = access.has("manage_users");
 
   const [search, setSearch] = useState("");
   const [q, setQ] = useState("");
@@ -53,7 +79,7 @@ export default function AdminUsersPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const users = useUsers(canView ? q : "");
+  const users = useUsers(q);
   const ban = useBanUser();
   const removeAvatar = useRemoveUserAvatar();
   const del = useDeleteUser();
@@ -63,8 +89,7 @@ export default function AdminUsersPage() {
   const confirm = useConfirm();
 
   // Sort + pagination (#16 #17) over the (backend-searched) directory. Search
-  // stays server-side (`?q=`) — this only orders/pages what came back. Above
-  // the early returns so the hook runs unconditionally.
+  // stays server-side (`?q=`) — this only orders/pages what came back.
   const rows = users.data ?? [];
   const table = useDataTable(rows, {
     columns: {
@@ -77,16 +102,6 @@ export default function AdminUsersPage() {
     },
   });
   const dir = (key: string) => (table.sort?.key === key ? table.sort.dir : null);
-
-  if (!access.ready) return <Skeleton className="h-64 w-full" />;
-  if (!canView) {
-    return (
-      <>
-        <SectionHeader title={t("title")} subtitle={t("noAccessSubtitle")} />
-        <EmptyState title={t("noAccessTitle")} description={t("noAccessDescription")} />
-      </>
-    );
-  }
 
   async function onRemoveAvatar(u: UserAccount) {
     if (
@@ -274,8 +289,6 @@ export default function AdminUsersPage() {
       )}
 
       <UserImportDialog open={importOpen} onOpenChange={setImportOpen} />
-
-      {access.has("manage_api_tokens") && <ApiTokensPanel />}
     </>
   );
 }

@@ -28,7 +28,6 @@ from auth.deps import require_permission
 from auth.identity import display_name_taken, email_taken
 from auth.security import ahash_many, hash_password
 from db import get_db, utcnow
-from models.competition import Competition
 from models.judging import CodeSubmission
 from models.role import Role, RoleAssignment
 from models.user import RefreshSession, User
@@ -42,6 +41,7 @@ from schemas.user import (
 from utils.api_tokens import emit_revoked, revoke_user_api_tokens
 from storage import get_storage
 from storage.base import ObjectStorage
+from utils.competitions import get_visible_competition
 from utils.event_bus import event_bus
 from utils.retention import delete_objects
 from utils.uploads import read_upload_capped
@@ -205,8 +205,10 @@ async def import_users(
     its own ``role.assigned``, because privilege changes must stay individually
     attributable in the audit log.
     """
+    # Role rows land only in competitions the actor can see — the same rule as
+    # roles.assign_role (GHSA-q472-m9qw-8gq4).
     if default_competition_id is not None:
-        if await db.get(Competition, default_competition_id) is None:
+        if await get_visible_competition(db, default_competition_id, current_user) is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"
             )

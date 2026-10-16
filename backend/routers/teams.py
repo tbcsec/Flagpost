@@ -230,9 +230,10 @@ async def create_team(
     # boundary as the join routes. A private competition is enterable only with
     # its invite code (via POST /competitions/join, which then makes the caller a
     # member) — never by POSTing a team with just the competition id. So allow
-    # only when the caller can already see it: public, a global admin, or an
-    # existing member. 404 (like the sibling reads) rather than 403 so a private
-    # competition's existence stays undisclosed.
+    # only when the caller can already see it: public, a site-wide role that
+    # reaches every competition, or an existing member. 404 (like the sibling
+    # reads) rather than 403 so a private competition's existence stays
+    # undisclosed.
     if not await can_see_competition(db, competition, current_user):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found"
@@ -330,6 +331,21 @@ async def join_team(
     db: AsyncSession = Depends(get_db),
 ) -> TeamJoinResult:
     competition = await _get_team_competition(db, competition_id)
+    # The team code is what authorizes entry into a private competition, so for
+    # a caller who can't otherwise see it, it is checked first — the gates below
+    # answer with the competition's own content (its rules document), which an
+    # id alone must not unlock (GHSA-q472-m9qw-8gq4).
+    if not await can_see_competition(db, competition, current_user):
+        known = await db.scalar(
+            select(Team.id).where(
+                Team.competition_id == competition_id,
+                Team.invite_code == body.invite_code,
+            )
+        )
+        if known is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Invalid invite code"
+            )
     # Email-verification gate (#74): parity with _join / create_team. No
     # visibility gate here — the team invite code in the body is the secret that
     # authorizes entry into a private competition (as the competition invite code

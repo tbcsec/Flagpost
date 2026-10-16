@@ -662,3 +662,62 @@ async def test_a_clarification_is_restored_against_its_challenge(client):
     async with SessionLocal() as db:
         msg = await db.scalar(select(TicketMessage).where(TicketMessage.sent_to_all.is_(True)))
     assert msg is not None and msg.announcement_id == rows["C1"].id
+
+
+async def test_competitions_and_audit_log_sections_need_their_own_grants(client):
+    """GHSA-3r5x: the competitions section carries every competition's content
+    (flags, attachments, submissions, invite codes), and audit_log the whole
+    event history — neither is site settings. A manage_site_settings delegate
+    moves neither, and isn't offered them."""
+    token, uid = await _register(client, "backupdelegate")
+    await _grant_global_role(uid, "Backup delegate", ["manage_site_settings"])
+    auth = {"Authorization": f"Bearer {token}"}
+    payload = {"flagpost_export": True, "schema_version": backup.SCHEMA_VERSION, "data": {}}
+
+    for section in ("competitions", "audit_log"):
+        exp = await client.post(
+            "/api/site-settings/export", json={"sections": [section]}, headers=auth
+        )
+        assert exp.status_code == 403, (section, exp.text)
+        imp = await client.post(
+            "/api/site-settings/import",
+            json={"sections": [section], "payload": payload},
+            headers=auth,
+        )
+        assert imp.status_code == 403, (section, imp.text)
+
+    offered = await client.get("/api/site-settings/backup/sections", headers=auth)
+    assert offered.json() == ["site_settings"]
+
+
+async def test_audit_log_section_opens_for_view_audit_log(client):
+    token, uid = await _register(client, "auditbackup")
+    await _grant_global_role(uid, "Audit backup", ["manage_site_settings", "view_audit_log"])
+    auth = {"Authorization": f"Bearer {token}"}
+    exp = await client.post(
+        "/api/site-settings/export", json={"sections": ["audit_log"]}, headers=auth
+    )
+    assert exp.status_code == 200, exp.text
+    offered = await client.get("/api/site-settings/backup/sections", headers=auth)
+    assert offered.json() == ["site_settings", "audit_log"]
+
+
+async def test_competition_reach_alone_does_not_open_the_competitions_section(client):
+    # A single competition-scope key held site-wide reaches every competition
+    # (GHSA-q472) but isn't every competition's content: the section still
+    # needs the whole competition catalog.
+    token, uid = await _register(client, "reachbackup")
+    await _grant_global_role(uid, "Reach backup", ["manage_site_settings", "ticket_view"])
+    auth = {"Authorization": f"Bearer {token}"}
+    exp = await client.post(
+        "/api/site-settings/export", json={"sections": ["competitions"]}, headers=auth
+    )
+    assert exp.status_code == 403, exp.text
+
+
+async def test_administrator_is_offered_every_section(client):
+    admin = await admin_token(client)
+    offered = await client.get(
+        "/api/site-settings/backup/sections", headers={"Authorization": f"Bearer {admin}"}
+    )
+    assert offered.json() == list(backup.SECTIONS)

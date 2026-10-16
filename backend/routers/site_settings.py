@@ -19,7 +19,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 
 from auth.containment import holds_every_permission
-from auth.deps import require_permission, user_has_permission
+from auth.deps import require_permission
+from auth.membership import effective_permissions
+from auth.permissions import PERMISSIONS_BY_KEY, Scope
 from config import settings as app_config
 from db import get_db, utcnow
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
@@ -230,49 +232,72 @@ async def delete_logo(
 # platform data (users, flag hashes), so it must stay tightly held.
 
 
+# Every competition-scope permission. The competitions section carries each
+# competition's whole content — challenges and their flags, hints, attachments,
+# submissions, tickets, survey and registration answers, team invite codes — so
+# moving it needs what reading and writing all of that needs: an
+# Administrator's reach, not just manage_site_settings (GHSA-3r5x-64c8-9q4m).
+_ALL_COMPETITION_PERMISSIONS = frozenset(
+    key for key, perm in PERMISSIONS_BY_KEY.items() if perm.scope is Scope.COMPETITION
+)
+
+
+async def _section_refusals(
+    db: AsyncSession, user: User, sections: list[str] | tuple[str, ...]
+) -> dict[str, str]:
+    """Each of ``sections`` this user may not export or import, with the reason.
+
+    manage_site_settings opens the backup; a section carrying more than site
+    settings needs the grant that governs its content too. The roles, users
+    and automations sections carry the RBAC graph, account rows, and executable
+    automation rules: without these gates a site-settings delegate could import
+    a global Administrator role assignment and self-escalate, or plant
+    executable automation rules (webhook exfil, score tampering) they hold no
+    automation permission for. Automation rules are executable and carry
+    outbound targets, and importing them is a create, so they need the global
+    automation_create grant (GHSA-x8v4). The competitions section needs every
+    competition permission site-wide (above), and the audit_log section the
+    grant that reads the log."""
+    held = set((await effective_permissions(db, user.id))["global"])
+    refusals: dict[str, str] = {}
+    if "roles" in sections and "manage_roles" not in held:
+        refusals["roles"] = "The roles section requires the Manage roles permission"
+    if "users" in sections and "manage_users" not in held:
+        refusals["users"] = "The users section requires the Manage users permission"
+    if "automations" in sections and "automation_create" not in held:
+        refusals["automations"] = (
+            "The automations section requires the Create automations permission"
+        )
+    if "competitions" in sections and not _ALL_COMPETITION_PERMISSIONS <= held:
+        refusals["competitions"] = (
+            "The competitions section requires every competition permission site-wide"
+        )
+    if "audit_log" in sections and "view_audit_log" not in held:
+        refusals["audit_log"] = "The audit log section requires the View audit log permission"
+    return refusals
+
+
 @router.get("/backup/sections", response_model=list[str])
 async def backup_sections(
-    _user: User = Depends(require_permission("manage_site_settings")),
+    user: User = Depends(require_permission("manage_site_settings")),
+    db: AsyncSession = Depends(get_db),
 ) -> list[str]:
-    """The selectable export/import sections, in display order."""
-    return list(backup.SECTIONS)
+    """The sections this user may export or import, in display order — the
+    panel offers only those, so it never presents a section that would 403."""
+    refusals = await _section_refusals(db, user, backup.SECTIONS)
+    return [section for section in backup.SECTIONS if section not in refusals]
 
 
 async def _require_section_permissions(
     db: AsyncSession, user: User, sections: list[str]
 ) -> None:
-    """The roles, users and automations sections carry the RBAC graph, account
-    rows, and executable automation rules, so reading or writing them requires
-    the dedicated global grants — not just manage_site_settings. Without this
-    gate, a site-settings delegate could import a global Administrator role
-    assignment and self-escalate, or plant executable automation rules (webhook
-    exfil, score tampering) they hold no automation permission for (the import
-    path has no equivalent of the role editor's grant containment)."""
-    if "roles" in sections and not await user_has_permission(
-        db, user.id, "manage_roles", None
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="The roles section requires the Manage roles permission",
-        )
-    if "users" in sections and not await user_has_permission(
-        db, user.id, "manage_users", None
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="The users section requires the Manage users permission",
-        )
-    # Automation rules are executable and carry outbound targets (webhook
-    # URLs/headers, email templates); importing them is a create, so require the
-    # global automation grant — the same containment the interactive route's
-    # automation_create + _authorize_trigger provide (GHSA-x8v4).
-    if "automations" in sections and not await user_has_permission(
-        db, user.id, "automation_create", None
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="The automations section requires the Create automations permission",
-        )
+    """403 on the first requested section the user may not move."""
+    refusals = await _section_refusals(db, user, sections)
+    for section in backup.SECTIONS:
+        if section in refusals:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail=refusals[section]
+            )
 
 
 @router.post("/export")

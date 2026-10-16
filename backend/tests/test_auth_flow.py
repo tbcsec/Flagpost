@@ -307,3 +307,71 @@ async def test_refresh_token_reuse_revokes_the_family(client, monkeypatch):
     # The live chain B is now dead too — the whole family was revoked.
     r2 = await client.post("/api/auth/refresh")  # client still holds B
     assert r2.status_code == 401
+
+
+async def test_pre_family_session_joins_a_family_when_rotated(client, monkeypatch):
+    """GHSA-vv68: a session minted before reuse detection has no family. Its
+    first rotation gives it one shared with the successor, so replaying the
+    rotated-out token still revokes the live chain."""
+    from models.user import RefreshSession
+    from routers import auth as auth_router
+    from auth.security import hash_refresh_token
+
+    monkeypatch.setattr(auth_router, "_REFRESH_REUSE_GRACE_SECONDS", -1)
+    reg = await client.post(
+        "/api/auth/register",
+        json={"display_name": "legacy", "email": "legacy@example.com", "password": "password123"},
+    )
+    assert reg.status_code == 201
+    token_a = client.cookies.get("refresh_token")
+    async with SessionLocal() as db:
+        session = await db.scalar(
+            select(RefreshSession).where(
+                RefreshSession.token_hash == hash_refresh_token(token_a)
+            )
+        )
+        session.family_id = None  # as if minted before the migration
+        await db.commit()
+
+    rotated = await client.post("/api/auth/refresh")
+    assert rotated.status_code == 200
+    replay = await client.post("/api/auth/refresh", cookies={"refresh_token": token_a})
+    assert replay.status_code == 401
+    chain = await client.post("/api/auth/refresh")  # the successor is dead too
+    assert chain.status_code == 401
+
+
+async def test_password_checks_run_off_the_event_loop(client, monkeypatch):
+    """GHSA-vv68: change-email and change-username verify the current password
+    on the bounded hash pool, like change-password — argon2 inline would stall
+    every request and socket on the worker for each guess."""
+    import threading
+
+    from auth import security
+
+    threads: list[str] = []
+    real_verify = security._password_hasher.verify
+
+    def recording_verify(hashed, raw):
+        threads.append(threading.current_thread().name)
+        return real_verify(hashed, raw)
+
+    monkeypatch.setattr(security._password_hasher, "verify", recording_verify)
+    reg = await client.post(
+        "/api/auth/register",
+        json={"display_name": "looper", "email": "looper@example.com", "password": "password123"},
+    )
+    token = reg.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    await client.post(
+        "/api/auth/change-email",
+        json={"new_email": "other@example.com", "current_password": "wrong-password"},
+        headers=headers,
+    )
+    await client.post(
+        "/api/auth/change-username",
+        json={"new_display_name": "looper2", "current_password": "wrong-password"},
+        headers=headers,
+    )
+    assert len(threads) >= 2, threads
+    assert all(name.startswith("pwhash") for name in threads), threads

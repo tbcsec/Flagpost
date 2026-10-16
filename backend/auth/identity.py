@@ -14,11 +14,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.user import User
 
 
+def normalize_identifier(identifier: str) -> str:
+    """A login identifier as the lookup matches it: surrounding whitespace
+    stripped, case folded. Anything keyed on an identifier — the login throttle
+    above all — uses this too, so every spelling the lookup treats as one
+    account shares one budget (GHSA-vv68-w7qp-6cpf)."""
+    return identifier.strip().lower()
+
+
 async def find_by_identifier(db: AsyncSession, identifier: str) -> User | None:
     """Resolve a login identifier to a user: try email first, then display name,
     both case-insensitively. Two queries (not an OR) so the match is deterministic
     even in the unlikely case one user's email equals another's display name."""
-    ident = identifier.strip().lower()
+    ident = normalize_identifier(identifier)
     user = await db.scalar(select(User).where(func.lower(User.email) == ident))
     if user is None:
         user = await db.scalar(

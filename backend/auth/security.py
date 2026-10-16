@@ -87,8 +87,10 @@ _bulk_hash_executor = ThreadPoolExecutor(
 # --- Passwords --------------------------------------------------------------
 
 def hash_password(raw: str) -> str:
-    """Synchronous hash — for one-off / non-async callers (change-password,
-    seed, tests). Hot async paths use :func:`ahash_password`."""
+    """Synchronous hash — for import-time constants, the seed and tests only.
+    Any request path awaits :func:`ahash_password` / :func:`averify_password`
+    instead: argon2 inline would stall the event loop for every request and
+    socket on the worker (GHSA-vv68)."""
     return _password_hasher.hash(raw)
 
 

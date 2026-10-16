@@ -25,7 +25,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import get_current_user
 from auth.external_identity import IdentityRejected, resolve_identity
-from auth.identity import display_name_taken, email_taken, find_by_identifier
+from auth.identity import (
+    display_name_taken,
+    email_taken,
+    find_by_identifier,
+    normalize_identifier,
+)
 from auth.registration_policy import domain_allowed
 from auth.setup import instance_needs_setup
 from auth.security import (
@@ -36,7 +41,6 @@ from auth.security import (
     hash_password,
     hash_refresh_token,
     refresh_expiry,
-    verify_password,
 )
 from config import settings
 from auth.membership import effective_permissions
@@ -235,7 +239,7 @@ async def register(
     # Unauthenticated, and each call costs an argon2 hash plus a row. Keyed on
     # the requested display name so a flood has to vary it, which is also what
     # makes the accounts distinguishable afterwards.
-    await _throttle(rate_limiter, f"register:{body.display_name}")
+    await _throttle(rate_limiter, f"register:{normalize_identifier(body.display_name)}")
     # Before the first-run wizard completes there's no owner — no self-serve
     # accounts until one exists (ADR-0017).
     if await instance_needs_setup(db):
@@ -405,7 +409,10 @@ async def login(
     # limit can't be probed by timing. Keyed per identifier — see the note on
     # `auth_rate_limit` about why not per IP. Deliberately ahead of the LDAP
     # leg below too, so the directory can't be probed unthrottled (ADR-0022 §5).
-    await _throttle(rate_limiter, f"login:{body.identifier}")
+    # Keyed on the identifier as the lookup normalises it, so padding it with
+    # whitespace can't mint a fresh budget per spelling (GHSA-vv68).
+    login_key = f"login:{normalize_identifier(body.identifier)}"
+    await _throttle(rate_limiter, login_key)
     # The identifier is the display name (username) or the email, matched
     # case-insensitively (§7.7).
     user = await find_by_identifier(db, body.identifier)
@@ -441,8 +448,8 @@ async def login(
     # attacker filling a known user's per-identifier login bucket with junk can't
     # lock them out, because their correct password gets through in any freed slot
     # and resets the count. Failed attempts still accrue, so brute-force stays
-    # throttled; the key matches _throttle's lowercasing.
-    await rate_limiter.reset(f"login:{body.identifier}".lower())
+    # throttled; it's the very key _throttle recorded.
+    await rate_limiter.reset(login_key)
     access_token = await _issue_session(db, user, response)
     return TokenResponse(access_token=access_token, user=UserOut.model_validate(user))
 
@@ -508,6 +515,11 @@ async def refresh(
     # family, so the whole lineage stays traceable for reuse detection and a
     # stolen token is usable at most until the next legitimate refresh.
     session.revoked_at = utcnow()
+    # A session minted before reuse detection has no family; give it one now so
+    # the rotated-out token and its successor share a lineage, and replaying
+    # the old token still revokes the new one (GHSA-vv68).
+    if session.family_id is None:
+        session.family_id = secrets.token_hex(16)
     family_id = session.family_id
     user = await db.get(User, session.user_id)
     await db.commit()
@@ -663,7 +675,9 @@ async def change_username(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Username changes are disabled on this platform",
         )
-    if not verify_password(body.current_password, current_user.password_hash):
+    # Off the event loop, like change-password: argon2 inline would stall every
+    # request and socket for each guess (GHSA-vv68).
+    if not await averify_password(body.current_password, current_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect",
@@ -761,7 +775,7 @@ async def change_email(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many attempts — please wait a few minutes and try again",
         )
-    if not verify_password(body.current_password, current_user.password_hash):
+    if not await averify_password(body.current_password, current_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect",
@@ -962,7 +976,7 @@ async def reset_password(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Account not found"
         )
-    user.password_hash = hash_password(body.new_password)
+    user.password_hash = await ahash_password(body.new_password)
     # Invalidate the token(s) + every session.
     await _drop_tokens(db, PasswordResetToken, user.id)
     for session in (

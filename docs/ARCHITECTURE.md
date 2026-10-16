@@ -736,6 +736,15 @@ stating, since other features rely on them:
   silently strips access mid-competition; unassign first.
 - **The last Administrator can't be unassigned** — an install always keeps at
   least one account that can manage roles, so it can't lock itself out.
+- **A delegate can't reach above themselves.** Granting a permission (into a
+  role or by assignment) requires holding it site-wide, and so does taking one
+  away (narrowing a role, unassigning one). Account management follows the same
+  rule (`auth/containment`): a `manage_users` delegate edits, resets, bans,
+  restores or deletes only accounts holding nothing they lack — counting the
+  account's site-wide permissions plus its competition permissions above the
+  Participant floor, so a help desk still serves ordinary players but can't take
+  over a Judge or an Administrator. The Administrator holds the whole catalog
+  and is unaffected.
 - A competition-scoped role's editor only offers competition-scoped permissions
   (a global permission held via a per-competition assignment never grants, so
   offering it would only mislead). Every role mutation emits its §3.2 event.

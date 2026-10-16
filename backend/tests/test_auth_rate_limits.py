@@ -151,3 +151,39 @@ async def test_successful_login_resets_the_identifier_throttle(client, monkeypat
             "/api/auth/login", json={"identifier": "tt@example.com", "password": "wrong"}
         )
         assert r.status_code == 401, r.text
+
+
+async def test_login_throttle_ignores_surrounding_whitespace(client):
+    """GHSA-vv68: the lookup strips the identifier, so the bucket must too —
+    otherwise every padded spelling of a known username is a fresh budget and
+    online brute force runs at the hash pool's speed."""
+    await admin_token(client)
+    for _ in range(settings.auth_rate_limit + 1):
+        await client.post(
+            "/api/auth/login",
+            json={"identifier": "admin@example.com", "password": "wrong"},
+        )
+    for padded in (" admin@example.com", "admin@example.com\t", "　admin@example.com "):
+        resp = await client.post(
+            "/api/auth/login", json={"identifier": padded, "password": "changeme"}
+        )
+        assert resp.status_code == 429, (padded, resp.text)
+
+
+async def test_padded_success_resets_the_shared_bucket(client):
+    """The reset after a successful login clears the same normalised key the
+    throttle recorded, whichever spelling got in."""
+    await admin_token(client)
+    for _ in range(settings.auth_rate_limit - 1):
+        await client.post(
+            "/api/auth/login",
+            json={"identifier": "admin@example.com", "password": "wrong"},
+        )
+    ok = await client.post(
+        "/api/auth/login", json={"identifier": "  Admin@Example.com ", "password": "changeme"}
+    )
+    assert ok.status_code == 200, ok.text
+    again = await client.post(
+        "/api/auth/login", json={"identifier": "admin@example.com", "password": "wrong"}
+    )
+    assert again.status_code == 401, again.text

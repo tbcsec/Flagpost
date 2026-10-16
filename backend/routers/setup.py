@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.identity import display_name_taken, email_taken
-from auth.security import hash_password
+from auth.security import ahash_password
 from auth.setup import (
     ADMINISTRATOR_ROLE_NAME,
     active_global_admin_count,
@@ -107,7 +107,7 @@ async def complete_setup(
 
     admin = User(
         email=body.admin.email,
-        password_hash=hash_password(body.admin.password),
+        password_hash=await ahash_password(body.admin.password),
         display_name=body.admin.display_name,
     )
     db.add(admin)

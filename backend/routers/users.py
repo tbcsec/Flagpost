@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import require_permission
 from auth.identity import display_name_taken, email_taken
-from auth.security import ahash_many, hash_password
+from auth.security import ahash_many, ahash_password
 from db import get_db, utcnow
 from models.judging import CodeSubmission
 from models.role import Role, RoleAssignment
@@ -163,7 +163,7 @@ async def create_user(
     user = User(
         email=body.email,
         display_name=body.display_name,
-        password_hash=hash_password(body.password),
+        password_hash=await ahash_password(body.password),
         # Admin-created accounts are exempt from email verification (#74) — an
         # administrator minting the account is itself the vouching step.
         email_verified_at=utcnow(),
@@ -354,7 +354,7 @@ async def update_user(
         user.username_changed_at = utcnow()
     revoked_tokens: list[str] = []
     if body.password is not None:
-        user.password_hash = hash_password(body.password)
+        user.password_hash = await ahash_password(body.password)
         # A reset forces re-login everywhere. An administrator setting someone
         # else's password means lockout or compromise, not routine rotation, so
         # their API tokens die with their sessions (#75) — otherwise a leaked

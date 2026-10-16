@@ -66,7 +66,10 @@ branding, user accounts, roles & assignments, competitions (challenges,
 teams, scores, tickets…), automation rules, the audit log — to one JSON
 file, and imports one **additively**: records that already exist (a
 competition by name, a user by name or email) are skipped, never
-overwritten.
+overwritten. Each section beyond site settings needs the permission that
+governs it — accounts *manage users*, roles *manage roles*, automation rules
+the automation grants, the audit log *view audit log*, and competitions full
+competition access — so a settings delegate is offered only what they hold.
 
 !!! note "What travels, and what doesn't"
     The file holds password and flag hashes, emails, uploaded files and

@@ -60,12 +60,6 @@ Assistants, Challenge Instances and Code Judge: switching those *on* per
 competition does nothing until the matching Site settings tab is configured
 and enabled.
 
-## My delegate holds the grant but can't see the Admin section.
-
-The Admin sidebar section (and every `/admin` page) appears only for someone
-holding a global *manage users*, *manage roles* or *create competition*
-grant. Add one of those alongside the narrower grant.
-
 ## A competitor says the scoreboard "lost" their programming solve.
 
 Judges can rejudge or override verdicts, and the newest verdict counts —

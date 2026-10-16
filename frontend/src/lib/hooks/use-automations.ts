@@ -80,17 +80,20 @@ export function useToggleAutomation() {
   const update = useUpdateAutomation();
   return {
     ...update,
-    toggle: (rule: AutomationRule) =>
-      update.mutate({
-        ruleId: rule.id,
-        input: {
-          name: rule.name,
-          trigger_type: rule.trigger_type,
-          conditions: rule.conditions,
-          actions: rule.actions,
-          is_enabled: !rule.is_enabled,
+    toggle: (rule: AutomationRule, options?: Parameters<typeof update.mutate>[1]) =>
+      update.mutate(
+        {
+          ruleId: rule.id,
+          input: {
+            name: rule.name,
+            trigger_type: rule.trigger_type,
+            conditions: rule.conditions,
+            actions: rule.actions,
+            is_enabled: !rule.is_enabled,
+          },
         },
-      }),
+        options,
+      ),
   };
 }
 

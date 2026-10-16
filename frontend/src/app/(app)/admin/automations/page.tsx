@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { relativeTime } from "@/lib/datetime";
 import {
@@ -27,15 +28,42 @@ import { toast } from "@/stores/toast";
 // rules that fire across every competition. Authoring needs the automation
 // perms via a *global* assignment (Administrator); the engine is live from
 // Phase 1, and this is the §5.5 builder for the global scope.
+//
+// Gated on its own grant (#477) — a *global* automation_view, the one the
+// list endpoint enforces without a competition. A judge's competition-scoped
+// automation grants don't count here, which is why this reads hasGlobal.
+// Creating takes a global automation_create; editing, toggling and deleting a
+// rule all take a global automation_edit (the API's _editable_org_rule).
 export default function AdminAutomationsPage() {
   const t = useTranslations("admin.automations");
   const access = useAccess();
-  const canCreate = access.has("automation_create");
+  if (!access.ready) return <Skeleton className="h-64 w-full" />;
+  if (!access.hasGlobal("automation_view")) {
+    return (
+      <>
+        <SectionHeader title={t("title")} subtitle={t("subtitle")} />
+        <EmptyState title={t("noAccessTitle")} description={t("noAccessDescription")} />
+      </>
+    );
+  }
+  return (
+    <GlobalAutomations
+      canCreate={access.hasGlobal("automation_create")}
+      canEdit={access.hasGlobal("automation_edit")}
+    />
+  );
+}
+
+function GlobalAutomations({ canCreate, canEdit }: { canCreate: boolean; canEdit: boolean }) {
+  const t = useTranslations("admin.automations");
   const { data: catalog } = useAutomationCatalog();
   const { data: rules, isLoading } = useAutomations(); // no competition → global
   const { toggle } = useToggleAutomation();
   const del = useDeleteAutomation();
   const confirm = useConfirm();
+
+  const onError = (title: string) => (e: unknown) =>
+    toast(title, { description: (e as Error).message, variant: "destructive" });
 
   async function onDelete(rule: { id: string; name: string }) {
     if (
@@ -45,7 +73,7 @@ export default function AdminAutomationsPage() {
         confirmLabel: t("deleteConfirm"),
       })
     ) {
-      del.mutate(rule.id);
+      del.mutate(rule.id, { onError: onError(t("couldntDelete")) });
     }
   }
   const create = useCreateAutomation(); // undefined competition → global rule
@@ -123,17 +151,23 @@ export default function AdminAutomationsPage() {
                       t("lastFired", { time: relativeTime(rule.last_triggered_at) })}
                   </div>
                 </div>
-                <div className="flex flex-shrink-0 gap-2">
-                  <Button size="sm" variant="outline" onClick={() => setEditing(rule)}>
-                    {t("edit")}
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => toggle(rule)}>
-                    {rule.is_enabled ? t("disable") : t("enable")}
-                  </Button>
-                  <Button size="sm" variant="destructive" onClick={() => onDelete(rule)}>
-                    {t("delete")}
-                  </Button>
-                </div>
+                {canEdit && (
+                  <div className="flex flex-shrink-0 gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setEditing(rule)}>
+                      {t("edit")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => toggle(rule, { onError: onError(t("couldntSave")) })}
+                    >
+                      {rule.is_enabled ? t("disable") : t("enable")}
+                    </Button>
+                    <Button size="sm" variant="destructive" onClick={() => onDelete(rule)}>
+                      {t("delete")}
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}

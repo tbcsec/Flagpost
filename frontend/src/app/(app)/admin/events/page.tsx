@@ -7,10 +7,12 @@ import { SectionHeader } from "@/components/app/section-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { EntityCombobox } from "@/components/ui/entity-combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -22,6 +24,7 @@ import {
 import { parseServerDate } from "@/lib/datetime";
 import { useAuditEventNames, useAuditLog } from "@/lib/hooks/use-audit-log";
 import { useCompetitions } from "@/lib/hooks/use-competitions";
+import { useAccess } from "@/lib/hooks/use-permissions";
 import { useTeams } from "@/lib/hooks/use-teams";
 import { useUsers } from "@/lib/hooks/use-users";
 import type { AuditLogQuery } from "@/lib/types";
@@ -46,7 +49,28 @@ const clean = (v: string) => (v ? v : undefined);
 // bus emits. Filter by event type (or a `challenge.*` prefix), competition,
 // team (matched inside the payload), actor, a time window, and free text; page
 // through results; expand a row to read the full payload.
+//
+// Gated on its own grant (#477): the Admin section now opens for any global
+// delegate, so the page — not the shell — decides it needs view_audit_log, and
+// the log's queries never fire for someone who'd only get a 403.
 export default function AdminEventLogPage() {
+  const t = useTranslations("admin.events");
+  const access = useAccess();
+  if (!access.ready) return <Skeleton className="h-64 w-full" />;
+  if (!access.hasGlobal("view_audit_log")) {
+    return (
+      <>
+        <SectionHeader title={t("title")} subtitle={t("subtitle")} />
+        <EmptyState title={t("noAccessTitle")} description={t("noAccessDescription")} />
+      </>
+    );
+  }
+  // The actor picker reads the user directory, a separate grant; without it the
+  // filter takes a pasted user id instead (the API filters on the raw id).
+  return <EventLog canPickUsers={access.hasGlobal("view_all_users")} />;
+}
+
+function EventLog({ canPickUsers }: { canPickUsers: boolean }) {
   const t = useTranslations("admin.events");
   const [draft, setDraft] = useState({ ...EMPTY_DRAFT });
   const [applied, setApplied] = useState<AuditLogQuery>({
@@ -61,7 +85,7 @@ export default function AdminEventLogPage() {
   // Name pickers for the id filters: teams are competition-scoped (only load
   // once a competition is chosen); actors come from the global user directory.
   const teams = useTeams(draft.competition_id);
-  const users = useUsers("");
+  const users = useUsers("", { enabled: canPickUsers });
   const teamOptions = (teams.data ?? []).map((t) => ({ value: t.id, label: t.name }));
   const userOptions = (users.data ?? []).map((u) => ({
     value: u.id,
@@ -161,13 +185,22 @@ export default function AdminEventLogPage() {
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="f-user">{t("actor")}</Label>
-                <EntityCombobox
-                  id="f-user"
-                  options={userOptions}
-                  value={draft.user_id}
-                  onChange={(v) => set("user_id", v)}
-                  placeholder={t("anyUser")}
-                />
+                {canPickUsers ? (
+                  <EntityCombobox
+                    id="f-user"
+                    options={userOptions}
+                    value={draft.user_id}
+                    onChange={(v) => set("user_id", v)}
+                    placeholder={t("anyUser")}
+                  />
+                ) : (
+                  <Input
+                    id="f-user"
+                    value={draft.user_id}
+                    onChange={(e) => set("user_id", e.target.value.trim())}
+                    placeholder={t("actorIdPlaceholder")}
+                  />
+                )}
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="f-since">{t("from")}</Label>

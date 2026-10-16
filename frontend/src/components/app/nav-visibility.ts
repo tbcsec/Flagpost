@@ -54,3 +54,18 @@ export function visibleCompNav<T extends NavRule>(
     return true;
   });
 }
+
+/** Whether a lobby-state viewer on `pathname` should be sent to /lobby. They
+ *  keep the lobby itself and their profile — and, for a narrow global delegate
+ *  (#477), the Admin pages their grant opens: being in the lobby is about
+ *  competition access, not about the global section. */
+export function shouldRedirectToLobby(viewer: {
+  showLobby: boolean;
+  pathname: string;
+  isAdmin: boolean;
+}): boolean {
+  if (!viewer.showLobby) return false;
+  if (viewer.pathname === "/lobby" || viewer.pathname === "/profile") return false;
+  if (viewer.isAdmin && viewer.pathname.startsWith("/admin")) return false;
+  return true;
+}

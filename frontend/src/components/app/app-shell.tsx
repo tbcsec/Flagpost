@@ -11,7 +11,12 @@ import { DemoBanner } from "@/components/app/demo-banner";
 import { CertificateReleaseWatcher } from "@/components/certificates/certificate-release-watcher";
 import { UpdateNotice } from "@/components/admin/update-notice";
 import { HelpMenu } from "@/components/app/help-menu";
-import { shouldCheckProgrammingProblems, visibleCompNav } from "@/components/app/nav-visibility";
+import {
+  shouldCheckProgrammingProblems,
+  shouldRedirectToLobby,
+  visibleCompNav,
+} from "@/components/app/nav-visibility";
+import { visibleAdminSurfaces } from "@/lib/admin-surfaces";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { LanguageMenu } from "@/components/app/language-menu";
 import { PageIcon } from "@/components/app/page-icons";
@@ -140,40 +145,12 @@ const COMP_NAV: {
   { href: "/settings", key: "settings", icon: settingsIcon, manage: true },
 ];
 
-type AdminNavKey =
-  | "dashboard"
-  | "skills"
-  | "competitions"
-  | "users"
-  | "roles"
-  | "events"
-  | "automations"
-  | "pages"
-  | "marketplace"
-  | "siteSettings";
-
-const ADMIN_SUBNAV: { href: string; key: AdminNavKey }[] = [
-  { href: "/admin/dashboard", key: "dashboard" },
-  // Cross-competition skills matrix (#364) — another view_global_analytics read,
-  // filtered out below when the site-wide skills web is off.
-  { href: "/admin/skills", key: "skills" },
-  { href: "/admin/competitions", key: "competitions" },
-  { href: "/admin/users", key: "users" },
-  { href: "/admin/roles", key: "roles" },
-  { href: "/admin/events", key: "events" },
-  { href: "/admin/automations", key: "automations" },
-  // Custom pages (#198) get their own route rather than a Site-settings tab:
-  // `manage_pages` is a separate, delegable grant, and this is a content
-  // manager with an editor rather than a settings form.
-  { href: "/admin/pages", key: "pages" },
-  // Import content packs + configure the registry/trust (#389). Its own page
-  // (like Pages), not a Site-settings tab: the import surface is a workflow, and
-  // manage_marketplace is a separate delegable grant.
-  { href: "/admin/marketplace", key: "marketplace" },
-  // Appearance (#104) and Auth providers (#58) are tabs under Site settings,
-  // not their own pages.
-  { href: "/admin/settings", key: "siteSettings" },
-];
+// The Admin sub-nav comes from the shared surface catalogue (lib/admin-surfaces,
+// #477): each entry gated on its own global grant, so the section lists exactly
+// the pages this viewer can open. Pages (#198) and Marketplace (#389) are their
+// own routes rather than Site-settings tabs because their grants are separately
+// delegable; Appearance (#104) and Auth providers (#58) are tabs under Site
+// settings, not pages.
 
 function useActivePath() {
   const pathname = usePathname();
@@ -202,7 +179,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const platformName = brand.platform_name;
   // Hide the admin Skills matrix link when the site-wide skills web is off (#364).
   const skillsEnabled = useSiteSettings().data?.skills_enabled ?? false;
-  const adminSubnav = ADMIN_SUBNAV.filter(
+  const adminSubnav = visibleAdminSurfaces(access.hasGlobal).filter(
     (item) => item.key !== "skills" || skillsEnabled,
   );
   // The active competition's name, for the assistant's context chip. Shares the
@@ -276,12 +253,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const adminDenied = isAdminSection && access.ready && !access.isAdmin;
 
   // A lobby user (no competition access) has no competition-scoped pages to be
-  // on — send them to the lobby (they can still reach their profile).
+  // on — send them to the lobby (they can still reach their profile, and a
+  // narrow global delegate keeps the Admin pages their grant opens, #477).
+  const toLobby = shouldRedirectToLobby({ showLobby, pathname, isAdmin: access.isAdmin });
   React.useEffect(() => {
-    if (showLobby && pathname !== "/lobby" && pathname !== "/profile") {
-      router.replace("/lobby");
-    }
-  }, [showLobby, pathname, router]);
+    if (toLobby) router.replace("/lobby");
+  }, [toLobby, router]);
 
   const navItem = (active: boolean) =>
     cn(

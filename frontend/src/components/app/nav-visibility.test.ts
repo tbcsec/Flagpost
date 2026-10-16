@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   shouldCheckProgrammingProblems,
+  shouldRedirectToLobby,
   visibleCompNav,
   type NavViewer,
 } from "@/components/app/nav-visibility";
@@ -64,5 +65,28 @@ describe("the other sidebar rules", () => {
 
   it("hides staff entries from competitors", () => {
     expect(keys(visibleCompNav(NAV, competitor, undefined, undefined))).toEqual(["challenges"]);
+  });
+});
+
+describe("the lobby redirect", () => {
+  const go = (pathname: string, isAdmin = false, showLobby = true) =>
+    shouldRedirectToLobby({ showLobby, pathname, isAdmin });
+
+  it("sends a lobby-state viewer off competition pages", () => {
+    expect(go("/")).toBe(true);
+    expect(go("/challenges")).toBe(true);
+  });
+
+  it("leaves the lobby, the profile, and anyone not in the lobby alone", () => {
+    expect(go("/lobby")).toBe(false);
+    expect(go("/profile")).toBe(false);
+    expect(go("/challenges", false, false)).toBe(false);
+  });
+
+  it("lets a narrow global delegate stay on the Admin pages (#477)", () => {
+    expect(go("/admin/events", true)).toBe(false);
+    // …but not elsewhere, and not someone who can't open Admin at all.
+    expect(go("/challenges", true)).toBe(true);
+    expect(go("/admin/events", false)).toBe(true);
   });
 });

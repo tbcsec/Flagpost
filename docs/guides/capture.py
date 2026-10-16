@@ -46,26 +46,65 @@ OPEN_UNSOLVED_CARD = """
     return true;
   })()"""
 
-# guide -> (persona, [ (name, path, prep_js, selector, pad) ])
+CLICK_BY_TEXT = """
+  (() => {{
+    const el = [...document.querySelectorAll('#main-content button, #main-content a, #main-content tr, #main-content li')]
+      .find(e => e.textContent.includes({text}));
+    if (!el) return false;
+    (el.querySelector('button, a') || el).click();
+    return true;
+  }})()"""
+
+# Click a Manage row, then scroll its editor to a heading (the shot clips to
+# the viewport, so scrolling chooses which part of a tall editor is pictured).
+SELECT_ROW_SCROLL_TO = """
+  (async () => {{
+    const row = [...document.querySelectorAll('#main-content ul button')]
+      .find(b => b.textContent.includes({row}));
+    if (!row) return 'row missing';
+    row.click();
+    await new Promise(r => setTimeout(r, 1800));
+    const heading = [...document.querySelectorAll('#main-content h2, #main-content h3, #main-content label')]
+      .find(h => h.textContent.trim() === {heading});
+    if (!heading) return 'heading missing';
+    heading.scrollIntoView({{block: 'start'}});
+    window.scrollBy(0, -16);
+    return 'ok';
+  }})()"""
+
+# The judge persona's demo competition has flag challenges only; the code-judge
+# shots use a second seeded competition and one of its competitors.
+CODE_COMP = "e75f4956-2631-419e-8672-5391ee92d3a7"
+CODE_PROBLEM = "0a333053-3f3a-4c3b-a881-95975980e928"
+PASSWORDS = {"mei": "password123"}
+
+# guide -> (default persona, [ (name, path, prep_js, selector, pad[, persona[, competition]]) ])
+# A shot may override the persona (a re-sign-in happens as needed) and pin the
+# active competition (set in localStorage before navigating).
 GUIDES = {
     "competitor": ("participant", [
         ("login",            "/login",             "LOGIN_CARD", None, 18),
         ("challenges",       "/challenges",        None, MAIN, 14),
         ("challenge-dialog", "/challenges",        OPEN_UNSOLVED_CARD, "[role=dialog]", 10),
         ("scoreboard",       "/scoreboard",        None, MAIN, 14),
-        ("support",          "/support",           None, MAIN, 14),
+        ("support",          "/support",           CLICK_BY_TEXT.format(text=json.dumps("New ticket")), "[role=dialog]", 10),
+        ("programming",      f"/challenges/{CODE_PROBLEM}", None, MAIN, 14, "mei", CODE_COMP),
     ]),
     "judge": ("judge", [
         ("dashboard",        "/",                  None, MAIN, 14),
         ("manage",           "/challenges/manage", SELECT_FIRST_MANAGE_ROW, MAIN, 14),
-        ("settings",         "/settings",          None, MAIN, 14),
-        ("tickets",          "/support",           None, MAIN, 14),
+        ("settings",         "/settings?tab=schedule", None, MAIN, 14),
+        ("tickets",          "/support",           CLICK_BY_TEXT.format(text=json.dumps("Question about")), MAIN, 14, "admin", CODE_COMP),
+        ("judging",          "/judging",           CLICK_BY_TEXT.format(text=json.dumps("Max of two numbers")), MAIN, 14, "admin", CODE_COMP),
+        ("test-cases",       "/challenges/manage", SELECT_ROW_SCROLL_TO.format(row=json.dumps("Binary Botch"), heading=json.dumps("Test cases")), MAIN, 14, "admin", CODE_COMP),
     ]),
     "admin": ("admin", [
         ("overview",         "/admin",             None, MAIN, 14),
         ("users",            "/admin/users",       None, MAIN, 14),
         ("roles",            "/admin/roles",       None, MAIN, 14),
         ("site-settings",    "/admin/settings",    None, MAIN, 14),
+        ("code-judge",       "/admin/settings?tab=judge", None, MAIN, 14),
+        ("skills",           "/admin/skills",      None, MAIN, 14),
         ("competitions",     "/admin/competitions", None, MAIN, 14),
         ("pages",            "/admin/pages",       None, MAIN, 14),
         ("audit-log",        "/admin/events",      None, MAIN, 14),
@@ -131,13 +170,13 @@ async def sign_out(ws):
     await evaljs(ws, "localStorage.clear(), sessionStorage.clear(), true")
     await goto(ws, f"{BASE}/login", settle=2.5)
 
-async def sign_in(ws, username):
+async def sign_in(ws, username, password="password"):
     ok = await evaljs(ws, SET_NATIVE + f"""
       (() => {{
         const inputs = document.querySelectorAll('form input');
         if (inputs.length < 2) return 'inputs missing';
         setNative(inputs[0], {json.dumps(username)});
-        setNative(inputs[1], 'password');
+        setNative(inputs[1], {json.dumps(password)});
         const btn = [...document.querySelectorAll('form button')].find(b => b.type === 'submit');
         if (!btn) return 'no submit';
         btn.click();
@@ -150,11 +189,16 @@ async def capture_guide(ws, guide):
     persona, shots = GUIDES[guide]
     out_dir = ROOT / guide / "assets"
     print(f"── {guide} (as {persona}) ──")
-    await sign_out(ws)
+    current = None  # who is signed in right now
 
-    for name, path, prep, selector, pad in shots:
-        # The login shot is taken while still signed out.
+    for spec in shots:
+        name, path, prep, selector, pad = spec[:5]
+        who = spec[5] if len(spec) > 5 and spec[5] else persona
+        competition = spec[6] if len(spec) > 6 else None
+        # The login shot is taken while signed out.
         if prep == "LOGIN_CARD":
+            await sign_out(ws)
+            current = None
             await goto(ws, f"{BASE}{path}", settle=3)
             await evaljs(ws, """
               (() => {
@@ -163,10 +207,13 @@ async def capture_guide(ws, guide):
                 return !!card;
               })()""")
             await shot(ws, out_dir, name, "#__login_card", pad)
-            await sign_in(ws, persona)
             continue
-        if name == shots[0][0] and prep != "LOGIN_CARD":
-            await sign_in(ws, persona)
+        if who != current:
+            await sign_out(ws)
+            await sign_in(ws, who, PASSWORDS.get(who, "password"))
+            current = who
+        if competition:
+            await evaljs(ws, f"localStorage.setItem('fp:active-competition', {json.dumps(competition)}), true")
         await goto(ws, f"{BASE}{path}", settle=3)
         if prep and prep != "LOGIN_CARD":
             done = await evaljs(ws, prep)

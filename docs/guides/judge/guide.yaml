@@ -8,7 +8,9 @@ audience: Judges & organisers
 chapters:
   - { file: 01-role.md, title: The judge role }
   - { file: 02-authoring.md, title: Authoring challenges }
-  - { file: 03-running.md, title: "Configuring & running the event" }
-  - { file: 04-supporting.md, title: Supporting competitors }
-  - { file: 05-watching.md, title: Watching the event }
-  - { file: 06-faq.md, title: FAQ }
+  - { file: 03-programming.md, title: "Programming problems & judging" }
+  - { file: 04-instances.md, title: Challenge instances }
+  - { file: 05-running.md, title: "Configuring & running the event" }
+  - { file: 06-supporting.md, title: Supporting competitors }
+  - { file: 07-watching.md, title: Watching the event }
+  - { file: 08-faq.md, title: FAQ }

@@ -252,9 +252,12 @@ Hard-won, non-obvious, and not visible from reading the code you're changing.
 ADR-0010). A fresh install ships with **no** administrator and is *unconfigured*
 until an operator completes the **first-run setup wizard** (`/setup`), which
 creates the owner account and initial branding.
-`auth.setup.instance_needs_setup` (no active Administrator ⇒ true) gates the
-wizard and blocks public registration until an owner exists; `SetupGuard`
-redirects while unconfigured. Public registration never grants above
+The wizard endpoint is gated by `auth.setup.setup_is_complete`, a **one-way
+flag**: it never reopens on a configured install, even if the admin count hits
+zero (reopening was a takeover hole — recovery is another Administrator or
+Forgot password, and the UI refuses to ban/delete/unassign the last one).
+`instance_needs_setup` (no active Administrator ⇒ true) blocks public
+registration until an owner exists; `SetupGuard` redirects while unconfigured. Public registration never grants above
 Participant. **The test suite still seeds `admin@example.com` / `changeme`** in
 its fixtures (`auth/seed.py` constants), so `admin_token` works unchanged.
 

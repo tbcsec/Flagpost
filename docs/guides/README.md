@@ -63,3 +63,13 @@ python capture.py                                # needs httpx + websockets
 If the demo competition's status gate shows "ended" (its hourly-reset window
 has lapsed), start it again as `admin` first. Re-capture whenever a pictured
 surface changes materially — stale screenshots read as neglect.
+
+The demo seed has flag challenges only, so the **code-judge shots** (the
+competitor's programming page, the Judging page, Test cases, the Question
+ticket) use a second competition: `CODE_COMP` / `CODE_PROBLEM` in
+`capture.py` name a competition with published programming problems, a
+handful of submissions and an open judge question, and `PASSWORDS` holds
+one of its competitors. Point them at your own seeded competition (and
+have the code judge enabled under Site settings) before re-capturing those;
+a shot may also override the persona and pin the active competition, so
+adding one is a tuple, not a new flow.

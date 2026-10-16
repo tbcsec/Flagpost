@@ -1,42 +1,57 @@
 The **Challenges** page is where you'll spend the event.
 
 ![The challenges page](assets/challenges.png)
-*Cards grouped by category chips (each with your progress), showing points,
-difficulty and topic tags, live solve counts, and Solved/Open state. Prefer
-rows? Switch Cards → List — the choice sticks per device.*
+*Category chips filter the board (each with your solved/total); cards carry
+points, difficulty, tags and a badge: Open, Solved, 🔒 Locked, or Code.
+Prefer rows? Switch Cards → List — the choice sticks per device.*
 
-Two card states matter: **Locked** means the challenge has prerequisites —
-solve those first and it unlocks (opening it shows which). **Open** means
-it's ready. New challenges can appear mid-event in scheduled or manual
-waves — watch the announcements.
+**Locked** means the challenge has prerequisites — solve those first and it
+unlocks (opening it shows which). **Code** marks a programming challenge,
+which opens on its own page (chapter 4). New challenges can appear mid-event
+in waves — watch the announcements.
 
 ## Inside a challenge
 
 ![A challenge](assets/challenge-dialog.png)
-*The challenge view: description, flag entry, solves so far, and your private
-notes pad.*
+*The challenge view: description, flag entry, solves so far, and your notes
+pad — My notes when you play solo, Team notes in a team event.*
 
-Depending on the challenge you'll also see **connection info** (where the
-live target runs, e.g. `nc chal.example.org 1337`, with a copy button),
-**attachments** to download, **hints** (chapter 4), and a presence line when
-others have the same challenge open.
+Depending on the challenge you'll also see **Files** to download,
+**Connection** (where the live target runs, with a copy button), **Hints**
+(chapter 5), **Clarifications from the judges**, and how many others have it
+open.
 
 ## Submitting flags
 
-Most challenges want a flag — usually `flag{...}` — pasted exactly as found:
-grading is precise, including case, unless the authors chose otherwise.
-A correct flag scores instantly, updates the scoreboard live, and marks the
-card solved; resubmitting a solved challenge never scores twice.
+Most challenges want a flag — usually `flag{...}` — pasted exactly as found.
+Surrounding whitespace is trimmed for you; everything else, including case
+(unless the authors chose otherwise), must match. A correct flag scores
+instantly and marks the card solved. Rapid-fire guessing is rate-limited.
 
-Some challenges are **multiple choice** instead. Two things to know:
+Some challenges are **multiple choice** instead:
 
-- Your **guesses may be capped** — the challenge shows attempts remaining.
-  Out of guesses? Open a support ticket; organisers can reset them.
-- Events can enable a **wrong-guess penalty** that permanently reduces what
-  that question is worth to you (or your team) with each wrong answer — the
-  reduced value shows struck through next to the original.
+- Your **guesses may be capped** — the challenge shows how many remain. Out
+  of guesses? Open a support ticket; organisers can reset them.
+- Events can enable a **wrong-guess penalty**: each wrong answer lowers what
+  that question is worth to you (or your team) by a stated percentage. The
+  original value shows struck through next to what it's worth now.
+
+## Your own instance
+
+Some challenges hand each player or team an **isolated running copy** of a
+service. In the **Instance** panel, **Launch instance** starts one; once it's
+running you get the connection details — an `nc host port` line or a
+clickable link — with a countdown. **Extend** restarts the clock a limited
+number of times; **Stop** destroys it, and you can launch again. In a team
+event the instance is shared by the whole team, and launches can be refused
+when you've hit a cap or are launching too quickly.
+
+!!! note "Unique flags"
+    Instanced challenges may give every instance its own flag. It's only
+    accepted while *your* instance is running (relaunching mints a new one),
+    and submitting another team's flag is recorded as flag sharing.
 
 !!! note "Paused competitions"
-    Organisers can pause gameplay (say, during an infrastructure issue). A
-    banner appears and submissions close until play resumes — everything
-    else stays available.
+    Organisers can pause gameplay during an incident. The Challenges page
+    shows *⏸ The competition is paused*, and flag submissions, code
+    submissions and hint reveals close until play resumes.

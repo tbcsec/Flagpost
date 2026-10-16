@@ -1,46 +1,58 @@
-Open **Manage challenges** from the challenges page to reach the authoring
-surface: your challenge list on the left, the editor for the selected
-challenge on the right.
+Open **Manage challenges** from the challenges page: your challenge list on
+the left, the editor for the selected challenge on the right.
 
 ![Managing challenges](assets/manage.png)
-*The list pane searches and filters, and carries New / Import / Export; the
-editor keeps Save, Publish and Delete together above the fields.*
+*The list pane searches and filters by category, and carries New challenge,
+Export and Import (plus problem-package import when the code judge is on);
+the editor keeps Save, Publish and Delete together above the fields.*
 
 ## The lifecycle: draft → published
 
 New challenges are **drafts** — invisible to competitors, so you can build
-openly during the event. Publishing requires a flag to be set. Unpublishing
-hides a challenge again without deleting anything; deleting removes it *and*
-its attachments, hints, and solve history.
+openly during the event. Each type has its own publish requirement: a static
+or regex challenge needs a flag, multiple choice a correct option, a
+programming problem at least one test case. Unpublishing hides a challenge
+again without deleting anything; deleting removes it *and* its attachments,
+hints and solve history.
 
 ## What a challenge can carry
 
-- **Flag types** — `static` (exact match, optionally case-insensitive),
-  `regex` (pattern-graded), or `multiple choice` (options with one correct
-  answer; pairs with guess caps).
-- **Scoring** — static points, or **dynamic**: the value decays from a
-  starting value toward a floor as solves accumulate. Every solver holds the
-  current value.
-- **Prerequisites** — an unlock chain: competitors must solve the listed
-  challenges first.
-- **Release schedule** — a published challenge can stay hidden until a set
-  time, for mid-event waves that need no one awake to push a button.
-- **Connection info** — where the live target runs (`nc host 1337`, a URL);
-  shown with a copy button once unlocked.
-- **Attachments** and **hints** — hints can be free or cost points, and can
-  be authored hidden with their own release time.
+- **Challenge type** — fixed once created. *Static* (exact match, with a
+  **Case-insensitive flag** option), *Regex* (pattern-graded), *Multiple
+  choice* (up to ten options, one marked correct; pairs with guess caps), or
+  *Programming* (solved by submitting code — chapter 3).
+- **Scoring** — *Static (fixed points)* or *Dynamic (decays as more solve)*:
+  the value falls from the initial points toward a minimum over roughly the
+  stated number of solves. Every solver holds the current value.
+- **More options** (collapsed) — **Connection info** (`nc host 1337`, a URL;
+  shown with a copy button once unlocked), **Release at** (a published
+  challenge stays hidden until then — waves with no one awake to push a
+  button), **Prerequisites** (an unlock chain), **Difficulty** and **Tags**
+  (once defined in Settings → Challenges).
 
 The flag itself is **write-only**: the editor shows *that* one is set, never
 its value — so a shared screen never leaks it.
 
+## After creating
+
+**Create challenge** first; the sections that need a saved challenge appear
+below it: **Attachments**, **Hints** (free or costing points, optionally
+*Hidden until released* at a set time), **Guesses** (multiple choice —
+chapter 6), **Deployment** (instanced challenges — chapter 4) and **Test
+cases** (programming — chapter 3).
+
 ## Categories, difficulty & tags
 
-The **Challenges tab in Settings** owns the vocabulary: categories (the
-chips competitors filter by), difficulty tiers, and topic tags. Set them
-early — consistent tagging is what makes a 40-challenge board navigable.
+**Settings → Challenges** owns the vocabulary: categories (the chips
+competitors filter by), difficulty tiers, and tags. Set them early —
+consistent tagging is what makes a 40-challenge board navigable.
 
 ## Import & export
 
-**Export** downloads the whole set as a ctfcli-format zip; **Import** loads
-one. That's the path for versioning challenges in git, moving an event
-between instances, or bulk-authoring outside the browser.
+**Export** downloads the set as a ctfcli-format zip and **Import** loads one
+(challenges whose title already exists are skipped, never overwritten).
+Descriptions, regex patterns, hints, attachments, prerequisites and
+deployments round-trip; **static flags do not** — they're stored hashed — so
+keep flags in your own source and re-add them after an import.
+Multiple-choice options aren't carried either, and programming problems
+export separately as problem packages (chapter 3).

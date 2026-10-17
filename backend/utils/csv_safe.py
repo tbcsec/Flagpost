@@ -44,11 +44,13 @@ _FORMULA_LEADS = frozenset("=+-@\t\r")
 # file (see above) — followed by a formula lead. Quote characters between the
 # two are looked through: once the writer has doubled them, a parser can consume
 # them as an empty quoted prefix and still leave the lead first in the cell. The
-# apostrophe goes straight after the separator, ahead of any quotes. This runs
-# over untrusted text, so it must stay linear: a single-character separator and
-# a possessive quote run (runs after different separators can't overlap — a
-# separator is never a quote).
-_SEGMENT_FORMULA = re.compile(r'([;,\t\r\n])(?="*+[=+\-@\t\r])')
+# apostrophe goes straight after the separator, ahead of any quotes. A TAB or
+# CR after a separator needs nothing: it is a separator itself, so a lead after
+# *it* is caught there — prefixing it would only mangle CRLF paragraphs. This
+# runs over untrusted text, so it must stay linear: a single-character
+# separator and a possessive quote run (runs after different separators can't
+# overlap — a separator is never a quote).
+_SEGMENT_FORMULA = re.compile(r'([;,\t\r\n])(?="*+[=+\-@])')
 
 
 def csv_safe(value: object) -> str:

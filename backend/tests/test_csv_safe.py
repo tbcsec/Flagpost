@@ -80,9 +80,16 @@ def test_prefixes_a_formula_lead_after_every_separator():
     # One test, not a parametrized matrix: every test pays the autouse
     # fresh-schema fixture, which 36 string-in/string-out cases don't need.
     for sep in (";", ",", "\t", "\n", "\r", "\r\n"):
-        for lead in ("=", "+", "-", "@", "\t", "\r"):
+        for lead in ("=", "+", "-", "@"):
             text = f"vegan{sep}{lead}1+1"
             assert csv_safe(text) == f"vegan{sep}'{lead}1+1", repr(text)
+        # A TAB or CR is a separator itself: a lead after it is caught there,
+        # and line breaks between paragraphs stay as written.
+        for lead in ("\t", "\r"):
+            text = f"vegan{sep}{lead}1+1"
+            assert csv_safe(text) == text, repr(text)
+    assert csv_safe("Para1\r\n\r\nPara2") == "Para1\r\n\r\nPara2"
+    assert csv_safe("a;\r\n=b") == "a;\r\n'=b"
 
 
 def test_neutralises_every_segment_not_just_the_first():

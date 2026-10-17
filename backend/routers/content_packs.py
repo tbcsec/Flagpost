@@ -22,6 +22,7 @@ from routers.marketplace import _require_enabled
 from utils.competitions import get_visible_competition
 from utils.content_packs import PackError, apply_pack
 from utils.event_bus import event_bus
+from utils.uploads import read_upload_capped
 
 router = APIRouter(prefix="/api/content-packs", tags=["content-packs"])
 
@@ -42,12 +43,9 @@ async def install_content_pack(
     # too — otherwise a locked-down instance could still install packs by file.
     await _require_enabled(db)
 
-    pack_bytes = await file.read()
-    if len(pack_bytes) > MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Pack file too large",
-        )
+    # Chunked with the cap enforced as it reads (413 past it), so an oversized
+    # pack never fully materialises in memory (GHSA-r7rp-46pp-x55q).
+    pack_bytes = await read_upload_capped(file, MAX_UPLOAD_BYTES)
 
     competition: Competition | None = None
     if competition_id:

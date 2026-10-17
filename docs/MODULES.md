@@ -214,7 +214,9 @@ download, not as a short guessable alias. Don't conflate the two.
 The instance fetches `artifact.url`, checks the bytes against `artifact.digest`,
 and verifies the detached `signature` against its trust policy (§6). A short-lived
 signed URL MAY be issued for paid downloads; if so the resolution's `expires_at`
-bounds it.
+bounds it. The instance bounds both calls itself: the resolution and the artifact
+are each read under a byte cap (200 MiB for an artifact) and an overall deadline
+(5 minutes for an artifact), so a mirror must serve within those.
 
 ### 5.4 Mirroring & air-gap
 

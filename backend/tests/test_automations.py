@@ -1202,6 +1202,62 @@ async def test_webhook_template_body_escapes_and_defangs_adversarial_values(clie
     assert calls[0]["headers"]["Content-Type"] == "application/json"
 
 
+async def test_webhook_header_drip_is_cut_off_by_the_overall_deadline(monkeypatch):
+    # GHSA-r7rp-46pp-x55q: httpx's timeout is per read, so a target that drips
+    # its response headers a byte at a time never trips it. A real server on
+    # loopback does exactly that; the overall deadline must end the call.
+    import time
+    from types import SimpleNamespace
+
+    from utils import automation_actions, webhook_security
+
+    writers: list[asyncio.StreamWriter] = []
+
+    async def _drip(reader, writer):
+        writers.append(writer)
+        try:
+            await reader.readuntil(b"\r\n\r\n")  # the request head
+            writer.write(b"HTTP/1.1 200 OK\r\nX-Drip: ")
+            for _ in range(60):  # ~3s of headers that never end
+                writer.write(b"a")
+                await writer.drain()
+                await asyncio.sleep(0.05)
+        except (ConnectionError, asyncio.IncompleteReadError):
+            pass  # the client gave up — the point of the test
+        finally:
+            writer.close()
+
+    server = await asyncio.start_server(_drip, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+
+    async def _pin(url):
+        # Pin to the loopback server (the SSRF check itself is covered in
+        # test_webhook_security); the request still goes through real httpx.
+        return webhook_security.PinnedTarget(
+            url=f"http://127.0.0.1:{port}/hook",
+            host_header="hooks.example.com",
+            sni_hostname=None,
+        )
+
+    monkeypatch.setattr(webhook_security, "resolve_pinned_target", _pin)
+    monkeypatch.setattr(automation_actions, "WEBHOOK_DEADLINE_S", 0.3)
+    rule = SimpleNamespace(id="r1", name="drip")
+
+    started = time.monotonic()
+    try:
+        with pytest.raises(TimeoutError, match="deadline"):
+            await automation_actions._execute_webhook(
+                None, rule, "challenge.solved", {}, {"url": "http://hooks.example.com/hook"}
+            )
+        elapsed = time.monotonic() - started
+    finally:
+        server.close()
+        for writer in writers:
+            writer.close()
+        await server.wait_closed()
+    assert elapsed < 2.0  # the deadline, not the server's ~3s drip, ended it
+
+
 async def test_cascade_depth_guard_stops_rule_loops(client):
     comp = await _competition(client)
     chal = await _challenge(client, comp)

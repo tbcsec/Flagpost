@@ -100,3 +100,21 @@ assumption behind deferring these was narrower than ADR-0013 first stated.
 Still residual: destination rate-limiting / coalescing (the §15 question) — a
 rule may legitimately fire thousands of times on a large event, so a naive cap
 is still wrong. Unchanged by this amendment.
+
+## Amendment — GHSA-r7rp-46pp-x55q follow-up: time bounded too
+
+Item 2 above bounded the response **body**, not the request's **time**. The same
+per-read `timeout` meant a target that dripped its response *headers* a byte at
+a time held the call open — only the automations handler ceiling ended it. The
+whole exchange (connect, request, status line + headers) now runs under an
+overall deadline, `automation_actions.WEBHOOK_DEADLINE_S` = 3 × the 5s
+per-operation timeout, so one webhook action is bounded in both memory and
+time. Pinning, SNI and `follow_redirects=False` are unchanged.
+
+The same follow-up held the other operator-trusted egress that still buffered
+whole responses to the same standard: the marketplace registry client
+(`utils/marketplace_registry.py`, ADR-0040) now streams both the resolve
+response and the artifact download with a byte cap (checked against
+`Content-Length` up front and against the decoded bytes as they arrive) and an
+overall deadline. Trusting a registry's content is not trusting its size or
+pace.

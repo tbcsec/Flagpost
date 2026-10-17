@@ -30,6 +30,7 @@ and must land before any public release.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from dataclasses import dataclass
@@ -196,6 +197,18 @@ async def _execute_send_email(db, rule, event_name, payload, config) -> None:
 
 # --- webhook (§5.3): outbound HTTP call, hardened per §5.4 -------------------
 
+# httpx's timeout is per operation — connect, each write, each read — not per
+# request, so it never fires while bytes keep arriving: a target that drips its
+# response headers a byte at a time holds the call open for as long as it drips.
+WEBHOOK_IO_TIMEOUT_S = 5.0
+# The whole exchange is a connect, a request write and the status line plus
+# headers — three per-operation windows — so 3 x the per-operation timeout is
+# what an honest-but-slow target can need. Past it the call is abandoned, which
+# keeps a single webhook well inside the automations handler ceiling
+# (plugins/automations EVALUATE_HANDLER_TIMEOUT) instead of consuming all of it
+# (GHSA-r7rp-46pp-x55q).
+WEBHOOK_DEADLINE_S = 3 * WEBHOOK_IO_TIMEOUT_S
+
 
 async def _execute_webhook(db, rule, event_name, payload, config) -> None:
     import httpx
@@ -239,12 +252,24 @@ async def _execute_webhook(db, rule, event_name, payload, config) -> None:
     # pinned IP URL with the original hostname as TLS SNI, and stream the
     # response so its body is never buffered — a hostile target that streams an
     # endless body (timeout is per-read, so it never fires while bytes flow)
-    # can't exhaust worker memory. Only the status line is consumed (GHSA-r7rp).
-    async with httpx.AsyncClient(timeout=5.0, follow_redirects=False) as client:
-        async with client.stream(
-            "POST", target.url, extensions=target.extensions, **request_kwargs
-        ) as response:
-            status_code = response.status_code
+    # can't exhaust worker memory. Only the status line is consumed, and the
+    # whole exchange runs under WEBHOOK_DEADLINE_S, so it can't be held open by
+    # a slow drip either (GHSA-r7rp).
+    try:
+        async with asyncio.timeout(WEBHOOK_DEADLINE_S):
+            async with httpx.AsyncClient(
+                timeout=WEBHOOK_IO_TIMEOUT_S, follow_redirects=False
+            ) as client:
+                async with client.stream(
+                    "POST", target.url, extensions=target.extensions, **request_kwargs
+                ) as response:
+                    status_code = response.status_code
+    except TimeoutError:
+        # Raised on, like any transport failure, to the engine's per-action
+        # isolation — just with a message that names the cause.
+        raise TimeoutError(
+            f"webhook POST {url} exceeded its {WEBHOOK_DEADLINE_S:.0f}s deadline"
+        ) from None
     logger.info("webhook: rule %s POST %s -> %s", rule.id, url, status_code)
 
 

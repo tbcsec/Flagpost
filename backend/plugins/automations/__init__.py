@@ -20,7 +20,8 @@ from __future__ import annotations
 # A **policy ceiling, not a derivation** — the work is unbounded in principle,
 # since an event can match many rules and a rule can carry many actions. What
 # bounds it in practice is that each individual action is itself bounded:
-# webhook egress at 5s (ADR-0013) and SMTP at ``mailer.SMTP_TIMEOUT_SECONDS``.
+# webhook egress at ``automation_actions.WEBHOOK_DEADLINE_S`` overall (ADR-0013)
+# and SMTP at ``mailer.SMTP_TIMEOUT_SECONDS``.
 # This ceiling then allows a realistic fan of several slow actions instead of
 # the bus's 10s default, which a *single* email action could exhaust on its
 # own — cancelling the rest of the run, skipping the trigger-count bump and the

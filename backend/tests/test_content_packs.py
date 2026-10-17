@@ -433,3 +433,28 @@ async def test_a_manifest_with_merge_keys_or_an_unbuildable_value_is_a_pack_erro
         resp = await _install(client, token, _pack_with_manifest_text(_THEME_MANIFEST + extra))
         assert resp.status_code == 400, resp.text
         assert phrase in resp.json()["detail"]
+
+
+async def test_oversized_upload_is_refused_without_reading_it_whole(client, monkeypatch):
+    # GHSA-r7rp-46pp-x55q: the size check must bound the read itself, not run on
+    # a body already pulled into memory — so every read is a bounded chunk.
+    from starlette.datastructures import UploadFile
+
+    from routers import content_packs
+
+    sizes: list[int] = []
+    real_read = UploadFile.read
+
+    async def _spy(self, size: int = -1) -> bytes:
+        sizes.append(size)
+        return await real_read(self, size)
+
+    monkeypatch.setattr(UploadFile, "read", _spy)
+    monkeypatch.setattr(content_packs, "MAX_UPLOAD_BYTES", 1024)
+    token = await admin_token(client)
+
+    resp = await _install(client, token, b"x" * (4 << 20))
+    assert resp.status_code == 413, resp.text
+    assert sizes and all(size > 0 for size in sizes)  # never an unbounded read()
+    # Stopped at the first chunk over the cap, not after the whole 4 MiB.
+    assert len(sizes) == 1

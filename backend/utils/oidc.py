@@ -84,8 +84,10 @@ async def validate_issuer_url(url: str) -> None:
     """Refuse anything but a public https endpoint (ADR-0021).
 
     Re-resolved on every fetch rather than trusted from configuration time, so
-    DNS that changes after a provider is saved is re-checked. Note the same
-    resolve-then-connect TOCTOU that §15 records for webhooks applies here.
+    DNS that changes after a provider is saved is re-checked. The connection is
+    not pinned to the checked address, though: httpx resolves again to connect,
+    so a resolve-then-connect TOCTOU remains on this OIDC path. (Webhooks closed
+    theirs by pinning — ADR-0013 amendment.)
     """
     parts = urlsplit(url)
     if parts.scheme != "https":

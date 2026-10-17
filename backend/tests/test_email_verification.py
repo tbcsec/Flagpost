@@ -180,6 +180,90 @@ async def test_verify_rejects_expired_token(client, monkeypatch):
     assert resp.status_code == 400
 
 
+async def _verified_at(user_id: str):
+    from db import SessionLocal
+    from models.user import User
+
+    async with SessionLocal() as session:
+        return (await session.get(User, user_id)).email_verified_at
+
+
+async def test_a_link_only_verifies_the_address_it_was_mailed_to(client, monkeypatch):
+    """GHSA-42m4: a verification link proves the address it was mailed to and
+    nothing else. Race-shaped: the account switches address after
+    /verify-email has already read its token — modelled by the old link
+    surviving the switch — and redeeming it must not stamp the new address,
+    which nobody proved (yet trusted-email SSO linking and the join gate would
+    believe the stamp). The new address's own link, already in flight, still
+    works afterwards."""
+    from datetime import timedelta
+
+    from db import SessionLocal, utcnow
+    from models.email_verification import EmailVerificationToken
+    from routers.auth import _hash_token
+
+    admin = await admin_token(client)
+    await _enable_verification(client, admin)
+    sent = _mock_mailer(monkeypatch)
+    reg = await _register(client, email="old@example.com", name="Switcher")
+    access, user_id = reg.json()["access_token"], reg.json()["user"]["id"]
+    old_link = re.search(r"token=([\w\-]+)", sent[0][2]).group(1)
+
+    changed = await client.post(
+        "/api/auth/change-email",
+        json={"current_password": "password123", "new_email": "new@example.com"},
+        headers=_auth(access),
+    )
+    assert changed.status_code == 200, changed.text
+    (new_mail,) = [m for m in sent if m[0] == ["new@example.com"]]
+    new_link = re.search(r"token=([\w\-]+)", new_mail[2]).group(1)
+    # The old link as /verify-email holds it mid-race: change-email's token
+    # sweep has run, but the redemption already has the row in hand.
+    async with SessionLocal() as session:
+        session.add(
+            EmailVerificationToken(
+                user_id=user_id,
+                token_hash=_hash_token(old_link),
+                expires_at=utcnow() + timedelta(hours=1),
+                email="old@example.com",
+            )
+        )
+        await session.commit()
+
+    stale = await client.post("/api/auth/verify-email", json={"token": old_link})
+    assert stale.status_code == 400, stale.text
+    assert await _verified_at(user_id) is None
+
+    fresh = await client.post("/api/auth/verify-email", json={"token": new_link})
+    assert fresh.status_code == 204, fresh.text
+    assert await _verified_at(user_id) is not None
+
+
+async def test_a_link_minted_before_links_carried_their_address_verifies_nothing(
+    client, monkeypatch
+):
+    """GHSA-42m4: a token from before tokens recorded their address can't be
+    tied to one, so it's refused; the user requests a fresh link."""
+    from sqlalchemy import update
+
+    from db import SessionLocal
+    from models.email_verification import EmailVerificationToken
+
+    admin = await admin_token(client)
+    await _enable_verification(client, admin)
+    sent = _mock_mailer(monkeypatch)
+    reg = await _register(client, email="legacy@example.com", name="Legacy")
+    user_id = reg.json()["user"]["id"]
+    link = re.search(r"token=([\w\-]+)", sent[0][2]).group(1)
+    async with SessionLocal() as session:
+        await session.execute(update(EmailVerificationToken).values(email=None))
+        await session.commit()
+
+    resp = await client.post("/api/auth/verify-email", json={"token": link})
+    assert resp.status_code == 400, resp.text
+    assert await _verified_at(user_id) is None
+
+
 async def test_resend_rate_limited_and_gated(client, monkeypatch):
     admin = await admin_token(client)
     await _enable_verification(client, admin)

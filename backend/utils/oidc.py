@@ -316,7 +316,27 @@ async def fetch_userinfo(
                 endpoint, headers={"Authorization": f"Bearer {access_token}"}
             )
         if response.status_code == 200:
-            return response.json()
+            body = response.json()
+            # Valid JSON isn't necessarily an object; the caller indexes it.
+            if isinstance(body, dict):
+                return body
+            logger.warning("userinfo response was not a JSON object; ignoring it")
     except Exception:  # noqa: BLE001 — optional enrichment, never fatal
         logger.warning("userinfo lookup failed", exc_info=True)
     return {}
+
+
+def userinfo_for_subject(info: dict[str, Any], subject: str) -> dict[str, Any]:
+    """``info`` (a ``fetch_userinfo`` result), checked against the ID token's
+    ``subject``.
+
+    OIDC Core §5.3.2: the UserInfo ``sub`` MUST exactly match the ID token's,
+    and a mismatched response MUST NOT be used — its email (and
+    ``email_verified``) describe some other principal, and would steer which
+    local account this login links to. A mismatch, or a missing ``sub``, fails
+    the login rather than carrying on without the claims, which would quietly
+    JIT a duplicate account. An empty ``info`` (no endpoint, or the lookup
+    failed) is just no enrichment."""
+    if info and info.get("sub") != subject:
+        raise OidcError("userinfo sub does not match the id_token sub")
+    return info

@@ -59,6 +59,10 @@ created with no email on it.
   out of backups.
 - A sign-in must finish in the browser that started it; a callback opened
   elsewhere gets *That sign-in link has expired or was already used*.
+- **SAML needs HTTPS.** The IdP hands the sign-in back with a form post from
+  its own site, and the cookie tying it to the browser that started it only
+  travels with that post over HTTPS. Over plain HTTP, SAML works only with an
+  IdP on the same site.
 - Redirect-based providers need the IdP to know your site's public URL — if
   a provider rejects the callback, the URL registered at the IdP and the one
   the site runs behind disagree. The deployment side lives at

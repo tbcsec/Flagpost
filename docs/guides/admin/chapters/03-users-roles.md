@@ -18,6 +18,11 @@ once and blocks sign-in; everything they did survives with attribution),
 team memberships included; prefer a ban). You cannot ban or delete
 yourself, or the last active Administrator.
 
+Changing someone's email clears its verification and cancels any reset or
+verification links sent to the old address. Where email verification is on,
+they confirm the new address (Profile → Account resends the link) before
+joining another competition.
+
 The **API tokens** panel at the bottom lists every personal token on the
 platform; **Revoke** kills any of them immediately. That's your lever when a
 credential leaks.

@@ -85,6 +85,14 @@ def _public_base(monkeypatch):
     monkeypatch.setattr(app_settings, "public_base_url", SP_ORIGIN)
 
 
+@pytest.fixture(autouse=True)
+def _https_browser(client):
+    """The SP is https, so the stand-in browser is too: the SAML state cookie is
+    ``SameSite=None; Secure`` there (GHSA-42m4), and httpx — like a browser —
+    withholds a Secure cookie from a plain-http request."""
+    client.base_url = "https://test"
+
+
 def _iso(dt: datetime.datetime) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -383,6 +391,79 @@ async def test_acs_rejects_cross_browser_response(client):
     resp = await _acs(client, relay, make_saml_response(rid, email="ada@example.com"))
     assert "error=invalid_state" in resp.headers["location"]
     assert await _user_by_email("ada@example.com") is None
+
+
+async def test_state_cookie_rides_a_cross_site_post_on_https(client):
+    """GHSA-42m4: the HTTP-POST binding ends in a cross-site POST from the IdP's
+    page, which browsers send a SameSite=Lax cookie on never — so the binding
+    cookie must be SameSite=None (hence Secure), scoped to the SAML routes, and
+    not the Lax `sso_login_state` OIDC/OAuth2 use."""
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+    resp = await client.get(f"/api/auth/saml/{SLUG}/login", follow_redirects=False)
+    set_cookies = resp.headers.get_list("set-cookie")
+    saml = [c for c in set_cookies if c.startswith("saml_login_state=")]
+    assert len(saml) == 1, set_cookies
+    attrs = {a.strip().lower() for a in saml[0].split(";")[1:]}
+    assert {"samesite=none", "secure", "httponly", "path=/api/auth/saml"} <= attrs
+    assert not any(c.startswith("sso_login_state=") for c in set_cookies)
+
+
+@pytest.mark.parametrize(
+    ("public_base", "scheme", "cookie_secure", "expected"),
+    [
+        ("https://ctf.example.com", "http", False, ("none", True)),  # behind TLS proxy
+        ("", "https", False, ("none", True)),
+        ("", "http", True, ("none", True)),  # REFRESH_COOKIE_SECURE decides, as elsewhere
+        # Plain HTTP can't carry SameSite=None (browsers demand Secure with it).
+        ("", "http", False, ("lax", False)),
+        ("http://localhost:8000", "http", False, ("lax", False)),
+    ],
+)
+def test_state_cookie_policy_falls_back_to_lax_only_on_plain_http(
+    monkeypatch, public_base, scheme, cookie_secure, expected
+):
+    from starlette.requests import Request
+
+    from routers.saml import _state_cookie_policy
+
+    monkeypatch.setattr(app_settings, "public_base_url", public_base)
+    monkeypatch.setattr(app_settings, "refresh_cookie_secure", cookie_secure)
+    request = Request(
+        {
+            "type": "http",
+            "scheme": scheme,
+            "server": ("backend", 8000),
+            "path": "/",
+            "headers": [],
+        }
+    )
+    assert _state_cookie_policy(request) == expected
+
+
+async def test_acs_rejects_a_mismatched_state_cookie(client):
+    """GHSA-42m4: a browser carrying *a* binding cookie, but for a different
+    login, is refused — and the refusal doesn't retire that browser's own
+    login, which still completes afterwards."""
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+    own_relay, own_rid = await _begin_login(client)
+    (own_cookie,) = [c for c in client.cookies.jar if c.name == "saml_login_state"]
+    assert own_cookie.value == own_relay
+    # A second login stands in for one begun in another browser; put this
+    # browser's own cookie back, as if that login never touched it.
+    other_relay, other_rid = await _begin_login(client)
+    client.cookies.jar.set_cookie(own_cookie)
+    assert client.cookies.get("saml_login_state") == own_relay
+
+    forged = await _acs(
+        client, other_relay, make_saml_response(other_rid, email="ada@example.com")
+    )
+    assert "error=invalid_state" in forged.headers["location"]
+    assert await _user_by_email("ada@example.com") is None
+
+    own = await _acs(client, own_relay, make_saml_response(own_rid))
+    assert own.status_code == 302 and "/auth/callback" in own.headers["location"]
 
 
 async def test_unsigned_assertion_is_rejected(client):

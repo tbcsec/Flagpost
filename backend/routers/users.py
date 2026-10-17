@@ -20,16 +20,19 @@ from __future__ import annotations
 import asyncio
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from auth.containment import assert_may_manage_account
 from auth.deps import require_permission
 from auth.identity import display_name_taken, email_taken
 from auth.security import ahash_many, ahash_password
 from db import get_db, utcnow
+from models.email_verification import EmailVerificationToken
 from models.judging import CodeSubmission
+from models.password_reset import PasswordResetToken
 from models.role import Role, RoleAssignment
 from models.user import RefreshSession, User
 from schemas.user import (
@@ -340,6 +343,19 @@ async def update_user(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
             )
+        if (user.email or "").lower() != body.email.lower():
+            # A new address is unproven, whoever typed it (GHSA-42m4): carrying
+            # the old verification over would let trusted-email SSO link it and
+            # the join gate admit it. Mirrors self-service /change-email — the
+            # reset is written even if already None (so a concurrent verify of
+            # the old address can't survive), and links mailed to the old
+            # address die.
+            user.email_verified_at = None
+            flag_modified(user, "email_verified_at")
+            for token_model in (EmailVerificationToken, PasswordResetToken):
+                await db.execute(
+                    delete(token_model).where(token_model.user_id == user.id)
+                )
         user.email = body.email
     renamed_from: str | None = None
     if body.display_name is not None and body.display_name != user.display_name:

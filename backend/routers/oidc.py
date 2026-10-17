@@ -64,7 +64,9 @@ def _frontend_base() -> str:
 # in the path, so `/\evil.com` becomes `//evil.com` — protocol-relative, and an
 # open redirect. Constraining the whole string to RFC 3986 path/query/fragment
 # characters excludes backslashes, control characters and whitespace outright.
-_SAFE_RETURN_TO = re.compile(r"^/(?!/)[A-Za-z0-9\-._~!$&'()*+,;=:@%/?#\[\]]*$")
+# Anchored with `\Z`, not `$`: Python's `$` also matches just before a trailing
+# newline, which would let `/x\n` through.
+_SAFE_RETURN_TO = re.compile(r"^/(?!/)[A-Za-z0-9\-._~!$&'()*+,;=:@%/?#\[\]]*\Z")
 
 
 def _safe_return_to(raw: str | None) -> str | None:
@@ -270,8 +272,18 @@ async def oidc_callback(
     email = claims.get("email")
     email_verified = _claim_is_true(claims.get("email_verified"))
     if not email:
-        # Some providers only expose the address at the userinfo endpoint.
-        info = await oidc_utils.fetch_userinfo(document, tokens.get("access_token", ""))
+        # Some providers only expose the address at the userinfo endpoint. Its
+        # answer is only usable if it's about the subject the ID token is
+        # (OIDC Core §5.3.2); one about anybody else fails the login.
+        try:
+            info = oidc_utils.userinfo_for_subject(
+                await oidc_utils.fetch_userinfo(
+                    document, tokens.get("access_token", "")
+                ),
+                subject,
+            )
+        except OidcError as exc:
+            return _fail(f"userinfo rejected for {slug}: {exc}", "invalid_token")
         email = info.get("email")
         email_verified = _claim_is_true(info.get("email_verified"))
         claims = {**info, **claims}

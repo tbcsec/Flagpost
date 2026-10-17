@@ -6,9 +6,9 @@ the #56 domain allowlist applies here too, and outstanding reset/verification
 tokens die on any actual change.
 """
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
-from db import SessionLocal
+from db import SessionLocal, utcnow
 from models.email_verification import EmailVerificationToken
 from models.password_reset import PasswordResetToken
 from models.user import User
@@ -188,6 +188,34 @@ async def test_reset_and_verification_tokens_dropped_on_change(client, monkeypat
         )).all()
     assert resets == []
     assert verifications == []  # verification is off, so none was re-minted
+
+
+async def test_a_verify_landing_mid_change_does_not_survive_it(client, monkeypatch):
+    """GHSA-42m4, the other interleaving: a /verify-email of the *old* address
+    commits after /change-email has loaded the account (here, during its
+    duplicate check). The change must still write the cleared stamp — left
+    unwritten because the loaded value was already empty, the old address's
+    verification would carry over to the new one."""
+    import routers.auth as auth_router
+
+    token, user_id = await _register(client, email="old@example.com")
+    real_email_taken = auth_router.email_taken
+
+    async def _verify_lands_meanwhile(db, email, *, exclude_id=None):
+        async with SessionLocal() as other:
+            await other.execute(
+                update(User).where(User.id == user_id).values(email_verified_at=utcnow())
+            )
+            await other.commit()
+        return await real_email_taken(db, email, exclude_id=exclude_id)
+
+    monkeypatch.setattr(auth_router, "email_taken", _verify_lands_meanwhile)
+    assert (await _change(client, token, new_email="new@example.com")).status_code == 200
+
+    async with SessionLocal() as session:
+        user = await session.get(User, user_id)
+    assert user.email == "new@example.com"
+    assert user.email_verified_at is None
 
 
 async def test_same_address_is_a_noop(client, monkeypatch):

@@ -2,6 +2,14 @@
 password reset), soft-ban/unban with login/token enforcement, hard delete, and
 the self/last-admin lockout guards."""
 
+from datetime import timedelta
+
+from sqlalchemy import select, update
+
+from db import SessionLocal, utcnow
+from models.email_verification import EmailVerificationToken
+from models.password_reset import PasswordResetToken
+from models.user import User
 from tests.conftest import admin_token
 
 
@@ -117,6 +125,99 @@ async def test_edit_user_including_password(client):
             json={"email": "edit@example.com", "password": "password123"},
         )
     ).status_code == 401
+
+
+async def _stamp_verified_with_links(user_id: str) -> None:
+    async with SessionLocal() as session:
+        await session.execute(
+            update(User).where(User.id == user_id).values(email_verified_at=utcnow())
+        )
+        for model, token_hash in (
+            (EmailVerificationToken, "v" * 64),
+            (PasswordResetToken, "r" * 64),
+        ):
+            session.add(
+                model(
+                    user_id=user_id,
+                    token_hash=token_hash,
+                    expires_at=utcnow() + timedelta(hours=1),
+                )
+            )
+        await session.commit()
+
+
+async def _verified_at(user_id: str):
+    async with SessionLocal() as session:
+        return (await session.get(User, user_id)).email_verified_at
+
+
+async def _links(user_id: str) -> list:
+    async with SessionLocal() as session:
+        return [
+            *(await session.scalars(
+                select(EmailVerificationToken).where(EmailVerificationToken.user_id == user_id)
+            )).all(),
+            *(await session.scalars(
+                select(PasswordResetToken).where(PasswordResetToken.user_id == user_id)
+            )).all(),
+        ]
+
+
+async def test_admin_email_change_reopens_verification(client):
+    """GHSA-42m4: an address an administrator types in is as unproven as one
+    the user types — carrying the old verification over would let
+    trusted-email SSO link it and the join gate admit it. Mirrors
+    /change-email: the stamp clears and links mailed to the old address die. A
+    change of letter case alone is the same address and keeps both."""
+    admin = await admin_token(client)
+    token = await _register(client, "moved@example.com")
+    user_id = (await client.get("/api/auth/me", headers=_auth(token))).json()["id"]
+    await _stamp_verified_with_links(user_id)
+
+    same = await client.patch(
+        f"/api/users/{user_id}", json={"email": "Moved@example.com"}, headers=_auth(admin)
+    )
+    assert same.status_code == 200, same.text
+    assert await _verified_at(user_id) is not None
+    assert len(await _links(user_id)) == 2
+
+    moved = await client.patch(
+        f"/api/users/{user_id}", json={"email": "elsewhere@example.com"}, headers=_auth(admin)
+    )
+    assert moved.status_code == 200, moved.text
+    assert await _verified_at(user_id) is None
+    assert await _links(user_id) == []
+
+
+async def test_admin_email_change_outlasts_a_verify_landing_meanwhile(client, monkeypatch):
+    """GHSA-42m4: a /verify-email of the old address committing after the
+    admin edit loaded the account (here, during its duplicate check) must not
+    survive the change — the cleared stamp is written even though the loaded
+    value was already empty."""
+    import routers.users as users_router
+
+    admin = await admin_token(client)
+    token = await _register(client, "racer@example.com")
+    user_id = (await client.get("/api/auth/me", headers=_auth(token))).json()["id"]
+    real_email_taken = users_router.email_taken
+
+    async def _verify_lands_meanwhile(db, email, *, exclude_id=None):
+        async with SessionLocal() as other:
+            await other.execute(
+                update(User).where(User.id == user_id).values(email_verified_at=utcnow())
+            )
+            await other.commit()
+        return await real_email_taken(db, email, exclude_id=exclude_id)
+
+    monkeypatch.setattr(users_router, "email_taken", _verify_lands_meanwhile)
+    resp = await client.patch(
+        f"/api/users/{user_id}", json={"email": "racer2@example.com"}, headers=_auth(admin)
+    )
+    assert resp.status_code == 200, resp.text
+    async with SessionLocal() as session:
+        user = await session.get(User, user_id)
+    assert user.email == "racer2@example.com"
+    assert user.email_verified_at is None
 
 
 async def test_ban_blocks_login_and_token_then_unban_restores(client):

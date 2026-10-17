@@ -534,6 +534,7 @@
         "account_disabled": "Ce compte a été désactivé. Contactez un administrateur.",
         "domain_not_allowed": "Votre compte n'est pas autorisé à se connecter à cette instance. Contactez un administrateur.",
         "registration_closed": "Cette instance n'accepte pas de nouveaux comptes. Contactez un administrateur.",
+        "email_unverified_conflict": "This email address belongs to an account that hasn't verified it. Sign in to that account with its password and verify the email first, or contact an administrator.",
         "default": "Échec de l'authentification unique. Veuillez réessayer ou vous connecter avec un mot de passe."
       },
       "demo": {

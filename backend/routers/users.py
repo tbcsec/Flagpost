@@ -23,7 +23,6 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm.attributes import flag_modified
 
 from auth.containment import assert_may_manage_account
 from auth.deps import require_permission
@@ -344,14 +343,13 @@ async def update_user(
                 status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
             )
         if (user.email or "").lower() != body.email.lower():
-            # A new address is unproven, whoever typed it (GHSA-42m4): carrying
-            # the old verification over would let trusted-email SSO link it and
-            # the join gate admit it. Mirrors self-service /change-email — the
-            # reset is written even if already None (so a concurrent verify of
-            # the old address can't survive), and links mailed to the old
-            # address die.
-            user.email_verified_at = None
-            flag_modified(user, "email_verified_at")
+            # The administrator vouches for the address they set, exactly as at
+            # account creation (#74) — so the stamp is theirs, not carried over
+            # from the old address (GHSA-42m4), and trusted-email SSO linking
+            # and the join gate believe it. Links mailed to the old address die
+            # with it, as on self-service /change-email. A change of letter
+            # case alone is the same address and keeps both.
+            user.email_verified_at = utcnow()
             for token_model in (EmailVerificationToken, PasswordResetToken):
                 await db.execute(
                     delete(token_model).where(token_model.user_id == user.id)

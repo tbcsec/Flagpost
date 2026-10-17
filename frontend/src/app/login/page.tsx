@@ -53,6 +53,9 @@ const SSO_ERROR_CODES = [
   // #118 — kept generic on purpose: neither reveals whether an account exists.
   "domain_not_allowed",
   "registration_closed",
+  // GHSA-42m4 — the provider's address matches a local account that never
+  // verified it, so the sign-in is refused rather than linked.
+  "email_unverified_conflict",
 ] as const;
 type SsoErrorCode = (typeof SSO_ERROR_CODES)[number] | "default";
 

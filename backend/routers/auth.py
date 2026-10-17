@@ -930,11 +930,29 @@ async def _deliver_password_reset(user_id: str, email: str) -> None:
     try:
         raw = secrets.token_urlsafe(32)
         async with SessionLocal() as db:
+            # Re-read the address in this session (GHSA-42m4): forgot-password
+            # matched it before this task ran, and an email change committing
+            # in between would otherwise mail the old address a link to the
+            # account that has moved on. The token records the address either
+            # way, which is what /reset-password enforces.
+            current = await db.scalar(
+                select(User.email).where(
+                    User.id == user_id, User.is_active.is_(True)
+                )
+            )
+            if current is None or current.lower() != email.strip().lower():
+                logger.info(
+                    "forgot-password for user %s skipped: address changed or "
+                    "account disabled since the request",
+                    user_id,
+                )
+                return
             db.add(
                 PasswordResetToken(
                     user_id=user_id,
                     token_hash=_hash_token(raw),
                     expires_at=utcnow() + timedelta(hours=1),
+                    email=email,
                 )
             )
             await db.commit()
@@ -1015,28 +1033,50 @@ async def reset_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This reset link is invalid or has expired",
         )
-    user = await db.get(User, token.user_id)
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Account not found"
+    user_id, token_id, token_email = token.user_id, token.id, token.email
+    new_hash = await ahash_password(body.new_password)
+    changed = 0
+    # The link proves control of the address it was mailed to (GHSA-42m4), so
+    # the password write is conditional on the account still holding it — one
+    # UPDATE, no read-then-write gap for an email change to slip into. A token
+    # minted before tokens carried their address (NULL) resets nothing.
+    if token_email:
+        changed = (
+            await db.execute(
+                update(User)
+                .where(
+                    User.id == user_id,
+                    func.lower(User.email) == func.lower(token_email),
+                )
+                .values(password_hash=new_hash)
+                .execution_options(synchronize_session=False)
+            )
+        ).rowcount
+    if changed != 1:
+        await db.execute(
+            delete(PasswordResetToken).where(PasswordResetToken.id == token_id)
         )
-    user.password_hash = await ahash_password(body.new_password)
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This reset link is invalid or has expired",
+        )
     # Invalidate the token(s) + every session.
-    await _drop_tokens(db, PasswordResetToken, user.id)
+    await _drop_tokens(db, PasswordResetToken, user_id)
     for session in (
         await db.execute(
             select(RefreshSession).where(
-                RefreshSession.user_id == user.id,
+                RefreshSession.user_id == user_id,
                 RefreshSession.revoked_at.is_(None),
             )
         )
     ).scalars().all():
         session.revoked_at = utcnow()
-    revoked_tokens = await revoke_user_api_tokens(db, user.id)
+    revoked_tokens = await revoke_user_api_tokens(db, user_id)
     await db.commit()
-    await event_bus.emit("user.password_changed", {"user_id": user.id})
+    await event_bus.emit("user.password_changed", {"user_id": user_id})
     # Self-service recovery: the account holder is the actor.
-    await emit_revoked(revoked_tokens, user_id=user.id, actor_id=user.id)
+    await emit_revoked(revoked_tokens, user_id=user_id, actor_id=user_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

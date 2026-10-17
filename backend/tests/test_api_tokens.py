@@ -26,11 +26,13 @@ def _sha256(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-async def _register(client, name="Regular User", password="password123") -> dict:
-    resp = await client.post(
-        "/api/auth/register",
-        json={"display_name": name, "password": password},
-    )
+async def _register(
+    client, name="Regular User", password="password123", email=None
+) -> dict:
+    payload = {"display_name": name, "password": password}
+    if email is not None:
+        payload["email"] = email
+    resp = await client.post("/api/auth/register", json=payload)
     assert resp.status_code in (200, 201), resp.text
     return resp.json()
 
@@ -310,7 +312,7 @@ async def test_voluntary_password_change_keeps_tokens(client):
 async def test_password_reset_revokes_tokens(client):
     """Recovering an account without the old password is the compromise path:
     every credential it holds dies with it."""
-    reg = await _register(client)
+    reg = await _register(client, email="recover@example.com")
     user_token = await _login(client, reg["user"]["display_name"], "password123")
     created = await _mint(client, user_token)
 
@@ -322,6 +324,7 @@ async def test_password_reset_revokes_tokens(client):
                 user_id=reg["user"]["id"],
                 token_hash=_sha256(raw),
                 expires_at=utcnow() + timedelta(hours=1),
+                email="recover@example.com",
             )
         )
         await db.commit()

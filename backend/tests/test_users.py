@@ -4,7 +4,7 @@ the self/last-admin lockout guards."""
 
 from datetime import timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 
 from db import SessionLocal, utcnow
 from models.email_verification import EmailVerificationToken
@@ -127,11 +127,8 @@ async def test_edit_user_including_password(client):
     ).status_code == 401
 
 
-async def _stamp_verified_with_links(user_id: str) -> None:
+async def _add_links(user_id: str) -> None:
     async with SessionLocal() as session:
-        await session.execute(
-            update(User).where(User.id == user_id).values(email_verified_at=utcnow())
-        )
         for model, token_hash in (
             (EmailVerificationToken, "v" * 64),
             (PasswordResetToken, "r" * 64),
@@ -163,61 +160,72 @@ async def _links(user_id: str) -> list:
         ]
 
 
-async def test_admin_email_change_reopens_verification(client):
-    """GHSA-42m4: an address an administrator types in is as unproven as one
-    the user types — carrying the old verification over would let
-    trusted-email SSO link it and the join gate admit it. Mirrors
-    /change-email: the stamp clears and links mailed to the old address die. A
-    change of letter case alone is the same address and keeps both."""
+async def test_admin_email_change_vouches_for_the_new_address(client):
+    """GHSA-42m4: the administrator vouches for an address they set, as at
+    account creation — the account isn't stranded unverified (with verification
+    off there'd be no way back, and trusted-email SSO would refuse it), and the
+    old address's verification isn't what's carried over. Links mailed to the
+    old address die, as on /change-email. A change of letter case alone is the
+    same address and keeps both."""
     admin = await admin_token(client)
     token = await _register(client, "moved@example.com")
     user_id = (await client.get("/api/auth/me", headers=_auth(token))).json()["id"]
-    await _stamp_verified_with_links(user_id)
+    await _add_links(user_id)
 
     same = await client.patch(
         f"/api/users/{user_id}", json={"email": "Moved@example.com"}, headers=_auth(admin)
     )
     assert same.status_code == 200, same.text
-    assert await _verified_at(user_id) is not None
+    assert await _verified_at(user_id) is None
     assert len(await _links(user_id)) == 2
 
     moved = await client.patch(
         f"/api/users/{user_id}", json={"email": "elsewhere@example.com"}, headers=_auth(admin)
     )
     assert moved.status_code == 200, moved.text
-    assert await _verified_at(user_id) is None
+    assert await _verified_at(user_id) is not None
     assert await _links(user_id) == []
 
 
-async def test_admin_email_change_outlasts_a_verify_landing_meanwhile(client, monkeypatch):
-    """GHSA-42m4: a /verify-email of the old address committing after the
-    admin edit loaded the account (here, during its duplicate check) must not
-    survive the change — the cleared stamp is written even though the loaded
-    value was already empty."""
-    import routers.users as users_router
+async def test_kept_verification_link_still_works_after_a_case_only_admin_edit(
+    client, monkeypatch
+):
+    """Links are bound to their address case-insensitively, like every other
+    address comparison (§7.7): re-casing the address keeps the link, and the
+    link still verifies."""
+    import re
 
+    from utils import mailer
+
+    sent: list[tuple] = []
+
+    async def _capture(to, subject, body):
+        sent.append((to, subject, body))
+        return True
+
+    monkeypatch.setattr(mailer, "send_email", _capture)
     admin = await admin_token(client)
-    token = await _register(client, "racer@example.com")
-    user_id = (await client.get("/api/auth/me", headers=_auth(token))).json()["id"]
-    real_email_taken = users_router.email_taken
-
-    async def _verify_lands_meanwhile(db, email, *, exclude_id=None):
-        async with SessionLocal() as other:
-            await other.execute(
-                update(User).where(User.id == user_id).values(email_verified_at=utcnow())
-            )
-            await other.commit()
-        return await real_email_taken(db, email, exclude_id=exclude_id)
-
-    monkeypatch.setattr(users_router, "email_taken", _verify_lands_meanwhile)
-    resp = await client.patch(
-        f"/api/users/{user_id}", json={"email": "racer2@example.com"}, headers=_auth(admin)
+    enabled = await client.put(
+        "/api/site-settings/operational",
+        json={
+            "registration_open": True,
+            "email_verification_enabled": True,
+            "smtp_host": "smtp.example.com",
+        },
+        headers=_auth(admin),
     )
-    assert resp.status_code == 200, resp.text
-    async with SessionLocal() as session:
-        user = await session.get(User, user_id)
-    assert user.email == "racer2@example.com"
-    assert user.email_verified_at is None
+    assert enabled.status_code == 200, enabled.text
+    token = await _register(client, "recase@example.com")
+    user_id = (await client.get("/api/auth/me", headers=_auth(token))).json()["id"]
+    link = re.search(r"token=([\w\-]+)", sent[0][2]).group(1)
+
+    recased = await client.patch(
+        f"/api/users/{user_id}", json={"email": "ReCase@example.com"}, headers=_auth(admin)
+    )
+    assert recased.status_code == 200, recased.text
+    verify = await client.post("/api/auth/verify-email", json={"token": link})
+    assert verify.status_code == 204, verify.text
+    assert await _verified_at(user_id) is not None
 
 
 async def test_ban_blocks_login_and_token_then_unban_restores(client):

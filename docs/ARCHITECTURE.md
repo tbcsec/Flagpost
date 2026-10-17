@@ -902,9 +902,11 @@ from the userinfo endpoint, but only an answer whose `sub` equals the ID token's
   `email_verified: true`; closed: the admin set `email_is_authoritative`) →
   link to the local account with that address, **if that account has verified
   it** — an unverified match is refused rather than linked (GHSA-42m4).
-  Because linking trusts that stamp, a verification link verifies only the
-  address it was mailed to, and any change of address — self-service or by an
-  administrator — clears it.
+  Because linking trusts that stamp, a verification link — like a
+  password-reset link — acts only on the address it was mailed to. A
+  self-service change of address clears the stamp; an address an administrator
+  sets is stamped verified, the administrator vouching for it as at account
+  creation.
 - **Otherwise** → JIT-create a user holding **Participant only**, mirroring the
   rule that public registration never grants above Participant. The #118
   admission gate (registration-open + domain allowlist) applies to **open**

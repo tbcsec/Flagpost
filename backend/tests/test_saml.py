@@ -466,6 +466,62 @@ async def test_acs_rejects_a_mismatched_state_cookie(client):
     assert own.status_code == 302 and "/auth/callback" in own.headers["location"]
 
 
+def _state_cookie_deletion(resp) -> set[str] | None:
+    """The attributes of the response's ``saml_login_state`` deletion, if any."""
+    for header in resp.headers.get_list("set-cookie"):
+        name_value, *attrs = header.split(";")
+        if name_value.split("=", 1)[0] == "saml_login_state":
+            attrs = {a.strip().lower() for a in attrs}
+            assert "max-age=0" in attrs, header  # only ever deleted by the ACS
+            return attrs
+    return None
+
+
+@pytest.mark.parametrize("outcome", ["success", "failure"])
+async def test_acs_retires_its_cookie_with_the_attributes_it_was_set_with(
+    client, outcome
+):
+    """Once the binding check passes the login's state is spent, so the ACS
+    deletes the cookie whether the login then succeeds or fails — and with
+    Secure + SameSite=None, since browsers ignore a deletion of a SameSite=None
+    cookie that doesn't carry them."""
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+    relay, rid = await _begin_login(client)
+    resp = await _acs(
+        client, relay, make_saml_response(rid, sign=outcome == "success")
+    )
+    assert ("/auth/callback" in resp.headers["location"]) is (outcome == "success")
+    attrs = _state_cookie_deletion(resp)
+    assert attrs is not None
+    assert {"samesite=none", "secure", "path=/api/auth/saml"} <= attrs
+
+
+async def test_acs_refusal_on_the_binding_keeps_the_cookie_and_hints_at_config(
+    client, caplog
+):
+    """A binding refusal leaves the browser's cookie alone (that browser may
+    still finish its own login). A cookie that's missing outright logs a
+    configuration hint — the shape of an HTTPS site the process can't tell is
+    HTTPS — while a cookie for another login doesn't."""
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+    relay, rid = await _begin_login(client)
+
+    caplog.clear()
+    wrong = await _acs(client, "not-this-login", make_saml_response(rid))
+    assert "error=invalid_state" in wrong.headers["location"]
+    assert _state_cookie_deletion(wrong) is None
+    assert "PUBLIC_BASE_URL" not in caplog.text
+
+    client.cookies.clear()
+    caplog.clear()
+    missing = await _acs(client, relay, make_saml_response(rid))
+    assert "error=invalid_state" in missing.headers["location"]
+    assert _state_cookie_deletion(missing) is None
+    assert "PUBLIC_BASE_URL" in caplog.text
+
+
 async def test_unsigned_assertion_is_rejected(client):
     admin = await admin_token(client)
     await _create_provider(client, admin)

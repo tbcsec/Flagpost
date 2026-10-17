@@ -117,6 +117,16 @@ describe("LoginPage", () => {
     );
   });
 
+  it("explains a sign-in refused over an unverified local account (GHSA-42m4)", () => {
+    mockUseSiteSettings.mockReturnValue({ data: settings() });
+    mockUseAuthProviders.mockReturnValue({ data: [] });
+    mockUseSearchParams.mockReturnValue(params("email_unverified_conflict"));
+    renderWithIntl(<LoginPage />);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /belongs to an account that hasn't verified it/,
+    );
+  });
+
   it("renders the demo card from the configured accounts (#360)", () => {
     mockUseSearchParams.mockReturnValue(params(null));
     mockUseAuthProviders.mockReturnValue({ data: [] });

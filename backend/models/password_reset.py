@@ -29,3 +29,8 @@ class PasswordResetToken(Base, TimestampMixin):
         String, unique=True, index=True, nullable=False
     )
     expires_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)
+    # The address this link was mailed to (GHSA-42m4): it resets the password
+    # only while the account still holds this address, so a link sitting in a
+    # mailbox the account has since moved away from can't recover it. Null only
+    # on a token minted before the column existed — /reset-password refuses those.
+    email: Mapped[str | None] = mapped_column(String, nullable=True)

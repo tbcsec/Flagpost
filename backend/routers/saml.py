@@ -258,6 +258,18 @@ async def saml_acs(
     if not sso_state_cookie_matches(
         request, relay_state, cookie_name=SAML_STATE_COOKIE_NAME
     ):
+        if SAML_STATE_COOKIE_NAME not in request.cookies:
+            # No cookie at all is what a deployment misconfiguration looks like
+            # from here, rather than an injected response: an HTTPS site that
+            # this process can't tell is HTTPS (behind a TLS proxy, with neither
+            # PUBLIC_BASE_URL nor REFRESH_COOKIE_SECURE set) issues the cookie
+            # as SameSite=Lax, and the IdP's cross-site POST never carries it.
+            logger.warning(
+                "SAML ACS for %s arrived without its state cookie; if every SAML "
+                "login fails this way, set PUBLIC_BASE_URL to the site's https "
+                "origin so the cookie is issued SameSite=None; Secure",
+                slug,
+            )
         return _fail(
             "SAML ACS state-cookie mismatch (cross-browser)", "invalid_state"
         )

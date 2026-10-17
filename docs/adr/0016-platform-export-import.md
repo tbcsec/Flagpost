@@ -39,7 +39,8 @@ foreign keys. Two ways to build the serialiser:
   `data`, with the selected `sections`.
 - **Sections are the checkboxes**: `site_settings`, `users`, `roles`,
   `competitions`, `automations`, `audit_log`. Export and import both take a
-  section list; the UI offers exactly these.
+  section list; the UI offers exactly these. *(Since the 2026-10-18 amendment
+  it offers only those the caller's grants allow.)*
 - **Import is additive — "create what's missing, never modify or delete"**:
   - Top-level entities match by **natural key** and are skipped if present:
     users by display-name/email, roles by name, competitions by name, role
@@ -58,7 +59,8 @@ foreign keys. Two ways to build the serialiser:
   credentials. The file is therefore **sensitive** — the UI says so, and both
   endpoints are gated on `manage_site_settings` (Administrator-only, the
   permission this page already carries; no new permission for a strictly-admin
-  operation).
+  operation). *(Each section also needs its own grant — see the 2026-10-18
+  amendment.)*
 - **Excluded tables**: `refresh_sessions` (live secrets — never), and the
   transient/derived `notifications`, `collab_documents`, `dashboard_layouts`.
   None belong in a portable backup.
@@ -92,3 +94,26 @@ foreign keys. Two ways to build the serialiser:
 - The export file contains full credentials — operational guidance, not a code
   control, keeps it safe. A future revision could offer a redacted/"config-only"
   export toggle for sharing.
+
+## Amendment: per-section grants (2026-10-18, GHSA-3r5x-64c8-9q4m)
+
+`manage_site_settings` still opens the backup, but it is no longer the whole
+gate: it can be delegated without the rest of the Administrator role, and most
+sections carry data another permission governs. Each section now also needs
+that permission, decided in one place (`routers/site_settings._section_refusals`):
+
+| Section | Export | Import |
+|---|---|---|
+| `site_settings` | no further grant | no further grant |
+| `users` | the whole permission catalog (an Administrator): it carries every account's password hash and email | `manage_users` — additive, never touches an existing account |
+| `roles` | `manage_roles` | `manage_roles`, plus grant containment |
+| `competitions` | every competition-scope permission site-wide, plus `create_competition` | the same |
+| `automations` | `automation_create` | the same |
+| `audit_log` | `view_audit_log` | the whole catalog: imported entries read as recorded history |
+
+`pages` rides the `site_settings` section (older files carry it there, so it
+stays) but is authored under `manage_pages`: without it, the export leaves pages
+out and the import skips their rows (`Spec.permission`). `GET
+/backup/sections?direction=export|import` lists only what the caller may move
+that way, so the UI offers that subset rather than all six. Internal callers
+with no actor — the bootstrap baseline import — are unaffected.

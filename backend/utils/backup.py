@@ -231,6 +231,13 @@ class Spec:
     # boundary the interactive routes guard (#323 review). It raises
     # :class:`ImportError_` to reject the whole document with a 400.
     validate_row: Callable[[dict], None] | None = None
+    # A global grant this table needs on top of its section's gate, for a table
+    # that rides a section whose grant doesn't govern it: ``pages`` travels with
+    # site_settings (older files carry it there, so it can't move) but is
+    # authored under manage_pages (GHSA-3r5x). When the actor lacks it, export
+    # leaves the table out and import skips its rows; internal callers (no
+    # actor) move it like any other table.
+    permission: str | None = None
 
 
 def _challenge_object_key(row: dict) -> str:
@@ -523,9 +530,10 @@ SPECS: tuple[Spec, ...] = (
     # so it needs nothing but a natural key: `slug` is unique and is the page's
     # address, which makes it the right identity for the additive import — a
     # restore onto an install that already has /p/about leaves that page alone
-    # rather than creating a second one that can't have the URL.
+    # rather than creating a second one that can't have the URL. Drafts and
+    # publishing are manage_pages business, which manage_site_settings isn't.
     Spec("pages", Page, "site_settings", id_map="page", natural_key=_nk_page,
-         validate_row=_validate_page_row),
+         validate_row=_validate_page_row, permission="manage_pages"),
     # Custom brand themes (#323) — portable branding. keep_id: the slug id is what
     # default_palette points at, so it must survive the round-trip. created_by is
     # install-local authorship (a user id that may not exist on the target), so
@@ -638,15 +646,35 @@ SPECS: tuple[Spec, ...] = (
 )
 
 
+async def _actor_global(db: AsyncSession, actor: User | None) -> set[str] | None:
+    """The actor's global permission set, or None for an internal caller."""
+    if actor is None:
+        return None
+    return set((await effective_permissions(db, actor.id)).get("global", ()))
+
+
+def _withheld(spec: Spec, actor_global: set[str] | None) -> bool:
+    """Whether the actor lacks the extra grant ``spec.permission`` names."""
+    return (
+        actor_global is not None
+        and spec.permission is not None
+        and spec.permission not in actor_global
+    )
+
+
 # --- export ------------------------------------------------------------------
 
 async def export_data(
-    db: AsyncSession, storage: ObjectStorage, sections: list[str]
+    db: AsyncSession,
+    storage: ObjectStorage,
+    sections: list[str],
+    actor: User | None = None,
 ) -> dict:
     picked = [s for s in SECTIONS if s in sections]
+    actor_global = await _actor_global(db, actor)
     data: dict[str, list[dict]] = {}
     for spec in SPECS:
-        if spec.section not in picked:
+        if spec.section not in picked or _withheld(spec, actor_global):
             continue
         stmt = select(spec.model)
         # Undefer deferred columns (e.g. the site-settings logo blob) so
@@ -780,19 +808,22 @@ async def import_data(
     state = _State()
     result: dict[str, dict[str, int]] = {}
 
-    # Grant containment: when importing the roles section, no imported role or
-    # assignment may carry permissions beyond the actor's own global set — the
-    # same bound the interactive role editor enforces, which the generic import
-    # would otherwise bypass. Skipped when no actor is supplied (internal callers).
-    actor_global: set[str] | None = None
-    if actor is not None and "roles" in picked:
-        actor_global = set((await effective_permissions(db, actor.id)).get("global", ()))
+    # The actor's global set bounds two things. Grant containment: no imported
+    # role or assignment may carry permissions beyond it — the same bound the
+    # interactive role editor enforces, which the generic import would otherwise
+    # bypass. And Spec.permission: a table needing a grant the actor lacks is
+    # skipped. Neither applies when no actor is supplied (internal callers).
+    actor_global = await _actor_global(db, actor)
 
     for spec in SPECS:
         if spec.section not in picked:
             continue
         created = skipped = 0
+        withheld = _withheld(spec, actor_global)
         for raw in data.get(spec.table, []):
+            if withheld:
+                skipped += 1
+                continue
             row = dict(raw)
             object_data = row.pop("_object_data", None)
 

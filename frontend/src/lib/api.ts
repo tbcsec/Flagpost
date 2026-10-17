@@ -1223,8 +1223,10 @@ export const siteSettingsApi = {
   },
   deleteLogo: () =>
     apiFetch<SiteSettingsAdmin>("/api/site-settings/logo", { method: "DELETE" }),
-  // Platform export / import (full-fidelity, section-selectable backup).
-  backupSections: () => apiFetch<string[]>("/api/site-settings/backup/sections"),
+  // Platform export / import (full-fidelity, section-selectable backup). The
+  // sections offered depend on the caller's grants, and on the direction.
+  backupSections: (direction: "export" | "import") =>
+    apiFetch<string[]>(`/api/site-settings/backup/sections?direction=${direction}`),
   exportBackup: (sections: string[]) =>
     apiFetch<BackupDocument>("/api/site-settings/export", {
       method: "POST",

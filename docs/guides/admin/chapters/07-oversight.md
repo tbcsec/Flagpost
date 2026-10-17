@@ -67,9 +67,13 @@ teams, scores, tickets…), automation rules, the audit log — to one JSON
 file, and imports one **additively**: records that already exist (a
 competition by name, a user by name or email) are skipped, never
 overwritten. Each section beyond site settings needs the permission that
-governs it — accounts *manage users*, roles *manage roles*, automation rules
-the automation grants, the audit log *view audit log*, and competitions full
-competition access — so a settings delegate is offered only what they hold.
+governs it — roles *manage roles*, automation rules *create automations*,
+and competitions every competition permission plus *create competitions*.
+Two depend on the direction: accounts import with *manage users* but export
+(every password hash and email) only for a full Administrator, and the audit
+log exports with *view audit log* but imports only for a full
+Administrator. Custom pages travel with site settings only for holders of
+*manage pages*. A delegate is offered only the sections they may move.
 
 !!! note "What travels, and what doesn't"
     The file holds password and flag hashes, emails, uploaded files and

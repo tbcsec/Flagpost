@@ -28,6 +28,14 @@ const SECTION_KEY: Record<
   audit_log: "sectionAuditLog",
 };
 
+function useSectionLabel() {
+  const t = useTranslations("admin.backup");
+  return (id: string) => {
+    const key = SECTION_KEY[id];
+    return key ? t(key) : id;
+  };
+}
+
 function SectionChecklist({
   sections,
   selected,
@@ -37,11 +45,7 @@ function SectionChecklist({
   selected: Set<string>;
   onToggle: (id: string, on: boolean) => void;
 }) {
-  const t = useTranslations("admin.backup");
-  const label = (id: string) => {
-    const key = SECTION_KEY[id];
-    return key ? t(key) : id;
-  };
+  const label = useSectionLabel();
   return (
     <div className="grid gap-2 sm:grid-cols-2">
       {sections.map((id) => (
@@ -65,12 +69,19 @@ function SectionChecklist({
  *  overwrites or deletes). */
 export function BackupPanel() {
   const t = useTranslations("admin.backup");
-  const sections = useBackupSections();
+  const label = useSectionLabel();
+  // Each list holds only what the viewer's grants allow, and they differ by
+  // direction (exporting accounts needs more than importing them, and the
+  // reverse for the audit log), so the panel never offers a section the
+  // backend would refuse.
+  const exportSections = useBackupSections("export");
+  const importSections = useBackupSections("import");
   const exportBackup = useExportBackup();
   const importBackup = useImportBackup();
   const confirm = useConfirm();
 
-  const allSections = useMemo(() => sections.data ?? [], [sections.data]);
+  const allSections = useMemo(() => exportSections.data ?? [], [exportSections.data]);
+  const importAllowed = useMemo(() => importSections.data ?? [], [importSections.data]);
 
   // --- export ---
   const [exportSel, setExportSel] = useState<Set<string>>(new Set());
@@ -128,6 +139,13 @@ export function BackupPanel() {
     }
   }
 
+  // The file's sections split into what the viewer may import and what they
+  // may not; the selection is filtered the same way, so a section beyond their
+  // grants is never pre-selected or sent.
+  const importable = (file?.sections ?? []).filter((id) => importAllowed.includes(id));
+  const notImportable = (file?.sections ?? []).filter((id) => !importAllowed.includes(id));
+  const importChosen = new Set([...importSel].filter((id) => importAllowed.includes(id)));
+
   function toggleImport(id: string, on: boolean) {
     const next = new Set(importSel);
     if (on) next.add(id);
@@ -148,7 +166,7 @@ export function BackupPanel() {
       return;
     }
     importBackup.mutate(
-      { sections: [...importSel], payload: file },
+      { sections: [...importChosen], payload: file },
       {
         onSuccess: (res) => {
           setResult(res);
@@ -207,12 +225,17 @@ export function BackupPanel() {
                   date: file.exported_at ? new Date(file.exported_at).toLocaleString() : t("unknown"),
                 })}
               </p>
-              <SectionChecklist sections={file.sections} selected={importSel} onToggle={toggleImport} />
+              <SectionChecklist sections={importable} selected={importChosen} onToggle={toggleImport} />
+              {notImportable.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {t("notImportable", { sections: notImportable.map(label).join(", ") })}
+                </p>
+              )}
               <Button
                 type="button"
                 className="w-fit"
                 onClick={onImport}
-                disabled={importBackup.isPending || importSel.size === 0}
+                disabled={importBackup.isPending || importChosen.size === 0}
               >
                 {importBackup.isPending ? t("importing") : t("importSelected")}
               </Button>

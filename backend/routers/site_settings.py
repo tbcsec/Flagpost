@@ -13,6 +13,8 @@ without a data migration.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, status
 from sqlalchemy import String, select, type_coerce
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,7 +23,7 @@ from sqlalchemy.orm import undefer
 from auth.containment import holds_every_permission
 from auth.deps import require_permission
 from auth.membership import effective_permissions
-from auth.permissions import PERMISSIONS_BY_KEY, Scope
+from auth.permissions import ALL_PERMISSION_KEYS, PERMISSIONS_BY_KEY, Scope
 from config import settings as app_config
 from db import get_db, utcnow
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
@@ -228,24 +230,33 @@ async def delete_logo(
 
 # --- Platform export / import (Admin → Site settings, ADR-0016) --------------
 # Full-fidelity, section-selectable backup. Gated on manage_site_settings — the
-# Administrator-only permission this page already uses; the export carries whole-
-# platform data (users, flag hashes), so it must stay tightly held.
+# Administrator-only permission this page already uses — plus each section's own
+# grant (_section_refusals); the export carries whole-platform data (users, flag
+# hashes), so it must stay tightly held.
 
 
-# Every competition-scope permission. The competitions section carries each
-# competition's whole content — challenges and their flags, hints, attachments,
-# submissions, tickets, survey and registration answers, team invite codes — so
-# moving it needs what reading and writing all of that needs: an
-# Administrator's reach, not just manage_site_settings (GHSA-3r5x-64c8-9q4m).
-_ALL_COMPETITION_PERMISSIONS = frozenset(
+# Every competition-scope permission, plus create_competition. The competitions
+# section carries each competition's whole content — challenges and their
+# flags, hints, attachments, submissions, tickets, survey and registration
+# answers, team invite codes — so moving it needs what reading and writing all
+# of that needs: an Administrator's reach, not just manage_site_settings. And
+# importing it creates competitions, which is the global create_competition
+# grant; it is required both ways so the section opens or stays shut as one
+# (GHSA-3r5x-64c8-9q4m).
+_COMPETITIONS_SECTION_PERMISSIONS = frozenset(
     key for key, perm in PERMISSIONS_BY_KEY.items() if perm.scope is Scope.COMPETITION
-)
+) | {"create_competition"}
+
+BackupDirection = Literal["export", "import"]
 
 
 async def _section_refusals(
-    db: AsyncSession, user: User, sections: list[str] | tuple[str, ...]
+    db: AsyncSession,
+    user: User,
+    sections: list[str] | tuple[str, ...],
+    direction: BackupDirection,
 ) -> dict[str, str]:
-    """Each of ``sections`` this user may not export or import, with the reason.
+    """Each of ``sections`` this user may not export (or import), with the reason.
 
     manage_site_settings opens the backup; a section carrying more than site
     settings needs the grant that governs its content too. The roles, users
@@ -256,43 +267,68 @@ async def _section_refusals(
     automation permission for. Automation rules are executable and carry
     outbound targets, and importing them is a create, so they need the global
     automation_create grant (GHSA-x8v4). The competitions section needs every
-    competition permission site-wide (above), and the audit_log section the
-    grant that reads the log."""
+    competition permission site-wide plus create_competition (above).
+
+    Two sections differ by direction, and need the whole permission catalog —
+    an Administrator — one way. Exporting users hands over every account's
+    password hash and email, Administrators' included, so it is not a
+    manage_users read; importing them stays on manage_users, since the import
+    is additive and never touches an existing account. Exporting the audit log
+    is the view_audit_log read, but importing it writes entries the log then
+    presents as recorded history, so no narrower grant may do it."""
     held = set((await effective_permissions(db, user.id))["global"])
+    administrator = ALL_PERMISSION_KEYS <= held
     refusals: dict[str, str] = {}
     if "roles" in sections and "manage_roles" not in held:
         refusals["roles"] = "The roles section requires the Manage roles permission"
-    if "users" in sections and "manage_users" not in held:
-        refusals["users"] = "The users section requires the Manage users permission"
+    if "users" in sections:
+        if direction == "export" and not administrator:
+            refusals["users"] = (
+                "Exporting the users section requires every permission (an "
+                "Administrator): it carries every account's password hash and email"
+            )
+        elif "manage_users" not in held:
+            refusals["users"] = "The users section requires the Manage users permission"
     if "automations" in sections and "automation_create" not in held:
         refusals["automations"] = (
             "The automations section requires the Create automations permission"
         )
-    if "competitions" in sections and not _ALL_COMPETITION_PERMISSIONS <= held:
+    if "competitions" in sections and not _COMPETITIONS_SECTION_PERMISSIONS <= held:
         refusals["competitions"] = (
-            "The competitions section requires every competition permission site-wide"
+            "The competitions section requires every competition permission "
+            "site-wide and the Create competitions permission"
         )
-    if "audit_log" in sections and "view_audit_log" not in held:
-        refusals["audit_log"] = "The audit log section requires the View audit log permission"
+    if "audit_log" in sections:
+        if direction == "import" and not administrator:
+            refusals["audit_log"] = (
+                "Importing the audit log section requires every permission (an "
+                "Administrator): imported entries read as recorded history"
+            )
+        elif "view_audit_log" not in held:
+            refusals["audit_log"] = (
+                "The audit log section requires the View audit log permission"
+            )
     return refusals
 
 
 @router.get("/backup/sections", response_model=list[str])
 async def backup_sections(
+    direction: BackupDirection = "export",
     user: User = Depends(require_permission("manage_site_settings")),
     db: AsyncSession = Depends(get_db),
 ) -> list[str]:
-    """The sections this user may export or import, in display order — the
-    panel offers only those, so it never presents a section that would 403."""
-    refusals = await _section_refusals(db, user, backup.SECTIONS)
+    """The sections this user may export (or, with ``direction=import``,
+    import), in display order — the panel offers only those, so it never
+    presents a section that would 403."""
+    refusals = await _section_refusals(db, user, backup.SECTIONS, direction)
     return [section for section in backup.SECTIONS if section not in refusals]
 
 
 async def _require_section_permissions(
-    db: AsyncSession, user: User, sections: list[str]
+    db: AsyncSession, user: User, sections: list[str], direction: BackupDirection
 ) -> None:
-    """403 on the first requested section the user may not move."""
-    refusals = await _section_refusals(db, user, sections)
+    """403 on the first requested section the user may not move this way."""
+    refusals = await _section_refusals(db, user, sections, direction)
     for section in backup.SECTIONS:
         if section in refusals:
             raise HTTPException(
@@ -312,8 +348,8 @@ async def export_backup(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Select at least one section to export",
         )
-    await _require_section_permissions(db, current_user, body.sections)
-    document = await backup.export_data(db, storage, body.sections)
+    await _require_section_permissions(db, current_user, body.sections, "export")
+    document = await backup.export_data(db, storage, body.sections, actor=current_user)
     import json
 
     stamp = utcnow().strftime("%Y%m%d-%H%M%S")
@@ -338,7 +374,7 @@ async def import_backup(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Select at least one section to import",
         )
-    await _require_section_permissions(db, current_user, body.sections)
+    await _require_section_permissions(db, current_user, body.sections, "import")
     try:
         result = await backup.import_data(
             db, storage, body.payload, body.sections, actor=current_user

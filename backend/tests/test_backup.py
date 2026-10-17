@@ -7,9 +7,11 @@ from datetime import timedelta
 import pytest
 from sqlalchemy import func, select
 
+from auth.permissions import PERMISSIONS_BY_KEY, Scope
 from auth.security import generate_api_token, hash_api_token, hash_password
 from db import SessionLocal, utcnow
 from models.api_token import ApiToken
+from models.audit_log import AuditLogEntry
 from models.challenge import Category, Challenge
 from models.competition import Competition
 from models.page import Page
@@ -717,7 +719,197 @@ async def test_competition_reach_alone_does_not_open_the_competitions_section(cl
 
 async def test_administrator_is_offered_every_section(client):
     admin = await admin_token(client)
-    offered = await client.get(
-        "/api/site-settings/backup/sections", headers={"Authorization": f"Bearer {admin}"}
+    auth = {"Authorization": f"Bearer {admin}"}
+    for query in ("", "?direction=export", "?direction=import"):
+        offered = await client.get(f"/api/site-settings/backup/sections{query}", headers=auth)
+        assert offered.json() == list(backup.SECTIONS), query
+
+
+def _export_doc(data: dict) -> dict:
+    return {"flagpost_export": True, "schema_version": backup.SCHEMA_VERSION, "data": data}
+
+
+async def _offered(client, auth: dict, direction: str) -> list[str]:
+    resp = await client.get(
+        f"/api/site-settings/backup/sections?direction={direction}", headers=auth
     )
-    assert offered.json() == list(backup.SECTIONS)
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+async def test_users_export_needs_an_administrator(client):
+    """GHSA-3r5x: the users section carries every account's password hash and
+    email, Administrators' included, so exporting it is not a manage_users read.
+    The import is additive (it never touches an existing account), so it stays
+    on manage_users."""
+    token, uid = await _register(client, "usersdelegate")
+    await _grant_global_role(uid, "Users delegate", ["manage_site_settings", "manage_users"])
+    auth = {"Authorization": f"Bearer {token}"}
+
+    exp = await client.post(
+        "/api/site-settings/export", json={"sections": ["users"]}, headers=auth
+    )
+    assert exp.status_code == 403, exp.text
+    assert "users" not in await _offered(client, auth, "export")
+    assert "users" in await _offered(client, auth, "import")
+
+    row = {"id": "src-user-1", "display_name": "importeduser", "email": None,
+           "password_hash": hash_password("password123")}
+    imp = await client.post(
+        "/api/site-settings/import",
+        json={"sections": ["users"], "payload": _export_doc({"users": [row]})},
+        headers=auth,
+    )
+    assert imp.status_code == 200, imp.text
+    assert imp.json()["users"] == {"created": 1, "skipped": 0}
+
+    admin = await admin_token(client)
+    full = await client.post(
+        "/api/site-settings/export",
+        json={"sections": ["users"]},
+        headers={"Authorization": f"Bearer {admin}"},
+    )
+    assert full.status_code == 200, full.text
+    assert any(u["display_name"] == "importeduser" for u in full.json()["data"]["users"])
+
+
+async def test_audit_log_import_needs_an_administrator(client):
+    """GHSA-3r5x: view_audit_log reads the log; importing writes entries the log
+    then presents as recorded history, so it needs the whole catalog."""
+    token, uid = await _register(client, "auditimporter")
+    await _grant_global_role(uid, "Audit importer", ["manage_site_settings", "view_audit_log"])
+    auth = {"Authorization": f"Bearer {token}"}
+    entry = {"id": "forged-entry-1", "event_name": "user.role_assigned",
+             "payload": {"user_id": uid}, "competition_id": None, "user_id": uid}
+    payload = _export_doc({"audit_log": [entry]})
+
+    imp = await client.post(
+        "/api/site-settings/import",
+        json={"sections": ["audit_log"], "payload": payload},
+        headers=auth,
+    )
+    assert imp.status_code == 403, imp.text
+    async with SessionLocal() as db:
+        assert await db.get(AuditLogEntry, "forged-entry-1") is None
+    assert "audit_log" in await _offered(client, auth, "export")
+    assert "audit_log" not in await _offered(client, auth, "import")
+
+    admin = await admin_token(client)
+    restored = await client.post(
+        "/api/site-settings/import",
+        json={"sections": ["audit_log"], "payload": payload},
+        headers={"Authorization": f"Bearer {admin}"},
+    )
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["audit_log"]["created"] == 1
+
+
+_COMPETITION_SCOPE = sorted(
+    key for key, perm in PERMISSIONS_BY_KEY.items() if perm.scope is Scope.COMPETITION
+)
+_IMPORTED_COMPETITION = {
+    "id": "src-comp-1", "name": "Imported comp", "description": "",
+    "participation_mode": "individual", "visibility": "public", "invite_code": "SRC00001",
+}
+
+
+async def test_competitions_section_needs_create_competition(client):
+    """GHSA-3r5x: importing the competitions section creates competitions, so
+    every competition permission held site-wide isn't enough without the
+    global create_competition grant."""
+    token, uid = await _register(client, "nocreate")
+    await _grant_global_role(
+        uid, "No create", ["manage_site_settings", *_COMPETITION_SCOPE]
+    )
+    auth = {"Authorization": f"Bearer {token}"}
+
+    imp = await client.post(
+        "/api/site-settings/import",
+        json={"sections": ["competitions"],
+              "payload": _export_doc({"competitions": [_IMPORTED_COMPETITION]})},
+        headers=auth,
+    )
+    assert imp.status_code == 403, imp.text
+    async with SessionLocal() as db:
+        assert await db.scalar(
+            select(Competition).where(Competition.name == "Imported comp")
+        ) is None
+    exp = await client.post(
+        "/api/site-settings/export", json={"sections": ["competitions"]}, headers=auth
+    )
+    assert exp.status_code == 403, exp.text
+    for direction in ("export", "import"):
+        assert "competitions" not in await _offered(client, auth, direction)
+
+
+async def test_competitions_section_opens_short_of_administrator(client):
+    """The other side of the gate: every competition permission plus
+    create_competition opens the section both ways, without the rest of the
+    catalog — it must not quietly demand an Administrator."""
+    token, uid = await _register(client, "compbackup")
+    await _grant_global_role(
+        uid, "Competition backup",
+        ["manage_site_settings", "create_competition", *_COMPETITION_SCOPE],
+    )
+    auth = {"Authorization": f"Bearer {token}"}
+
+    for direction in ("export", "import"):
+        assert "competitions" in await _offered(client, auth, direction)
+    exp = await client.post(
+        "/api/site-settings/export", json={"sections": ["competitions"]}, headers=auth
+    )
+    assert exp.status_code == 200, exp.text
+    imp = await client.post(
+        "/api/site-settings/import",
+        json={"sections": ["competitions"],
+              "payload": _export_doc({"competitions": [_IMPORTED_COMPETITION]})},
+        headers=auth,
+    )
+    assert imp.status_code == 200, imp.text
+    assert imp.json()["competitions"]["created"] == 1
+
+
+async def test_pages_ride_site_settings_only_with_manage_pages(client):
+    """GHSA-3r5x: pages travel in the site_settings section but are authored
+    under manage_pages. Without it, the export leaves them out (drafts
+    included) and the import skips them — counted, not silently dropped."""
+    admin = await admin_token(client)
+    created = await client.post(
+        "/api/admin/pages",
+        json={"slug": "secret-draft", "title": "Unreleased", "draft": True},
+        headers={"Authorization": f"Bearer {admin}"},
+    )
+    assert created.status_code == 201, created.text
+
+    token, uid = await _register(client, "settingsonly")
+    await _grant_global_role(uid, "Settings only", ["manage_site_settings"])
+    auth = {"Authorization": f"Bearer {token}"}
+
+    exp = await client.post(
+        "/api/site-settings/export", json={"sections": ["site_settings"]}, headers=auth
+    )
+    assert exp.status_code == 200, exp.text
+    assert "pages" not in exp.json()["data"]
+    assert "site_settings" in exp.json()["data"]
+
+    page = {"id": "page-src", "slug": "planted", "title": "Planted", "content": None,
+            "visibility": "public", "draft": False}
+    imp = await client.post(
+        "/api/site-settings/import",
+        json={"sections": ["site_settings"], "payload": _export_doc({"pages": [page]})},
+        headers=auth,
+    )
+    assert imp.status_code == 200, imp.text
+    assert imp.json()["pages"] == {"created": 0, "skipped": 1}
+    async with SessionLocal() as db:
+        assert await db.scalar(select(Page).where(Page.slug == "planted")) is None
+
+    # Holding manage_pages too, the delegate moves pages like an Administrator.
+    token2, uid2 = await _register(client, "settingsandpages")
+    await _grant_global_role(uid2, "Settings and pages", ["manage_site_settings", "manage_pages"])
+    exp2 = await client.post(
+        "/api/site-settings/export",
+        json={"sections": ["site_settings"]},
+        headers={"Authorization": f"Bearer {token2}"},
+    )
+    assert [p["slug"] for p in exp2.json()["data"]["pages"]] == ["secret-draft"]

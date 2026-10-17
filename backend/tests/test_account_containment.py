@@ -54,6 +54,15 @@ async def _help_desk(client) -> str:
 async def test_user_delegate_cannot_take_over_an_administrator(client):
     admin = await admin_token(client)
     admin_id = await _me(client, admin)
+    # A second administrator, so ban/delete are refused by containment rather
+    # than by the last-administrator guard.
+    await _register(client, "spare")
+    spare = await client.post(
+        "/api/roles/assignments",
+        json={"email": "spare@example.com", "role_id": (await _roles(client, admin))["Administrator"]["id"]},
+        headers=_auth(admin),
+    )
+    assert spare.status_code == 201, spare.text
     desk = await _help_desk(client)
 
     for body in ({"password": "takeover-123"}, {"email": "desk@evil.example"}, {"display_name": "x"}):
@@ -183,3 +192,199 @@ async def test_role_delegate_cannot_strip_permissions_it_lacks(client):
         f"/api/roles/{role_id}", json={"description": "operations"}, headers=_auth(rolesmith)
     )
     assert renamed.status_code == 200, renamed.text
+
+
+async def test_a_site_wide_floor_permission_is_still_privilege(client):
+    # The Participant floor is subtracted from competition grants only: the
+    # same key held site-wide reaches every competition.
+    _, target_id = await _register(client, "observer")
+    await _grant_global(target_id, "Observer", ["challenge_view"])
+    desk = await _help_desk(client)
+    resp = await client.patch(
+        f"/api/users/{target_id}", json={"password": "takeover-123"}, headers=_auth(desk)
+    )
+    assert resp.status_code == 403, resp.text
+
+
+async def test_a_desk_judging_one_competition_cannot_take_over_its_fellow_judge(client):
+    # The actor's own competition grants don't count: containment compares
+    # against what they hold site-wide.
+    admin = await admin_token(client)
+    comp = (
+        await client.post(
+            "/api/competitions", json={"name": "Shared", "visibility": "public"}, headers=_auth(admin)
+        )
+    ).json()
+    judge_role = (await _roles(client, admin))["Judge"]["id"]
+    desk, desk_id = await _register(client, "deskjudge")
+    await _grant_global(desk_id, "Help desk", ["manage_users", "view_all_users"])
+    _, other_id = await _register(client, "otherjudge")
+    for email in ("deskjudge@example.com", "otherjudge@example.com"):
+        r = await client.post(
+            "/api/roles/assignments",
+            json={"email": email, "role_id": judge_role, "competition_id": comp["id"]},
+            headers=_auth(admin),
+        )
+        assert r.status_code == 201, r.text
+
+    resp = await client.patch(
+        f"/api/users/{other_id}", json={"password": "takeover-123"}, headers=_auth(desk)
+    )
+    assert resp.status_code == 403, resp.text
+    # Acting on yourself is never an escalation.
+    own = await client.patch(
+        f"/api/users/{desk_id}", json={"display_name": "deskjudge2"}, headers=_auth(desk)
+    )
+    assert own.status_code == 200, own.text
+
+
+async def test_role_delegate_cannot_unassign_a_competition_judge(client):
+    admin = await admin_token(client)
+    comp = (
+        await client.post(
+            "/api/competitions", json={"name": "Run2", "visibility": "public"}, headers=_auth(admin)
+        )
+    ).json()
+    await _register(client, "judged")
+    judge = await client.post(
+        "/api/roles/assignments",
+        json={
+            "email": "judged@example.com",
+            "role_id": (await _roles(client, admin))["Judge"]["id"],
+            "competition_id": comp["id"],
+        },
+        headers=_auth(admin),
+    )
+    assert judge.status_code == 201, judge.text
+    rolesmith, rolesmith_id = await _register(client, "unassigner")
+    await _grant_global(rolesmith_id, "Role desk", ["manage_roles"])
+    resp = await client.delete(
+        f"/api/roles/assignments/{judge.json()['id']}", headers=_auth(rolesmith)
+    )
+    assert resp.status_code == 403, resp.text
+
+
+async def test_a_stale_permission_key_never_locks_out_an_administrator(client):
+    # A key no longer in the catalog grants nothing, so it confers nothing.
+    admin = await admin_token(client)
+    _, target_id = await _register(client, "stale")
+    role_id = await _grant_global(target_id, "Stale", ["no_longer_a_permission"])
+    patched = await client.patch(
+        f"/api/users/{target_id}", json={"password": "reset-by-admin-1"}, headers=_auth(admin)
+    )
+    assert patched.status_code == 200, patched.text
+    async with SessionLocal() as db:
+        assignment = await db.scalar(
+            select(RoleAssignment.id).where(RoleAssignment.role_id == role_id)
+        )
+    removed = await client.delete(f"/api/roles/assignments/{assignment}", headers=_auth(admin))
+    assert removed.status_code == 204, removed.text
+
+
+async def test_settings_delegate_cannot_redirect_mail_delivery(client):
+    """Mail delivery carries every password-reset link, so pointing it at
+    another server takes over any account: it needs an Administrator."""
+    admin = await admin_token(client)
+    token, user_id = await _register(client, "settingsdesk")
+    await _grant_global(user_id, "Settings desk", ["manage_site_settings"])
+    base = {"registration_open": True}
+
+    for change in (
+        {"smtp_host": "mail.attacker.example"},
+        {"smtp_port": 2525},
+        {"smtp_username": "me"},
+        {"smtp_starttls": False},
+        {"smtp_password": "secret"},
+    ):
+        resp = await client.put(
+            "/api/site-settings/operational", json={**base, **change}, headers=_auth(token)
+        )
+        assert resp.status_code == 403, (change, resp.text)
+
+    # Leaving the transport as it is keeps the rest of the page theirs.
+    ok = await client.put(
+        "/api/site-settings/operational",
+        json={**base, "smtp_from": "ctf@example.com"},
+        headers=_auth(token),
+    )
+    assert ok.status_code == 200, ok.text
+    # An Administrator still configures it.
+    by_admin = await client.put(
+        "/api/site-settings/operational",
+        json={**base, "smtp_host": "smtp.example.com"},
+        headers=_auth(admin),
+    )
+    assert by_admin.status_code == 200, by_admin.text
+
+
+async def test_assignment_by_id_lands_on_exactly_that_account(client):
+    admin = await admin_token(client)
+    _, picked_id = await _register(client, "picked")
+    role = await client.post(
+        "/api/roles",
+        json={"name": "Pages", "scope": "global", "permissions": ["manage_pages"]},
+        headers=_auth(admin),
+    )
+    resp = await client.post(
+        "/api/roles/assignments",
+        json={"user_id": picked_id, "role_id": role.json()["id"]},
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["user_id"] == picked_id
+    both = await client.post(
+        "/api/roles/assignments",
+        json={"user_id": picked_id, "email": "picked@example.com", "role_id": role.json()["id"]},
+        headers=_auth(admin),
+    )
+    assert both.status_code == 422, both.text
+
+
+async def test_settings_delegate_cannot_redirect_mail_delivery_by_import(client):
+    """The backup's site_settings section is no way around the Administrator
+    bar on the mail transport."""
+    admin = await admin_token(client)
+    token, user_id = await _register(client, "importdesk")
+    await _grant_global(user_id, "Settings desk", ["manage_site_settings"])
+
+    export = await client.post(
+        "/api/site-settings/export", json={"sections": ["site_settings"]}, headers=_auth(admin)
+    )
+    assert export.status_code == 200, export.text
+    document = export.json()
+
+    # Restoring the install's own settings unchanged is still theirs.
+    same = await client.post(
+        "/api/site-settings/import",
+        json={"sections": ["site_settings"], "payload": document},
+        headers=_auth(token),
+    )
+    assert same.status_code == 200, same.text
+
+    (row,) = document["data"]["site_settings"]
+    for change in (
+        {"smtp_host": "mail.attacker.example"},
+        {"smtp_port": 2525},
+        {"smtp_password": "secret"},
+    ):
+        tampered = {**document, "data": {"site_settings": [{**row, **change}]}}
+        resp = await client.post(
+            "/api/site-settings/import",
+            json={"sections": ["site_settings"], "payload": tampered},
+            headers=_auth(token),
+        )
+        assert resp.status_code == 403, (change, resp.text)
+
+    operational = await client.get("/api/site-settings/operational", headers=_auth(admin))
+    assert operational.json()["smtp_host"] != "mail.attacker.example"
+
+    # An Administrator's restore still carries it.
+    by_admin = await client.post(
+        "/api/site-settings/import",
+        json={
+            "sections": ["site_settings"],
+            "payload": {**document, "data": {"site_settings": [{**row, "smtp_host": "smtp.example.com"}]}},
+        },
+        headers=_auth(admin),
+    )
+    assert by_admin.status_code == 200, by_admin.text

@@ -18,6 +18,7 @@ from sqlalchemy import String, select, type_coerce
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 
+from auth.containment import holds_every_permission
 from auth.deps import require_permission, user_has_permission
 from config import settings as app_config
 from db import get_db, utcnow
@@ -483,6 +484,27 @@ async def update_operational_settings(
             detail="Configure SMTP before enabling email verification",
         )
     settings = await get_or_create_settings(db)
+    # Mail delivery carries every account's password-reset link: whoever can
+    # point it at their own server can take over any account, Administrators
+    # included. So changing the transport — server, port, credentials, TLS —
+    # needs the whole catalog, not just manage_site_settings
+    # (GHSA-mwhq-j3jg-p339). The From address only labels mail, so it stays
+    # with the settings grant.
+    transport_changed = (
+        (body.smtp_host or None) != settings.smtp_host
+        or body.smtp_port != settings.smtp_port
+        or (body.smtp_username or None) != settings.smtp_username
+        or body.smtp_starttls != settings.smtp_starttls
+        or body.smtp_password is not None
+    )
+    if transport_changed and not await holds_every_permission(db, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Changing mail delivery needs an Administrator: password-reset "
+                "links travel through it"
+            ),
+        )
     settings.registration_open = body.registration_open
     # Omitted = unchanged (#298), the update_checks_enabled pattern below.
     if body.username_changes_enabled is not None:

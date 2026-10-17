@@ -1098,7 +1098,13 @@ export const rolesApi = {
   ) => apiFetch<Role>(`/api/roles/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
   remove: (id: string) => apiFetch<void>(`/api/roles/${id}`, { method: "DELETE" }),
   assignments: () => apiFetch<RoleAssignment[]>("/api/roles/assignments"),
-  assign: (input: { email: string; role_id: string; competition_id?: string | null }) =>
+  // Exactly one target: the picked account's id, or a typed email/username.
+  assign: (
+    input: { role_id: string; competition_id?: string | null } & (
+      | { user_id: string }
+      | { email: string }
+    ),
+  ) =>
     apiFetch<RoleAssignment>("/api/roles/assignments", {
       method: "POST",
       body: JSON.stringify(input),

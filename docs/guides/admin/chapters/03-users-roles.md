@@ -63,4 +63,6 @@ yours to grant — sign-in method never implies privilege.
     request. The Auth, AI, Instances and Code judge tabs each have their own
     grant, as do most Admin pages, so an Auth delegate needn't be a full
     administrator; General, Email, Rules, Backup and Appearance share
-    *manage site settings*.
+    *manage site settings* — though changing the mail server itself needs an
+    Administrator, since password-reset links travel through it. Treat *manage
+    auth providers* as administrator-level too.

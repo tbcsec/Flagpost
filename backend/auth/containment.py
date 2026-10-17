@@ -19,7 +19,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.membership import effective_permissions
-from auth.permissions import PARTICIPANT_PERMISSIONS
+from auth.permissions import ALL_PERMISSION_KEYS, PARTICIPANT_PERMISSIONS, is_known
 from models.user import User
 
 _PARTICIPANT_FLOOR = frozenset(PARTICIPANT_PERMISSIONS)
@@ -33,7 +33,17 @@ async def privileged_permissions(db: AsyncSession, user_id: str) -> set[str]:
     privileged = set(effective["global"])
     for permissions in effective["by_competition"].values():
         privileged |= set(permissions) - _PARTICIPANT_FLOOR
-    return privileged
+    # A key no longer in the catalog grants nothing, so it confers nothing —
+    # and must not make an account unmanageable even by an Administrator.
+    return {key for key in privileged if is_known(key)}
+
+
+async def holds_every_permission(db: AsyncSession, user: User) -> bool:
+    """Whether ``user`` holds the whole catalog site-wide — an Administrator.
+    The bar for controls that reach every account at once, such as where
+    password-reset mail is delivered."""
+    held = set((await effective_permissions(db, user.id))["global"])
+    return ALL_PERMISSION_KEYS <= held
 
 
 async def assert_may_manage_account(
@@ -45,12 +55,13 @@ async def assert_may_manage_account(
     if actor.id == target.id:
         return
     actor_global = set((await effective_permissions(db, actor.id))["global"])
-    missing = sorted(await privileged_permissions(db, target.id) - actor_global)
-    if missing:
+    if await privileged_permissions(db, target.id) - actor_global:
+        # The missing keys aren't listed: they'd name staff roles the account
+        # holds in competitions the actor may not be able to see.
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
                 "You can't manage an account holding permissions you don't hold "
-                "yourself: " + ", ".join(missing)
+                "yourself"
             ),
         )

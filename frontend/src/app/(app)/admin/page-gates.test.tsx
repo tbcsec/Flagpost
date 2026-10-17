@@ -85,8 +85,9 @@ vi.mock("@/lib/hooks/use-automations", () => ({
 vi.mock("@/components/automations/rule-builder", () => ({ RuleBuilder: () => null }));
 vi.mock("@/components/ui/confirm", () => ({ useConfirm: () => () => Promise.resolve(true) }));
 
+let directory: { id: string; display_name: string; email: string | null }[] = [];
 const useUsers = vi.fn((_q: string, _opts?: { enabled?: boolean }) => ({
-  data: [],
+  data: directory,
   isLoading: false,
 }));
 vi.mock("@/lib/hooks/use-users", () => ({
@@ -144,6 +145,7 @@ vi.mock("@/components/admin/rules-settings-panel", () => ({
 afterEach(() => {
   ready = true;
   grants = [];
+  directory = [];
   competitions = [];
   rules = [];
   vi.clearAllMocks();
@@ -299,6 +301,22 @@ describe("Admin → Roles", () => {
     renderWithIntl(<AdminRolesPage />);
     expect(useUsers).toHaveBeenCalledWith("", { enabled: true });
     expect(screen.queryByPlaceholderText("Username or email")).toBeNull();
+  });
+
+  it("assigns a picked account by its id, not an identifier", () => {
+    // An identifier could resolve to a different account whose email reads
+    // like the picked username; the id can't.
+    grants = ["manage_roles", "view_all_users"];
+    directory = [{ id: "u-7", display_name: "boss@corp.example", email: null }];
+    renderWithIntl(<AdminRolesPage />);
+    fireEvent.focus(screen.getByLabelText("User"));
+    fireEvent.mouseDown(screen.getByRole("option", { name: /boss@corp\.example/ }));
+    fireEvent.change(screen.getByLabelText("Role"), { target: { value: "role-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Assign" }));
+    expect(assignRole).toHaveBeenCalledWith(
+      { user_id: "u-7", role_id: "role-1", competition_id: null },
+      expect.anything(),
+    );
   });
 });
 

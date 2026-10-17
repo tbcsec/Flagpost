@@ -99,10 +99,13 @@ async def _assert_may_revoke(
     the Administrator role from every other administrator, or narrow a broader
     delegate's role, would be acting on authority they were never given.
     Administrator holds the full catalog and is unaffected."""
+    # A key no longer in the catalog grants nothing; removing it is no
+    # de-escalation of anyone, so it never needs holding.
+    permissions = {key for key in permissions if is_known(key)}
     if not permissions:
         return
     effective = await effective_permissions(db, actor.id)
-    missing = sorted(set(permissions) - set(effective["global"]))
+    missing = sorted(permissions - set(effective["global"]))
     if missing:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -363,9 +366,12 @@ async def assign_role(
     current_user: User = Depends(require_permission("manage_roles")),
     db: AsyncSession = Depends(get_db),
 ) -> AssignmentOut:
-    # Resolve by email *or* display name (username) so email-less accounts stay
-    # assignable now that email is optional.
-    user = await find_by_identifier(db, body.email)
+    # By id when the actor picked the account (exact), else by email *or*
+    # display name (username) so email-less accounts stay assignable.
+    if body.user_id is not None:
+        user = await db.get(User, body.user_id)
+    else:
+        user = await find_by_identifier(db, body.email)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

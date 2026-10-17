@@ -1482,12 +1482,16 @@ submission is the one endpoint they have direct incentive to script.
   recent-solves ticker, which values each solve as of the cutoff rather than by
   its re-valued `points_awarded`. A competitor's own submit result under a
   freeze carries `is_first_blood: null` and, on a dynamic challenge,
-  `points_awarded: null`. Nor do the WS rooms time post-cutoff activity: the
-  scoreboard room re-broadcasts only when the frozen board itself changes (a
-  backdated judge verdict, a revoked pre-cutoff solve), and the activity room
-  drops the solve-timing pings (`challenge.solved` / `solve_revoked` /
-  `attempted` / `rated` / `hint_requested`, `score.adjusted`,
-  `achievement.awarded`) for everyone until unfreeze.
+  `points_awarded: null` — and so does the `challenge.solved` payload a
+  competitor's personal automation rule sees. Nor do the WS rooms time
+  post-cutoff activity. The scoreboard room decides from the triggering event,
+  never by comparing boards (the frozen board also moves with no event — a team
+  renamed): while frozen it re-broadcasts only on freeze/unfreeze, or on a solve
+  or revoked solve whose `solved_at` is at or before the cutoff (a backdated
+  judge verdict, a rejudge). The activity room drops the solve-timing pings
+  (`challenge.solved` / `solve_revoked` / `attempted` / `rated` /
+  `hint_requested`, `score.adjusted`, `achievement.awarded`) for everyone until
+  unfreeze.
   A freeze **stops the board from moving publicly — competitors keep solving and
   their points still count**; the UI states this (confirm on freeze + a note on
   the frozen board). It's also an automation action, so a rule can freeze on

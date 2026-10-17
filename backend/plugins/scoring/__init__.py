@@ -19,8 +19,10 @@ from __future__ import annotations
 def setup(app, event_bus, db_factory) -> None:
     import hashlib
     import json
+    from datetime import datetime
 
     from auth.deps import user_has_permission
+    from db import ensure_aware_utc
     from models.competition import Competition
     from realtime import manager, register_room_type
     from routers.public_scoreboard import router as public_router
@@ -28,6 +30,7 @@ def setup(app, event_bus, db_factory) -> None:
     from utils.scoreboard import (
         cached_scoreboard,
         compute_scoreboard,
+        freeze_cutoff,
         invalidate_scoreboard,
     )
     from utils.scoreboard_timeline import invalidate_timeline
@@ -56,39 +59,46 @@ def setup(app, event_bus, db_factory) -> None:
             return True
         return await user_has_permission(db, user.id, "challenge_edit", competition_id)
 
-    # Freeze containment (GHSA-r7j2): while the board is frozen, every member
-    # gets the same frozen board, so re-sending it on each post-cutoff solve,
-    # hint or adjustment sends nothing new — except the timing: an unchanged
-    # frame arriving right after a solve is the solve. So while frozen the room
-    # re-broadcasts only when the frozen board actually differs from the one its
-    # members hold: a backdated judge verdict or a revoked pre-cutoff solve
-    # still goes out, a post-cutoff solve doesn't. ``held`` is that per-
-    # competition digest — per worker, so after a restart, or on a worker that
-    # hasn't served the room yet, the first post-cutoff event can still send one
-    # redundant frame. Staff read the live board over REST (``?live=true``).
+    async def snapshot(db, user, competition_id: str) -> dict:
+        competition = await db.get(Competition, competition_id)
+        # Cached read model (#87): a reconnect herd computes the board once, not
+        # once per joining socket.
+        board = await cached_scoreboard(db, competition)
+        return {"type": "scoreboard", **board}
+
+    register_room_type("scoreboard", authorize=authorize, snapshot=snapshot)
+
+    # Freeze containment (GHSA-r7j2): while the board is frozen, a frame sent
+    # on a post-cutoff event is timed to that event whatever it carries — and
+    # comparing boards can't rule that out, because the frozen board also moves
+    # with no event of its own (a team renamed, a team created), which the next
+    # post-cutoff solve would then carry out. So while frozen the room decides
+    # from the triggering event: a freeze/unfreeze always goes out; a solve, or
+    # a revoked solve, only when that solve is dated at or before the cutoff (a
+    # backdated judge verdict, a rejudge of a pre-cutoff solve); hint costs,
+    # adjustments and awards are stamped when they happen — after the cutoff —
+    # so never. Staff read the live board over REST (``?live=true``).
+    def _moves_frozen_board(event_name: str, payload: dict, cutoff) -> bool:
+        if event_name in ("scoreboard.frozen", "scoreboard.unfrozen"):
+            return True
+        if event_name in ("challenge.solved", "challenge.solve_revoked"):
+            try:
+                solved_at = ensure_aware_utc(
+                    datetime.fromisoformat(payload["solved_at"])
+                )
+            except (KeyError, TypeError, ValueError):
+                return False  # no usable solve time: fail closed
+            return solved_at <= cutoff
+        return False
+
+    # The frozen board last sent, per competition, so an event that passes the
+    # gate but leaves the board as it was sends nothing.
     held: dict[str, str] = {}
 
     def _digest(board: dict) -> str:
         return hashlib.sha256(
             json.dumps(board, sort_keys=True, default=str).encode()
         ).hexdigest()
-
-    async def snapshot(db, user, competition_id: str) -> dict:
-        competition = await db.get(Competition, competition_id)
-        # Cached read model (#87): a reconnect herd computes the board once, not
-        # once per joining socket.
-        board = await cached_scoreboard(db, competition)
-        if board["frozen"]:
-            # The first socket into an empty room sets what the room holds. A
-            # later joiner doesn't overwrite it: members already in the room may
-            # still be owed a change this joiner's fresher snapshot includes.
-            if manager.room_size("scoreboard", competition_id) == 0:
-                held[competition_id] = _digest(board)
-            else:
-                held.setdefault(competition_id, _digest(board))
-        return {"type": "scoreboard", **board}
-
-    register_room_type("scoreboard", authorize=authorize, snapshot=snapshot)
 
     async def broadcast_scoreboard(event_name: str, payload: dict) -> None:
         competition_id = payload.get("competition_id")
@@ -100,6 +110,11 @@ def setup(app, event_bus, db_factory) -> None:
         async with db_factory() as db:
             competition = await db.get(Competition, competition_id)
             if competition is None:
+                return
+            cutoff = freeze_cutoff(competition)
+            if cutoff is not None and not _moves_frozen_board(
+                event_name, payload, cutoff
+            ):
                 return
             board = await compute_scoreboard(db, competition)
         if not board["frozen"]:

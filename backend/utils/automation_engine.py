@@ -161,6 +161,34 @@ async def _owner_may_observe(
     return False
 
 
+async def _frozen_out_solve(db, payload: dict[str, Any]) -> dict[str, Any]:
+    """The ``challenge.solved`` payload as its solver may see it.
+
+    A personal rule only ever fires on its owner's own solve (``_scope_matches``)
+    and reports back to that owner, so it must not tell them what their submit
+    result withholds under a scoreboard freeze (GHSA-r7j2): ``is_first_blood``
+    and, on a dynamic challenge, the live ``points``. Same rule as the submit
+    route — null for anyone ``visible_solve_cutoff`` freezes out; staff and an
+    unfrozen board keep the payload as is.
+    """
+    from models.challenge import Challenge
+    from models.competition import Competition
+    from models.user import User
+    from utils.scoreboard import visible_solve_cutoff
+
+    competition = await db.get(Competition, payload.get("competition_id"))
+    user = await db.get(User, payload.get("user_id"))
+    if competition is None or user is None:
+        return payload
+    if await visible_solve_cutoff(db, competition, user) is None:
+        return payload
+    view = dict(payload, is_first_blood=None)
+    challenge = await db.get(Challenge, payload.get("challenge_id"))
+    if challenge is None or challenge.scoring_type == "dynamic":
+        view["points"] = None
+    return view
+
+
 async def handle_event(db_factory, event_name: str, payload: dict[str, Any]) -> None:
     """Evaluate every enabled rule for one emitted event (§5.2)."""
     if event_name.startswith("automation."):
@@ -191,11 +219,19 @@ async def handle_event(db_factory, event_name: str, payload: dict[str, Any]) -> 
             .scalars()
             .all()
         )
+        # Personal rules see a solve the way their owner — its solver — may.
+        personal = payload
+        if event_name == "challenge.solved" and any(
+            r.owner_user_id is not None and _scope_matches(r, payload) for r in rules
+        ):
+            personal = await _frozen_out_solve(db, payload)
         matched = [
             r
             for r in rules
             if _scope_matches(r, payload)
-            and evaluate_conditions(r.conditions, payload)
+            and evaluate_conditions(
+                r.conditions, personal if r.owner_user_id else payload
+            )
         ]
         if not matched:
             return
@@ -220,7 +256,9 @@ async def handle_event(db_factory, event_name: str, payload: dict[str, Any]) -> 
         token = _depth.set(depth + 1)
         try:
             for rule in runnable:
-                await run_rule(db, rule, event_name, payload)
+                await run_rule(
+                    db, rule, event_name, personal if rule.owner_user_id else payload
+                )
         finally:
             _depth.reset(token)
 

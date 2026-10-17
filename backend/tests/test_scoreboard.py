@@ -471,7 +471,7 @@ async def test_frozen_submit_result_hides_first_blood_and_dynamic_worth(client):
     assert res["correct"] is True
     assert res["points_awarded"] is None
     assert res["is_first_blood"] is None
-    assert res["full_value"] is None
+    # (full_value, the penalised case, is pinned in test_multiple_choice.)
 
     res = (await _submit(client, comp, static, player, "flag{s}")).json()
     assert res["correct"] is True

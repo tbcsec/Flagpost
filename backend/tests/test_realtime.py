@@ -339,16 +339,17 @@ async def test_frozen_scoreboard_room_is_silent_on_post_cutoff_solves(client):
 
 
 async def test_frozen_scoreboard_room_still_sends_a_frozen_board_change(client):
-    """The flip side: a change that lands *before* the cutoff — a backdated code
-    judge verdict (ADR-0042 records the solve at submission time) — moves the
-    frozen board itself, so it must still go out."""
+    """The flip side: a change dated *before* the cutoff — a backdated code
+    judge verdict (ADR-0042 records the solve at submission time), or a rejudge
+    revoking it — moves the frozen board itself, so it must still go out."""
     from datetime import timedelta
 
     from db import SessionLocal, ensure_aware_utc
     from models.challenge import Challenge
     from models.competition import Competition
+    from models.submission import Submission
     from models.user import User
-    from utils.grading import emit_grade, record_grade
+    from utils.grading import emit_grade, emit_regrade, record_grade, regrade
     from utils.scoring import resolve_subject
 
     comp, chal = await _competition_with_challenge(client)
@@ -405,6 +406,70 @@ async def test_frozen_scoreboard_room_still_sends_a_frozen_board_change(client):
         frame = await ws.receive_json()
         assert frame["frozen"] is True
         assert {e["name"]: e["points"] for e in frame["entries"]}["Act"] == 100
+
+        # A rejudge revokes that pre-cutoff solve: the frozen board drops it.
+        async with SessionLocal() as db:
+            competition = await db.get(Competition, comp)
+            revoked = await regrade(
+                db,
+                competition=competition,
+                challenge=await db.get(Challenge, chal),
+                subject=subject,
+                row=await db.get(Submission, outcome.submission.id),
+                correct=False,
+            )
+            await db.commit()
+        assert revoked.revoked
+        await emit_regrade(
+            revoked,
+            competition_id=comp,
+            challenge_id=chal,
+            user_id=actor_id,
+            team_id=subject.team_id,
+        )
+        frame = await ws.receive_json()
+        assert frame["frozen"] is True
+        assert {e["name"]: e["points"] for e in frame["entries"]}["Act"] == 0
+
+
+async def test_frozen_scoreboard_room_cannot_be_rearmed_by_a_silent_board_change(
+    client,
+):
+    """Regression for the board-comparison design: the frozen board also moves
+    with no event of its own — a captain renames their team, a new team joins —
+    and the next post-cutoff solve then carried that change out, timed to the
+    solve. The room decides from the triggering event instead, so a post-cutoff
+    solve stays silent whatever changed in between."""
+    comp, chal = await _competition_with_challenge(client)
+    admin = await admin_token(client)
+    spy = await _joined_participant(client, comp, "spy@example.com", "Spy")
+    v1 = await _joined_participant(client, comp, "v1@example.com", "V1")
+    v2 = await _joined_participant(client, comp, "v2@example.com", "V2")
+    r = await client.post(
+        f"/api/competitions/{comp}/scoreboard/freeze", json={}, headers=_auth(admin)
+    )
+    assert r.status_code == 200
+    submit = f"/api/competitions/{comp}/challenges/{chal}/submit"
+
+    async with WsTestClient(main.app, f"/ws/scoreboard/{comp}") as ws:
+        await ws.send_json({"token": spy})
+        assert (await ws.receive_json())["type"] == "auth_ok"
+        assert (await ws.receive_json())["frozen"] is True
+
+        renamed = await client.patch(
+            f"/api/competitions/{comp}/teams/me",
+            json={"name": "Spy2"},
+            headers=_auth(spy),
+        )
+        assert renamed.status_code == 200, renamed.text
+        solved = await client.post(submit, json={"flag": "flag{win}"}, headers=_auth(v1))
+        assert solved.json()["correct"] is True
+        await _drain_and_expect_silence(ws)
+
+        await _joined_participant(client, comp, "late@example.com", "Late")
+        solved = await client.post(submit, json={"flag": "flag{win}"}, headers=_auth(v2))
+        assert solved.json()["correct"] is True
+        await _drain_and_expect_silence(ws)
 
 
 async def test_challenge_presence_room_closed_to_competitors_unless_running(client):

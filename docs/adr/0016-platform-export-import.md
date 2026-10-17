@@ -104,7 +104,7 @@ that permission, decided in one place (`routers/site_settings._section_refusals`
 
 | Section | Export | Import |
 |---|---|---|
-| `site_settings` | no further grant | no further grant |
+| `site_settings` | no further grant | no further grant, but a row that would change mail delivery (SMTP server, port, credentials, TLS, From address) needs the whole catalog (GHSA-mwhq-j3jg-p339) |
 | `users` | the whole permission catalog (an Administrator): it carries every account's password hash and email | `manage_users` — additive, never touches an existing account |
 | `roles` | `manage_roles` | `manage_roles`, plus grant containment |
 | `competitions` | every competition-scope permission site-wide, plus `create_competition` | the same |

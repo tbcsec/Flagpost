@@ -23,7 +23,7 @@ from sqlalchemy.orm import undefer
 from auth.containment import holds_every_permission
 from auth.deps import require_permission
 from auth.membership import effective_permissions
-from auth.permissions import ALL_PERMISSION_KEYS, PERMISSIONS_BY_KEY, Scope
+from auth.permissions import PERMISSIONS_BY_KEY, Scope
 from config import settings as app_config
 from db import get_db, utcnow
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
@@ -277,7 +277,7 @@ async def _section_refusals(
     is the view_audit_log read, but importing it writes entries the log then
     presents as recorded history, so no narrower grant may do it."""
     held = set((await effective_permissions(db, user.id))["global"])
-    administrator = ALL_PERMISSION_KEYS <= held
+    administrator = await holds_every_permission(db, user)
     refusals: dict[str, str] = {}
     if "roles" in sections and "manage_roles" not in held:
         refusals["roles"] = "The roles section requires the Manage roles permission"
@@ -319,7 +319,9 @@ async def backup_sections(
 ) -> list[str]:
     """The sections this user may export (or, with ``direction=import``,
     import), in display order — the panel offers only those, so it never
-    presents a section that would 403."""
+    presents a section its grant would refuse. (A site_settings import can
+    still be refused for its content: one changing mail delivery needs an
+    Administrator.)"""
     refusals = await _section_refusals(db, user, backup.SECTIONS, direction)
     return [section for section in backup.SECTIONS if section not in refusals]
 

@@ -73,7 +73,9 @@ Two depend on the direction: accounts import with *manage users* but export
 (every password hash and email) only for a full Administrator, and the audit
 log exports with *view audit log* but imports only for a full
 Administrator. Custom pages travel with site settings only for holders of
-*manage pages*. A delegate is offered only the sections they may move.
+*manage pages*, and a file whose site settings would change the mail server
+or From address imports only for a full Administrator. A delegate is offered
+only the sections they may move.
 
 !!! note "What travels, and what doesn't"
     The file holds password and flag hashes, emails, uploaded files and

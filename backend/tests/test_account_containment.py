@@ -295,6 +295,8 @@ async def test_settings_delegate_cannot_redirect_mail_delivery(client):
         {"smtp_username": "me"},
         {"smtp_starttls": False},
         {"smtp_password": "secret"},
+        # The From address is the envelope sender: bounces return there.
+        {"smtp_from": "bounces@attacker.example"},
     ):
         resp = await client.put(
             "/api/site-settings/operational", json={**base, **change}, headers=_auth(token)
@@ -304,7 +306,7 @@ async def test_settings_delegate_cannot_redirect_mail_delivery(client):
     # Leaving the transport as it is keeps the rest of the page theirs.
     ok = await client.put(
         "/api/site-settings/operational",
-        json={**base, "smtp_from": "ctf@example.com"},
+        json={**base, "registration_open": False},
         headers=_auth(token),
     )
     assert ok.status_code == 200, ok.text
@@ -315,6 +317,41 @@ async def test_settings_delegate_cannot_redirect_mail_delivery(client):
         headers=_auth(admin),
     )
     assert by_admin.status_code == 200, by_admin.text
+
+
+async def test_stray_whitespace_in_stored_mail_settings_is_no_change(client):
+    """The settings form trims what it sends back, so a host or username stored
+    with stray whitespace (an older client, an import) must still read as
+    unchanged — or a settings delegate couldn't save the page at all."""
+    from models.site_settings import SITE_SETTINGS_ID, SiteSettings
+
+    admin = await admin_token(client)
+    await client.get("/api/site-settings/operational", headers=_auth(admin))
+    async with SessionLocal() as db:
+        row = await db.get(SiteSettings, SITE_SETTINGS_ID)
+        row.smtp_host = "  smtp.example.com "
+        row.smtp_username = ""
+        await db.commit()
+    token, user_id = await _register(client, "trimdesk")
+    await _grant_global(user_id, "Settings desk", ["manage_site_settings"])
+    resp = await client.put(
+        "/api/site-settings/operational",
+        json={"registration_open": False, "smtp_host": "smtp.example.com", "smtp_username": None},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200, resp.text
+
+
+async def test_user_delegate_cannot_remove_an_administrators_avatar(client):
+    admin = await admin_token(client)
+    admin_id = await _me(client, admin)
+    _, player_id = await _register(client, "pictured")
+    desk = await _help_desk(client)
+    refused = await client.delete(f"/api/users/{admin_id}/avatar", headers=_auth(desk))
+    assert refused.status_code == 403, refused.text
+    # An ordinary player is still theirs to moderate (no picture set: 404).
+    served = await client.delete(f"/api/users/{player_id}/avatar", headers=_auth(desk))
+    assert served.status_code == 404, served.text
 
 
 async def test_assignment_by_id_lands_on_exactly_that_account(client):
@@ -365,6 +402,7 @@ async def test_settings_delegate_cannot_redirect_mail_delivery_by_import(client)
     for change in (
         {"smtp_host": "mail.attacker.example"},
         {"smtp_port": 2525},
+        {"smtp_from": "bounces@attacker.example"},
         {"smtp_password": "secret"},
     ):
         tampered = {**document, "data": {"site_settings": [{**row, **change}]}}

@@ -469,6 +469,13 @@ async def read_operational_settings(
     )
 
 
+def _blank_to_none(value: str | None) -> str | None:
+    """A mail-transport text field as stored: trimmed, and blank means unset —
+    the form trims, so a stored value with stray whitespace must still compare
+    equal to what it sends back."""
+    return (value or "").strip() or None
+
+
 @router.put("/operational", response_model=OperationalSettingsOut)
 async def update_operational_settings(
     body: OperationalSettingsUpdate,
@@ -488,13 +495,14 @@ async def update_operational_settings(
     # point it at their own server can take over any account, Administrators
     # included. So changing the transport — server, port, credentials, TLS —
     # needs the whole catalog, not just manage_site_settings
-    # (GHSA-mwhq-j3jg-p339). The From address only labels mail, so it stays
-    # with the settings grant.
+    # (GHSA-mwhq-j3jg-p339). So does the From address: it is the envelope
+    # sender too, where bounces (often quoting the whole message) return.
     transport_changed = (
-        (body.smtp_host or None) != settings.smtp_host
+        _blank_to_none(body.smtp_host) != _blank_to_none(settings.smtp_host)
         or body.smtp_port != settings.smtp_port
-        or (body.smtp_username or None) != settings.smtp_username
+        or _blank_to_none(body.smtp_username) != _blank_to_none(settings.smtp_username)
         or body.smtp_starttls != settings.smtp_starttls
+        or _blank_to_none(body.smtp_from) != _blank_to_none(settings.smtp_from)
         or body.smtp_password is not None
     )
     if transport_changed and not await holds_every_permission(db, current_user):
@@ -511,9 +519,9 @@ async def update_operational_settings(
         settings.username_changes_enabled = body.username_changes_enabled
     if body.skills_enabled is not None:
         settings.skills_enabled = body.skills_enabled
-    settings.smtp_host = body.smtp_host or None
+    settings.smtp_host = _blank_to_none(body.smtp_host)
     settings.smtp_port = body.smtp_port
-    settings.smtp_username = body.smtp_username or None
+    settings.smtp_username = _blank_to_none(body.smtp_username)
     settings.smtp_from = body.smtp_from
     settings.smtp_starttls = body.smtp_starttls
     # Write-only password: only replace it when a new value is supplied.

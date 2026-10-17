@@ -747,8 +747,9 @@ stating, since other features rely on them:
   Administrator. The grant side has no floor: a role delegate removes only what
   they hold, Participant included. Controls that reach every account at once
   need the whole catalog: changing mail delivery (SMTP server, port,
-  credentials, TLS) — on the settings page or through a backup's
-  `site_settings` section — since every password-reset link travels through it.
+  credentials, TLS, and the From address, which is also where bounces return)
+  — on the settings page or through a backup's `site_settings` section — since
+  every password-reset link travels through it.
   Likewise `manage_auth_providers` is administrator-equivalent by nature — an
   identity provider can vouch for any verified email — so grant it as such.
   The Administrator holds the whole catalog and is unaffected.

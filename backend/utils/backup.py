@@ -728,11 +728,13 @@ async def _assert_import_within_grant(
         )
 
 
-# The mail transport: where every password-reset link is delivered. Changing it
-# needs an Administrator on the operational settings route (GHSA-mwhq-j3jg-p339);
-# the site_settings section must not be a way around that.
+# The mail transport: where every password-reset link is delivered (and, via
+# the From address, where bounces return). Changing it needs an Administrator on
+# the operational settings route (GHSA-mwhq-j3jg-p339); the site_settings
+# section must not be a way around that.
 _MAIL_TRANSPORT_COLUMNS = (
-    "smtp_host", "smtp_port", "smtp_username", "smtp_starttls", "smtp_password",
+    "smtp_host", "smtp_port", "smtp_username", "smtp_from", "smtp_starttls",
+    "smtp_password",
 )
 
 

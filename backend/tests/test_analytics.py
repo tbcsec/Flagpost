@@ -9,6 +9,7 @@ from sqlalchemy import select
 from db import SessionLocal
 from models.competition import Competition
 from tests.conftest import admin_token
+from tests.test_csv_safe import formula_cells
 
 
 def _auth(token: str) -> dict:
@@ -258,14 +259,16 @@ async def test_analytics_module_can_be_disabled(client):
 async def test_submissions_export_neutralises_csv_formula_injection(client):
     """GHSA-352q / F7: the `value` column is the submitted flag string — fully
     competitor-controlled — so a guess a spreadsheet would evaluate as a formula
-    is escaped in the dispute export an organiser opens."""
-    import csv as _csv
-
+    is escaped in the dispute export an organiser opens — including a lead after
+    an embedded ';', comma, TAB or line break, where a ';'-list-separator locale,
+    a TAB import or a row ended early starts a new cell (GHSA-352q-g5xh-3299)."""
     comp = await _competition(client)
     chal = await _challenge(client, comp, "C", 100, "flag{real}")
     mallory = await _participant(client, comp, "mallory@example.com")
     payload = "=cmd|' /C calc'!A0"
     await _submit(client, comp, chal, mallory, payload)  # wrong guess, recorded
+    for guess in ("flag{x};=1+1", "flag{x}\t-1", "flag{x}\n@SUM(1)", "flag{x}\nok,+1"):
+        await _submit(client, comp, chal, mallory, guess)
 
     judge = await _judge(client, comp, "judge@example.com")
     export = await client.get(
@@ -274,5 +277,6 @@ async def test_submissions_export_neutralises_csv_formula_injection(client):
     assert export.status_code == 200
     body = export.text
     assert "'=cmd" in body  # the submitted-flag cell is neutralised
-    rows = list(_csv.reader(body.splitlines()))
-    assert not any(cell[:1] in "=+-@" for row in rows for cell in row if cell)
+    assert "flag{x};'=1+1" in body and "flag{x}\t'-1" in body
+    assert "flag{x}\n'@SUM(1)" in body and "flag{x}\nok,'+1" in body
+    assert formula_cells(body) == []

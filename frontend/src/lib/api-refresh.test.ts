@@ -35,6 +35,27 @@ describe("session refresh", () => {
     expect(order).toEqual(["lock:flagpost-auth-refresh", "fetch", "unlock"]);
   });
 
+  it("refreshes without the lock when the browser refuses it", async () => {
+    const request = vi.fn(async () => {
+      throw new DOMException("blocked", "SecurityError");
+    });
+    vi.stubGlobal("navigator", { ...navigator, locks: { request } });
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(session), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(authApi.restore()).resolves.toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("bounds the refresh request", async () => {
+    vi.stubGlobal("navigator", { ...navigator, locks: undefined });
+    const fetchMock = vi.fn(
+      async (_url: string, init?: RequestInit) =>
+        new Response(JSON.stringify(session), { status: init?.signal ? 200 : 500 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(authApi.restore()).resolves.toBe(true);
+  });
+
   it("still refreshes where Web Locks are unavailable", async () => {
     vi.stubGlobal("navigator", { ...navigator, locks: undefined });
     const fetchMock = vi.fn(async () => new Response(JSON.stringify(session), { status: 200 }));

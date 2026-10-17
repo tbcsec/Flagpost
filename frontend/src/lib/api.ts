@@ -200,12 +200,19 @@ export class ApiError extends Error {
 
 let refreshPromise: Promise<boolean> | null = null;
 
+/** Every tab waits on the cross-tab refresh lock, so an attempt is bounded. */
+const REFRESH_TIMEOUT_MS = 15_000;
+
 async function runRefresh(): Promise<boolean> {
   let res: Response;
   try {
     res = await fetch(`${API_URL}/api/auth/refresh`, {
       method: "POST",
       credentials: "include",
+      signal:
+        typeof AbortSignal.timeout === "function"
+          ? AbortSignal.timeout(REFRESH_TIMEOUT_MS)
+          : undefined,
     });
   } catch {
     // Network error — the backend is unreachable (not running, CORS, offline).
@@ -231,8 +238,19 @@ async function runRefresh(): Promise<boolean> {
 function refreshOnce(): Promise<boolean> {
   if (!refreshPromise) {
     const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+    let started = false;
     const attempt = locks
-      ? locks.request("flagpost-auth-refresh", runRefresh)
+      ? locks
+          .request("flagpost-auth-refresh", () => {
+            started = true;
+            return runRefresh();
+          })
+          // A lock refused outright (site data blocked) mustn't strand the
+          // app: refresh without it, as browsers without Web Locks do.
+          .catch((err: unknown) => {
+            if (started) throw err;
+            return runRefresh();
+          })
       : runRefresh();
     refreshPromise = attempt.finally(() => {
       refreshPromise = null;

@@ -325,9 +325,10 @@ async def register(
 
 async def _directory_login(
     db: AsyncSession, identifier: str, password: str, rate_limiter: RateLimiter
-) -> User | None:
+) -> tuple[User | None, str | None]:
     """Offer the submitted credentials to each enabled LDAP directory
-    (ADR-0022 §5), returning the resolved local user on the first success.
+    (ADR-0022 §5), returning the resolved local user on the first success,
+    with the throttle key the caller clears once the login is admitted.
 
     Runs only after local verification failed — the ADR-0017 owner and any
     real-password account never touch a directory, and a returning LDAP user
@@ -346,18 +347,19 @@ async def _directory_login(
         )
     ).all()
     if not providers:
-        return None
-    # The directory's own budget (GHSA-vv68). It matches identifiers more
-    # loosely than the local lookup (width, case folding, formatting
+        return None, None
+    # Each directory's own budget (GHSA-vv68). A directory matches identifiers
+    # more loosely than the local lookup (width, case folding, formatting
     # characters), so it's keyed on the identifier folded as far — hashed, as
-    # folding can lengthen it. Only a directory success clears it: a local
-    # success, perhaps on a look-alike or a same-named local account, says
-    # nothing about the directory entry being guessed.
-    directory_key = (
-        "login-dir:"
-        + hashlib.sha256(directory_match_key(identifier).encode()).hexdigest()
-    )
-    await _throttle(rate_limiter, directory_key)
+    # folding can lengthen it — and per directory. A guess spends every
+    # directory's budget; only a success in that directory clears its own: a
+    # local success (perhaps on a look-alike or a same-named local account), or
+    # an entry with the same uid in another directory, says nothing about the
+    # entry being guessed.
+    digest = hashlib.sha256(directory_match_key(identifier).encode()).hexdigest()
+    keys = {provider.id: f"login-dir:{provider.id}:{digest}" for provider in providers}
+    for key in keys.values():
+        await _throttle(rate_limiter, key)
     for provider in providers:
         config = provider_config_or_none(provider)
         if config is None:
@@ -409,9 +411,8 @@ async def _directory_login(
                 provider.slug,
             )
             continue
-        await rate_limiter.reset(directory_key)
-        return user
-    return None
+        return user, keys[provider.id]
+    return None, None
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -442,12 +443,13 @@ async def login(
     # workers under a login storm.
     target_hash = user.password_hash if user is not None else _DUMMY_PASSWORD_HASH
     password_ok = await averify_password(body.password, target_hash)
+    directory_key: str | None = None
     if user is None or not password_ok:
         # Local failure falls through to the directory before 401ing
         # (ADR-0022 §5). Both failure shapes take this branch, so the accepted
         # residual timing signal (a bind round-trip on the miss path) doesn't
         # distinguish "no such user" from "wrong password".
-        user = await _directory_login(
+        user, directory_key = await _directory_login(
             db, body.identifier, body.password, rate_limiter
         )
     if user is None:
@@ -469,8 +471,11 @@ async def login(
     # attacker filling a known user's per-identifier login bucket with junk can't
     # lock them out, because their correct password gets through in any freed slot
     # and resets the count. Failed attempts still accrue, so brute-force stays
-    # throttled; it's the very key _throttle recorded.
+    # throttled; it's the very key _throttle recorded. A directory success also
+    # clears that directory's budget — only now, once the account is admitted.
     await rate_limiter.reset(login_key)
+    if directory_key is not None:
+        await rate_limiter.reset(directory_key)
     access_token = await _issue_session(db, user, response)
     return TokenResponse(access_token=access_token, user=UserOut.model_validate(user))
 

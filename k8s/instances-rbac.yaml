@@ -96,6 +96,17 @@ subjects:
 # instance stays DNS-only. Requires a policy-enforcing CNI (Calico / Cilium /
 # k3s's kube-router) — the egress_enforcement validate leg checks it is enforced.
 #
+# The DNS rule is scoped to the cluster DNS pods, EXACTLY like each instance's
+# own policy (GHSA-vgrr; `_dns_egress_rule` in
+# backend/utils/provisioner_kubernetes.py — a backend test pins the two
+# together). Additivity cuts both ways: because this baseline selects every
+# instance pod, a port-53 rule here with no `to` would allow port 53 to ANY
+# address and undo the per-instance scoping. The selector matches a standard
+# CoreDNS/kube-dns install (`k8s-app=kube-dns` in `kube-system`); if your DNS
+# pods are labelled differently, instance DNS fails closed until they carry
+# that label. Upgrading from an earlier release: re-apply this file
+# (`kubectl apply -f k8s/instances-rbac.yaml`).
+#
 # It selects every pod EXCEPT the ephemeral ``flagpost.io/probe`` pods that
 # "Test connection" runs: the egress-enforcement leg's positive control is an
 # UNRESTRICTED probe that must reach the internet to prove the node has egress at
@@ -117,6 +128,14 @@ spec:
       - { key: flagpost.io/probe, operator: DoesNotExist }
   policyTypes: ["Egress"]
   egress:
-    - ports:
+    # DNS to the cluster DNS pods only. ONE `to` entry carrying BOTH selectors
+    # (namespace AND pod) — split into two entries they would OR, admitting
+    # every pod in kube-system.
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
         - { protocol: UDP, port: 53 }
         - { protocol: TCP, port: 53 }

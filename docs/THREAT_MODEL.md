@@ -49,40 +49,46 @@ for them (they are a kubelet/node setting), so they are an operator
 responsibility on the challenge nodes, not something Flagpost can pin in the
 manifest. cpu/memory limits still bound the memory-heavy case.
 
+An author's cpu/memory/PID overrides are bounded at authoring — the editor, the
+ctfcli import and the backup import alike: finite, whole numbers for memory and
+PIDs, and floors of 0.01 CPU / 16 MiB / 16 PIDs — and clamped to the same bounds
+again where each provisioner composes the runtime spec, so no stored value
+(including one saved before the bounds existed) reaches a runtime as `0`, which
+Docker reads as *unlimited* (GHSA-vgrr).
+
 ## How the control plane / peers / metadata are isolated
 
 ### Docker
 **Peer isolation is enforced** for published-port (TCP) and `none` instances
-(GHSA-vgrr): each such instance gets its **own** throwaway bridge,
+(GHSA-vgrr): each TCP instance gets its **own** throwaway bridge,
 `flagpost-net-<instance_id>`, instead of sharing one flat `flagpost-instances`
-bridge — so a competitor who gets code execution in their own box has no route to
-a neighbour's over the Docker network (they sit on different bridges). Competitor
-reachability is unchanged: a TCP instance is still reached through its *published
-host port* (a normal bridge NATs it in), never over the shared network. The
-per-instance bridge is created before the container, removed with it, and any one
-orphaned by a crash is swept by the reaper. This needs no extra socket-proxy
-scope — `NETWORKS` + `POST` (already required for the isolation leg and container
-create) cover network create/inspect/remove — and the probe leg exercises the
-whole path at Test-connection time.
+bridge, and a `none` instance gets no network at all (`NetworkMode: none`) — so a
+competitor who gets code execution in their own box has no route to a
+neighbour's over the Docker network. Competitor reachability is unchanged: a TCP
+instance is still reached through its *published host port* (a normal bridge
+NATs it in), never over the shared network. The per-instance bridge is created
+before the container, removed with it, and any one orphaned by a crash is swept
+by the reaper. This needs no extra socket-proxy scope — `NETWORKS` + `POST`
+(already required for the isolation leg and container create) cover network
+create/inspect/remove — and the probe leg exercises the whole path at
+Test-connection time.
 
 **Egress isolation** (to the internet / control plane / metadata) remains a
 **host-firewall** responsibility (ADR-0036 amendment): a normal bridge is
 required — an `internal` network can't publish a TCP port — so the operator must
-drop forwarded traffic from the instance subnet except the competitor-facing
-ports, and always block `169.254.169.254`. The `network_isolation` Test-connection
+drop forwarded traffic from the instance subnets (the shared bridge and every
+`flagpost-net-*` one) except the competitor-facing ports, and always block
+`169.254.169.254`. The `network_isolation` Test-connection
 leg *reminds* of this; it cannot verify firewall rules. The privilege-posture leg
 proves the endpoint is a restricted socket **proxy**, never a raw
 `/var/run/docker.sock` (the app can't hold host-root through a mounted socket).
 
-The same firewall must drop **inter-instance** traffic on the bridge. Docker's
-default `icc=true` lets any container on the shared bridge open a connection to
-any other, so a competitor who exploits their own instance (the intended
-pwn/web solve) can reach a neighbour's on the same bridge by IP:port — which
-also sidesteps the unguessable-subdomain control on HTTP instances (GHSA-vgrr).
-`icc=false` would block this but breaks the shared Caddy ingress, so peer
-isolation on the docker backend is the operator's firewall rule (or a
-per-challenge network), **not** the default bridge — unlike the kubernetes
-backend, which enforces it in-cluster. Treat the shared bridge as a shared LAN.
+The shared `flagpost-instances` bridge now carries only `exposure=http`
+instances (and the Test-connection probe). Docker's default `icc=true` lets
+containers on one bridge connect to each other, and `icc=false` would break the
+shared Caddy ingress, so HTTP instances are **not** isolated from each other on
+the docker backend — treat that bridge as a shared LAN (see Residual risks).
+The kubernetes backend enforces peer isolation in-cluster for every exposure.
 
 ### Kubernetes
 Isolation is **enforced in-cluster** by a per-instance NetworkPolicy (the upgrade
@@ -93,13 +99,18 @@ over docker's documentation-only egress):
   that can't initiate any connection can't reach a neighbour. The DNS rule is
   scoped to the cluster DNS pods (`k8s-app=kube-dns` in `kube-system`), not any
   host on port 53 — otherwise "DNS-only" would itself be a full outbound channel
-  (DNS tunnelling / a reverse shell to `attacker:53`) (GHSA-vgrr).
+  (DNS tunnelling / a reverse shell to `attacker:53`) (GHSA-vgrr). What the
+  scoping can't remove is the cluster resolver's own recursion — see Residual
+  risks.
 - **allow mode** — egress everywhere *except* the metadata IPs (both families)
   and, when `k8s_cluster_cidr` is configured, the cluster's pod/service ranges —
   so peers and the control plane stay unreachable even for an
   internet-legitimate challenge. A namespace **default-deny-egress baseline**
   (in `k8s/instances-rbac.yaml`) covers the startup window before a pod's own
-  policy is programmed.
+  policy is programmed. NetworkPolicies are additive and the baseline selects
+  every instance pod, so its DNS rule carries the same kube-dns scope as the
+  per-instance one — a looser rule there would widen every instance's policy
+  (GHSA-vgrr; a backend test pins the manifest to the provisioner).
 
 This all depends on a **policy-enforcing CNI**. Flannel *accepts* NetworkPolicy
 objects but does not enforce them — so the `egress_enforcement` Test-connection
@@ -112,22 +123,27 @@ no-policy positive control, so an air-gapped node can't produce a false pass).
   operator must run Calico/Cilium/kube-router. *Detected, not prevented.*
 - **`k8s_cluster_cidr` unset in allow mode** → peers/control plane reachable by
   IP for internet-enabled challenges. Recommended in the UI; documented here.
-- **Docker inter-instance reachability** → the shared bridge does not isolate
-  peers; the operator's host firewall must drop bridge-internal traffic (or run
-  per-challenge networks). The kubernetes backend enforces this in-cluster; the
-  docker backend does not (GHSA-vgrr). *Operator-owned.*
+- **Recursive DNS through the cluster resolver** → deny mode still lets a pod
+  query kube-dns, which resolves external names upstream on its behalf, so data
+  encoded in query names (and answers) can cross the boundary as a
+  low-bandwidth channel (DNS tunnelling). Scoping the rule to kube-dns removes
+  direct port-53 egress, not this. An operator who needs it closed can limit
+  what the cluster resolver answers for the instance pods (e.g. cluster names
+  only), or run instances on a cluster whose resolver doesn't forward.
+  *Accepted / operator-owned.*
 - **Kubernetes PID/fd exhaustion** → a fork bomb can pressure the node. Operator
   sets a kubelet `--pod-max-pids`. *(Docker pins this; k8s can't in-manifest.)*
 - **Docker HTTP-instance peers share a bridge** → per-instance bridges isolate
-  TCP/`none` instances, but `exposure=http` instances stay on the shared
-  `flagpost-instances` bridge because the caddy-docker-proxy ingress must share a
-  network to reach them by IP. A web-app RCE in one HTTP instance can therefore
-  reach a neighbouring HTTP instance. Kubernetes has no such gap (NetworkPolicy
-  covers all exposures). Isolating Docker HTTP peers too is a scoped follow-up —
-  connect the ingress to each per-instance bridge (opt-in, since it needs the
-  operator's ingress container named and `CADDY_INGRESS_NETWORKS` widened). Lower
-  risk than the TCP case: an HTTP competitor drives the app through the browser,
-  not a shell. *Mitigated for TCP/`none`; documented for HTTP.*
+  TCP instances (and `none` has no network at all), but `exposure=http`
+  instances stay on the shared `flagpost-instances` bridge because the
+  caddy-docker-proxy ingress must share a network to reach them by IP. A web-app
+  RCE in one HTTP instance can therefore reach a neighbouring HTTP instance.
+  Kubernetes has no such gap (NetworkPolicy covers all exposures). Isolating
+  Docker HTTP peers too is a scoped follow-up — connect the ingress to each
+  per-instance bridge (opt-in, since it needs the operator's ingress container
+  named and `CADDY_INGRESS_NETWORKS` widened). Lower risk than the TCP case: an
+  HTTP competitor drives the app through the browser, not a shell. *Mitigated
+  for TCP/`none`; documented for HTTP.*
 - **The socket proxy / API can't inspect payloads** → isolation rests on the
   app-composed hardened spec plus the recommended **sacrificial challenge host**
   (a separate box/cluster from the control plane). Don't run instances on the

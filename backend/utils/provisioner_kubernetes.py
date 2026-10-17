@@ -53,6 +53,7 @@ from utils.provisioners import (
     Provisioner,
     ProvisionerError,
     register_provisioner,
+    resource_limit,
 )
 
 logger = logging.getLogger(__name__)
@@ -140,6 +141,35 @@ _READY_BUDGET = 120.0
 # and — with automountServiceAccountToken:false, so no token is ever mounted —
 # gives the pod an identity that can do nothing even if that changed.
 _INSTANCE_SA = "flagpost-instance"
+
+
+def _dns_egress_rule() -> dict[str, Any]:
+    """The one port-53 egress rule an instance pod may have (GHSA-vgrr): DNS to
+    the cluster DNS pods only. Without a ``to`` selector the port-53 allowance
+    reaches *any* host, reopening a full outbound channel despite deny mode
+    advertising "no internet". The selector matches a standard CoreDNS/kube-dns
+    install (``k8s-app=kube-dns`` in ``kube-system``); an operator whose DNS
+    lives elsewhere must relabel or widen it — but the safe default is a scoped
+    rule, not egress-to-any.
+
+    ``k8s/instances-rbac.yaml``'s namespace default-deny-egress baseline carries
+    this exact rule too, and must: NetworkPolicies are additive and the baseline
+    selects every instance pod, so a looser port-53 rule there reopens what this
+    one closes. ``test_shipped_baseline_networkpolicy_scopes_dns_to_kube_dns``
+    pins the manifest to this function. (What scoping can't stop is a query the
+    cluster DNS itself recurses upstream — a residual in docs/THREAT_MODEL.md.)
+    A fresh dict per call, so no caller can mutate a shared one."""
+    return {
+        "to": [
+            {
+                "namespaceSelector": {
+                    "matchLabels": {"kubernetes.io/metadata.name": "kube-system"}
+                },
+                "podSelector": {"matchLabels": {"k8s-app": "kube-dns"}},
+            }
+        ],
+        "ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}],
+    }
 
 
 def _resource_name(instance_id: str) -> str:
@@ -323,9 +353,12 @@ class KubernetesProvisioner(Provisioner):
         field, so they are an **operator responsibility** on the challenge nodes
         — called out in the deploy guide + threat model (slice 7), not silently
         assumed. cpu/memory limits below still bound the memory-heavy case."""
-        limits = spec.resource_limits or {}
-        cpu = float(limits.get("cpu", self._cfg.default_cpu))
-        memory_mb = int(limits.get("memory_mb", self._cfg.default_memory_mb))
+        # Clamped to the floors/caps right here, where they become runtime
+        # limits (GHSA-vgrr): a stored row may predate the authoring-schema
+        # floors, and an int()-truncated fraction would otherwise emit "0Mi".
+        limits = spec.resource_limits
+        cpu = resource_limit(limits, "cpu", self._cfg.default_cpu)
+        memory_mb = resource_limit(limits, "memory_mb", self._cfg.default_memory_mb)
 
         env = dict(spec.env)
         if spec.flag_plaintext is not None:
@@ -475,26 +508,9 @@ class KubernetesProvisioner(Provisioner):
         """Egress half of the per-instance NetworkPolicy (#320 D5) — the
         load-bearing isolation control. DNS is always allowed (a pod needs it to
         resolve anything, and kube-dns lives in the cluster range that ``allow``
-        mode otherwise excepts, so it is carved back in explicitly).
-
-        The DNS rule is scoped to the cluster DNS pods (GHSA-vgrr): without a
-        ``to`` selector the port-53 allowance reaches *any* host, reopening a full
-        outbound channel (DNS tunnelling, or a plain reverse shell to
-        ``attacker:53``) despite deny mode advertising "no internet". The default
-        selector matches a standard CoreDNS/kube-dns install (``k8s-app=kube-dns``
-        in ``kube-system``); an operator whose DNS lives elsewhere must relabel or
-        widen it — but the safe default is a scoped rule, not egress-to-any."""
-        dns = {
-            "to": [
-                {
-                    "namespaceSelector": {
-                        "matchLabels": {"kubernetes.io/metadata.name": "kube-system"}
-                    },
-                    "podSelector": {"matchLabels": {"k8s-app": "kube-dns"}},
-                }
-            ],
-            "ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}],
-        }
+        mode otherwise excepts, so it is carved back in explicitly), scoped to
+        the cluster DNS pods — see :func:`_dns_egress_rule`."""
+        dns = _dns_egress_rule()
         if self._cfg.egress_denied:
             # Deny mode (default): DNS only. Blocks the internet, the control
             # plane, peer instances and the metadata IP in one stroke — and

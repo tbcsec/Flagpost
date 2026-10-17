@@ -204,6 +204,52 @@ async def test_create_resource_overrides_and_fractional_cpu():
     assert hc["PidsLimit"] == 64
 
 
+@pytest.mark.parametrize(
+    "limits",
+    [
+        # Raw stored values that int()-truncate to 0 — Docker's UNLIMITED. The
+        # authoring schema now refuses them, but validate_shape isn't re-run at
+        # provision time, so a row stored before that fix still carries them.
+        {"cpu": 1e-10, "memory_mb": 0.5, "pids": 0.5},
+        {"cpu": 0, "memory_mb": 0, "pids": 0},
+        {"cpu": -1, "memory_mb": -1, "pids": -1},
+    ],
+)
+async def test_create_clamps_stored_limits_that_would_mean_unlimited(limits):
+    """GHSA-vgrr residual (defence in depth): the final runtime limits are
+    clamped to the floors where they're composed, never 0."""
+    router = (
+        _Router()
+        .on("POST", "/containers/create", httpx.Response(201, json={"Id": "x"}))
+        .on("POST", "/start", httpx.Response(204))
+    )
+    prov = DockerProvisioner(_cfg(), transport=router.transport())
+    await prov.create(_spec(resource_limits=limits))
+    hc = router.create_body()["HostConfig"]
+    assert hc["NanoCpus"] == 10_000_000  # 0.01 CPU, Docker's own minimum
+    assert hc["Memory"] == 16 * 1024 * 1024
+    assert hc["PidsLimit"] == 16
+
+
+async def test_create_clamps_nan_caps_and_bad_operator_defaults():
+    router = (
+        _Router()
+        .on("POST", "/containers/create", httpx.Response(201, json={"Id": "x"}))
+        .on("POST", "/start", httpx.Response(204))
+    )
+    # A NaN override falls back to the operator default; an over-cap one is
+    # capped; and an operator default that would itself mean unlimited is floored.
+    prov = DockerProvisioner(
+        _cfg(default_cpu=0.0, default_memory_mb=512, default_pids=0),
+        transport=router.transport(),
+    )
+    await prov.create(_spec(resource_limits={"memory_mb": float("nan"), "pids": 10**9}))
+    hc = router.create_body()["HostConfig"]
+    assert hc["NanoCpus"] == 10_000_000  # default_cpu 0 → floor
+    assert hc["Memory"] == 512 * 1024 * 1024  # NaN → default
+    assert hc["PidsLimit"] == 65536  # capped
+
+
 async def test_create_no_ports_uses_network_none():
     router = (
         _Router()

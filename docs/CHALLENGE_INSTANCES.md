@@ -59,14 +59,15 @@ This adds:
   reaches them here) and the Test-connection probe; **TCP/`none` instances do
   not use it** — see the next point.
 
-> **Peer isolation is automatic (GHSA-vgrr).** Each published-port (TCP) or
-> `none` instance is launched on its **own** throwaway bridge,
-> `flagpost-net-<instance_id>`, created and destroyed by Flagpost — so a
-> competitor who pops their own box can't reach a neighbour's over the Docker
-> network. You don't create these; the app does (it needs only the `NETWORKS` +
-> `POST` proxy scope already listed above). `exposure=http` instances stay on the
-> shared `flagpost-instances` bridge, so HTTP peers are *not* isolated from each
-> other yet (a documented residual — see `docs/THREAT_MODEL.md`).
+> **Peer isolation is automatic (GHSA-vgrr).** Each published-port (TCP)
+> instance is launched on its **own** throwaway bridge,
+> `flagpost-net-<instance_id>`, created and destroyed by Flagpost, and a `none`
+> instance gets no network at all — so a competitor who pops their own box can't
+> reach a neighbour's over the Docker network. You don't create these; the app
+> does (it needs only the `NETWORKS` + `POST` proxy scope already listed above).
+> `exposure=http` instances stay on the shared `flagpost-instances` bridge, so
+> HTTP peers are *not* isolated from each other yet (a documented residual — see
+> `docs/THREAT_MODEL.md`).
 
 > **Egress control (do this for a real event).** A normal bridge lets instances
 > reach the internet and the host by default. Block outbound from the instance
@@ -192,7 +193,12 @@ kubectl config view --raw --minify \
 baseline** NetworkPolicy — a belt-and-suspenders that isolates a freshly-created
 pod during the brief window before its own per-instance policy is programmed by
 the CNI (NetworkPolicies are additive, so an allow-mode instance's policy
-re-opens what it needs).
+re-opens what it needs). Its one allowance is DNS to the cluster DNS pods
+(`k8s-app=kube-dns` in `kube-system`), the same scope as each instance's own
+policy; if your DNS pods carry different labels, instance DNS fails closed until
+they carry that one. **Upgrading?** Re-apply the file
+(`kubectl apply -f k8s/instances-rbac.yaml`) so an existing namespace picks up
+the scoped DNS rule (GHSA-vgrr).
 
 Then in **Admin → Site settings → Instances**:
 

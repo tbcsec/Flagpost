@@ -162,6 +162,10 @@ async def test_backup_import_rejects_an_invalid_deployment_spec(client):
         {**base, "ports": ["1337"]},                        # strict: string port (no coercion)
         {k: v for k, v in base.items() if k != "backend"},  # missing NOT-NULL backend
         {**base, "backend": "nonsense"},                    # unknown backend
+        # GHSA-vgrr: limits a provisioner would int()-truncate to 0 (Docker's
+        # "unlimited"), and a NaN that passes every comparison.
+        {**base, "resource_limits": {"memory_mb": 0.5, "pids": 0.5}},
+        {**base, "resource_limits": {"cpu": float("nan")}},
     ]
     for bad in bad_rows:
         doc = copy.deepcopy(full_doc)

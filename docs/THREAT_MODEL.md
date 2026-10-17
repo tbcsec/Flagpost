@@ -99,7 +99,7 @@ over docker's documentation-only egress):
   that can't initiate any connection can't reach a neighbour. The DNS rule is
   scoped to the cluster DNS pods (`k8s-app=kube-dns` in `kube-system`), not any
   host on port 53 — otherwise "DNS-only" would itself be a full outbound channel
-  (DNS tunnelling / a reverse shell to `attacker:53`) (GHSA-vgrr).
+  (a reverse shell to `attacker:53`) (GHSA-vgrr).
 - **allow mode** — egress everywhere *except* the metadata IPs (both families)
   and, when `k8s_cluster_cidr` is configured, the cluster's pod/service ranges —
   so peers and the control plane stay unreachable even for an

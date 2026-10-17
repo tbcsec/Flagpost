@@ -597,7 +597,7 @@ _SCOPED_BASELINE = {"spec": {"egress": [_DNS_EGRESS]}}
 def _validate_router(
     *, cluster_admin: bool = False, egress_exit: int | None = 1, baseline_exit: int = 0,
     probe_running: bool = True, denied_rights: frozenset = frozenset(), namespace_ok: bool = True,
-    namespace_policy: dict | None = _SCOPED_BASELINE,
+    namespace_policy: dict | None = _SCOPED_BASELINE, namespace_policy_status: int = 200,
 ) -> _Router:
     """A router covering every call the staged validate() makes, with all legs
     green by default (good token, netpol accepted, the namespace baseline
@@ -623,7 +623,7 @@ def _validate_router(
     )
     policy_resp = (
         httpx.Response(404, json={"message": "not found"}) if namespace_policy is None
-        else httpx.Response(200, json=namespace_policy)
+        else httpx.Response(namespace_policy_status, json=namespace_policy)
     )
     return (
         _Router()
@@ -694,6 +694,15 @@ async def test_validate_flags_a_missing_namespace_baseline():
     leg = _leg(await prov.validate(), "baseline_policy")
     assert leg.ok is False
     assert "not found" in leg.detail and "k8s/instances-rbac.yaml" in leg.detail
+
+
+@pytest.mark.parametrize("status", [403, 500])
+async def test_validate_flags_an_unreadable_namespace_baseline(status):
+    router = _validate_router(namespace_policy={"message": "nope"}, namespace_policy_status=status)
+    prov = KubernetesProvisioner(_cfg(), transport=router.transport(), sleep=_nosleep, tcp_probe=_yes_dial)
+    leg = _leg(await prov.validate(), "baseline_policy")
+    assert leg.ok is False
+    assert "cannot read NetworkPolicy" in leg.detail
 
 
 async def test_validate_posture_rejects_an_overprivileged_token():

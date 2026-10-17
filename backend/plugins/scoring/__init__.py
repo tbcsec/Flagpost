@@ -17,6 +17,9 @@ from __future__ import annotations
 
 
 def setup(app, event_bus, db_factory) -> None:
+    import hashlib
+    import json
+
     from auth.deps import user_has_permission
     from models.competition import Competition
     from realtime import manager, register_room_type
@@ -53,11 +56,36 @@ def setup(app, event_bus, db_factory) -> None:
             return True
         return await user_has_permission(db, user.id, "challenge_edit", competition_id)
 
+    # Freeze containment (GHSA-r7j2): while the board is frozen, every member
+    # gets the same frozen board, so re-sending it on each post-cutoff solve,
+    # hint or adjustment sends nothing new — except the timing: an unchanged
+    # frame arriving right after a solve is the solve. So while frozen the room
+    # re-broadcasts only when the frozen board actually differs from the one its
+    # members hold: a backdated judge verdict or a revoked pre-cutoff solve
+    # still goes out, a post-cutoff solve doesn't. ``held`` is that per-
+    # competition digest — per worker, so after a restart, or on a worker that
+    # hasn't served the room yet, the first post-cutoff event can still send one
+    # redundant frame. Staff read the live board over REST (``?live=true``).
+    held: dict[str, str] = {}
+
+    def _digest(board: dict) -> str:
+        return hashlib.sha256(
+            json.dumps(board, sort_keys=True, default=str).encode()
+        ).hexdigest()
+
     async def snapshot(db, user, competition_id: str) -> dict:
         competition = await db.get(Competition, competition_id)
         # Cached read model (#87): a reconnect herd computes the board once, not
         # once per joining socket.
         board = await cached_scoreboard(db, competition)
+        if board["frozen"]:
+            # The first socket into an empty room sets what the room holds. A
+            # later joiner doesn't overwrite it: members already in the room may
+            # still be owed a change this joiner's fresher snapshot includes.
+            if manager.room_size("scoreboard", competition_id) == 0:
+                held[competition_id] = _digest(board)
+            else:
+                held.setdefault(competition_id, _digest(board))
         return {"type": "scoreboard", **board}
 
     register_room_type("scoreboard", authorize=authorize, snapshot=snapshot)
@@ -74,6 +102,13 @@ def setup(app, event_bus, db_factory) -> None:
             if competition is None:
                 return
             board = await compute_scoreboard(db, competition)
+        if not board["frozen"]:
+            held.pop(competition_id, None)
+        else:
+            digest = _digest(board)
+            if held.get(competition_id) == digest:
+                return
+            held[competition_id] = digest
         await manager.broadcast(
             "scoreboard", competition_id, {"type": "scoreboard", **board}
         )

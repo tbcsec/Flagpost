@@ -532,3 +532,41 @@ async def test_incorrect_guess_no_subject_value_when_penalty_off(client):
     r = (await client.post(submit, json={"flag": "London"}, headers=auth)).json()
     assert r["subject_value"] is None
     assert r["attempts_remaining"] == 1
+
+
+async def test_incorrect_guess_subject_value_uses_frozen_solve_count(client):
+    """GHSA-r7j2: on a dynamic challenge the reduced worth returned after a wrong
+    guess is derived from the solve count — so under a freeze it must use the
+    count as of the cutoff, like the card it replaces, not the live one."""
+    from utils.scoring import dynamic_value, penalised_value
+
+    admin = await admin_token(client)
+    initial, minp, decay, pct = 200, 20, 10, 25
+    comp = await _mc_competition(client, admin, limit=None, penalty=pct)
+    cid = await _mc_challenge(
+        client, admin, comp,
+        points=initial, scoring_type="dynamic", min_points=minp, decay=decay,
+    )
+    submit = f"/api/competitions/{comp}/challenges/{cid}/submit"
+
+    async def player(email):
+        token, uid = await _register(client, email)
+        await _assign_participant(uid, comp)
+        return _auth(token)
+
+    first = await player("first@example.com")
+    assert (await client.post(submit, json={"flag": "Paris"}, headers=first)).json()["correct"]
+    fr = await client.post(
+        f"/api/competitions/{comp}/scoreboard/freeze", json={}, headers=_auth(admin)
+    )
+    assert fr.status_code == 200
+    second = await player("second@example.com")
+    assert (await client.post(submit, json={"flag": "Paris"}, headers=second)).json()["correct"]
+
+    frozen_worth = penalised_value(dynamic_value(initial, minp, decay, 1), pct, 1)
+    live_worth = penalised_value(dynamic_value(initial, minp, decay, 2), pct, 1)
+    assert frozen_worth != live_worth
+    guesser = await player("guesser@example.com")
+    r = (await client.post(submit, json={"flag": "London"}, headers=guesser)).json()
+    assert r["correct"] is False
+    assert r["subject_value"] == frozen_worth

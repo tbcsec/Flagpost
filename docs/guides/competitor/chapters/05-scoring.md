@@ -38,6 +38,9 @@ without an account.
     Solves still count during the freeze — standings, including the
     scoreboard you see in Flagpost, just stop updating until the organisers
     unfreeze it. Don't panic when a late solve doesn't appear to move you.
+    For the same reason, a solve during the freeze doesn't tell you whether
+    you took first blood, nor — on a challenge whose value decays — how many
+    points it earned; both would give the hidden standings away.
 
 ## Rating challenges
 

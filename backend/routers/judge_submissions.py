@@ -444,9 +444,14 @@ async def get_problem_view(
     ).all()
     allowed = problem.allowed_languages if problem else None
     examples: list[ProblemExampleOut] = []
-    if problem is not None and any(t.get("sample") for t in problem.testcases or []):
-        cases = await asyncio.to_thread(td.load, storage, problem.object_key, problem.testcases)
-        for i, case in enumerate(c for c in cases if c.sample):
+    samples = [t for t in problem.testcases or [] if t.get("sample")] if problem else []
+    if samples:
+        # Only the examples are read: the hidden tests are never shown, so the
+        # page has no business inflating them (GHSA-4wrj). A sample's member
+        # name depends only on its place among the samples, so the sample
+        # entries alone address exactly their files.
+        cases = await asyncio.to_thread(td.load, storage, problem.object_key, samples)
+        for i, case in enumerate(cases):
             shown_in, cut_in = _display_text(case.input)
             shown_ans, cut_ans = _display_text(case.answer)
             examples.append(

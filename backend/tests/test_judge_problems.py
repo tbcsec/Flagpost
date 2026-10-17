@@ -4,6 +4,8 @@ limits / comparison / language overrides, the publish gate, and test data
 riding backup, clone, challenge delete and the competition purge. Nothing here
 runs code; judging arrives in #448."""
 
+import base64
+import copy
 import io
 import zipfile
 
@@ -534,6 +536,83 @@ async def test_backup_import_drops_a_foreign_object_key(client, object_storage):
     async with SessionLocal() as db:
         problem = await db.scalar(select(JudgeProblem))
     assert problem.object_key is None and problem.testcases == []
+
+
+def _zip_b64(members: dict[str, bytes], compression: int = zipfile.ZIP_STORED) -> str:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=compression) as zf:
+        for name, data in members.items():
+            zf.writestr(name, data)
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+async def test_backup_import_rebuilds_the_test_data(client, object_storage, monkeypatch):
+    """GHSA-4wrj: an imported test-data zip is held to the caps an upload is
+    and stored as a fresh build of what it holds, never as sent — the problem
+    page, the editor and the judge all read it. A member the manifest doesn't
+    name, a missing one, one over the per-file cap (refused from its header,
+    before anything inflates), a compression zipfile can't inflate in bounded
+    steps, or a broken archive rejects the import."""
+    admin, comp, chal = await _setup(client)
+    await _add(client, admin, comp, chal, "1 2", "3", sample=True)
+    await _add(client, admin, comp, chal, "4 5", "9")
+    async with SessionLocal() as db:
+        doc = await backup.export_data(db, object_storage, ["competitions"])
+    async with SessionLocal() as db:
+        await db.delete(await db.get(Competition, comp))
+        await db.commit()
+    exported = base64.b64decode(doc["data"]["judge_problems"][0]["_object_data"])
+    with zipfile.ZipFile(io.BytesIO(exported)) as zf:
+        members = {name: zf.read(name) for name in zf.namelist()}
+
+    def _with(blob: str) -> dict:
+        crafted = copy.deepcopy(doc)
+        crafted["data"]["judge_problems"][0]["_object_data"] = blob
+        return crafted
+
+    for blob in (
+        _zip_b64({**members, "data/secret/002.in": b"junk"}),
+        _zip_b64({k: v for k, v in members.items() if k != "data/secret/001.ans"}),
+        _zip_b64(members, zipfile.ZIP_BZIP2),
+        base64.b64encode(b"not a zip").decode(),
+    ):
+        async with SessionLocal() as db:
+            with pytest.raises(backup.ImportError_):
+                await backup.import_data(db, InMemoryStorage(), _with(blob), ["competitions"])
+
+    reads: list[str] = []
+    real_read = zipfile.ZipFile.read
+    with monkeypatch.context() as patch:
+        patch.setattr(td, "MAX_FILE_BYTES", 3)
+        patch.setattr(
+            zipfile.ZipFile, "read",
+            lambda self, name, pwd=None: reads.append(name) or real_read(self, name, pwd),
+        )
+        async with SessionLocal() as db:
+            with pytest.raises(backup.ImportError_):
+                await backup.import_data(db, InMemoryStorage(), doc, ["competitions"])
+    assert reads == []
+
+    # A sound archive — stored uncompressed, members out of order, sizes in the
+    # manifest wrong — is accepted, rebuilt in our own layout, and re-manifested.
+    crafted = _with(_zip_b64(dict(reversed(members.items()))))
+    for entry in crafted["data"]["judge_problems"][0]["testcases"]:
+        entry["input_bytes"] = 999
+    storage = InMemoryStorage()
+    async with SessionLocal() as db:
+        await backup.import_data(db, storage, crafted, ["competitions"])
+    async with SessionLocal() as db:
+        problem = await db.scalar(select(JudgeProblem))
+    assert [t["input_bytes"] for t in problem.testcases] == [4, 4]
+    with zipfile.ZipFile(io.BytesIO(storage.get(problem.object_key))) as zf:
+        assert zf.namelist() == [
+            "data/sample/001.in", "data/sample/001.ans", "data/secret/001.in", "data/secret/001.ans",
+        ]
+        assert {info.compress_type for info in zf.infolist()} == {zipfile.ZIP_DEFLATED}
+    cases = td.load(storage, problem.object_key, problem.testcases)
+    assert [(c.sample, c.input, c.answer) for c in cases] == [
+        (True, b"1 2\n", b"3\n"), (False, b"4 5\n", b"9\n"),
+    ]
 
 
 @pytest.mark.parametrize(

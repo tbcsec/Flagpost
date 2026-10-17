@@ -286,7 +286,8 @@ without Redis) — and beyond one box to **multiple instances behind a load
 balancer** (the AWS ECS/Fargate + ALB + S3 + RDS + ElastiCache topology is a
 supported target). To run **without Docker**: build & serve the frontend with
 `npm run build && npm run start`, and run the backend with `alembic upgrade head`
-then `uvicorn main:app` (no `--reload`) behind your own TLS-terminating proxy.
+then `uvicorn main:app --ws-max-size 2097152` (no `--reload`) behind your own
+TLS-terminating proxy.
 
 ### 📌 Versioned images (pull instead of build)
 

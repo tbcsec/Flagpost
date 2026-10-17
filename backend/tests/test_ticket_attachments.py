@@ -188,6 +188,36 @@ async def test_per_ticket_cap_spans_messages_and_authors(client):
     assert (await _attach(client, comp, ticket, staff_msg, admin)).status_code == 409
 
 
+async def test_per_ticket_cap_locks_the_ticket_before_counting(client):
+    """GHSA-4wrj: the cap is count-then-insert, so two concurrent uploads to a
+    ticket one short of it could both pass the count. The upload takes a row
+    lock on the ticket (held to its commit) before counting, which serialises
+    them on Postgres. SQLite renders no FOR UPDATE, so the statements are
+    compiled for Postgres to see it."""
+    from sqlalchemy import event
+    from sqlalchemy.dialects import postgresql
+    from sqlalchemy.orm import Session
+
+    admin, comp = await _competition(client)
+    token = await _participant(client, comp, "p@example.com")
+    ticket, message = await _open_ticket(client, comp, token)
+
+    selects: list[str] = []
+
+    def record(state) -> None:
+        if state.is_select:
+            selects.append(str(state.statement.compile(dialect=postgresql.dialect())))
+
+    event.listen(Session, "do_orm_execute", record)
+    try:
+        assert (await _attach(client, comp, ticket, message, token)).status_code == 201
+    finally:
+        event.remove(Session, "do_orm_execute", record)
+    locks = [i for i, sql in enumerate(selects) if "FROM tickets" in sql and "FOR UPDATE" in sql]
+    counts = [i for i, sql in enumerate(selects) if "count(ticket_attachments.id)" in sql]
+    assert locks and counts and locks[0] < counts[0], selects
+
+
 async def test_delete_frees_a_slot(client, object_storage):
     admin, comp = await _competition(client)
     token = await _participant(client, comp, "p@example.com")

@@ -45,4 +45,8 @@ ENV APP_VERSION=${APP_VERSION}
 EXPOSE 8000
 
 # docker-compose overrides this with --reload for development.
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --ws-max-size: no client frame legitimately exceeds ~1.4 MB (a collab note at
+# its 1 MiB cap, base64-encoded), so refuse bigger ones at the protocol layer
+# instead of uvicorn's 16 MiB default (GHSA-4wrj). Keep every uvicorn launch in
+# step: docker-entrypoint.sh, the compose files, .claude/launch.json.
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--ws-max-size", "2097152"]

@@ -756,6 +756,38 @@ async def test_problem_view_shows_examples_never_hidden_tests(client):
     assert body["examples"] == [{"index": 0, "input": "0 0\n", "answer": "0\n", "truncated": False}]
 
 
+async def test_problem_view_reads_only_the_examples(client, object_storage):
+    """GHSA-4wrj: the page shows the examples and nothing else, so it reads only
+    their files — it never inflates the hidden tests to show the samples. With
+    the hidden files gone from the stored zip, a reader that touched them would
+    fail."""
+    import io
+    import zipfile
+
+    from models.judge_problem import JudgeProblem
+
+    admin, comp, chal = await _setup(client, samples=2, secrets=2)
+    player = await _player(client, comp)
+    async with SessionLocal() as db:
+        problem = await db.scalar(select(JudgeProblem).where(JudgeProblem.challenge_id == chal))
+    buf = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(object_storage.get(problem.object_key))) as src, \
+            zipfile.ZipFile(buf, "w") as dst:
+        for name in src.namelist():
+            if name.startswith("data/sample/"):
+                dst.writestr(name, src.read(name))
+    object_storage.put(problem.object_key, buf.getvalue(), "application/zip")
+
+    resp = await client.get(
+        f"/api/competitions/{comp}/challenges/{chal}/problem", headers=_auth(player)
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["examples"] == [
+        {"index": 0, "input": "0 0\n", "answer": "0\n", "truncated": False},
+        {"index": 1, "input": "1 1\n", "answer": "2\n", "truncated": False},
+    ]
+
+
 async def test_problem_view_respects_allowed_languages_and_visibility(client):
     admin, comp, chal = await _setup(client, publish=False)
     player = await _player(client, comp)

@@ -293,6 +293,14 @@ class Settings(BaseSettings):
     # reconnect); tight enough to stop a hammering loop.
     ws_handshake_rate_limit: int = 60
     ws_handshake_rate_window_seconds: int = 30
+    # Per-user rate limit on the frames a room *handles* (the CRDT relay +
+    # persist, §4.2) — each note_update fans out to every other member of the
+    # room, and across workers (GHSA-4wrj). Keyed on the user, so opening more
+    # sockets buys no more budget. Far above fast typing (a Y.js update per
+    # keystroke); a socket that exceeds it is closed 4429, and the client's
+    # reconnect re-sends its full state, so a peer never stays out of step.
+    ws_message_rate_limit: int = 300
+    ws_message_rate_window_seconds: int = 10
     # Per-socket send timeout for a room broadcast (#177). A slow/stalled client
     # (full TCP send buffer) must not hold up delivery to the rest of the room:
     # the send is bounded by this timeout, and a socket that exceeds it is

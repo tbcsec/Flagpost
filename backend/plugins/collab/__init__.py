@@ -31,6 +31,11 @@ MAX_STATE_BYTES = 1_048_576  # 1 MiB
 # string, so the ceiling is the persist cap expanded by base64's 4:3 growth — a
 # single Y.js update never legitimately exceeds a full-state snapshot.
 _MAX_UPDATE_B64 = (MAX_STATE_BYTES * 4) // 3 + 4
+# The longest frame either kind can be — the base64 payload plus its small JSON
+# envelope. The WS router drops a longer one before parsing it (GHSA-4wrj), so
+# an oversized frame costs no parse; inbound frames are also rate-limited per
+# user there (``ws_message_rate_limit``).
+_MAX_FRAME_CHARS = _MAX_UPDATE_B64 + 256
 
 logger = logging.getLogger("collab")
 
@@ -91,4 +96,5 @@ def setup(app, event_bus, db_factory) -> None:
         authorize=authorize_note,
         snapshot=note_snapshot,
         on_message=on_note_message,
+        max_frame_chars=_MAX_FRAME_CHARS,
     )

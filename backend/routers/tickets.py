@@ -38,6 +38,12 @@ from ratelimit.base import RateLimiter
 # (GHSA-4wrj). A per-user cap generous enough never to bother a real reporter.
 _TICKET_CREATE_LIMIT = 20
 _TICKET_CREATE_WINDOW_S = 600  # 20 new tickets / 10 min / user
+# A competitor's reply notifies the ticket's assignee — or, unassigned, every
+# staff member — so replies are throttled per user too (GHSA-4wrj). Staff
+# replies notify only the opener and aren't throttled. Roomy enough for a quick
+# back-and-forth with a judge.
+_TICKET_REPLY_LIMIT = 30
+_TICKET_REPLY_WINDOW_S = 600  # 30 replies / 10 min / user
 from routers.challenges import load_visible_challenge
 from schemas.ticket import (
     TicketAssign,
@@ -191,6 +197,7 @@ async def reply_to_ticket(
     body: TicketReply,
     current_user: User = Depends(require_permission("ticket_respond")),
     db: AsyncSession = Depends(get_db),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> TicketDetail:
     row = await _load_visible_ticket(db, competition_id, ticket_id, current_user)
     ticket = row[0]
@@ -205,6 +212,15 @@ async def reply_to_ticket(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="A question can't be replied to — ask a new question instead",
+        )
+    if not staff and not await rate_limiter.hit(
+        f"ticket-reply:{current_user.id}",
+        limit=_TICKET_REPLY_LIMIT,
+        window_seconds=_TICKET_REPLY_WINDOW_S,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many replies — please wait a moment before sending another",
         )
 
     db.add(

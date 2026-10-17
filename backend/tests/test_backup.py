@@ -372,6 +372,106 @@ async def test_import_rejects_foreign_document(client):
             )
 
 
+async def test_backup_import_validates_the_whole_site_settings_row(client, monkeypatch):
+    """GHSA-4wrj: the site_settings row is held to the settings routes' bounds,
+    not only its demo accounts — most of it is served on the unauthenticated
+    settings read, and the logo on its own public GET."""
+    import base64
+
+    import routers.site_settings as site_settings_router
+    from schemas.site_settings import MAX_LOGIN_NOTICE_BYTES
+
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 40
+
+    def _doc(**row):
+        return {
+            "flagpost_export": True,
+            "schema_version": backup.SCHEMA_VERSION,
+            "data": {"site_settings": [{"id": SITE_SETTINGS_ID, **row}]},
+        }
+
+    def _b64(data: bytes) -> str:
+        return base64.b64encode(data).decode()
+
+    big_notice = {
+        "type": "doc",
+        "content": [{"type": "paragraph", "content": [
+            {"type": "text", "text": "x" * (MAX_LOGIN_NOTICE_BYTES + 1)},
+        ]}],
+    }
+    bad_rows = [
+        {"login_notice": big_notice},           # over the sign-in notice cap
+        {"platform_name": "x" * 65},
+        {"accent": "red;background:url(x)"},
+        {"smtp_port": 0},
+        {"registration_open": "yes"},           # strict: no coercion
+        {"background_style": None},             # a NOT NULL column
+        {"logo_data": _b64(b"<html>not an image</html>")},
+        {"logo_data": "not base64!"},
+    ]
+    for bad in bad_rows:
+        async with SessionLocal() as db:
+            with pytest.raises(backup.ImportError_):
+                await backup.import_data(db, InMemoryStorage(), _doc(**bad), ["site_settings"])
+    # The logo upload's size cap applies too.
+    with monkeypatch.context() as patch:
+        patch.setattr(site_settings_router, "MAX_LOGO_BYTES", len(png) - 1)
+        async with SessionLocal() as db:
+            with pytest.raises(backup.ImportError_):
+                await backup.import_data(
+                    db, InMemoryStorage(), _doc(logo_data=_b64(png)), ["site_settings"]
+                )
+
+    # A type sent without its logo is ignored; one sent with it is replaced by
+    # what the bytes sniff as.
+    async with SessionLocal() as db:
+        await backup.import_data(
+            db, InMemoryStorage(), _doc(logo_content_type="text/html"), ["site_settings"]
+        )
+    async with SessionLocal() as db:
+        assert (await db.get(SiteSettings, SITE_SETTINGS_ID)).logo_content_type is None
+    async with SessionLocal() as db:
+        await backup.import_data(
+            db, InMemoryStorage(),
+            _doc(logo_data=_b64(png), logo_content_type="text/html"), ["site_settings"],
+        )
+    async with SessionLocal() as db:
+        assert (await db.get(SiteSettings, SITE_SETTINGS_ID)).logo_content_type == "image/png"
+
+
+async def test_failed_import_removes_the_objects_it_stored(client):
+    """GHSA-4wrj: objects are stored as their rows are built, before the single
+    commit. A document rejected part-way rolls its rows back, and must take the
+    objects it already stored with them rather than leave orphans nothing
+    references."""
+    from models.attachment import Attachment
+
+    comp_id, chal_id, _ = await _seed()
+    storage = InMemoryStorage()
+    key = f"{comp_id}/{chal_id}/notes.txt"
+    storage.put(key, b"abc", "text/plain")
+    async with SessionLocal() as db:
+        db.add(Attachment(competition_id=comp_id, challenge_id=chal_id, filename="notes.txt",
+                          object_key=key, content_type="text/plain", size_bytes=3))
+        await db.commit()
+    async with SessionLocal() as db:
+        doc = await backup.export_data(db, storage, ["users", "competitions"])
+    async with SessionLocal() as db:
+        await db.delete(await db.get(Competition, comp_id))
+        await db.commit()
+
+    # A row imported after the attachment rejects the whole document.
+    doc["data"]["automation_rules"] = [{
+        "id": "rule-x", "name": "Bad", "trigger_type": "not.an.event",
+        "conditions": [], "actions": [], "competition_id": None, "owner_user_id": None,
+    }]
+    before = set(storage._objects)
+    async with SessionLocal() as db:
+        with pytest.raises(backup.ImportError_):
+            await backup.import_data(db, storage, doc, ["users", "competitions", "automations"])
+    assert set(storage._objects) == before
+
+
 async def test_export_requires_manage_site_settings(client):
     # A plain registered user can't export.
     reg = await client.post(

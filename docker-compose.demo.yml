@@ -60,7 +60,7 @@ services:
     image: ghcr.io/tbcsec/flagpost-backend:demo
     pull_policy: always
     restart: unless-stopped
-    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000 --ws-max-size 2097152"
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-flagpost}:${POSTGRES_PASSWORD:-flagpost}@postgres:5432/${POSTGRES_DB:-flagpost}
       REDIS_URL: redis://redis:6379/0

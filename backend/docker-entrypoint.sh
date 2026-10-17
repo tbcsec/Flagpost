@@ -13,7 +13,9 @@
 #    multi-instance deployment (ADR-0031) sets SCHEDULER_ENABLED=false here and
 #    runs `python -m scheduler` as its own single-task service instead — the
 #    web app's lifespan honours the same flag for the single-worker case.
-# 4. Exec uvicorn with the resolved worker count.
+# 4. Exec uvicorn with the resolved worker count. --ws-max-size bounds an
+#    inbound WebSocket frame well under uvicorn's 16 MiB default — see the
+#    Dockerfile CMD (GHSA-4wrj).
 set -e
 
 alembic upgrade head
@@ -33,4 +35,4 @@ elif [ "$SCHEDULER_SIDECAR" = "0" ]; then
     echo "entrypoint: SCHEDULER_ENABLED=false — no scheduler in this container (ADR-0031)"
 fi
 
-exec uvicorn main:app --host 0.0.0.0 --port 8000 --workers "$WORKERS"
+exec uvicorn main:app --host 0.0.0.0 --port 8000 --workers "$WORKERS" --ws-max-size 2097152

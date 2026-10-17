@@ -701,7 +701,8 @@
     },
     "solveToast": {
       "description": "{title} · +{points} puntos",
-      "descriptionReduced": "{title} · +{points} pts (reducido de {full})"
+      "descriptionReduced": "{title} · +{points} pts (reducido de {full})",
+      "descriptionNoPoints": "{title} · points hidden while the scoreboard is frozen"
     },
     "notes": {
       "team": "Notas del equipo",

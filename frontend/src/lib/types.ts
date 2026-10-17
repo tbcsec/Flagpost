@@ -1061,12 +1061,17 @@ export interface SignedUrl {
 export interface SubmitResult {
   correct: boolean;
   already_solved: boolean;
-  points_awarded: number;
-  is_first_blood: boolean;
+  /** Null when a competitor solves a dynamic challenge under a scoreboard
+   *  freeze: its worth would reveal the live solve count the freeze hides. */
+  points_awarded: number | null;
+  /** Null when a competitor solves under a scoreboard freeze: it would reveal
+   *  whether anyone has solved the challenge since the cutoff. */
+  is_first_blood: boolean | null;
   /** Guesses left on a multiple-choice challenge after this attempt (null = no cap). */
   attempts_remaining: number | null;
   /** Base worth before the multiple-choice wrong-guess penalty (#148), so the
-   *  result can show "reduced from N". Null unless a penalty lowered this award. */
+   *  result can show "reduced from N". Null unless a penalty lowered this award,
+   *  and null whenever `points_awarded` is. */
   full_value: number | null;
   /** The subject's current worth going forward after this attempt, under the
    *  wrong-guess penalty (#148) — set on an incorrect guess so the open detail

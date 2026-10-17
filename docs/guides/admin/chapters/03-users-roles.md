@@ -49,8 +49,11 @@ not a code change.
 ## Granting a role
 
 The **Assignments** card: pick a **User**, a **Role**, and a **Competition**
-(or **Site-wide** for a global role), then **Assign**. You can't grant more
-than you hold yourself, and the last Administrator can't be unassigned.
+(or **Site-wide** for a global role), then **Assign**. You can't grant, or
+take away, more than you hold yourself, and the last Administrator can't be
+unassigned. The same goes for accounts: someone delegated user management
+looks after ordinary players, but can't reset, ban or delete a Judge or an
+Administrator.
 Someone who signs in through an identity provider arrives with *no* role;
 they become a Participant per competition as they join, and staff roles are
 yours to grant — sign-in method never implies privilege.
@@ -60,4 +63,7 @@ yours to grant — sign-in method never implies privilege.
     request. The Auth, AI, Instances and Code judge tabs each have their own
     grant, as do most Admin pages, so an Auth delegate needn't be a full
     administrator; General, Email, Rules, Backup and Appearance share
-    *manage site settings*.
+    *manage site settings* — though changing the mail server or the From
+    address needs an Administrator, since password-reset links travel through
+    them. Treat *manage
+    auth providers* as administrator-level too.

@@ -361,10 +361,8 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
   const selectedRole = roles.find((r) => r.id === roleId) ?? null;
   const needsCompetition = selectedRole?.scope === "competition";
 
-  // Pick a user by name/email from a searchable list; the assign endpoint
-  // resolves by identifier (email or username, §7.7), so we submit the chosen
-  // user's email when they have one and fall back to their username otherwise —
-  // keeping email-less accounts assignable.
+  // Pick a user by name/email from a searchable list; the pick is submitted
+  // by id, so it lands on exactly that account.
   const userOptions = useMemo(
     () =>
       (users.data ?? []).map((u) => ({
@@ -375,12 +373,10 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
     [users.data],
   );
   const selectedUser = users.data?.find((u) => u.id === userId) ?? null;
-  // What the assign endpoint resolves: the picked user's email (or username,
-  // keeping email-less accounts assignable), or whatever was typed.
+  // Who to assign: the picked account (sent by id), or whatever was typed (an
+  // email or username the endpoint resolves). Empty until there's a target.
   const identifier = canPickUsers
-    ? selectedUser
-      ? (selectedUser.email ?? selectedUser.display_name)
-      : ""
+    ? (selectedUser?.id ?? "")
     : userId.trim();
 
   // One entry per user, listing all their role assignments (each still
@@ -427,7 +423,9 @@ function AssignmentsCard({ roles }: { roles: Role[] }) {
     if (!identifier) return;
     assign.mutate(
       {
-        email: identifier,
+        // A picked account goes by id — exact, where an identifier could match
+        // a different account whose email reads like this one's username.
+        ...(canPickUsers ? { user_id: identifier } : { email: identifier }),
         role_id: roleId,
         competition_id: needsCompetition ? competitionId : null,
       },

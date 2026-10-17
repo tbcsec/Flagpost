@@ -24,6 +24,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from auth.containment import assert_may_manage_account
 from auth.deps import require_permission
 from auth.identity import display_name_taken, email_taken
 from auth.security import ahash_many, hash_password
@@ -333,6 +334,7 @@ async def update_user(
     db: AsyncSession = Depends(get_db),
 ) -> UserAccountOut:
     user = await _get_user_or_404(db, user_id)
+    await assert_may_manage_account(db, current_user, user)
     if body.email is not None and body.email != user.email:
         if await email_taken(db, body.email, exclude_id=user.id):
             raise HTTPException(
@@ -388,6 +390,7 @@ async def ban_user(
     db: AsyncSession = Depends(get_db),
 ) -> UserAccountOut:
     user = await _get_user_or_404(db, user_id)
+    await assert_may_manage_account(db, current_user, user)
     if user.id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="You can't ban yourself"
@@ -415,6 +418,7 @@ async def unban_user(
     db: AsyncSession = Depends(get_db),
 ) -> UserAccountOut:
     user = await _get_user_or_404(db, user_id)
+    await assert_may_manage_account(db, current_user, user)
     user.is_active = True
     await db.commit()
     await event_bus.emit(
@@ -431,6 +435,7 @@ async def delete_user(
     storage: ObjectStorage = Depends(get_storage),
 ) -> None:
     user = await _get_user_or_404(db, user_id)
+    await assert_may_manage_account(db, current_user, user)
     if user.id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="You can't delete yourself"

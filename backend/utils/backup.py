@@ -79,6 +79,7 @@ from sqlalchemy import DateTime, LargeBinary, func, inspect as sa_inspect, selec
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 
+from auth.containment import holds_every_permission
 from auth.membership import effective_permissions
 from db import UtcDateTime, utcnow
 from models.announcement import Announcement
@@ -727,6 +728,39 @@ async def _assert_import_within_grant(
         )
 
 
+# The mail transport: where every password-reset link is delivered (and, via
+# the From address, where bounces return). Changing it needs an Administrator on
+# the operational settings route (GHSA-mwhq-j3jg-p339); the site_settings
+# section must not be a way around that.
+_MAIL_TRANSPORT_COLUMNS = (
+    "smtp_host", "smtp_port", "smtp_username", "smtp_from", "smtp_starttls",
+    "smtp_password",
+)
+
+
+async def _assert_import_keeps_mail_transport(
+    db: AsyncSession, row: dict, actor: User
+) -> None:
+    """Refuse a site_settings row that would change the mail transport, unless
+    the actor is an Administrator. An export never carries ``smtp_password``
+    (a secret column), so one present in the row is always a change."""
+    incoming = load_row(
+        SiteSettings, {k: row[k] for k in _MAIL_TRANSPORT_COLUMNS if k in row}
+    )
+    if not incoming:
+        return
+    current = await db.get(SiteSettings, SITE_SETTINGS_ID)
+    changed = "smtp_password" in incoming or any(
+        value != (getattr(current, key) if current is not None else None)
+        for key, value in incoming.items()
+    )
+    if changed and not await holds_every_permission(db, actor):
+        raise ImportForbidden(
+            "This import would change mail delivery, which needs an "
+            "Administrator: password-reset links travel through it"
+        )
+
+
 async def import_data(
     db: AsyncSession,
     storage: ObjectStorage,
@@ -768,6 +802,8 @@ async def import_data(
                 # content validation entirely (#360 review).
                 if spec.validate_row is not None:
                     spec.validate_row(row)
+                if spec.model is SiteSettings and actor is not None:
+                    await _assert_import_keeps_mail_transport(db, row, actor)
                 await _upsert_singleton(db, spec.model, row, spec.immutable_columns)
                 created += 1
                 continue

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class RoleOut(BaseModel):
@@ -47,10 +47,21 @@ class PermissionOut(BaseModel):
 
 
 class AssignmentCreate(BaseModel):
-    # Assign by email so the roles admin doesn't need a full user directory.
-    email: str = Field(min_length=1)
+    # Exactly one target. ``user_id`` is what the UI sends for an account picked
+    # from the directory: an exact match, where an identifier could resolve to
+    # a different account whose email happens to read like the picked
+    # username. ``email`` (an email or username) serves a roles admin without
+    # the directory, who types it.
+    email: str | None = Field(default=None, min_length=1)
+    user_id: str | None = Field(default=None, min_length=1)
     role_id: str
     competition_id: str | None = None
+
+    @model_validator(mode="after")
+    def _one_target(self) -> "AssignmentCreate":
+        if (self.email is None) == (self.user_id is None):
+            raise ValueError("Give exactly one of email or user_id")
+        return self
 
 
 class AssignmentOut(BaseModel):

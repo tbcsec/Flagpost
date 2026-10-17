@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 
+from auth.containment import assert_may_manage_account
 from auth.deps import get_current_user, require_permission
 from db import get_db, utcnow
 from models.user import User
@@ -91,6 +92,9 @@ async def remove_user_avatar(
     user = await db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No such user")
+    # Moderation is account management: held to the same containment as an edit
+    # (GHSA-mwhq-j3jg-p339).
+    await assert_may_manage_account(db, actor, user)
     if user.avatar_updated_at is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="No avatar set"

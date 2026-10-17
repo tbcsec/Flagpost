@@ -223,10 +223,18 @@ async function runRefresh(): Promise<boolean> {
   return true;
 }
 
-/** Single-flight refresh: concurrent callers await the same attempt. */
+/** Single-flight refresh: concurrent callers await the same attempt. Across
+ *  tabs, a Web Lock takes them in turn: a refresh token rotates once, so tabs
+ *  loading together and presenting the same one would get a single success and
+ *  401s (signing those tabs out). In turn, each presents the token the previous
+ *  one rotated to. Browsers without Web Locks refresh as before. */
 function refreshOnce(): Promise<boolean> {
   if (!refreshPromise) {
-    refreshPromise = runRefresh().finally(() => {
+    const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+    const attempt = locks
+      ? locks.request("flagpost-auth-refresh", runRefresh)
+      : runRefresh();
+    refreshPromise = attempt.finally(() => {
       refreshPromise = null;
     });
   }

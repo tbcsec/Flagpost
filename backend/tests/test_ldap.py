@@ -185,6 +185,64 @@ async def test_local_password_still_wins_before_the_directory(client, directory)
     assert directory.connects == 0
 
 
+async def test_directory_spellings_share_one_budget(client, directory):
+    """GHSA-vv68: the directory matches identifiers more loosely than the local
+    lookup (width, case folding, formatting characters), so every spelling it
+    resolves to one entry draws on one budget."""
+    from config import settings
+
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+    for _ in range(settings.auth_rate_limit):
+        await _login(client, "ada", "not-her-password")
+    for lookalike in (
+        "ａｄａ",  # fullwidth
+        "a\u200bda",  # zero-width space
+        "a\u00adda",  # soft hyphen
+        "a\x1cda",  # information separator
+        "ada\ufffc",  # object replacement character
+        "a da",
+    ):
+        resp = await _login(client, lookalike, "not-her-password")
+        assert resp.status_code == 429, (lookalike, resp.text)
+
+
+async def test_a_local_success_never_clears_the_directory_budget(client, directory):
+    """GHSA-vv68: someone holding a local account named like a directory user's
+    uid fails local verification on every guess at that user's directory
+    password; their own successful logins must not refill the directory's
+    budget. A directory success does clear it."""
+    from config import settings
+
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+    reg = await client.post(
+        "/api/auth/register", json={"display_name": "ada", "password": "shadow-pass-1"}
+    )
+    assert reg.status_code == 201, reg.text
+    codes = []
+    for _ in range(2):
+        for _ in range(settings.auth_rate_limit - 1):
+            codes.append((await _login(client, "ada", "not-her-password")).status_code)
+        own = await _login(client, "ada", "shadow-pass-1")
+        assert own.status_code == 200, own.text
+    assert 429 in codes, codes
+
+
+async def test_a_directory_success_clears_the_directory_budget(client, directory):
+    from config import settings
+
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+    for _ in range(settings.auth_rate_limit - 1):
+        await _login(client, "ada", "not-her-password")
+    ok = await _login(client, "ada", ADA_PASSWORD)
+    assert ok.status_code == 200, ok.text
+    for _ in range(settings.auth_rate_limit - 1):
+        resp = await _login(client, "ada", "not-her-password")
+        assert resp.status_code == 401, resp.text
+
+
 # --- refusals (all the same generic 401) --------------------------------------
 
 

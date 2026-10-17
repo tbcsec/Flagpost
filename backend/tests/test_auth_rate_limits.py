@@ -192,26 +192,34 @@ async def test_padded_success_resets_the_shared_bucket(client):
         assert again.status_code == 401, again.text
 
 
-async def test_login_throttle_folds_lookalike_spellings(client):
-    """GHSA-vv68: a directory matches identifiers under its own rules (RFC 4518:
-    compatibility forms, case folding, formatting characters dropped), so
-    fullwidth letters or zero-width characters must not mint fresh budgets."""
-    await admin_token(client)
-    for _ in range(settings.auth_rate_limit + 1):
-        await client.post(
+async def test_a_lookalike_account_cannot_clear_anothers_bucket(client):
+    """GHSA-vv68: a successful login clears only the bucket of the identifier
+    it used, exactly as the lookup reads it. A look-alike spelling is a
+    different local account, and its owner's logins must not refill the
+    budget for guessing someone else's password."""
+    for name in ("victim", "ｖｉｃｔｉｍ"):
+        reg = await client.post(
+            "/api/auth/register",
+            json={"display_name": name, "password": f"{name}-password-1"},
+        )
+        assert reg.status_code == 201, reg.text
+    codes = []
+    for _ in range(2):
+        for _ in range(settings.auth_rate_limit - 1):
+            codes.append(
+                (
+                    await client.post(
+                        "/api/auth/login",
+                        json={"identifier": "victim", "password": "wrong"},
+                    )
+                ).status_code
+            )
+        own = await client.post(
             "/api/auth/login",
-            json={"identifier": "admin@example.com", "password": "wrong"},
+            json={"identifier": "ｖｉｃｔｉｍ", "password": "ｖｉｃｔｉｍ-password-1"},
         )
-    for lookalike in (
-        "ａｄｍｉｎ@example.com",  # fullwidth
-        "ad\u200bmin@example.com",  # zero-width space
-        "ad\u00admin@example.com",  # soft hyphen
-        "\U0001d41admin@example.com",  # mathematical bold a
-    ):
-        resp = await client.post(
-            "/api/auth/login", json={"identifier": lookalike, "password": "wrong"}
-        )
-        assert resp.status_code == 429, (lookalike, resp.text)
+        assert own.status_code == 200, own.text
+    assert 429 in codes, codes
 
 
 async def test_password_taking_endpoints_share_one_budget(client):

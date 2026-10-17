@@ -8,6 +8,7 @@ so it's only ever sent to these endpoints and never readable by JS.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import secrets
 
@@ -28,8 +29,8 @@ from auth.external_identity import IdentityRejected, resolve_identity
 from auth.identity import (
     display_name_taken,
     email_taken,
+    directory_match_key,
     find_by_identifier,
-    login_throttle_key,
     normalize_identifier,
 )
 from auth.registration_policy import domain_allowed
@@ -323,7 +324,7 @@ async def register(
 
 
 async def _directory_login(
-    db: AsyncSession, identifier: str, password: str
+    db: AsyncSession, identifier: str, password: str, rate_limiter: RateLimiter
 ) -> User | None:
     """Offer the submitted credentials to each enabled LDAP directory
     (ADR-0022 §5), returning the resolved local user on the first success.
@@ -344,6 +345,19 @@ async def _directory_login(
             .order_by(IdentityProvider.created_at)
         )
     ).all()
+    if not providers:
+        return None
+    # The directory's own budget (GHSA-vv68). It matches identifiers more
+    # loosely than the local lookup (width, case folding, formatting
+    # characters), so it's keyed on the identifier folded as far — hashed, as
+    # folding can lengthen it. Only a directory success clears it: a local
+    # success, perhaps on a look-alike or a same-named local account, says
+    # nothing about the directory entry being guessed.
+    directory_key = (
+        "login-dir:"
+        + hashlib.sha256(directory_match_key(identifier).encode()).hexdigest()
+    )
+    await _throttle(rate_limiter, directory_key)
     for provider in providers:
         config = provider_config_or_none(provider)
         if config is None:
@@ -395,6 +409,7 @@ async def _directory_login(
                 provider.slug,
             )
             continue
+        await rate_limiter.reset(directory_key)
         return user
     return None
 
@@ -410,9 +425,12 @@ async def login(
     # limit can't be probed by timing. Keyed per identifier — see the note on
     # `auth_rate_limit` about why not per IP. Deliberately ahead of the LDAP
     # leg below too, so the directory can't be probed unthrottled (ADR-0022 §5).
-    # Keyed coarsely enough that no spelling the lookup or the directory treats
-    # as the same account mints a fresh budget (GHSA-vv68).
-    login_key = f"login:{login_throttle_key(body.identifier)}"
+    # Keyed on the identifier as the lookup normalises it, so padding it can't
+    # mint a fresh budget per spelling (GHSA-vv68). Exactly the lookup's key and
+    # no coarser: the reset below clears it on any successful login, and a
+    # coarser key would let a look-alike account's owner clear someone else's.
+    # The directory leg keeps its own, coarser budget (`_directory_login`).
+    login_key = f"login:{normalize_identifier(body.identifier)}"
     await _throttle(rate_limiter, login_key)
     # The identifier is the display name (username) or the email, matched
     # case-insensitively (§7.7).
@@ -429,7 +447,9 @@ async def login(
         # (ADR-0022 §5). Both failure shapes take this branch, so the accepted
         # residual timing signal (a bind round-trip on the miss path) doesn't
         # distinguish "no such user" from "wrong password".
-        user = await _directory_login(db, body.identifier, body.password)
+        user = await _directory_login(
+            db, body.identifier, body.password, rate_limiter
+        )
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

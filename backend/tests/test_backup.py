@@ -1070,3 +1070,54 @@ async def test_automations_export_needs_automation_view(client):
         headers={"Authorization": f"Bearer {token2}"},
     )
     assert ok.status_code == 200, ok.text
+
+
+async def test_backup_import_cleans_attachment_filenames(client):
+    """GHSA-wvjv-56qv-9v42: load_row does no content validation, so a crafted
+    backup's attachment name would land verbatim — and ride into the object key
+    and the ctfcli export's zip. The import reduces it to the leaf the upload
+    route would have stored."""
+    import copy
+
+    from models.attachment import Attachment
+
+    comp_id, chal_id, _ = await _seed()
+    storage = InMemoryStorage()
+    storage.put("old-key", b"payload", "application/octet-stream")
+    async with SessionLocal() as db:
+        db.add(Attachment(competition_id=comp_id, challenge_id=chal_id, filename="notes.txt",
+                          object_key="old-key", content_type="application/octet-stream",
+                          size_bytes=7))
+        await db.commit()
+    async with SessionLocal() as db:
+        doc = await backup.export_data(db, storage, ["competitions"])
+    [row] = doc["data"]["attachments"]
+    second = copy.deepcopy(row)
+    row["filename"] = "../../../evil.bat"
+    second.update(id="att-2", filename="..\\..\\evil.bat")
+    doc["data"]["attachments"].append(second)
+    async with SessionLocal() as db:
+        await db.delete(await db.get(Competition, comp_id))
+        await db.commit()
+
+    async with SessionLocal() as db:
+        await backup.import_data(db, storage, doc, ["competitions"])
+    async with SessionLocal() as db:
+        comp = await db.scalar(select(Competition).where(Competition.name == "Export Test"))
+        chal = await db.scalar(select(Challenge).where(Challenge.competition_id == comp.id))
+        rows = (await db.scalars(select(Attachment).where(Attachment.competition_id == comp.id))).all()
+    assert sorted(a.filename for a in rows) == [".._.._evil.bat", "evil.bat"]
+    for att in rows:
+        segments = att.object_key.split("/")
+        assert segments[:2] == [comp.id, chal.id] and len(segments) == 3
+        assert segments[2].endswith(f"_{att.filename}")
+        assert storage.get(att.object_key) == b"payload"
+
+
+def test_backup_import_cleans_ticket_attachment_filenames():
+    spec = next(s for s in backup.SPECS if s.table == "ticket_attachments")
+    row = {"competition_id": "c", "ticket_id": "t", "filename": "../../x/evil.png"}
+    key = spec.object_key_for(row)
+    spec.validate_row(row)
+    assert row["filename"] == "evil.png"
+    assert key.startswith("c/tickets/t/") and key.count("/") == 3 and key.endswith("_evil.png")

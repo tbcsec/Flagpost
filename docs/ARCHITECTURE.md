@@ -2080,7 +2080,9 @@ confirm the tests and the limit in one click.
 
 Same containment as the challenge importer, and then some, because a package
 from the internet is untrusted input: bounded reads that never trust a declared
-size, an aggregate decompressed ceiling that counts every byte inflated, an
+size and accept stored or deflate members only (CPython inflates a bzip2 or LZMA
+chunk whole, past any read bound), an aggregate decompressed ceiling that counts
+every byte inflated, an
 entry cap counted from the entries' own signatures before `zipfile` builds its
 directory (the end records can lie), a problem-count cap, symlinks followed only inside their own problem, YAML whose aliases
 can't expand past a node budget, and the judge's own test-data caps (16 MB a
@@ -2094,7 +2096,9 @@ scanner works against a character budget. The import creates **draft**
 challenges in one transaction with no per-row events (atomic authoring), and
 deletes anything it stored if it fails. Export writes a 2025-09 package per
 problem: `problem.yaml` with the effective limits, a Markdown statement, the
-stored test data (renumbered so name order is judging order), the checker
+stored test data (read through the judge's bounded loader and named from each
+case's position, never the stored zip's own names, so name order is judging
+order), the checker
 settings as `output_validator_args`, attachments, and the kept or newest
 accepted reference solution under `submissions/accepted/`. It streams each
 problem's files from storage into a temporary file, so a contest's test data is

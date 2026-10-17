@@ -19,9 +19,10 @@ often bundle a verbatim copy of the standard checker as a "custom" one; that
 copy is recognised and treated as the standard check.
 
 **Same containment as the challenge importer** (``utils/challenge_yaml``,
-GHSA-wvjv): every member is read through a bounded reader that never trusts a
-declared size, the whole import is held under an aggregate ceiling, and the
-member count is capped. Test data must also fit the judge's own caps (16 MB a
+GHSA-wvjv, both through ``utils/untrusted_zip``): every member is read through
+a bounded reader that never trusts a declared size and accepts stored or
+deflate members only, the whole import is held under an aggregate ceiling, and
+the member count is capped. Test data must also fit the judge's own caps (16 MB a
 file, 64 MB a problem — owner decision: refuse rather than raise them, since
 every judging copies all of a problem's tests). Symlinks — which the format
 allows — are followed only inside the package.
@@ -37,12 +38,10 @@ from __future__ import annotations
 import bisect
 import io
 import logging
-import lzma
 import math
 import posixpath
 import re
 import zipfile
-import zlib
 from dataclasses import dataclass, field
 from typing import IO
 from uuid import uuid4
@@ -50,6 +49,14 @@ from uuid import uuid4
 import yaml
 
 from utils import judge_testdata as td
+from utils.untrusted_zip import (
+    READ_ERRORS,
+    ArchiveRefused,
+    check_member_count,
+    read_bounded,
+    unique_name,
+    yaml_too_large,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -133,23 +140,13 @@ class ParseResult:
 # --- reading the zip --------------------------------------------------------------
 
 
-# What a corrupt, truncated, encrypted or exotically-compressed member raises
-# from zipfile — a lying header surfaces only once it's read.
-_ZIP_ERRORS = (
-    zipfile.BadZipFile, zlib.error, lzma.LZMAError, EOFError, NotImplementedError,
-    RuntimeError, OSError, ValueError,
-)
-
-
 def _check_directory(data: bytes) -> None:
-    """Refuse a zip with too many entries before zipfile parses it: it builds
-    an object per central-directory entry up front, so a cheap upload of a
-    million empty entries would cost far more memory than the member cap means
-    to allow. Every entry it can build starts with this signature, so counting
-    them bounds it however zipfile locates the directory — the end records
-    themselves can lie."""
-    if data.count(b"PK\x01\x02") > MAX_MEMBERS:
-        raise PackageError(f"The zip has too many files (more than {MAX_MEMBERS:,})")
+    """Refuse a zip with too many entries before zipfile parses it (see
+    ``utils.untrusted_zip``)."""
+    try:
+        check_member_count(data, MAX_MEMBERS)
+    except ArchiveRefused as exc:
+        raise PackageError(str(exc)) from exc
 
 
 class _Zip:
@@ -159,7 +156,7 @@ class _Zip:
         _check_directory(data)
         try:
             self.zf = zipfile.ZipFile(io.BytesIO(data))
-        except _ZIP_ERRORS as exc:
+        except READ_ERRORS as exc:
             raise PackageError("That isn't a valid zip file") from exc
         infos = self.zf.infolist()
         if len(infos) > MAX_MEMBERS:
@@ -209,9 +206,10 @@ class _Zip:
 
     def _read(self, info: zipfile.ZipInfo, name: str, root: str, limit: int) -> bytes:
         try:
-            with self.zf.open(info) as handle:
-                blob = handle.read(limit)
-        except _ZIP_ERRORS as exc:
+            blob = read_bounded(self.zf, info, limit)
+        except ArchiveRefused as exc:  # bzip2/LZMA: would inflate whole, past any limit
+            raise Refused(str(exc)) from exc
+        except READ_ERRORS as exc:
             raise Refused(f"{_short(name, root)} can't be read (the zip is damaged or encrypted)") from exc
         # Every byte inflated counts — an over-cap read too, or many problems
         # could each inflate one oversized member for free.
@@ -263,20 +261,8 @@ def _yaml(z: _Zip, name: str, root: str) -> dict:
         raise Refused(f"{_short(name, root)} isn't valid YAML") from exc
     if not isinstance(loaded, dict):
         raise Refused(f"{_short(name, root)} isn't a YAML mapping")
-    # Count the tree as it would be walked: YAML aliases share nodes, so a few
-    # hundred bytes can expand to gigabytes the moment anything str()s a value.
-    stack: list = [loaded]
-    seen = 0
-    while stack:
-        node = stack.pop()
-        seen += 1
-        if seen > _MAX_YAML_NODES:
-            raise Refused(f"{_short(name, root)} is too large once its aliases are expanded")
-        if isinstance(node, dict):
-            stack.extend(node.keys())
-            stack.extend(node.values())
-        elif isinstance(node, list):
-            stack.extend(node)
+    if yaml_too_large(loaded, _MAX_YAML_NODES):
+        raise Refused(f"{_short(name, root)} is too large once its aliases are expanded")
     return loaded
 
 
@@ -976,6 +962,7 @@ class ExportProblem:
     case_insensitive: bool
     allowed_languages: list[str] | None
     testdata_key: str | None  # the stored zip (data/sample|secret/NNN.in|.ans)
+    testcases: list[dict] = field(default_factory=list)  # its manifest (judge_testdata)
     files: list[tuple[str, str]] = field(default_factory=list)  # (filename, object key)
     reference: tuple[str, str] | None = None  # (filename, source)
 
@@ -1055,40 +1042,29 @@ def build_export(problems: list[ExportProblem], storage, out: IO[bytes]) -> None
 
 
 def _export_testdata(zf: zipfile.ZipFile, slug: str, p: ExportProblem, storage) -> None:
-    """The stored test data, renumbered so name order is judging order however
+    """The stored test data in judging order, read through the judge's own
+    bounded loader. Every name is made here from the case's position, never
+    taken from the stored zip — a restored backup decides those
+    (GHSA-wvjv-56qv-9v42) — and numbered so name order is judging order however
     many tests there are (``1000.in`` would sort before ``101.in``)."""
     try:
-        blob = storage.get(p.testdata_key)
-        data = zipfile.ZipFile(io.BytesIO(blob))
+        cases = td.load(storage, p.testdata_key, p.testcases)
     except Exception as exc:  # noqa: BLE001
         raise ExportError(
             f"The test data for “{p.name}” couldn't be read from storage — "
             "upload it again, then export."
         ) from exc
-    with data:
-        infos = [i for i in data.infolist() if i.filename.startswith("data/") and not i.is_dir()]
-        stems: dict[str, list[str]] = {}  # folder → its case stems, in stored (judging) order
-        for info in infos:
-            folder, stem = posixpath.dirname(info.filename), posixpath.splitext(info.filename)[0]
-            if stem not in stems.setdefault(folder, []):
-                stems[folder].append(stem)
-        renamed = {}
-        for folder, group in stems.items():
-            width = max(3, len(str(len(group))))
-            renamed.update({stem: f"{folder}/{k:0{width}d}" for k, stem in enumerate(group, start=1)})
-        for info in infos:
-            stem, ext = posixpath.splitext(info.filename)
-            zf.writestr(f"{slug}/{renamed[stem]}{ext}", data.read(info))
+    for sample, folder in ((True, "sample"), (False, "secret")):
+        group = [c for c in cases if c.sample == sample]
+        width = max(3, len(str(len(group))))
+        for k, case in enumerate(group, start=1):
+            stem = f"{slug}/data/{folder}/{k:0{width}d}"
+            zf.writestr(f"{stem}.in", case.input)
+            zf.writestr(f"{stem}.ans", case.answer)
 
 
 def _unique_member(filename: str, used: set[str]) -> str:
-    name = _safe_member(filename)
-    stem, ext = posixpath.splitext(name)
-    candidate, n = name, 2
-    while candidate in used:
-        candidate, n = f"{stem}_{n}{ext}", n + 1
-    used.add(candidate)
-    return candidate
+    return unique_name(_safe_member(filename), used)
 
 
 def _safe_member(filename: str) -> str:

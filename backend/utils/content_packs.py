@@ -28,6 +28,7 @@ first (both tracked as follow-ups on #387).
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import re
@@ -44,11 +45,23 @@ from plugins.manifest import Kind, ManifestModel, PackType
 from schemas.theme import ThemeCreate
 from storage.base import ObjectStorage
 from utils.challenge_yaml import import_challenges
+from utils.untrusted_zip import (
+    MAX_MEMBERS,
+    READ_ERRORS,
+    ArchiveRefused,
+    check_member_count,
+    read_bounded,
+)
 
-# A pack's declared uncompressed size is capped so a malformed or hostile archive
-# can't exhaust memory/disk on unpack. Generous enough for real challenge packs
-# with attachments; the route also bounds the upload itself.
+# A pack's uncompressed size is capped so a malformed or hostile archive can't
+# exhaust memory/disk on unpack. Generous enough for real challenge packs with
+# attachments; the route also bounds the upload itself. The headers' sizes are
+# a cheap first refusal only — they can lie, so every member is also read
+# through a bounded reader (``utils.untrusted_zip``, GHSA-wvjv-56qv-9v42) under
+# its own cap, and the entry count is capped before zipfile parses anything.
 MAX_PACK_UNCOMPRESSED = 200 * 1024 * 1024  # 200 MiB
+MAX_PACK_MEMBERS = MAX_MEMBERS
+_MAX_TEXT_BYTES = 1 * 1024 * 1024  # plugin.yaml, themes.json (~1,400 presets)
 
 _THEMES_MEMBER = "payload/themes.json"
 _CHALLENGES_MEMBER = "payload/challenges.zip"
@@ -74,6 +87,10 @@ def _version_tuple(v: str) -> tuple[int, int, int]:
 
 def _open_pack(pack_bytes: bytes) -> zipfile.ZipFile:
     try:
+        check_member_count(pack_bytes, MAX_PACK_MEMBERS)
+    except ArchiveRefused as exc:
+        raise PackError(str(exc)) from exc
+    try:
         zf = zipfile.ZipFile(io.BytesIO(pack_bytes))
     except zipfile.BadZipFile as exc:
         raise PackError("not a valid pack archive (bad zip)") from exc
@@ -84,10 +101,7 @@ def _open_pack(pack_bytes: bytes) -> zipfile.ZipFile:
 
 
 def _manifest_from_zip(zf: zipfile.ZipFile) -> ManifestModel:
-    try:
-        raw = zf.read("plugin.yaml")
-    except KeyError as exc:
-        raise PackError("pack is missing plugin.yaml") from exc
+    raw = _read_member(zf, "plugin.yaml", _MAX_TEXT_BYTES)
     try:
         data = yaml.safe_load(raw) or {}
     except yaml.YAMLError as exc:
@@ -120,11 +134,20 @@ def _check_compat(manifest: ManifestModel) -> None:
         raise PackError(f"pack requires Flagpost < {req.max}")
 
 
-def _read_member(zf: zipfile.ZipFile, name: str) -> bytes:
+def _read_member(zf: zipfile.ZipFile, name: str, cap: int = MAX_PACK_UNCOMPRESSED) -> bytes:
+    """``name``'s bytes, at most ``cap`` of them — read ``cap + 1`` at most, never
+    trusting the declared size, and stored or deflate members only."""
     try:
-        return zf.read(name)
+        blob = read_bounded(zf, name, cap + 1)
     except KeyError as exc:
         raise PackError(f"pack is missing {name}") from exc
+    except ArchiveRefused as exc:
+        raise PackError(str(exc)) from exc
+    except READ_ERRORS as exc:
+        raise PackError(f"{name} can't be read (the pack is damaged or encrypted)") from exc
+    if len(blob) > cap:
+        raise PackError(f"{name} is too large")
+    return blob
 
 
 async def _apply_theme_pack(
@@ -134,7 +157,7 @@ async def _apply_theme_pack(
     atomic (every preset is validated through ``ThemeCreate`` before any insert,
     so one bad preset installs none)."""
     try:
-        presets = json.loads(_read_member(zf, _THEMES_MEMBER))
+        presets = json.loads(_read_member(zf, _THEMES_MEMBER, _MAX_TEXT_BYTES))
     except json.JSONDecodeError as exc:
         raise PackError(f"{_THEMES_MEMBER} is not valid JSON: {exc}") from exc
     if not isinstance(presets, list):
@@ -192,9 +215,11 @@ async def apply_pack(
     if pack_type == PackType.challenges:
         if competition is None:
             raise PackError("a challenge pack must target a competition")
-        result = await import_challenges(
-            db, competition, _read_member(zf, _CHALLENGES_MEMBER), storage
-        )
+        bundle = await asyncio.to_thread(_read_member, zf, _CHALLENGES_MEMBER)
+        try:
+            result = await import_challenges(db, competition, bundle, storage)
+        except ValueError as exc:  # the bundle as a whole refused (bad zip, too big)
+            raise PackError(f"{_CHALLENGES_MEMBER}: {exc}") from exc
         target = competition.id
     elif pack_type == PackType.theme:
         result = await _apply_theme_pack(zf, db, actor_user_id)

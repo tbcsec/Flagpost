@@ -102,10 +102,12 @@ subjects:
 # together). Additivity cuts both ways: because this baseline selects every
 # instance pod, a port-53 rule here with no `to` would allow port 53 to ANY
 # address and undo the per-instance scoping. The selector matches a standard
-# CoreDNS/kube-dns install (`k8s-app=kube-dns` in `kube-system`); if your DNS
-# pods are labelled differently, instance DNS fails closed until they carry
-# that label. Upgrading from an earlier release: re-apply this file
-# (`kubectl apply -f k8s/instances-rbac.yaml`).
+# CoreDNS/kube-dns install (`k8s-app=kube-dns` in `kube-system`). If your
+# resolver lives elsewhere (NodeLocal DNSCache, GKE Cloud DNS, OpenShift), don't
+# loosen this rule: add a supplementary, `to`-scoped DNS policy instead (see
+# docs/CHALLENGE_INSTANCES.md). Upgrading from an earlier release: re-apply this
+# file (`kubectl apply -f k8s/instances-rbac.yaml`); Test connection's
+# `baseline_policy` leg checks it.
 #
 # It selects every pod EXCEPT the ephemeral ``flagpost.io/probe`` pods that
 # "Test connection" runs: the egress-enforcement leg's positive control is an

@@ -555,6 +555,15 @@ async def test_challenge_yaml_rejects_resource_limits_that_truncate_to_unlimited
                 "resource_limits": {"cpu": 0.5, "memory_mb": 64, "pids": 32},
             }},
         }))
+        # YAML writes these as 512.0 / 64.0: whole numbers, so accepted as ints.
+        zf.writestr("whole/challenge.yml", yaml.safe_dump({
+            "name": "Whole Floats", "category": "pwn", "description": "x", "value": 50,
+            "flags": ["flag{whole}"],
+            "extra": {"deployment": {
+                "backend": "docker", "image": "img:1", "exposure": "tcp", "ports": [1337],
+                "resource_limits": {"memory_mb": 512.0, "pids": 64.0},
+            }},
+        }))
 
     imp = await client.post(
         f"/api/competitions/{comp}/challenges/import",
@@ -574,8 +583,11 @@ async def test_challenge_yaml_rejects_resource_limits_that_truncate_to_unlimited
                 select(ChallengeDeployment).where(ChallengeDeployment.competition_id == comp)
             )).all()
         }
-    assert set(deps) == {listing["Sane Limits"]}
+    assert set(deps) == {listing["Sane Limits"], listing["Whole Floats"]}
     assert deps[listing["Sane Limits"]].resource_limits == {"cpu": 0.5, "memory_mb": 64, "pids": 32}
+    whole = deps[listing["Whole Floats"]].resource_limits
+    assert whole == {"memory_mb": 512, "pids": 64}
+    assert all(type(v) is int for v in whole.values())
 
 
 async def test_connection_info_authored_and_withheld_while_locked(client):

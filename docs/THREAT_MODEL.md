@@ -99,9 +99,7 @@ over docker's documentation-only egress):
   that can't initiate any connection can't reach a neighbour. The DNS rule is
   scoped to the cluster DNS pods (`k8s-app=kube-dns` in `kube-system`), not any
   host on port 53 — otherwise "DNS-only" would itself be a full outbound channel
-  (DNS tunnelling / a reverse shell to `attacker:53`) (GHSA-vgrr). What the
-  scoping can't remove is the cluster resolver's own recursion — see Residual
-  risks.
+  (DNS tunnelling / a reverse shell to `attacker:53`) (GHSA-vgrr).
 - **allow mode** — egress everywhere *except* the metadata IPs (both families)
   and, when `k8s_cluster_cidr` is configured, the cluster's pod/service ranges —
   so peers and the control plane stay unreachable even for an
@@ -110,7 +108,9 @@ over docker's documentation-only egress):
   policy is programmed. NetworkPolicies are additive and the baseline selects
   every instance pod, so its DNS rule carries the same kube-dns scope as the
   per-instance one — a looser rule there would widen every instance's policy
-  (GHSA-vgrr; a backend test pins the manifest to the provisioner).
+  (GHSA-vgrr; a backend test pins the manifest to the provisioner, and the
+  `baseline_policy` Test-connection leg flags a cluster still running an older,
+  unscoped copy).
 
 This all depends on a **policy-enforcing CNI**. Flannel *accepts* NetworkPolicy
 objects but does not enforce them — so the `egress_enforcement` Test-connection
@@ -123,14 +123,6 @@ no-policy positive control, so an air-gapped node can't produce a false pass).
   operator must run Calico/Cilium/kube-router. *Detected, not prevented.*
 - **`k8s_cluster_cidr` unset in allow mode** → peers/control plane reachable by
   IP for internet-enabled challenges. Recommended in the UI; documented here.
-- **Recursive DNS through the cluster resolver** → deny mode still lets a pod
-  query kube-dns, which resolves external names upstream on its behalf, so data
-  encoded in query names (and answers) can cross the boundary as a
-  low-bandwidth channel (DNS tunnelling). Scoping the rule to kube-dns removes
-  direct port-53 egress, not this. An operator who needs it closed can limit
-  what the cluster resolver answers for the instance pods (e.g. cluster names
-  only), or run instances on a cluster whose resolver doesn't forward.
-  *Accepted / operator-owned.*
 - **Kubernetes PID/fd exhaustion** → a fork bomb can pressure the node. Operator
   sets a kubelet `--pod-max-pids`. *(Docker pins this; k8s can't in-manifest.)*
 - **Docker HTTP-instance peers share a bridge** → per-instance bridges isolate

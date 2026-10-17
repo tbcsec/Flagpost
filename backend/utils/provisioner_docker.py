@@ -475,8 +475,9 @@ class DockerProvisioner(Provisioner):
             "ReadonlyRootfs": True,
             "PidsLimit": pids,
             "Memory": memory_mb * 1024 * 1024,
-            # round(), not int(): float error must never truncate a value at
-            # the floor to just under Docker's own 0.01-CPU minimum.
+            # round(), not int(): a product like 2.01 * 1e9 lands a hair under
+            # the whole number, and int() would shave a nano-CPU off it. (The
+            # clamp above is what keeps the value off 0.)
             "NanoCpus": round(cpu * 1_000_000_000),
             "RestartPolicy": {"Name": "no"},
             "AutoRemove": True,

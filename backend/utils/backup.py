@@ -325,10 +325,21 @@ def _validate_deployment_row(row: dict) -> None:
     with no image, a ``tcp`` spec with no ports, or a ``unique_per_instance``
     template missing its ``<random>`` placeholder) that the interactive editor
     would have rejected — the #323/#324 lesson: the backup import must repeat any
-    invariant the route guards."""
+    invariant the route guards.
+
+    One exception, made in place so the row that lands is the cleaned one:
+    ``resource_limits`` is first normalised into today's bounds
+    (``normalise_resource_limits``) rather than validated as-is. GHSA-vgrr
+    tightened those bounds after v1.7.x, and refusing a value an earlier
+    release accepted would fail the whole restore of an otherwise-valid
+    backup; the cleaned value is the one the provisioners would run anyway."""
     from pydantic import ValidationError
 
     from schemas.instances import DeploymentUpdate
+    from utils.provisioners import normalise_resource_limits
+
+    if "resource_limits" in row:
+        row["resource_limits"] = normalise_resource_limits(row["resource_limits"])
 
     # STRICT validation — no coercion. ``load_row`` persists the raw row as-is, so
     # validating a *coerced* copy (e.g. accepting "1337" as a port and then

@@ -223,6 +223,17 @@ async def test_deployment_route_rejects_resource_limits_that_truncate_to_unlimit
     )
     assert ok.status_code == 200, ok.text
 
+    # A whole-number float is accepted and stored as the integer it names.
+    whole = await client.put(
+        url,
+        json={**base, "resource_limits": {"memory_mb": 256.0, "pids": 64.0}},
+        headers=_auth(admin),
+    )
+    assert whole.status_code == 200, whole.text
+    stored = (await client.get(url, headers=_auth(admin))).json()["resource_limits"]
+    assert stored == {"memory_mb": 256, "pids": 64}
+    assert all(type(v) is int for v in stored.values())
+
 
 async def test_instanced_flag_exposed_on_challenge_reads(client):
     # The competitor-facing challenge list + detail carry `instanced` so the UI

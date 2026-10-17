@@ -53,6 +53,13 @@ def _finite_number(value: Any) -> int | float | None:
     return None
 
 
+def _clamp(key: str, value: int | float) -> int | float:
+    """A finite ``value`` clamped into ``[RESOURCE_MIN, RESOURCE_MAX]`` for
+    ``key``; memory/pids truncated to an int (never below the integer floor)."""
+    value = min(max(value, RESOURCE_MIN[key]), RESOURCE_MAX[key])
+    return int(value) if key in INTEGER_RESOURCES else value
+
+
 def resource_limit(
     limits: dict[str, Any] | None, key: str, default: float
 ) -> float | int:
@@ -70,8 +77,33 @@ def resource_limit(
         value = _finite_number(default)
     if value is None:
         value = RESOURCE_MIN[key]
-    value = min(max(value, RESOURCE_MIN[key]), RESOURCE_MAX[key])
-    return int(value) if key in INTEGER_RESOURCES else float(value)
+    value = _clamp(key, value)
+    return value if key in INTEGER_RESOURCES else float(value)
+
+
+def normalise_resource_limits(limits: Any) -> Any:
+    """Bring a stored ``resource_limits`` mapping inside today's bounds by the
+    same rules as :func:`resource_limit`: a finite number is clamped (and made
+    an int for memory/pids); a non-finite, non-numeric or bool value is dropped,
+    so the operator default applies — exactly what the provisioners would have
+    run. Other keys pass through, and a non-mapping is returned untouched for
+    the caller's validation to reject.
+
+    For restoring rows an earlier release accepted (GHSA-vgrr tightened the
+    authoring bounds after v1.7.x): the backup import cleans rather than
+    refuses them, so an old backup still restores. Interactive authoring and
+    the ctfcli import keep *rejecting* such values — there the author is
+    present to fix them."""
+    if not isinstance(limits, dict):
+        return limits
+    out = {k: v for k, v in limits.items() if k not in RESOURCE_MIN}
+    for key in RESOURCE_MIN:
+        if key not in limits:
+            continue
+        value = _finite_number(limits[key])
+        if value is not None:
+            out[key] = _clamp(key, value)
+    return out
 
 
 @dataclass(frozen=True)

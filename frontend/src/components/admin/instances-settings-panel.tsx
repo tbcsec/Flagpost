@@ -133,8 +133,9 @@ function InstancesSettingsForm({
       tcp_port_min: min,
       tcp_port_max: max,
       default_cpu: clamp(cpu, 0.1, 64, 1),
-      default_memory_mb: clamp(memoryMb, 16, 131072, 256),
-      default_pids: clamp(pids, 16, 65536, 256),
+      // Integer fields server-side: a fraction is refused, so round it here.
+      default_memory_mb: Math.round(clamp(memoryMb, 16, 131072, 256)),
+      default_pids: Math.round(clamp(pids, 16, 65536, 256)),
       max_concurrent: clamp(maxConcurrent, 1, 100000, 100),
       egress_policy: egress,
       // "" clears the base domain (the backend normalises a real value).
@@ -493,6 +494,7 @@ function InstancesSettingsForm({
               type="number"
               min={16}
               max={131072}
+              step={1}
               value={memoryMb}
               onChange={(e) => setMemoryMb(e.target.value)}
             />
@@ -504,6 +506,7 @@ function InstancesSettingsForm({
               type="number"
               min={16}
               max={65536}
+              step={1}
               value={pids}
               onChange={(e) => setPids(e.target.value)}
             />

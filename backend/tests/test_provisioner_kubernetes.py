@@ -591,13 +591,19 @@ def _ssar_handler(*, cluster_admin: bool = False, denied_rights: frozenset = fro
     return handler
 
 
+_SCOPED_BASELINE = {"spec": {"egress": [_DNS_EGRESS]}}
+
+
 def _validate_router(
     *, cluster_admin: bool = False, egress_exit: int | None = 1, baseline_exit: int = 0,
     probe_running: bool = True, denied_rights: frozenset = frozenset(), namespace_ok: bool = True,
+    namespace_policy: dict | None = _SCOPED_BASELINE,
 ) -> _Router:
     """A router covering every call the staged validate() makes, with all legs
-    green by default (good token, netpol accepted, egress enforced — deny-all
-    blocks, unrestricted baseline reaches — and the probe pod up)."""
+    green by default (good token, netpol accepted, the namespace baseline
+    policy scoped, egress enforced — deny-all blocks, unrestricted baseline
+    reaches — and the probe pod up). ``namespace_policy=None`` makes the
+    baseline NetworkPolicy 404."""
     def pods_get(request):
         p = request.url.path
         if p.endswith("/flagpost-egress-probe"):  # phase 1: under deny-all policy
@@ -615,9 +621,14 @@ def _validate_router(
         httpx.Response(200, json={"items": []}) if namespace_ok
         else httpx.Response(403, json={"message": "forbidden"})
     )
+    policy_resp = (
+        httpx.Response(404, json={"message": "not found"}) if namespace_policy is None
+        else httpx.Response(200, json=namespace_policy)
+    )
     return (
         _Router()
         .on("GET", "/version", httpx.Response(200, json={"gitVersion": "v1.30.2"}))
+        .on("GET", "/networkpolicies/flagpost-default-deny-egress", policy_resp)
         .on("POST", "/selfsubjectaccessreviews", _ssar_handler(cluster_admin=cluster_admin, denied_rights=denied_rights))
         .on("GET", lambda r: r.url.path.endswith("/deployments"), ns_resp)
         .on("POST", "/networkpolicies", httpx.Response(201, json={}))
@@ -649,9 +660,40 @@ async def test_validate_all_legs_pass():
     names = [l.name for l in legs]
     assert names == [
         "endpoint_reachable", "privilege_posture", "namespace_ready",
-        "network_policy_support", "egress_enforcement", "probe_run", "public_reachable",
+        "network_policy_support", "baseline_policy", "egress_enforcement", "probe_run",
+        "public_reachable",
     ]
     assert all(l.ok for l in legs), [(l.name, l.detail) for l in legs if not l.ok]
+
+
+@pytest.mark.parametrize(
+    "egress",
+    [
+        # The pre-GHSA-vgrr manifest: DNS ports with no destination scope.
+        [{"ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}]}],
+        # Scoped DNS alongside an unscoped rule is still a hole.
+        [_DNS_EGRESS, {"to": [], "ports": [{"protocol": "TCP", "port": 443}]}],
+    ],
+)
+async def test_validate_flags_an_unscoped_namespace_baseline(egress):
+    """GHSA-vgrr: the baseline is operator-applied, so an upgraded cluster keeps
+    an older copy until k8s/instances-rbac.yaml is re-applied. Test connection
+    says so, and the remaining legs still run."""
+    router = _validate_router(namespace_policy={"spec": {"egress": egress}})
+    prov = KubernetesProvisioner(_cfg(), transport=router.transport(), sleep=_nosleep, tcp_probe=_yes_dial)
+    legs = await prov.validate()
+    leg = _leg(legs, "baseline_policy")
+    assert leg.ok is False
+    assert "re-apply k8s/instances-rbac.yaml" in leg.detail
+    assert _leg(legs, "egress_enforcement").ok
+
+
+async def test_validate_flags_a_missing_namespace_baseline():
+    router = _validate_router(namespace_policy=None)
+    prov = KubernetesProvisioner(_cfg(), transport=router.transport(), sleep=_nosleep, tcp_probe=_yes_dial)
+    leg = _leg(await prov.validate(), "baseline_policy")
+    assert leg.ok is False
+    assert "not found" in leg.detail and "k8s/instances-rbac.yaml" in leg.detail
 
 
 async def test_validate_posture_rejects_an_overprivileged_token():

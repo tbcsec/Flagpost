@@ -37,10 +37,12 @@ from utils.provisioners import INTEGER_RESOURCES, RESOURCE_MAX, RESOURCE_MIN
 # Resource-containment bounds (GHSA-vgrr). A challenge author must not be able
 # to disable the operator's fork-bomb/OOM guards: Docker reads a 0 cpu/memory/
 # pids as UNLIMITED, and the provisioners int()-truncate, so a fraction that
-# truncates to 0 is as bad as 0 itself. So: whole numbers for memory/pids, every
-# value finite (NaN passes every comparison), and nothing below the floors or
-# above the caps — the same RESOURCE_MIN/MAX the settings schema and the
-# provisioners' final clamp read. Absent means "use the operator default".
+# truncates to 0 is as bad as 0 itself. So: whole numbers for memory/pids (256.0
+# counts, stored as 256), every value finite (NaN passes every comparison), and
+# nothing below the floors or above the caps — the same RESOURCE_MIN/MAX the
+# settings schema and the provisioners' final clamp read. Absent means "use the
+# operator default". The backup import normalises instead of rejecting (see
+# utils/backup._validate_deployment_row).
 # One host port is allocated per declared port; without a cap a single deployment
 # could claim the whole ephemeral host-port range and starve every other launch.
 _MAX_PORTS = 16
@@ -87,6 +89,21 @@ class DeploymentUpdate(BaseModel):
     per_subject_cap: int = Field(default=1, ge=1, le=100)
     flag_mode: str = "static"
     flag_template: str | None = None
+
+    @field_validator("resource_limits")
+    @classmethod
+    def _whole_number_limits(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        """A whole-number float for memory/pids (``256.0`` — JSON or YAML can
+        carry one) is the integer it names, so it is stored as that int. A real
+        fraction is left as-is for ``validate_shape`` to reject by name."""
+        if not v:
+            return v
+        out = dict(v)
+        for key in INTEGER_RESOURCES:
+            value = out.get(key)
+            if isinstance(value, float) and value.is_integer():
+                out[key] = int(value)
+        return out
 
     def validate_shape(self) -> str | None:
         """Return a human error if the spec is internally inconsistent, else

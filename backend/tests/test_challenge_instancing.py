@@ -696,7 +696,7 @@ def test_deployment_rejects_resource_limits_that_truncate_to_unlimited():
         ("pids", 0.5),
         ("pids", 15),
         ("pids", float("-inf")),
-        ("pids", True),           # bool is an int subclass, never a limit
+        ("cpu", True),            # bool is an int subclass (True == 1 CPU)
         ("pids", "64"),
     ]:
         err = _err({key: value})
@@ -708,22 +708,32 @@ def test_deployment_rejects_resource_limits_that_truncate_to_unlimited():
     # An integer far past float range is a clean "exceeds", not an OverflowError.
     assert "exceeds" in _err({"pids": 10**400})
 
+    # A whole-number float (JSON/YAML can carry 256.0) is the integer it names:
+    # accepted, and stored as an int; a real fraction is still refused (above).
+    upd = DeploymentUpdate(
+        backend="docker", image_ref="img:1", exposure="tcp", ports=[1337],
+        resource_limits={"cpu": 0.5, "memory_mb": 256.0, "pids": 64.0},
+    )
+    assert upd.validate_shape() is None
+    assert upd.resource_limits == {"cpu": 0.5, "memory_mb": 256, "pids": 64}
+    assert type(upd.resource_limits["memory_mb"]) is int
+    assert type(upd.resource_limits["pids"]) is int
 
-def test_operator_default_limits_share_the_deployment_floors():
+
+def test_operator_default_cpu_shares_the_deployment_floor():
     """GHSA-vgrr residual: the operator-default cpu was only bounded "> 0", so a
     sub-0.01 default (int()-truncated to NanoCpus 0, Docker's UNLIMITED) was
-    accepted. The settings defaults take the same floors as a deployment."""
+    accepted. It takes the same 0.01 floor as a deployment override now.
+    (memory/pids defaults already had integer fields with a 16 floor.)"""
     from pydantic import ValidationError
 
     from schemas.instances import InstanceSettingsUpdate
 
-    for bad in (
-        {"default_cpu": 1e-10},
-        {"default_cpu": 0.001},
-        {"default_memory_mb": 15},
-        {"default_pids": 0.5},
-    ):
+    for cpu in (1e-10, 0.001, 0.0099):
         with pytest.raises(ValidationError):
-            InstanceSettingsUpdate(**bad)
-    ok = InstanceSettingsUpdate(default_cpu=0.01, default_memory_mb=16, default_pids=16)
-    assert (ok.default_cpu, ok.default_memory_mb, ok.default_pids) == (0.01, 16, 16)
+            InstanceSettingsUpdate(default_cpu=cpu)
+    assert InstanceSettingsUpdate(default_cpu=0.01).default_cpu == 0.01
+    # Whole-number floats are accepted as their int for the integer defaults.
+    ok = InstanceSettingsUpdate(default_memory_mb=256.0, default_pids=64.0)
+    assert (ok.default_memory_mb, ok.default_pids) == (256, 64)
+    assert type(ok.default_memory_mb) is int and type(ok.default_pids) is int

@@ -319,7 +319,10 @@ threat model (`docs/THREAT_MODEL.md`). Concrete choices made while implementing:
   (SelfSubjectAccessReview allow/deny matrix — a cluster-admin token fails,
   deliberately), namespace, netpol-support, egress-enforcement, probe-run +
   public-reachability (NodePort dial), http-ingress. The two non-API actions are
-  injectable seams reused from the docker kind.
+  injectable seams reused from the docker kind. (GHSA-vgrr later added a
+  baseline-policy leg after netpol-support: the operator-applied namespace
+  baseline exists and every egress rule in it is scoped, since an upgrade
+  doesn't re-apply the manifest.)
 - **e2e harness.** `docker-compose.instances-k8s.yml` boots single-node k3s in
   Docker; `scripts/e2e-instances-k8s.sh` applies the RBAC, mints a token, and
   runs opt-in tests (`backend/tests_e2e/`) that drive the REAL provisioner —

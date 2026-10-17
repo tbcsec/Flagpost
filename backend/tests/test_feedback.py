@@ -8,6 +8,7 @@ from sqlalchemy import select
 from db import SessionLocal
 from models.audit_log import AuditLogEntry
 from tests.conftest import admin_token
+from tests.test_csv_safe import formula_cells
 
 import main  # noqa: E402
 
@@ -370,6 +371,31 @@ async def test_csv_export(client):
     assert lines[0] == "respondent,email,submitted_at,Rate"
     assert lines[1].startswith("ada,ada@example.com,")
     assert lines[1].endswith(",5")
+
+
+async def test_csv_export_neutralises_formula_injection(client):
+    """GHSA-352q: a free-text answer a spreadsheet would evaluate as a formula —
+    at its start, or after an embedded ';', comma, TAB or line break — is escaped
+    in the responses export an organiser opens (GHSA-352q-g5xh-3299)."""
+    comp = await _competition(client)
+    admin = await admin_token(client)
+    mallory = await _participant(client, comp, "mallory@example.com")
+    survey = await _survey(client, comp, admin)
+    q = await _add_question(client, comp, admin, survey, prompt="Comments", type="long_text")
+    await _open(client, comp, admin, survey)
+    submitted = await client.post(
+        f"/api/competitions/{comp}/surveys/{survey}/responses",
+        json={"answers": [{"question_id": q, "value": "=1+1\nfine;@SUM(1)\tthanks,-2"}]},
+        headers=_auth(mallory),
+    )
+    assert submitted.status_code == 204, submitted.text
+
+    resp = await client.get(
+        f"/api/competitions/{comp}/surveys/{survey}/responses.csv", headers=_auth(admin)
+    )
+    assert resp.status_code == 200
+    assert "'=1+1\nfine;'@SUM(1)\tthanks,'-2" in resp.text
+    assert formula_cells(resp.text) == []
 
 
 # --- module gating (§11.3) ----------------------------------------------------

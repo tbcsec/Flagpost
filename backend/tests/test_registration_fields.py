@@ -9,6 +9,7 @@ and only an organiser can author the field set.
 import pytest
 
 from tests.conftest import admin_token
+from tests.test_csv_safe import formula_cells
 from utils.registration_fields import validate_values
 
 
@@ -277,18 +278,28 @@ async def test_export_csv_is_organiser_only_and_carries_values(client):
 async def test_export_neutralises_csv_formula_injection(client):
     """GHSA-352q: a competitor-controlled free-text answer that a spreadsheet
     would evaluate as a formula is prefixed with an apostrophe in the export, so
-    opening the roster in Excel/LibreOffice can't execute it."""
-    import csv as _csv
-
+    opening the roster in Excel/LibreOffice can't execute it — including where a
+    ';'-list-separator locale or a TAB import splits a cell mid-value, or a line
+    break inside it ends the row early, after which a comma splits too
+    (GHSA-352q-g5xh-3299)."""
     comp = await _competition(client, "individual")
     admin = await admin_token(client)
-    await _define(client, comp, [_DIET], admin)
+    allergies = {"key": "allergies", "label": "Allergies", "field_type": "text", "position": 2}
+    notes = {"key": "notes", "label": "Notes", "field_type": "text", "position": 3}
+    await _define(client, comp, [_DIET, allergies, notes], admin)
     token, _ = await _register(client, "mallory")
-    await client.post(
+    joined = await client.post(
         f"/api/competitions/{comp}/join",
-        json={"field_values": {"diet": "=1+1"}},
+        json={
+            "field_values": {
+                "diet": "=1+1",
+                "allergies": "nuts;=1+1",
+                "notes": "line one\n@SUM(1),-2\tx\t+1",
+            }
+        },
         headers=_auth(token),
     )
+    assert joined.status_code == 200, joined.text
 
     export = await client.get(
         f"/api/competitions/{comp}/registration-fields/export", headers=_auth(admin)
@@ -296,11 +307,10 @@ async def test_export_neutralises_csv_formula_injection(client):
     assert export.status_code == 200
     body = export.text
     assert "'=1+1" in body  # neutralised
-    # No cell in the file begins with a bare formula lead.
-    rows = list(_csv.reader(body.splitlines()))
-    assert not any(
-        cell[:1] in "=+-@" for row in rows for cell in row if cell
-    )
+    assert "nuts;'=1+1" in body and "\n'@SUM(1),'-2\tx\t'+1" in body
+    # No cell begins with a formula lead, whether the file is split on the comma
+    # it was written with, a ';' list separator or TAB, or at every line break.
+    assert formula_cells(body) == []
 
 
 # --- validator unit -----------------------------------------------------------

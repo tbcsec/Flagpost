@@ -183,7 +183,57 @@ async def test_padded_success_resets_the_shared_bucket(client):
         "/api/auth/login", json={"identifier": "  Admin@Example.com ", "password": "changeme"}
     )
     assert ok.status_code == 200, ok.text
-    again = await client.post(
-        "/api/auth/login", json={"identifier": "admin@example.com", "password": "wrong"}
+    # A whole fresh budget: had the reset missed the recorded key, the bucket
+    # would still hold the failures above and refuse well before the end.
+    for _ in range(settings.auth_rate_limit):
+        again = await client.post(
+            "/api/auth/login", json={"identifier": "admin@example.com", "password": "wrong"}
+        )
+        assert again.status_code == 401, again.text
+
+
+async def test_login_throttle_folds_lookalike_spellings(client):
+    """GHSA-vv68: a directory matches identifiers under its own rules (RFC 4518:
+    compatibility forms, case folding, formatting characters dropped), so
+    fullwidth letters or zero-width characters must not mint fresh budgets."""
+    await admin_token(client)
+    for _ in range(settings.auth_rate_limit + 1):
+        await client.post(
+            "/api/auth/login",
+            json={"identifier": "admin@example.com", "password": "wrong"},
+        )
+    for lookalike in (
+        "ａｄｍｉｎ@example.com",  # fullwidth
+        "ad\u200bmin@example.com",  # zero-width space
+        "ad\u00admin@example.com",  # soft hyphen
+        "\U0001d41admin@example.com",  # mathematical bold a
+    ):
+        resp = await client.post(
+            "/api/auth/login", json={"identifier": lookalike, "password": "wrong"}
+        )
+        assert resp.status_code == 429, (lookalike, resp.text)
+
+
+async def test_password_taking_endpoints_share_one_budget(client):
+    """GHSA-vv68: every endpoint that takes the caller's current password draws
+    on one per-account budget, so a stolen session gets five guesses in five
+    minutes, not five per endpoint."""
+    reg = await client.post(
+        "/api/auth/register",
+        json={"display_name": "stepper", "email": "stepper@example.com", "password": "password123"},
     )
-    assert again.status_code == 401, again.text
+    token = reg.json()["access_token"]
+    for _ in range(5):
+        wrong = await client.post(
+            "/api/auth/change-password",
+            json={"current_password": "wrong-guess", "new_password": "another-pass-1"},
+            headers=_auth(token),
+        )
+        assert wrong.status_code != 429, wrong.text
+    for path, body in (
+        ("/api/auth/change-email", {"current_password": "password123", "new_email": "s2@example.com"}),
+        ("/api/auth/change-username", {"current_password": "password123", "new_display_name": "stepper2"}),
+        ("/api/api-tokens", {"current_password": "password123", "description": "ci", "expires_in_days": 30}),
+    ):
+        resp = await client.post(path, json=body, headers=_auth(token))
+        assert resp.status_code == 429, (path, resp.text)

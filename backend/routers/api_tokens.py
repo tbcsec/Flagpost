@@ -30,7 +30,7 @@ from auth.security import averify_password, generate_api_token, hash_api_token
 from db import get_db, utcnow
 from models.api_token import ApiToken
 from models.user import User
-from ratelimit import get_rate_limiter
+from ratelimit import get_rate_limiter, step_up_allowed
 from ratelimit.base import RateLimiter
 from schemas.api_token import ApiTokenCreate, ApiTokenCreated, ApiTokenOut
 from utils.event_bus import event_bus
@@ -92,9 +92,7 @@ async def create_token(
     """
     # Throttle before the password check — the mint endpoint takes a password,
     # so unthrottled it would be a brute-force oracle for a stolen session.
-    if not await rate_limiter.hit(
-        f"api-token-create:{current_user.id}", limit=5, window_seconds=300
-    ):
+    if not await step_up_allowed(rate_limiter, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many attempts — please wait a few minutes and try again",

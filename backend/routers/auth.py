@@ -29,6 +29,7 @@ from auth.identity import (
     display_name_taken,
     email_taken,
     find_by_identifier,
+    login_throttle_key,
     normalize_identifier,
 )
 from auth.registration_policy import domain_allowed
@@ -50,7 +51,7 @@ from models.identity_provider import IdentityProvider
 from models.password_reset import PasswordResetToken
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 from models.user import RefreshSession, User
-from ratelimit import get_rate_limiter
+from ratelimit import get_rate_limiter, step_up_allowed
 from ratelimit.base import RateLimiter
 from schemas.auth_providers import provider_config_or_none
 from utils import ldap as ldap_utils
@@ -409,9 +410,9 @@ async def login(
     # limit can't be probed by timing. Keyed per identifier — see the note on
     # `auth_rate_limit` about why not per IP. Deliberately ahead of the LDAP
     # leg below too, so the directory can't be probed unthrottled (ADR-0022 §5).
-    # Keyed on the identifier as the lookup normalises it, so padding it with
-    # whitespace can't mint a fresh budget per spelling (GHSA-vv68).
-    login_key = f"login:{normalize_identifier(body.identifier)}"
+    # Keyed coarsely enough that no spelling the lookup or the directory treats
+    # as the same account mints a fresh budget (GHSA-vv68).
+    login_key = f"login:{login_throttle_key(body.identifier)}"
     await _throttle(rate_limiter, login_key)
     # The identifier is the display name (username) or the email, matched
     # case-insensitively (§7.7).
@@ -513,14 +514,26 @@ async def refresh(
 
     # Rotate: revoke the presented session and issue a fresh one INHERITING the
     # family, so the whole lineage stays traceable for reuse detection and a
-    # stolen token is usable at most until the next legitimate refresh.
-    session.revoked_at = utcnow()
-    # A session minted before reuse detection has no family; give it one now so
-    # the rotated-out token and its successor share a lineage, and replaying
-    # the old token still revokes the new one (GHSA-vv68).
-    if session.family_id is None:
-        session.family_id = secrets.token_hex(16)
-    family_id = session.family_id
+    # stolen token is usable at most until the next legitimate refresh. A
+    # session minted before reuse detection has no family; it gets one now, so
+    # the rotated-out token and its successor share a lineage (GHSA-vv68).
+    # One conditional UPDATE claims the rotation: of two refreshes presenting
+    # the same token at once, only one revokes it and gets a successor. The
+    # other is answered like a replay, so a token can't fork into two live
+    # lineages that reuse detection would see only half of.
+    family_id = session.family_id or secrets.token_hex(16)
+    claimed = await db.execute(
+        update(RefreshSession)
+        .where(RefreshSession.id == session.id, RefreshSession.revoked_at.is_(None))
+        .values(revoked_at=utcnow(), family_id=family_id)
+        .execution_options(synchronize_session=False)
+    )
+    if claimed.rowcount != 1:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
     user = await db.get(User, session.user_id)
     await db.commit()
 
@@ -596,9 +609,7 @@ async def change_password(
     # endpoint is a brute-force oracle for anyone holding a stolen session, and
     # was the one such endpoint left unthrottled (change-username/change-email
     # already do this). 5/300s per user (GHSA-vv68).
-    if not await rate_limiter.hit(
-        f"change-password:{current_user.id}", limit=5, window_seconds=300
-    ):
+    if not await step_up_allowed(rate_limiter, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many attempts — please wait a few minutes and try again",
@@ -658,9 +669,7 @@ async def change_username(
     """
     # Throttle before the password check — an unthrottled password-taking
     # endpoint is a brute-force oracle for a stolen session (as change-email).
-    if not await rate_limiter.hit(
-        f"change-username:{current_user.id}", limit=5, window_seconds=300
-    ):
+    if not await step_up_allowed(rate_limiter, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many attempts — please wait a few minutes and try again",
@@ -768,9 +777,7 @@ async def change_email(
     # Limit attempts *before* checking the password: this endpoint takes an
     # arbitrary password guess, so an unthrottled version is a brute-force
     # oracle for anyone holding a stolen session.
-    if not await rate_limiter.hit(
-        f"change-email:{current_user.id}", limit=5, window_seconds=300
-    ):
+    if not await step_up_allowed(rate_limiter, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many attempts — please wait a few minutes and try again",

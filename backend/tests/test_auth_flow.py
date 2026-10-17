@@ -341,6 +341,29 @@ async def test_pre_family_session_joins_a_family_when_rotated(client, monkeypatc
     assert chain.status_code == 401
 
 
+async def test_concurrent_refreshes_rotate_a_token_once(client):
+    """GHSA-vv68: two refreshes presenting the same token at once get one
+    successor between them, so the lineage can't fork into two live chains."""
+    import asyncio
+
+    reg = await client.post(
+        "/api/auth/register",
+        json={"display_name": "racer", "email": "racer@example.com", "password": "password123"},
+    )
+    assert reg.status_code == 201
+    token = client.cookies.get("refresh_token")
+    client.cookies.clear()
+    results = await asyncio.gather(
+        *(
+            client.post("/api/auth/refresh", cookies={"refresh_token": token})
+            for _ in range(4)
+        )
+    )
+    assert sorted(r.status_code for r in results) == [200, 401, 401, 401], [
+        (r.status_code, r.text) for r in results
+    ]
+
+
 async def test_password_checks_run_off_the_event_loop(client, monkeypatch):
     """GHSA-vv68: change-email and change-username verify the current password
     on the bounded hash pool, like change-password — argon2 inline would stall

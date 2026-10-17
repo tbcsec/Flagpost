@@ -249,6 +249,11 @@ async def test_personal_rule_runs_no_org_action(client, monkeypatch):
     await automation_actions.execute_action(
         None, rule, "challenge.solved", {}, {"type": "webhook", "url": "https://x.example"}
     )
+    # Targeting self doesn't make a non-personal action personal.
+    await automation_actions.execute_action(
+        None, rule, "challenge.solved", {},
+        {"type": "webhook", "target": "self", "url": "https://x.example"},
+    )
     await automation_actions.execute_action(
         None, rule, "challenge.solved", {}, {"type": "notify", "target": "role", "role_name": "Judge"}
     )

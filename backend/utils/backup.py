@@ -768,7 +768,9 @@ async def _assert_import_within_grant(
         # The interactive route only lets you automate on an event you may
         # observe (_authorize_trigger). An import is a site-wide write, so the
         # importer must hold the trigger's governing permission site-wide
-        # (GHSA-x8v4-p7x5-v6c8).
+        # (GHSA-x8v4-p7x5-v6c8). A personal row is also bound by its *owner's*
+        # grants, which the engine re-checks every time the rule would run
+        # (automation_engine._owner_may_observe).
         from utils.automation_catalog import required_permission
 
         permission = required_permission(obj.trigger_type)

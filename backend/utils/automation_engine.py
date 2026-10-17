@@ -5,8 +5,9 @@ A pure consumer of the event bus: the automations module subscribes
 evaluation and action execution never hold up the request that emitted the
 event. For each event it loads enabled rules matching ``trigger_type``,
 filters by scope (§5.1: competition match, and owner match for personal
-rules), AND-evaluates ``conditions`` against the payload, and runs the §5.3
-actions of every rule that matches — then bumps the rule's
+rules), AND-evaluates ``conditions`` against the payload, re-checks a personal
+rule's trigger authorization against its owner, and runs the §5.3 actions of
+every rule that passes — then bumps the rule's
 ``trigger_count``/``last_triggered_at`` and emits ``automation.rule_triggered``.
 
 Loop guards (§5.2):
@@ -36,6 +37,8 @@ from typing import Any
 
 from sqlalchemy import select
 
+from auth.deps import user_has_permission
+from auth.permissions import Scope, scope_of
 from config import settings
 from db import utcnow
 from models.automation import AutomationRule
@@ -123,6 +126,41 @@ def _scope_matches(rule: AutomationRule, payload: dict[str, Any]) -> bool:
     return True
 
 
+async def _owner_may_observe(
+    db, rule: AutomationRule, event_name: str, payload: dict[str, Any]
+) -> bool:
+    """Whether a personal rule's owner may observe its trigger (§5.1 trigger
+    authorization), re-checked every time the rule would run.
+
+    The personal routes check this when a rule is written
+    (``routers.automations._authorize_trigger``); checking it again here covers
+    a rule that arrived any other way — a backup import, a row older than that
+    check — and an owner who has since lost the permission
+    (GHSA-x8v4-p7x5-v6c8). Same bound as the route — a global-scope
+    permission site-wide, a competition one in the rule's competition — except
+    that a rule with no competition, which the route can only check site-wide,
+    is checked in the competition this event happened in: the narrowest grant
+    that still lets its owner see this event."""
+    from utils.automation_catalog import required_permission  # import cycle
+
+    permission = required_permission(event_name)
+    if scope_of(permission) is Scope.GLOBAL:
+        scope_competition = None
+    elif rule.competition_id is not None:
+        scope_competition = rule.competition_id
+    else:
+        scope_competition = payload.get("competition_id")
+    if await user_has_permission(db, rule.owner_user_id, permission, scope_competition):
+        return True
+    logger.warning(
+        "personal rule %s refused on %r (owner lacks %r)",
+        rule.id,
+        event_name,
+        permission,
+    )
+    return False
+
+
 async def handle_event(db_factory, event_name: str, payload: dict[str, Any]) -> None:
     """Evaluate every enabled rule for one emitted event (§5.2)."""
     if event_name.startswith("automation."):
@@ -169,9 +207,19 @@ async def handle_event(db_factory, event_name: str, payload: dict[str, Any]) -> 
         ):
             return
 
+        # Personal rules re-pass trigger authorization against their owner.
+        # Decide for every rule before running any: run_rule can roll the
+        # session back, which expires the rules still waiting to run.
+        runnable = [
+            r
+            for r in matched
+            if r.owner_user_id is None
+            or await _owner_may_observe(db, r, event_name, payload)
+        ]
+
         token = _depth.set(depth + 1)
         try:
-            for rule in matched:
+            for rule in runnable:
                 await run_rule(db, rule, event_name, payload)
         finally:
             _depth.reset(token)

@@ -515,6 +515,156 @@ async def test_personal_rule_fires_only_for_its_owner(client):
     assert len(notifs) == 1 and notifs[0]["type"] == "challenge.solved"
 
 
+_SHARED = "challenge.flag_shared_detected"  # view_submissions — staff only
+
+
+def _self_notify_row(**fields) -> dict:
+    return {
+        "conditions": [],
+        "actions": [{"type": "notify", "target": "self", "title": "Fired"}],
+        "is_enabled": True,
+        **fields,
+    }
+
+
+async def _emit_shared(comp: str, user_id: str) -> None:
+    await event_bus.emit(
+        _SHARED,
+        {"competition_id": comp, "challenge_id": "c", "user_id": user_id,
+         "matched_user_id": "someone-else"},
+    )
+    await event_bus.wait_for_background()
+
+
+async def _user_id(client, token) -> str:
+    return (await client.get("/api/auth/me", headers=_auth(token))).json()["id"]
+
+
+async def _trigger_counts() -> dict[str, int]:
+    async with SessionLocal() as session:
+        rows = await session.execute(select(AutomationRule.name, AutomationRule.trigger_count))
+    return dict(rows.all())
+
+
+async def _rule_triggered_ids() -> list[str]:
+    async with SessionLocal() as session:
+        entries = await session.scalars(
+            select(AuditLogEntry).where(AuditLogEntry.event_name == "automation.rule_triggered")
+        )
+        return [e.payload["rule_id"] for e in entries]
+
+
+async def test_imported_personal_rule_is_authorized_against_its_owner(client):
+    """GHSA-x8v4: a personal rule's trigger is authorized against its *owner*,
+    not whoever imported it. A restore can attach a personal rule on a
+    staff-only trigger to a participant (the importer holds everything); the
+    engine re-checks the owner whenever the rule would run, so it stays inert —
+    no notification, no trigger_count, no rule_triggered — while the same rule
+    owned by someone who may observe the trigger fires."""
+    from utils import backup
+
+    comp = await _competition(client)
+    admin = await admin_token(client)
+    ada = await _participant(client, comp, "ada@example.com")
+    ada_id, admin_id = await _user_id(client, ada), await _user_id(client, admin)
+
+    doc = {
+        "flagpost_export": True,
+        "schema_version": backup.SCHEMA_VERSION,
+        "data": {
+            # Natural keys map both owners onto the live accounts.
+            "users": [
+                {"id": "old-ada", "display_name": "ada", "email": "ada@example.com"},
+                {"id": "old-admin", "display_name": "admin", "email": "admin@example.com"},
+            ],
+            "automation_rules": [
+                _self_notify_row(id="r1", competition_id=None, owner_user_id="old-ada",
+                                 name="Ada's", trigger_type=_SHARED),
+                _self_notify_row(id="r2", competition_id=None, owner_user_id="old-admin",
+                                 name="Admin's", trigger_type=_SHARED),
+            ],
+        },
+    }
+    resp = await client.post(
+        "/api/site-settings/import",
+        json={"sections": ["users", "automations"], "payload": doc},
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 200, resp.text
+
+    await _emit_shared(comp, ada_id)
+    await _emit_shared(comp, admin_id)
+
+    assert [n for n in await _notifications(client, ada) if n["type"] == _SHARED] == []
+    assert len([n for n in await _notifications(client, admin) if n["type"] == _SHARED]) == 1
+    assert await _trigger_counts() == {"Ada's": 0, "Admin's": 1}
+    async with SessionLocal() as session:
+        admins_rule = await session.scalar(
+            select(AutomationRule.id).where(AutomationRule.name == "Admin's")
+        )
+    assert await _rule_triggered_ids() == [admins_rule]
+
+
+async def test_legacy_personal_rule_on_a_staff_only_trigger_does_not_fire(client):
+    """GHSA-x8v4: personal rules written before the routes checked trigger
+    authorization can still sit on staff-only events. Such a row stays inert,
+    while a legacy rule on an event its owner may observe keeps firing — one
+    with no competition is checked against the competition the event is in."""
+    comp = await _competition(client)
+    chal = await _challenge(client, comp)
+    ada = await _participant(client, comp, "ada@example.com")
+    ada_id = await _user_id(client, ada)
+    async with SessionLocal() as session:
+        session.add_all([
+            AutomationRule(**_self_notify_row(
+                name="Oracle", trigger_type=_SHARED, owner_user_id=ada_id,
+                competition_id=comp,
+            )),
+            AutomationRule(**_self_notify_row(
+                name="My solves", trigger_type="challenge.solved",
+                owner_user_id=ada_id, competition_id=None,
+            )),
+        ])
+        await session.commit()
+
+    await _emit_shared(comp, ada_id)
+    await _solve(client, comp, chal, ada)
+
+    assert [n["type"] for n in await _notifications(client, ada)] == ["challenge.solved"]
+    assert await _trigger_counts() == {"Oracle": 0, "My solves": 1}
+
+
+async def test_personal_rule_stops_when_its_owner_loses_the_trigger(client):
+    """GHSA-x8v4: the run-time check follows the owner's current grants — a
+    Judge's personal rule on a staff trigger fires while they're a Judge, and
+    stops once they're not."""
+    from models.role import RoleAssignment
+
+    comp = await _competition(client)
+    judge = await _judge(client, comp, "judge@example.com")
+    judge_id = await _user_id(client, judge)
+    resp = await client.post(
+        "/api/automations/personal",
+        json=_notify_rule(trigger=_SHARED, target="self", competition_id=comp),
+        headers=_auth(judge),
+    )
+    assert resp.status_code == 201, resp.text
+
+    await _emit_shared(comp, judge_id)
+    assert len(await _notifications(client, judge)) == 1
+
+    async with SessionLocal() as session:
+        assignment = await session.scalar(
+            select(RoleAssignment).where(RoleAssignment.user_id == judge_id)
+        )
+        await session.delete(assignment)
+        await session.commit()
+
+    await _emit_shared(comp, judge_id)
+    assert len(await _notifications(client, judge)) == 1
+    assert (await _trigger_counts())["Test rule"] == 1
+
+
 # --- the engine + executors, driven by real events ---------------------------
 
 

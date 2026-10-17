@@ -1041,7 +1041,7 @@ async def test_import_holds_personal_rules_to_the_personal_schema(client):
         {"id": "old-admin", "display_name": "admin", "email": "admin@example.com"}
     ]
     async with SessionLocal() as db:
-        with pytest.raises(backup.ImportError_):
+        with pytest.raises(backup.ImportError_, match="notify action targeting self"):
             await backup.import_data(db, storage, doc, ["users", "automations"])
 
 

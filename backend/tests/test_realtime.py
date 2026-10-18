@@ -472,6 +472,153 @@ async def test_frozen_scoreboard_room_cannot_be_rearmed_by_a_silent_board_change
         await _drain_and_expect_silence(ws)
 
 
+@pytest.mark.parametrize("move", ["hint", "adjustment", "award"])
+async def test_frozen_scoreboard_room_ignores_post_cutoff_point_moves(client, move):
+    """Hint costs, score adjustments and awards are stamped when they happen —
+    after the cutoff, under a freeze — so they can never move the frozen board
+    and never broadcast. The unfreeze frame proves each one really landed."""
+    from db import SessionLocal
+    from models.automation import Achievement
+    from models.score_adjustment import ScoreAdjustment
+    from models.team import Team
+    from sqlalchemy import select
+    from utils.event_bus import event_bus
+
+    comp, chal = await _competition_with_challenge(client)
+    admin = await admin_token(client)
+    watcher = await _joined_participant(client, comp, "mwatch@example.com", "Watch")
+    actor = await _joined_participant(client, comp, "mact@example.com", "Act")
+    hint = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges/{chal}/hints",
+            json={"body": "Look closer", "cost": 10},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    solved = await client.post(
+        f"/api/competitions/{comp}/challenges/{chal}/submit",
+        json={"flag": "flag{win}"},
+        headers=_auth(actor),
+    )
+    assert solved.json()["correct"] is True
+    r = await client.post(
+        f"/api/competitions/{comp}/scoreboard/freeze", json={}, headers=_auth(admin)
+    )
+    assert r.status_code == 200
+
+    async with WsTestClient(main.app, f"/ws/scoreboard/{comp}") as ws:
+        await ws.send_json({"token": watcher})
+        assert (await ws.receive_json())["type"] == "auth_ok"
+        assert (await ws.receive_json())["frozen"] is True
+
+        if move == "hint":
+            revealed = await client.post(
+                f"/api/competitions/{comp}/challenges/{chal}/hints/{hint}/reveal",
+                headers=_auth(actor),
+            )
+            assert revealed.status_code == 200, revealed.text
+            expected = 90
+        else:
+            # The automation actions' rows + events (update_score / create_award).
+            async with SessionLocal() as db:
+                team_id = await db.scalar(
+                    select(Team.id).where(Team.competition_id == comp, Team.name == "Act")
+                )
+                if move == "adjustment":
+                    db.add(ScoreAdjustment(
+                        competition_id=comp, points=25, reason="bonus", team_id=team_id
+                    ))
+                    event, expected = "score.adjusted", 125
+                else:
+                    db.add(Achievement(
+                        competition_id=comp, title="Style", points=40, team_id=team_id
+                    ))
+                    event, expected = "achievement.awarded", 140
+                await db.commit()
+            await event_bus.emit(event, {"competition_id": comp, "team_id": team_id})
+        await _drain_and_expect_silence(ws)
+
+        await client.post(
+            f"/api/competitions/{comp}/scoreboard/unfreeze", headers=_auth(admin)
+        )
+        live = await ws.receive_json()
+        assert live["frozen"] is False
+        assert {e["name"]: e["points"] for e in live["entries"]}["Act"] == expected
+
+
+async def test_frozen_scoreboard_room_fails_closed_without_a_solve_time(client):
+    """A solve event whose ``solved_at`` is missing or unreadable can't be placed
+    against the cutoff, so while frozen it doesn't broadcast — even for a solve
+    that really is pre-cutoff, which goes out once the event carries its time."""
+    from datetime import timedelta
+
+    from db import SessionLocal, ensure_aware_utc
+    from models.challenge import Challenge
+    from models.competition import Competition
+    from models.user import User
+    from utils.event_bus import event_bus
+    from utils.grading import record_grade
+    from utils.scoring import resolve_subject
+
+    comp, chal = await _competition_with_challenge(client)
+    admin = await admin_token(client)
+    watcher = await _joined_participant(client, comp, "cwatch@example.com", "Watch")
+    resp = await client.post(
+        "/api/auth/register",
+        json={"email": "cact@example.com", "password": "password123", "display_name": "cact"},
+    )
+    actor, actor_id = resp.json()["access_token"], resp.json()["user"]["id"]
+    assert (
+        await client.post(
+            f"/api/competitions/{comp}/teams", json={"name": "Act"}, headers=_auth(actor)
+        )
+    ).status_code == 201
+    r = await client.post(
+        f"/api/competitions/{comp}/scoreboard/freeze", json={}, headers=_auth(admin)
+    )
+    assert r.status_code == 200
+
+    async with WsTestClient(main.app, f"/ws/scoreboard/{comp}") as ws:
+        await ws.send_json({"token": watcher})
+        assert (await ws.receive_json())["type"] == "auth_ok"
+        assert (await ws.receive_json())["frozen"] is True
+
+        # A genuinely pre-cutoff solve row, so only the payload decides.
+        async with SessionLocal() as db:
+            competition = await db.get(Competition, comp)
+            subject = await resolve_subject(db, competition, await db.get(User, actor_id))
+            outcome = await record_grade(
+                db,
+                competition=competition,
+                challenge=await db.get(Challenge, chal),
+                subject=subject,
+                user_id=actor_id,
+                value="flag{win}",
+                correct=True,
+                created_at=ensure_aware_utc(competition.scoreboard_frozen_at)
+                - timedelta(seconds=30),
+            )
+            await db.commit()
+        base = {
+            "competition_id": comp,
+            "challenge_id": chal,
+            "user_id": actor_id,
+            "team_id": subject.team_id,
+        }
+        await event_bus.emit("challenge.solved", base)
+        await _drain_and_expect_silence(ws)
+        await event_bus.emit("challenge.solved", {**base, "solved_at": "not-a-time"})
+        await _drain_and_expect_silence(ws)
+
+        await event_bus.emit(
+            "challenge.solved",
+            {**base, "solved_at": outcome.submission.created_at.isoformat()},
+        )
+        frame = await ws.receive_json()
+        assert frame["frozen"] is True
+        assert {e["name"]: e["points"] for e in frame["entries"]}["Act"] == 100
+
+
 async def test_challenge_presence_room_closed_to_competitors_unless_running(client):
     """GHSA-r7j2: the #221 status gate — the REST detail 403s a competitor unless
     the competition is running, so the presence room rejects them once it has

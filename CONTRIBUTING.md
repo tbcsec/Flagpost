@@ -129,8 +129,12 @@ images, so the tag *is* the release artefact — there's nothing to build by han
    [`frontend/src/lib/changelog.ts`](frontend/src/lib/changelog.ts) — the
    `/changelog` page is bundled static data, so a tagged build only knows the
    history committed before the tag. Commit it with the version bump.
-3. Tag and push: `git tag v1.3.0 && git push origin v1.3.0`.
-4. Write the GitHub Release notes.
+3. **Rebuild the user guides.** Each guide's cover is stamped with
+   `SOURCE_BUILD_VERSION`, and the frontend image bundles the PDFs, so run
+   `python build.py --deploy` in [`docs/guides/`](docs/guides/README.md) after
+   the bump and commit the refreshed `frontend/public/guides/*.pdf` with it.
+4. Tag and push: `git tag v1.3.0 && git push origin v1.3.0`.
+5. Write the GitHub Release notes.
 
 Step 1 is easy to forget and matters more than it looks. Release *images* get
 their version baked from the tag automatically, but the README's headline

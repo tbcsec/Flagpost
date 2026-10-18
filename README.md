@@ -61,6 +61,12 @@ The things that set Flagpost apart — every one of them **built and working tod
   reaping, raw TCP or per-instance HTTPS subdomains, and a "Test connection"
   button so operators verify the infrastructure before anyone clicks *Launch*.
   An optional module that ships inert until configured.
+- **💻 Programming challenges with a built-in code judge.** Competitors upload or
+  write code in the browser and watch the verdict arrive live, judged against
+  hidden tests in network-less, resource-limited containers. Nine languages, a
+  Judging page to rejudge and override, clarifications, and ICPC/Kattis
+  problem-package import/export. Also an optional module that ships inert until
+  configured.
 - **🏆 A scoreboard done right.** Live standings with first-blood, parallel
   **brackets/divisions**, a **freeze** for the final stretch, a public **spectator
   board**, and a **CTFtime feed** so rated events just work.
@@ -141,6 +147,8 @@ The things that set Flagpost apart — every one of them **built and working tod
 - **Connection info** (URL / `host:port`) for challenges that run a live service
 - **On-demand instances** per team/player (Docker /
   Kubernetes provisioners, optional module)
+- **Programming challenges** judged against hidden tests,
+  with live verdicts (code judge, optional module)
 - Bulk **ctfcli YAML** import/export
 - Manual guess-cap resets for multiple-choice
 

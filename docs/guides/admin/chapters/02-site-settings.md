@@ -27,14 +27,17 @@ appear (chapter 3).
 "your email was changed" notice, and the automation *send email* action
 (notifications themselves are in-app only). Without SMTP those flows quietly
 do nothing — a password reset still *says* a link is on its way — so
-configure it early. The password field is write-only.
+configure it early. The password field is write-only. Only a full
+Administrator can change the server, its credentials or the From address
+(chapter 3).
 
 Two registration controls live here too: an **email domain allowlist**
 (subdomains included; makes email mandatory at sign-up; a rejected sign-up
 sees only a generic error; also applies to open-policy providers), and
 **email verification** — a self-registered account must confirm its address
-before it can *join a competition*. It needs SMTP, and admin-created
-accounts are exempt.
+before it can *join a competition*. It needs SMTP. Accounts a full
+Administrator creates are exempt; those a *manage users* delegate creates
+are not (chapter 3).
 
 ## Appearance
 

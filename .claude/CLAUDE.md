@@ -31,15 +31,15 @@ file, don't ignore it.
 Tiers 0–3 are complete and the platform shipped **v1.0.0 on 2026-07-25**, then
 v1.1.0 through v1.6.0 (v1.5.1 was the Apache-2.0 relicense — ADR-0035), **v1.7.0
 (2026-10-13: module SDK & marketplace, cross-competition skills web, challenge
-sharing links, RustFS)** and **v1.7.1 (2026-10-14: a security patch for
+sharing links, RustFS)**, **v1.7.1 (2026-10-14: a security patch for
 cross-worker WebSocket revocation — GHSA-p679-w29c-326x — plus background-handler
-time-budget fixes)**. **The latest tag is `v1.7.1`; `main` is now `1.7.1-src`**
-(`SOURCE_BUILD_VERSION` in `backend/config.py`, bumped at tag time; see
-CONTRIBUTING → "Cutting a release"), accumulating the **v1.8.0** milestone:
-**programming challenges — a code-execution judge** (epic #446, sub-issues
-#447–#451). Its design is **ADR-0042**, and it is not built yet; read the ADR
-before starting any of it. The ICPC-style ranking mode is a *later* milestone and
-is deliberately not a module (ADR-0042 explains why).
+time-budget fixes)** and **v1.8.0 (2026-10-18: programming challenges — the
+optional code judge, epic #446, designed in ADR-0042 and ARCHITECTURE §17 —
+plus a security pass that closed every open advisory)**. **The latest tag is
+`v1.8.0`; `main` is now `1.8.0-src`** (`SOURCE_BUILD_VERSION` in
+`backend/config.py`, bumped at tag time; see CONTRIBUTING → "Cutting a
+release"). The next milestone hasn't been opened yet. The ICPC-style ranking mode
+is a *later* milestone and is deliberately not a module (ADR-0042 explains why).
 
 The tier/phase plans in `docs/claude_plans/` are **finished and historical** —
 don't work "the next phase". Work is tracked as **GitHub issues against version

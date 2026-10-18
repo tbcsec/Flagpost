@@ -48,6 +48,11 @@ update reaches them automatically. **Clone** one for an editable variant, or
   tickets, announcements, judging, instances…) apply inside whichever
   competition the role is granted for.
 
+A global role can carry competition permissions too, and then holds them in
+every competition. Only such a role sees private competitions its holder
+has no role in: a role with just *create competitions* can't see the
+private events it creates until its holder is granted a role in them.
+
 So "ticket handler who can also see analytics" or "site moderator who
 manages users but never touches events" are each a five-minute custom role,
 not a code change.

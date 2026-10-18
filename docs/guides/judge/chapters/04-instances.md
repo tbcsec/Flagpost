@@ -15,7 +15,8 @@ Open an existing challenge and fill in **Deployment**:
   to have set a base domain), or *None*.
 - **Ports**, **Environment variables**, **Instances per team**, and
   resource overrides — **CPUs**, **Memory**, **PIDs**, **Lifetime** — which
-  default to the site or competition values when blank.
+  default to the site or competition values when blank (memory and PIDs
+  take whole numbers).
 - **Flag mode** — *Shared flag* (the challenge's own flag, same for
   everyone) or *Unique per instance*: a **Flag template** containing the
   random-token placeholder the field names. Each instance gets its own flag,

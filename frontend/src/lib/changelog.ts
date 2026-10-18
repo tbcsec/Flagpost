@@ -29,6 +29,14 @@ function entry(
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  entry("v1.8.0", "2026-10-18", "Programming challenges & a code judge", [
+    "Programming challenges: a new optional code judge runs competitors' solutions against hidden test cases in isolated containers. Competitors upload a file or write code on the problem page, try it on the examples, and watch the verdict arrive live. Ships off until an operator enables it.",
+    "Nine languages out of the box (Python 3, PyPy 3, C, C++, Java, Go, Rust, C# and JavaScript), with per-language time multipliers and an optional ignore-letter-case output check.",
+    "For organisers: test-case authoring with reference-solution checks, a Judging page to rejudge submissions and override verdicts (points follow the latest verdict), clarifications answered privately or sent to everyone, and problem import/export in the open ICPC/Kattis package format.",
+    "Competitors can download challenge files from the problem page and the challenge dialog.",
+    "Admin: a colleague given a narrow site-wide role now reaches exactly the Admin pages that role covers.",
+    "Security: a broad hardening pass. Delegated administrators can no longer act on accounts, mail settings or backup contents beyond their own permissions; sign-in throttling and session refresh are tighter; uploads, archives and outbound responses are size-bounded; plus scoreboard-freeze and SSO fixes. Read the upgrade notes before upgrading.",
+  ]),
   entry("v1.7.1", "2026-10-14", "Security & reliability fixes", [
     "Security: revoking someone's access — a ban, account deletion, team removal or role change — now reliably closes their live connections on every server process, not just one. Multi-worker deployments should upgrade (advisory GHSA-p679-w29c-326x).",
     "Reliability: slow background work is no longer cut off silently — challenge-instance provisioning, announcement notifications and automation rules each get a realistic time budget, and a large announcement can no longer fail to notify anyone.",

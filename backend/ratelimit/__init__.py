@@ -32,3 +32,12 @@ def _rate_limiter() -> RateLimiter:
 
 def get_rate_limiter() -> RateLimiter:
     return _rate_limiter()
+
+
+async def step_up_allowed(rate_limiter: RateLimiter, user_id: str) -> bool:
+    """Record an attempt at an endpoint that takes the caller's current password
+    (change password, username or email; minting an API token), and whether it
+    is within budget: 5 per 5 minutes per account, shared by all of them. One
+    bucket each would add up to a larger guessing budget for whoever holds a
+    stolen session (GHSA-vv68-w7qp-6cpf)."""
+    return await rate_limiter.hit(f"step-up:{user_id}", limit=5, window_seconds=300)

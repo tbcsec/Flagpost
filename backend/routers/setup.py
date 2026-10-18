@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.identity import display_name_taken, email_taken
-from auth.security import hash_password
+from auth.security import ahash_password
 from auth.setup import (
     ADMINISTRATOR_ROLE_NAME,
     active_global_admin_count,
@@ -99,6 +99,9 @@ async def complete_setup(
     # enter deliberately on a fresh deployment). Everything below shares this
     # transaction, so a later failure rolls the claim back and the wizard stays
     # open. Same writer the seeds use, so the flag can't drift between them.
+    # Hash first: once the claim's UPDATE runs, this transaction holds the
+    # writer lock (on SQLite), so nothing slow belongs between it and commit.
+    password_hash = await ahash_password(body.admin.password)
     if not await mark_setup_complete(db):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -107,7 +110,7 @@ async def complete_setup(
 
     admin = User(
         email=body.admin.email,
-        password_hash=hash_password(body.admin.password),
+        password_hash=password_hash,
         display_name=body.admin.display_name,
     )
     db.add(admin)

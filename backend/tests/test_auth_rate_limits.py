@@ -151,3 +151,97 @@ async def test_successful_login_resets_the_identifier_throttle(client, monkeypat
             "/api/auth/login", json={"identifier": "tt@example.com", "password": "wrong"}
         )
         assert r.status_code == 401, r.text
+
+
+async def test_login_throttle_ignores_surrounding_whitespace(client):
+    """GHSA-vv68: the lookup strips the identifier, so the bucket must too —
+    otherwise every padded spelling of a known username is a fresh budget and
+    online brute force runs at the hash pool's speed."""
+    await admin_token(client)
+    for _ in range(settings.auth_rate_limit + 1):
+        await client.post(
+            "/api/auth/login",
+            json={"identifier": "admin@example.com", "password": "wrong"},
+        )
+    for padded in (" admin@example.com", "admin@example.com\t", "　admin@example.com "):
+        resp = await client.post(
+            "/api/auth/login", json={"identifier": padded, "password": "changeme"}
+        )
+        assert resp.status_code == 429, (padded, resp.text)
+
+
+async def test_padded_success_resets_the_shared_bucket(client):
+    """The reset after a successful login clears the same normalised key the
+    throttle recorded, whichever spelling got in."""
+    await admin_token(client)
+    for _ in range(settings.auth_rate_limit - 1):
+        await client.post(
+            "/api/auth/login",
+            json={"identifier": "admin@example.com", "password": "wrong"},
+        )
+    ok = await client.post(
+        "/api/auth/login", json={"identifier": "  Admin@Example.com ", "password": "changeme"}
+    )
+    assert ok.status_code == 200, ok.text
+    # A whole fresh budget: had the reset missed the recorded key, the bucket
+    # would still hold the failures above and refuse well before the end.
+    for _ in range(settings.auth_rate_limit):
+        again = await client.post(
+            "/api/auth/login", json={"identifier": "admin@example.com", "password": "wrong"}
+        )
+        assert again.status_code == 401, again.text
+
+
+async def test_a_lookalike_account_cannot_clear_anothers_bucket(client):
+    """GHSA-vv68: a successful login clears only the bucket of the identifier
+    it used, exactly as the lookup reads it. A look-alike spelling is a
+    different local account, and its owner's logins must not refill the
+    budget for guessing someone else's password."""
+    for name in ("victim", "ｖｉｃｔｉｍ"):
+        reg = await client.post(
+            "/api/auth/register",
+            json={"display_name": name, "password": f"{name}-password-1"},
+        )
+        assert reg.status_code == 201, reg.text
+    codes = []
+    for _ in range(2):
+        for _ in range(settings.auth_rate_limit - 1):
+            codes.append(
+                (
+                    await client.post(
+                        "/api/auth/login",
+                        json={"identifier": "victim", "password": "wrong"},
+                    )
+                ).status_code
+            )
+        own = await client.post(
+            "/api/auth/login",
+            json={"identifier": "ｖｉｃｔｉｍ", "password": "ｖｉｃｔｉｍ-password-1"},
+        )
+        assert own.status_code == 200, own.text
+    assert 429 in codes, codes
+
+
+async def test_password_taking_endpoints_share_one_budget(client):
+    """GHSA-vv68: every endpoint that takes the caller's current password draws
+    on one per-account budget, so a stolen session gets five guesses in five
+    minutes, not five per endpoint."""
+    reg = await client.post(
+        "/api/auth/register",
+        json={"display_name": "stepper", "email": "stepper@example.com", "password": "password123"},
+    )
+    token = reg.json()["access_token"]
+    for _ in range(5):
+        wrong = await client.post(
+            "/api/auth/change-password",
+            json={"current_password": "wrong-guess", "new_password": "another-pass-1"},
+            headers=_auth(token),
+        )
+        assert wrong.status_code != 429, wrong.text
+    for path, body in (
+        ("/api/auth/change-email", {"current_password": "password123", "new_email": "s2@example.com"}),
+        ("/api/auth/change-username", {"current_password": "password123", "new_display_name": "stepper2"}),
+        ("/api/api-tokens", {"current_password": "password123", "description": "ci", "expires_in_days": 30}),
+    ):
+        resp = await client.post(path, json=body, headers=_auth(token))
+        assert resp.status_code == 429, (path, resp.text)

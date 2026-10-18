@@ -185,6 +185,103 @@ async def test_local_password_still_wins_before_the_directory(client, directory)
     assert directory.connects == 0
 
 
+async def test_directory_spellings_share_one_budget(client, directory):
+    """GHSA-vv68: the directory matches identifiers more loosely than the local
+    lookup (width, case folding, formatting characters), so every spelling it
+    resolves to one entry draws on one budget."""
+    from config import settings
+
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+    for _ in range(settings.auth_rate_limit):
+        await _login(client, "ada", "not-her-password")
+    for lookalike in (
+        "ａｄａ",  # fullwidth
+        "a\u200bda",  # zero-width space
+        "a\u00adda",  # soft hyphen
+        "a\x1cda",  # information separator
+        "ada\ufffc",  # object replacement character
+        "a da",
+    ):
+        resp = await _login(client, lookalike, "not-her-password")
+        assert resp.status_code == 429, (lookalike, resp.text)
+
+
+async def test_a_local_success_never_clears_the_directory_budget(client, directory):
+    """GHSA-vv68: someone holding a local account named like a directory user's
+    uid fails local verification on every guess at that user's directory
+    password; their own successful logins must not refill the directory's
+    budget. A directory success does clear it."""
+    from config import settings
+
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+    reg = await client.post(
+        "/api/auth/register", json={"display_name": "ada", "password": "shadow-pass-1"}
+    )
+    assert reg.status_code == 201, reg.text
+    codes = []
+    for _ in range(2):
+        for _ in range(settings.auth_rate_limit - 1):
+            codes.append((await _login(client, "ada", "not-her-password")).status_code)
+        own = await _login(client, "ada", "shadow-pass-1")
+        assert own.status_code == 200, own.text
+    assert 429 in codes, codes
+
+
+async def test_a_success_in_one_directory_never_clears_anothers_budget(
+    client, directory
+):
+    """GHSA-vv68: each directory keeps its own budget. Holding an entry with
+    the same uid in a second directory must not refill the budget for
+    guessing at the first one's entry."""
+    from config import settings
+
+    directory.entries["cn=ada,ou=contractors,dc=corp"] = {
+        "objectClass": "person",
+        "uid": "ada",
+        "entryUUID": "0e9b9d39-5d2b-4a5e-9a51-6e7e34a0c0de",
+        "displayName": "Ada Contractor",
+        "userPassword": "contractor-pw",
+    }
+    admin = await admin_token(client)
+    await _create_provider(
+        client, admin, config={**LDAP_CONFIG, "base_dn": "ou=people,dc=corp"}
+    )
+    await _create_provider(
+        client,
+        admin,
+        slug="contractors",
+        config={**LDAP_CONFIG, "base_dn": "ou=contractors,dc=corp"},
+    )
+    for _ in range(settings.auth_rate_limit - 1):
+        await _login(client, "ada", "not-her-password")
+    own = await _login(client, "ada", "contractor-pw")
+    assert own.status_code == 200, own.text
+    assert own.json()["user"]["display_name"] == "Ada Contractor"
+    # The contractors directory's budget was cleared; the people directory's
+    # was not, so guessing at its entry stays capped.
+    codes = [
+        (await _login(client, "ada", "not-her-password")).status_code
+        for _ in range(settings.auth_rate_limit - 1)
+    ]
+    assert 429 in codes, codes
+
+
+async def test_a_directory_success_clears_the_directory_budget(client, directory):
+    from config import settings
+
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+    for _ in range(settings.auth_rate_limit - 1):
+        await _login(client, "ada", "not-her-password")
+    ok = await _login(client, "ada", ADA_PASSWORD)
+    assert ok.status_code == 200, ok.text
+    for _ in range(settings.auth_rate_limit - 1):
+        resp = await _login(client, "ada", "not-her-password")
+        assert resp.status_code == 401, resp.text
+
+
 # --- refusals (all the same generic 401) --------------------------------------
 
 
@@ -287,6 +384,28 @@ async def test_banned_ldap_user_cannot_log_in(client, directory):
     resp = await _login(client, "ada", ADA_PASSWORD)
     assert resp.status_code == 403
 
+
+
+async def test_a_banned_accounts_directory_login_clears_no_budget(client, directory):
+    """A refused login clears nothing: a locally banned account's directory
+    bind succeeds, but it mustn't refill the directory's budget (GHSA-vv68)."""
+    from config import settings
+
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+    assert (await _login(client, "ada", ADA_PASSWORD)).status_code == 200
+    async with SessionLocal() as db:
+        user = await db.scalar(select(User).where(User.display_name == "Ada L"))
+        user.is_active = False
+        await db.commit()
+    # Spellings the directory folds to one entry but the local lookup keeps
+    # apart, so only the directory's budget accumulates.
+    spellings = ["ａda", "aｄa", "adａ", "ａｄa", "ａdａ", "aｄａ", "ａｄａ", "a\u200bda", "ad\u200ba"]
+    for spelling in spellings[: settings.auth_rate_limit - 1]:
+        assert (await _login(client, spelling, "not-her-password")).status_code == 401
+    assert (await _login(client, "ada", ADA_PASSWORD)).status_code == 403
+    resp = await _login(client, "a\u00adda", "not-her-password")
+    assert resp.status_code == 429, resp.text
 
 # --- email trust (ADR-0022 §2) ------------------------------------------------
 

@@ -8,6 +8,7 @@ so it's only ever sent to these endpoints and never readable by JS.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import secrets
 
@@ -25,7 +26,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import get_current_user
 from auth.external_identity import IdentityRejected, resolve_identity
-from auth.identity import display_name_taken, email_taken, find_by_identifier
+from auth.identity import (
+    display_name_taken,
+    email_taken,
+    directory_match_key,
+    find_by_identifier,
+    normalize_identifier,
+)
 from auth.registration_policy import domain_allowed
 from auth.setup import instance_needs_setup
 from auth.security import (
@@ -36,7 +43,6 @@ from auth.security import (
     hash_password,
     hash_refresh_token,
     refresh_expiry,
-    verify_password,
 )
 from config import settings
 from auth.membership import effective_permissions
@@ -46,7 +52,7 @@ from models.identity_provider import IdentityProvider
 from models.password_reset import PasswordResetToken
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
 from models.user import RefreshSession, User
-from ratelimit import get_rate_limiter
+from ratelimit import get_rate_limiter, step_up_allowed
 from ratelimit.base import RateLimiter
 from schemas.auth_providers import provider_config_or_none
 from utils import ldap as ldap_utils
@@ -235,7 +241,7 @@ async def register(
     # Unauthenticated, and each call costs an argon2 hash plus a row. Keyed on
     # the requested display name so a flood has to vary it, which is also what
     # makes the accounts distinguishable afterwards.
-    await _throttle(rate_limiter, f"register:{body.display_name}")
+    await _throttle(rate_limiter, f"register:{normalize_identifier(body.display_name)}")
     # Before the first-run wizard completes there's no owner — no self-serve
     # accounts until one exists (ADR-0017).
     if await instance_needs_setup(db):
@@ -318,10 +324,11 @@ async def register(
 
 
 async def _directory_login(
-    db: AsyncSession, identifier: str, password: str
-) -> User | None:
+    db: AsyncSession, identifier: str, password: str, rate_limiter: RateLimiter
+) -> tuple[User | None, str | None]:
     """Offer the submitted credentials to each enabled LDAP directory
-    (ADR-0022 §5), returning the resolved local user on the first success.
+    (ADR-0022 §5), returning the resolved local user on the first success,
+    with the throttle key the caller clears once the login is admitted.
 
     Runs only after local verification failed — the ADR-0017 owner and any
     real-password account never touch a directory, and a returning LDAP user
@@ -339,6 +346,20 @@ async def _directory_login(
             .order_by(IdentityProvider.created_at)
         )
     ).all()
+    if not providers:
+        return None, None
+    # Each directory's own budget (GHSA-vv68). A directory matches identifiers
+    # more loosely than the local lookup (width, case folding, formatting
+    # characters), so it's keyed on the identifier folded as far — hashed, as
+    # folding can lengthen it — and per directory. A guess spends every
+    # directory's budget; only a success in that directory clears its own: a
+    # local success (perhaps on a look-alike or a same-named local account), or
+    # an entry with the same uid in another directory, says nothing about the
+    # entry being guessed.
+    digest = hashlib.sha256(directory_match_key(identifier).encode()).hexdigest()
+    keys = {provider.id: f"login-dir:{provider.id}:{digest}" for provider in providers}
+    for key in keys.values():
+        await _throttle(rate_limiter, key)
     for provider in providers:
         config = provider_config_or_none(provider)
         if config is None:
@@ -390,8 +411,8 @@ async def _directory_login(
                 provider.slug,
             )
             continue
-        return user
-    return None
+        return user, keys[provider.id]
+    return None, None
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -405,7 +426,13 @@ async def login(
     # limit can't be probed by timing. Keyed per identifier — see the note on
     # `auth_rate_limit` about why not per IP. Deliberately ahead of the LDAP
     # leg below too, so the directory can't be probed unthrottled (ADR-0022 §5).
-    await _throttle(rate_limiter, f"login:{body.identifier}")
+    # Keyed on the identifier as the lookup normalises it, so padding it can't
+    # mint a fresh budget per spelling (GHSA-vv68). Exactly the lookup's key and
+    # no coarser: the reset below clears it on any successful login, and a
+    # coarser key would let a look-alike account's owner clear someone else's.
+    # The directory leg keeps its own, coarser budget (`_directory_login`).
+    login_key = f"login:{normalize_identifier(body.identifier)}"
+    await _throttle(rate_limiter, login_key)
     # The identifier is the display name (username) or the email, matched
     # case-insensitively (§7.7).
     user = await find_by_identifier(db, body.identifier)
@@ -416,12 +443,15 @@ async def login(
     # workers under a login storm.
     target_hash = user.password_hash if user is not None else _DUMMY_PASSWORD_HASH
     password_ok = await averify_password(body.password, target_hash)
+    directory_key: str | None = None
     if user is None or not password_ok:
         # Local failure falls through to the directory before 401ing
         # (ADR-0022 §5). Both failure shapes take this branch, so the accepted
         # residual timing signal (a bind round-trip on the miss path) doesn't
         # distinguish "no such user" from "wrong password".
-        user = await _directory_login(db, body.identifier, body.password)
+        user, directory_key = await _directory_login(
+            db, body.identifier, body.password, rate_limiter
+        )
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -441,8 +471,11 @@ async def login(
     # attacker filling a known user's per-identifier login bucket with junk can't
     # lock them out, because their correct password gets through in any freed slot
     # and resets the count. Failed attempts still accrue, so brute-force stays
-    # throttled; the key matches _throttle's lowercasing.
-    await rate_limiter.reset(f"login:{body.identifier}".lower())
+    # throttled; it's the very key _throttle recorded. A directory success also
+    # clears that directory's budget — only now, once the account is admitted.
+    await rate_limiter.reset(login_key)
+    if directory_key is not None:
+        await rate_limiter.reset(directory_key)
     access_token = await _issue_session(db, user, response)
     return TokenResponse(access_token=access_token, user=UserOut.model_validate(user))
 
@@ -506,9 +539,26 @@ async def refresh(
 
     # Rotate: revoke the presented session and issue a fresh one INHERITING the
     # family, so the whole lineage stays traceable for reuse detection and a
-    # stolen token is usable at most until the next legitimate refresh.
-    session.revoked_at = utcnow()
-    family_id = session.family_id
+    # stolen token is usable at most until the next legitimate refresh. A
+    # session minted before reuse detection has no family; it gets one now, so
+    # the rotated-out token and its successor share a lineage (GHSA-vv68).
+    # One conditional UPDATE claims the rotation: of two refreshes presenting
+    # the same token at once, only one revokes it and gets a successor. The
+    # other is answered like a replay, so a token can't fork into two live
+    # lineages that reuse detection would see only half of.
+    family_id = session.family_id or secrets.token_hex(16)
+    claimed = await db.execute(
+        update(RefreshSession)
+        .where(RefreshSession.id == session.id, RefreshSession.revoked_at.is_(None))
+        .values(revoked_at=utcnow(), family_id=family_id)
+        .execution_options(synchronize_session=False)
+    )
+    if claimed.rowcount != 1:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
     user = await db.get(User, session.user_id)
     await db.commit()
 
@@ -584,9 +634,7 @@ async def change_password(
     # endpoint is a brute-force oracle for anyone holding a stolen session, and
     # was the one such endpoint left unthrottled (change-username/change-email
     # already do this). 5/300s per user (GHSA-vv68).
-    if not await rate_limiter.hit(
-        f"change-password:{current_user.id}", limit=5, window_seconds=300
-    ):
+    if not await step_up_allowed(rate_limiter, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many attempts — please wait a few minutes and try again",
@@ -646,9 +694,7 @@ async def change_username(
     """
     # Throttle before the password check — an unthrottled password-taking
     # endpoint is a brute-force oracle for a stolen session (as change-email).
-    if not await rate_limiter.hit(
-        f"change-username:{current_user.id}", limit=5, window_seconds=300
-    ):
+    if not await step_up_allowed(rate_limiter, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many attempts — please wait a few minutes and try again",
@@ -663,7 +709,9 @@ async def change_username(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Username changes are disabled on this platform",
         )
-    if not verify_password(body.current_password, current_user.password_hash):
+    # Off the event loop, like change-password: argon2 inline would stall every
+    # request and socket for each guess (GHSA-vv68).
+    if not await averify_password(body.current_password, current_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect",
@@ -754,14 +802,12 @@ async def change_email(
     # Limit attempts *before* checking the password: this endpoint takes an
     # arbitrary password guess, so an unthrottled version is a brute-force
     # oracle for anyone holding a stolen session.
-    if not await rate_limiter.hit(
-        f"change-email:{current_user.id}", limit=5, window_seconds=300
-    ):
+    if not await step_up_allowed(rate_limiter, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many attempts — please wait a few minutes and try again",
         )
-    if not verify_password(body.current_password, current_user.password_hash):
+    if not await averify_password(body.current_password, current_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect",
@@ -962,7 +1008,7 @@ async def reset_password(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Account not found"
         )
-    user.password_hash = hash_password(body.new_password)
+    user.password_hash = await ahash_password(body.new_password)
     # Invalidate the token(s) + every session.
     await _drop_tokens(db, PasswordResetToken, user.id)
     for session in (

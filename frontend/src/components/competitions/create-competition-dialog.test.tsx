@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CreateCompetitionDialog } from "@/components/competitions/create-competition-dialog";
@@ -15,8 +15,9 @@ vi.mock("@/lib/hooks/use-competitions", () => ({
   }),
 }));
 
+let catalogLoading = false;
 vi.mock("@/lib/hooks/use-modules", () => ({
-  useModuleCatalog: () => ({
+  useModuleCatalog: () => (catalogLoading ? { data: undefined, isLoading: true } : {
     data: [
       { id: "ai", name: "AI Assistants", description: "A read-only assistant." },
       { id: "analytics", name: "Analytics", description: "Engagement dashboards." },
@@ -28,27 +29,21 @@ vi.mock("@/lib/hooks/use-modules", () => ({
   }),
 }));
 
-const MODULE_LABELS = [
-  "AI Assistants",
-  "Analytics",
-  "Automations",
-  "Certificates",
-  "Feedback & Surveys",
-];
+// The tiles' names come from the UI's module copy, not the manifests above.
+const MODULE_LABELS = ["AI assistants", "Analytics", "Automations", "Certificates", "Feedback"];
 
 function openDialog() {
   renderWithIntl(<CreateCompetitionDialog />);
   fireEvent.click(screen.getByRole("button", { name: "New competition" }));
 }
 
-/** The Enable/Disable button in a module's row, found by the module name. */
-function moduleButton(name: string) {
-  const row = screen.getByText(name).closest("li");
-  if (!row) throw new Error(`no row for module ${name}`);
-  return within(row).getByRole("button");
+/** A module tile's on/off switch, labelled by the module's name (#502). */
+function moduleSwitch(name: string) {
+  return screen.getByRole("switch", { name });
 }
 
 afterEach(() => {
+  catalogLoading = false;
   mockMutate.mockClear();
   vi.restoreAllMocks();
 });
@@ -59,12 +54,15 @@ describe("CreateCompetitionDialog", () => {
     expect(screen.getByLabelText("Public scoreboard")).not.toBeChecked();
     expect(screen.getByLabelText("Starts (optional)")).toBeInTheDocument();
     expect(screen.getByLabelText("Ends (optional)")).toBeInTheDocument();
-    // Each optional module renders its description and an on-by-default row whose
-    // button offers to Disable it.
+    // Each optional module is a tile, on by default, with the UI's own
+    // plain-language description rather than the manifest's.
     for (const label of MODULE_LABELS) {
-      expect(moduleButton(label)).toHaveTextContent("Disable");
+      expect(moduleSwitch(label)).toHaveAttribute("aria-checked", "true");
     }
-    expect(screen.getByText("Engagement dashboards.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Solve rates, completion and timing per challenge and team, for organisers."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Engagement dashboards.")).toBeNull();
   });
 
   it("turning a module off flips its button and sends it as disabled_modules", () => {
@@ -72,10 +70,9 @@ describe("CreateCompetitionDialog", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Lean CTF" },
     });
-    fireEvent.click(moduleButton("Analytics")); // Disable
-    fireEvent.click(moduleButton("Feedback & Surveys")); // Disable
-    // The toggled row now offers to re-enable.
-    expect(moduleButton("Analytics")).toHaveTextContent("Enable");
+    fireEvent.click(moduleSwitch("Analytics")); // off
+    fireEvent.click(moduleSwitch("Feedback")); // off
+    expect(moduleSwitch("Analytics")).toHaveAttribute("aria-checked", "false");
     fireEvent.click(screen.getByLabelText("Public scoreboard")); // enable
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
@@ -86,5 +83,12 @@ describe("CreateCompetitionDialog", () => {
     expect(new Set(payload.disabled_modules)).toEqual(
       new Set(["analytics", "feedback"]),
     );
+  });
+
+  it("says the modules are loading until the catalog arrives", () => {
+    catalogLoading = true;
+    openDialog();
+    expect(screen.getByText("Loading modules…")).toBeInTheDocument();
+    expect(screen.queryByRole("switch")).toBeNull();
   });
 });

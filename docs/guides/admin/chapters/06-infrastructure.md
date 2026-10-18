@@ -63,5 +63,5 @@ set every multiplier to 1.0.
     host-specific infrastructure and runs code. After restoring onto a new
     host, re-run both setups.
 
-Organisers then switch the **Code Judge** (or **Challenge Instances**)
+Organisers then switch the **Code judge** (or **Challenge instances**)
 module on per competition — it's on by default — and author away.

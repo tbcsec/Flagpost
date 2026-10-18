@@ -56,9 +56,9 @@ attribution intact. **Unban** restores access exactly as it was.
 
 That competition loses the feature's surfaces while the toggle is off —
 nothing else on the site is affected. The reverse isn't symmetric for AI
-Assistants, Challenge Instances and Code Judge: switching those *on* per
+assistants, Challenge instances and Code judge: switching those *on* per
 competition does nothing until the matching Site settings tab is configured
-and enabled.
+and enabled, and their tiles say *Needs site setup* until it is.
 
 ## A competitor says the scoreboard "lost" their programming solve.
 

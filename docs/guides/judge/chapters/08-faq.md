@@ -23,10 +23,10 @@ you when it's stale.
 
 ## Where's the Judging page?
 
-It appears in the sidebar only when the competition's Code Judge module is
+It appears in the sidebar only when the competition's Code judge module is
 on *and* the competition has at least one programming problem (drafts
 count). If *Programming* isn't selectable in the challenge editor, either
-the competition's Code Judge module is off (Settings → Modules) or the
+the competition's Code judge module is off (Settings → Modules) or the
 administrator hasn't finished the judge setup — the editor says which.
 
 ## Can I grant bonus points?

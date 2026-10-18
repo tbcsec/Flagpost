@@ -1,6 +1,6 @@
 An **instanced challenge** hands each team (or player) its own running copy
 of a service, so nobody can trample another team's target or guess a shared
-one. It needs the **Challenge Instances** module on for the competition and
+one. It needs the **Challenge instances** module on for the competition and
 an administrator to have connected a container runtime (Admin → Site
 settings → Instances); until then nothing launches.
 

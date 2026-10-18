@@ -123,3 +123,60 @@ async def test_manage_modules_in_catalog_under_competition_management(client):
     assert entry is not None
     assert entry["scope"] == "competition"
     assert entry["category"] == "Competition Management"
+
+
+async def test_inert_modules_report_when_they_need_site_setup(client):
+    """#502: AI, challenge instances and the code judge do nothing until an
+    administrator switches them on site-wide. The competition inventory, the
+    toggle response and the at-creation catalog all say which still need it."""
+    from models.ai import AI_SETTINGS_ID, AiSettings
+
+    admin = await admin_token(client)
+    comp = await _competition(client)
+
+    def waiting(entries) -> set[str]:
+        return {m["id"] for m in entries if m["needs_setup"]}
+
+    inventory = (await client.get(f"/api/competitions/{comp}/modules", headers=_auth(admin))).json()
+    assert waiting(inventory) == {"ai", "instances", "judge"}
+    assert all(isinstance(m["description"], str) for m in inventory)
+    catalog = (await client.get("/api/modules", headers=_auth(admin))).json()
+    assert waiting(catalog) == {"ai", "instances", "judge"}
+
+    # Switch the AI assistant on site-wide: it no longer needs setup anywhere.
+    async with SessionLocal() as db:
+        row = await db.get(AiSettings, AI_SETTINGS_ID)
+        if row is None:
+            row = AiSettings(id=AI_SETTINGS_ID)
+            db.add(row)
+        row.enabled = True
+        row.base_url = "https://ai.example.com/v1"
+        row.model = "model"
+        await db.commit()
+
+    inventory = (await client.get(f"/api/competitions/{comp}/modules", headers=_auth(admin))).json()
+    assert waiting(inventory) == {"instances", "judge"}
+
+    # The judge configured but switched off still needs setup; switched on, only
+    # the judge clears.
+    from models.judge import JUDGE_SETTINGS_ID, JudgeSettings
+
+    async with SessionLocal() as db:
+        db.add(JudgeSettings(id=JUDGE_SETTINGS_ID, enabled=False))
+        await db.commit()
+    inventory = (await client.get(f"/api/competitions/{comp}/modules", headers=_auth(admin))).json()
+    assert waiting(inventory) == {"instances", "judge"}
+    async with SessionLocal() as db:
+        (await db.get(JudgeSettings, JUDGE_SETTINGS_ID)).enabled = True
+        await db.commit()
+    inventory = (await client.get(f"/api/competitions/{comp}/modules", headers=_auth(admin))).json()
+    assert waiting(inventory) == {"instances"}
+    toggled = (
+        await client.put(
+            f"/api/competitions/{comp}/modules/instances",
+            json={"enabled": False},
+            headers=_auth(admin),
+        )
+    ).json()
+    assert toggled["needs_setup"] is True and toggled["enabled"] is False
+    assert toggled["description"]

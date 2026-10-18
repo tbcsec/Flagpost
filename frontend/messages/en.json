@@ -2344,15 +2344,13 @@
       "optionalDescription": "Disable a module to switch its features off for this competition — its routes stop responding, its nav entry disappears, and nothing fires for its events.",
       "coreTitle": "Core modules",
       "coreDescription": "Part of the platform floor — always on and can't be disabled.",
-      "badgeCore": "Core",
-      "badgeEnabled": "Enabled",
-      "badgeDisabled": "Disabled",
       "alwaysOn": "Always on",
-      "enable": "Enable",
-      "disable": "Disable",
       "toggledOn": "{name} enabled",
       "toggledOff": "{name} disabled",
-      "toggleFailed": "Couldn't update module"
+      "toggleFailed": "Couldn't update module",
+      "needsSetup": "Needs site setup: an administrator has to configure this before it does anything.",
+      "showCore": "{count, plural, one {Show the always-on module} other {Show the # always-on modules}}",
+      "hideCore": "Hide the always-on modules"
     },
     "create": {
       "trigger": "New competition",
@@ -2373,10 +2371,6 @@
       "modules": "Modules",
       "modulesHint": "Optional modules are on by default. Turn off any this competition won't use — you can change these later in settings.",
       "loadingModules": "Loading modules…",
-      "badgeEnabled": "Enabled",
-      "badgeDisabled": "Disabled",
-      "enable": "Enable",
-      "disable": "Disable",
       "creating": "Creating…",
       "create": "Create"
     }
@@ -3505,5 +3499,115 @@
     "code": "Submitted code",
     "history": "History",
     "byName": "by {name}"
+  },
+  "moduleCatalog": {
+    "automations": {
+      "name": "Automations",
+      "description": "Rules that react to what happens: announce first bloods, release hints on a timer, notify staff or call a webhook."
+    },
+    "feedback": {
+      "name": "Feedback",
+      "description": "Surveys for competitors and quick ratings after each solve, with results you can export."
+    },
+    "analytics": {
+      "name": "Analytics",
+      "description": "Solve rates, completion and timing per challenge and team, for organisers."
+    },
+    "certificates": {
+      "name": "Certificates",
+      "description": "Design a certificate, and let competitors download participation and placement certificates once you release them."
+    },
+    "reports": {
+      "name": "Reports",
+      "description": "A branded post-event report, as PDF or HTML: participation, results, challenge analysis and support load."
+    },
+    "instances": {
+      "name": "Challenge instances",
+      "description": "Give each team or player their own running copy of a challenge's service, launched on demand."
+    },
+    "ai": {
+      "name": "AI assistants",
+      "description": "An assistant for organisers, and optionally one for competitors, using the AI provider your administrator sets up."
+    },
+    "judge": {
+      "name": "Code judge",
+      "description": "Programming challenges: competitors submit code, and it's run against hidden tests and judged automatically."
+    },
+    "announcements": {
+      "name": "Announcements",
+      "description": "Post updates to competitors by severity and audience, straight away or on a schedule."
+    },
+    "audit_log": {
+      "name": "Event log",
+      "description": "A record of who did what, for staff and administrators."
+    },
+    "challenges": {
+      "name": "Challenges",
+      "description": "Challenges, flags, categories, scoring and files."
+    },
+    "collab": {
+      "name": "Shared notes",
+      "description": "Live notes teams write together on each challenge, and staff notes on tickets."
+    },
+    "competitions": {
+      "name": "Competitions",
+      "description": "The competition itself: schedule, status, visibility, invites and rules."
+    },
+    "dashboard": {
+      "name": "Dashboard",
+      "description": "The home page for competitors and organisers."
+    },
+    "hints": {
+      "name": "Hints",
+      "description": "Hints competitors can reveal, free or at a cost."
+    },
+    "marketplace": {
+      "name": "Marketplace",
+      "description": "Install challenge and theme packs from a registry your administrator trusts."
+    },
+    "notifications": {
+      "name": "Notifications",
+      "description": "The bell: notices about replies, announcements and more."
+    },
+    "pages": {
+      "name": "Custom pages",
+      "description": "Pages your administrators write, such as About or Sponsors."
+    },
+    "roles": {
+      "name": "Roles",
+      "description": "Who can do what: the built-in roles and any custom ones."
+    },
+    "scoring": {
+      "name": "Scoreboard",
+      "description": "Live standings, the freeze, divisions and the public board."
+    },
+    "setup": {
+      "name": "First-run setup",
+      "description": "The setup wizard that creates the owner account."
+    },
+    "site_settings": {
+      "name": "Site settings",
+      "description": "Branding, email and the other site-wide settings."
+    },
+    "skills": {
+      "name": "Skills web",
+      "description": "Each competitor's skills across events, when your administrator turns it on."
+    },
+    "sso": {
+      "name": "Sign-in providers",
+      "description": "Single sign-on through your organisation's identity provider."
+    },
+    "teams": {
+      "name": "Teams & participants",
+      "description": "Teams, invites and rosters, or individual participants."
+    },
+    "tickets": {
+      "name": "Support",
+      "description": "Support tickets between competitors and staff, including questions about a challenge."
+    },
+    "users": {
+      "name": "Users",
+      "description": "Accounts, profiles and the user directory."
+    }
   }
 }

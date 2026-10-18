@@ -53,10 +53,10 @@ saves with the form; **Start competition** / **Stop competition** (and
   reveals during an incident. The Challenges page shows a paused banner;
   post an announcement too. Staff can still submit, to verify a fix.
 - **Scoreboard freeze** — stop standings updates near the finale, in the
-  app and on the public board alike. Solves keep counting; staff still see
-  the live board; unfreeze at your ceremony. While frozen, your dashboard
-  stops updating on its own — reload it for current figures. **Freeze
-  board** is also on the Scoreboard page.
+  app and on the public board alike. Solves keep counting; staff can switch
+  the Scoreboard to **Show live standings**; unfreeze at your ceremony.
+  While frozen, your dashboard stops updating on its own — reload it for
+  current figures. **Freeze board** is also on the Scoreboard page.
 
 !!! tip "Dry-run before doors open"
     While the competition is not started, open every challenge and download

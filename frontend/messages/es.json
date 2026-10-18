@@ -223,7 +223,11 @@
     },
     "frozenBanner": {
       "lead": "El marcador está congelado.",
-      "rest": "Los competidores siguen resolviendo y sus puntos siguen contando – aquí se ocultan nuevas soluciones hasta que los organizadores desbloquean la junta."
+      "rest": "Los competidores siguen resolviendo y sus puntos siguen contando – aquí se ocultan nuevas soluciones hasta que los organizadores desbloquean la junta.",
+      "liveLead": "You're viewing the live standings.",
+      "liveRest": "Competitors still see the frozen board until you unfreeze it, so keep this view off shared screens.",
+      "showLive": "Show live standings",
+      "showFrozen": "Show the frozen board"
     },
     "empty": {
       "title": "Aún no hay puntuaciones",

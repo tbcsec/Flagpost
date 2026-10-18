@@ -13,10 +13,12 @@ The dashboard's sections are your event telemetry:
 - **Support queue** — an open count trending up is the earliest warning of
   an infrastructure or clarity problem.
 
-On the **Scoreboard**, staff see live standings even while it's frozen, can
-**Freeze board** / **Unfreeze board**, and in a divisioned event assign each
-competitor's **Division** from the table. The public board has a **Venue
-mode** for projectors.
+On the **Scoreboard**, staff can **Freeze board** / **Unfreeze board**, and
+in a divisioned event assign each competitor's **Division** from the table.
+While it's frozen, **Show live standings** switches to the real standings,
+still updating live. It starts on the frozen board each time, so don't
+project the page after switching. The public board has a **Venue mode** for
+projectors.
 
 ## Optional instrumentation
 

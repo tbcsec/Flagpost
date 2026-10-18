@@ -30,6 +30,9 @@ class ScoreboardOut(BaseModel):
     # frozen_at is the instant they stopped moving.
     frozen: bool = False
     frozen_at: datetime | None = None
+    # True when these are live standings read past a freeze in effect — the
+    # staff view (#501). frozen or live = competitors see a frozen board.
+    live: bool = False
     # The competition's bracket/division vocab (empty = no brackets).
     brackets: list[str] = []
 

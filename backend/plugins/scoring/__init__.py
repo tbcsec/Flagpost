@@ -68,6 +68,28 @@ def setup(app, event_bus, db_factory) -> None:
 
     register_room_type("scoreboard", authorize=authorize, snapshot=snapshot)
 
+    # The staff live view (#501): during a freeze the shared room above carries
+    # only the frozen board, so a ``scoreboard_freeze`` holder — the same grant
+    # the REST ``?live=true`` bypass checks — follows the live standings here.
+    # Authorized like the shared room plus that grant. A holder who loses it is
+    # re-handshaken by the role eviction listeners (realtime/eviction.py), like
+    # every other permission-gated room.
+    async def authorize_live(db, user, competition_id: str) -> bool:
+        if not await authorize(db, user, competition_id):
+            return False
+        return await user_has_permission(
+            db, user.id, "scoreboard_freeze", competition_id
+        )
+
+    async def snapshot_live(db, user, competition_id: str) -> dict:
+        competition = await db.get(Competition, competition_id)
+        board = await cached_scoreboard(db, competition, live=True)
+        return {"type": "scoreboard", **board}
+
+    register_room_type(
+        "scoreboard_live", authorize=authorize_live, snapshot=snapshot_live
+    )
+
     # Freeze containment (GHSA-r7j2): while the board is frozen, a frame sent
     # on a post-cutoff event is timed to that event whatever it carries — and
     # comparing boards can't rule that out, because the frozen board also moves
@@ -77,7 +99,7 @@ def setup(app, event_bus, db_factory) -> None:
     # a revoked solve, only when that solve is dated at or before the cutoff (a
     # backdated judge verdict, a rejudge of a pre-cutoff solve); hint costs,
     # adjustments and awards are stamped when they happen — after the cutoff —
-    # so never. Staff read the live board over REST (``?live=true``).
+    # so never. Staff follow the live board in the ``scoreboard_live`` room.
     def _moves_frozen_board(event_name: str, payload: dict, cutoff) -> bool:
         if event_name in ("scoreboard.frozen", "scoreboard.unfrozen"):
             return True
@@ -104,19 +126,36 @@ def setup(app, event_bus, db_factory) -> None:
         competition_id = payload.get("competition_id")
         if not competition_id:
             return
-        # No listeners → skip the recompute, not just the send.
-        if manager.room_size("scoreboard", competition_id) == 0:
+        # No listeners → skip the recompute, not just the send. Across workers
+        # the rooms can't be seen from here, so a relay means "maybe".
+        public_room = manager.may_have_listeners("scoreboard", competition_id)
+        staff_room = manager.may_have_listeners("scoreboard_live", competition_id)
+        if not public_room and not staff_room:
             return
+        board = live_board = None
         async with db_factory() as db:
             competition = await db.get(Competition, competition_id)
             if competition is None:
                 return
             cutoff = freeze_cutoff(competition)
-            if cutoff is not None and not _moves_frozen_board(
-                event_name, payload, cutoff
+            if public_room and (
+                cutoff is None or _moves_frozen_board(event_name, payload, cutoff)
             ):
-                return
-            board = await compute_scoreboard(db, competition)
+                board = await compute_scoreboard(db, competition)
+            if staff_room:
+                # Unfrozen, the live board *is* the public one: compute it once.
+                # Frozen, staff get every movement — they're entitled to timing.
+                live_board = (
+                    board
+                    if board is not None and not board["frozen"]
+                    else await compute_scoreboard(db, competition, live=True)
+                )
+        if live_board is not None:
+            await manager.broadcast(
+                "scoreboard_live", competition_id, {"type": "scoreboard", **live_board}
+            )
+        if board is None:
+            return
         if not board["frozen"]:
             held.pop(competition_id, None)
         else:

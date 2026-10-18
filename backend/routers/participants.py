@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth.deps import require_permission
+from auth.deps import require_permission, user_has_permission
 from db import get_db
 from models.competition import Competition
 from models.role import Role, RoleAssignment
@@ -62,14 +62,21 @@ async def list_participants(
     ).all()
 
     # Standing from the same scoreboard computation (individual mode → each entry's
-    # subject_id is the user id), so rank/points match the board exactly.
-    board = await compute_scoreboard(db, competition)
+    # subject_id is the user id), so rank/points match the board exactly. A
+    # scoreboard_freeze holder reads it live, as the scoreboard route's
+    # ``?live=true`` does; they used to get frozen rank and points beside the
+    # live solve count below (#501).
+    live = await user_has_permission(
+        db, current_user.id, "scoreboard_freeze", competition_id
+    )
+    board = await compute_scoreboard(db, competition, live=live)
     standing = {e["subject_id"]: (e["rank"], e["points"]) for e in board["entries"]}
 
     # Distinct challenges each user has solved, under the same cutoff the board
-    # above already applies. Without it this response carried frozen rank and
-    # points beside a *live* solve count — the two disagreeing is itself the
-    # leak, since the delta is exactly what the freeze is hiding.
+    # above already applies (None for that same freeze holder). Without it a
+    # competitor got frozen rank and points beside a *live* solve count — the
+    # two disagreeing is itself the leak, since the delta is exactly what the
+    # freeze is hiding.
     cutoff = await visible_solve_cutoff(db, competition, current_user)
     solve_stmt = select(
         Submission.user_id,

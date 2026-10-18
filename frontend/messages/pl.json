@@ -223,7 +223,11 @@
     },
     "frozenBanner": {
       "lead": "Tablica wyników jest zamrożona.",
-      "rest": "Konkurenci nadal rozwiązują problemy, a ich punkty nadal się liczą — nowe rozwiązania są tutaj ukryte do czasu odmrożenia działu przez organizatorów."
+      "rest": "Konkurenci nadal rozwiązują problemy, a ich punkty nadal się liczą — nowe rozwiązania są tutaj ukryte do czasu odmrożenia działu przez organizatorów.",
+      "liveLead": "You're viewing the live standings.",
+      "liveRest": "Competitors still see the frozen board until you unfreeze it, so keep this view off shared screens.",
+      "showLive": "Show live standings",
+      "showFrozen": "Show the frozen board"
     },
     "empty": {
       "title": "Brak wyników",

@@ -173,6 +173,76 @@ async def test_backup_import_rejects_an_invalid_deployment_spec(client):
                 await backup.import_data(db, storage, doc, ["competitions"])
 
 
+async def test_backup_import_normalises_legacy_resource_limits(client):
+    """GHSA-vgrr tightened the resource-limit bounds after v1.7.x. A deployment
+    row an earlier release accepted must still restore — cleaned into today's
+    bounds (what the provisioners would run anyway), not refused along with the
+    whole backup. Values no provisioner can use (0 and fractions included) can
+    never land as-is."""
+    from models.challenge_instancing import ChallengeDeployment
+
+    legacy = [
+        ({"pids": 8}, {"pids": 16}),
+        ({"memory_mb": 256.5}, {"memory_mb": 256}),
+        ({"memory_mb": 256.0}, {"memory_mb": 256}),
+        ({"cpu": 0.005}, {"cpu": 0.01}),
+        ({"memory_mb": 8}, {"memory_mb": 16}),
+        # int()-truncates to 0 (Docker's "unlimited") → floored; NaN and a bool
+        # are no number at all → dropped, so the operator default applies.
+        ({"cpu": float("nan"), "memory_mb": 0.5, "pids": True}, {"memory_mb": 16}),
+    ]
+    async with SessionLocal() as db:
+        comp = Competition(name="Legacy Limits", participation_mode="individual",
+                           visibility="public", invite_code="LEGL0001")
+        db.add(comp)
+        await db.flush()
+        chals = [
+            Challenge(competition_id=comp.id, title=f"L{i}", description={}, points=10,
+                      state="published")
+            for i in range(len(legacy))
+        ]
+        db.add_all(chals)
+        await db.commit()
+        comp_id, chal_ids = comp.id, [c.id for c in chals]
+
+    storage = InMemoryStorage()
+    async with SessionLocal() as db:
+        doc = await backup.export_data(db, storage, ["competitions"])
+    async with SessionLocal() as db:
+        await db.delete(await db.get(Competition, comp_id))
+        await db.commit()
+    doc["data"]["challenge_deployments"] = [
+        {
+            "id": f"dep-{i}", "competition_id": comp_id, "challenge_id": chal_ids[i],
+            "backend": "docker", "image_ref": "img:1", "exposure": "tcp", "ports": [1337],
+            "env": {}, "manifest": None, "resource_limits": limits, "lifetime_s": None,
+            "per_subject_cap": 1, "flag_mode": "static", "flag_template": None,
+        }
+        for i, (limits, _) in enumerate(legacy)
+    ]
+    async with SessionLocal() as db:
+        result = await backup.import_data(db, storage, doc, ["competitions"])
+    assert result["challenge_deployments"]["created"] == len(legacy)
+
+    async with SessionLocal() as db:
+        comp = await db.scalar(select(Competition).where(Competition.name == "Legacy Limits"))
+        titles = {
+            c.id: c.title
+            for c in (await db.scalars(select(Challenge).where(Challenge.competition_id == comp.id))).all()
+        }
+        stored = {
+            titles[d.challenge_id]: d.resource_limits
+            for d in (await db.scalars(
+                select(ChallengeDeployment).where(ChallengeDeployment.competition_id == comp.id)
+            )).all()
+        }
+    for i, (_, want) in enumerate(legacy):
+        got = stored[f"L{i}"]
+        assert got == want, (i, got)
+        # memory/pids land as ints, not merely equal floats.
+        assert {k: type(v) for k, v in got.items()} == {k: type(v) for k, v in want.items()}
+
+
 async def test_restore_after_delete(client):
     comp_id, _, _ = await _seed()
     storage = InMemoryStorage()

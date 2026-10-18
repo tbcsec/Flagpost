@@ -668,3 +668,72 @@ def test_deployment_rejects_unlimited_resource_limits_and_too_many_ports():
     assert "exceeds" in _upd(resource_limits={"memory_mb": 10**9}).validate_shape()
     # A deployment can't declare a huge number of ports.
     assert "at most" in _upd(ports=list(range(30000, 30030))).validate_shape()
+
+
+def test_deployment_rejects_resource_limits_that_truncate_to_unlimited():
+    """GHSA-vgrr residual: "positive" isn't enough. The provisioners turn these
+    into runtime limits with int(), so a fraction that truncates to 0 (0.5 pids,
+    1e-10 cpu → NanoCpus 0) is Docker's UNLIMITED — and NaN slips past every
+    comparison. memory/pids must be whole numbers at or above the operator
+    settings' floors; cpu at or above 0.01; every value finite."""
+    from schemas.instances import DeploymentUpdate
+
+    def _err(limits):
+        return DeploymentUpdate(
+            backend="docker", image_ref="img:1", exposure="tcp", ports=[1337],
+            resource_limits=limits,
+        ).validate_shape()
+
+    for key, value in [
+        ("cpu", 1e-10),           # int(1e-10 * 1e9) == 0
+        ("cpu", 0.001),           # below Docker's own 0.01 CPU minimum
+        ("cpu", float("nan")),    # NaN <= 0 and NaN > max are both False
+        ("cpu", float("inf")),
+        ("memory_mb", 0.5),       # int(0.5) == 0
+        ("memory_mb", 256.5),     # fractional even above the floor
+        ("memory_mb", 15),        # below the settings floor (16)
+        ("memory_mb", float("nan")),
+        ("pids", 0.5),
+        ("pids", 15),
+        ("pids", float("-inf")),
+        ("cpu", True),            # bool is an int subclass (True == 1 CPU)
+        ("pids", "64"),
+    ]:
+        err = _err({key: value})
+        assert err is not None and f"resource_limits.{key}" in err, (key, value)
+
+    # The floors and caps themselves are inclusive and valid.
+    assert _err({"cpu": 0.01, "memory_mb": 16, "pids": 16}) is None
+    assert _err({"cpu": 64, "memory_mb": 131072, "pids": 65536}) is None
+    # An integer far past float range is a clean "exceeds", not an OverflowError.
+    assert "exceeds" in _err({"pids": 10**400})
+
+    # A whole-number float (JSON/YAML can carry 256.0) is the integer it names:
+    # accepted, and stored as an int; a real fraction is still refused (above).
+    upd = DeploymentUpdate(
+        backend="docker", image_ref="img:1", exposure="tcp", ports=[1337],
+        resource_limits={"cpu": 0.5, "memory_mb": 256.0, "pids": 64.0},
+    )
+    assert upd.validate_shape() is None
+    assert upd.resource_limits == {"cpu": 0.5, "memory_mb": 256, "pids": 64}
+    assert type(upd.resource_limits["memory_mb"]) is int
+    assert type(upd.resource_limits["pids"]) is int
+
+
+def test_operator_default_cpu_shares_the_deployment_floor():
+    """GHSA-vgrr residual: the operator-default cpu was only bounded "> 0", so a
+    sub-0.01 default (int()-truncated to NanoCpus 0, Docker's UNLIMITED) was
+    accepted. It takes the same 0.01 floor as a deployment override now.
+    (memory/pids defaults already had integer fields with a 16 floor.)"""
+    from pydantic import ValidationError
+
+    from schemas.instances import InstanceSettingsUpdate
+
+    for cpu in (1e-10, 0.001, 0.0099):
+        with pytest.raises(ValidationError):
+            InstanceSettingsUpdate(default_cpu=cpu)
+    assert InstanceSettingsUpdate(default_cpu=0.01).default_cpu == 0.01
+    # Whole-number floats are accepted as their int for the integer defaults.
+    ok = InstanceSettingsUpdate(default_memory_mb=256.0, default_pids=64.0)
+    assert (ok.default_memory_mb, ok.default_pids) == (256, 64)
+    assert type(ok.default_memory_mb) is int and type(ok.default_pids) is int

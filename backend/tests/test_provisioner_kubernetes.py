@@ -152,6 +152,40 @@ async def test_create_composes_a_hardened_pod():
     assert dep_req.headers["Authorization"] == "Bearer sa-token"
 
 
+@pytest.mark.parametrize(
+    "limits",
+    [
+        # Raw stored values that int()-truncate to 0 ("0Mi"). The authoring
+        # schema now refuses them, but validate_shape isn't re-run at provision
+        # time, so a row stored before that fix still carries them.
+        {"cpu": 1e-10, "memory_mb": 0.5},
+        {"cpu": 0, "memory_mb": 0},
+        {"cpu": float("nan"), "memory_mb": -1},
+    ],
+)
+async def test_create_clamps_stored_limits_to_the_floors(limits):
+    """GHSA-vgrr residual (defence in depth): the pod's cpu/memory are clamped
+    to the floors where they're composed, never "0Mi" or a sub-milli CPU."""
+    router = _happy_create_router()
+    # The NaN case falls back to the operator default — set that to 0 too, so
+    # every row lands on the floor.
+    prov = KubernetesProvisioner(
+        _cfg(default_cpu=0.0, default_memory_mb=0), transport=router.transport(), sleep=_nosleep
+    )
+    await prov.create(_spec(resource_limits=limits))
+    resources = router.body("POST", "/deployments")["spec"]["template"]["spec"]["containers"][0]["resources"]
+    assert resources["limits"] == {"cpu": "0.01", "memory": "16Mi"}
+    assert resources["requests"] == resources["limits"]
+
+
+async def test_create_caps_stored_limits_at_the_maximum():
+    router = _happy_create_router()
+    prov = KubernetesProvisioner(_cfg(), transport=router.transport(), sleep=_nosleep)
+    await prov.create(_spec(resource_limits={"cpu": 99, "memory_mb": 10**9}))
+    resources = router.body("POST", "/deployments")["spec"]["template"]["spec"]["containers"][0]["resources"]
+    assert resources["limits"] == {"cpu": "64.0", "memory": "131072Mi"}
+
+
 async def test_create_tcp_requests_the_allocated_nodeport():
     router = _happy_create_router()
     prov = KubernetesProvisioner(_cfg(), transport=router.transport(), sleep=_nosleep)
@@ -301,6 +335,38 @@ async def test_deny_mode_egress_is_dns_only():
     assert spec["egress"] == [_DNS_EGRESS]
     # Ingress: the declared container port from any source.
     assert spec["ingress"] == [{"ports": [{"protocol": "TCP", "port": 1337}]}]
+
+
+def test_shipped_baseline_networkpolicy_scopes_dns_to_kube_dns():
+    """GHSA-vgrr: NetworkPolicies are additive and the shipped namespace
+    baseline (k8s/instances-rbac.yaml) selects every instance pod, so any
+    egress rule it carries widens every instance's own policy. No rule there
+    may be unscoped, and the baseline's one rule — DNS — must be exactly the
+    per-instance policy's kube-dns rule, so the two can't drift apart."""
+    from pathlib import Path
+
+    import yaml
+
+    repo = Path(__file__).resolve().parents[2]
+    manifest = repo / "k8s" / "instances-rbac.yaml"
+    if not manifest.exists() and not (repo / "docs" / "ARCHITECTURE.md").exists():
+        pytest.skip("not a full repository checkout (e.g. the backend-only dev container)")
+
+    policies = {
+        doc["metadata"]["name"]: doc["spec"]
+        for doc in yaml.safe_load_all(manifest.read_text())
+        if doc and doc.get("kind") == "NetworkPolicy"
+    }
+    assert "flagpost-default-deny-egress" in policies
+    for name, spec in policies.items():
+        for rule in spec.get("egress") or []:
+            # No (or an empty) ``to`` admits every destination on the rule's
+            # ports — on every port, if it lists none.
+            assert rule.get("to"), (name, rule)
+
+    deny_mode = KubernetesProvisioner(_cfg(egress_denied=True))._egress_rules()
+    assert deny_mode == [_DNS_EGRESS]
+    assert policies["flagpost-default-deny-egress"]["egress"] == deny_mode
 
 
 def _ipblocks_by_family(egress: list) -> dict[str, dict]:
@@ -525,13 +591,19 @@ def _ssar_handler(*, cluster_admin: bool = False, denied_rights: frozenset = fro
     return handler
 
 
+_SCOPED_BASELINE = {"spec": {"egress": [_DNS_EGRESS]}}
+
+
 def _validate_router(
     *, cluster_admin: bool = False, egress_exit: int | None = 1, baseline_exit: int = 0,
     probe_running: bool = True, denied_rights: frozenset = frozenset(), namespace_ok: bool = True,
+    namespace_policy: dict | None = _SCOPED_BASELINE, namespace_policy_status: int = 200,
 ) -> _Router:
     """A router covering every call the staged validate() makes, with all legs
-    green by default (good token, netpol accepted, egress enforced — deny-all
-    blocks, unrestricted baseline reaches — and the probe pod up)."""
+    green by default (good token, netpol accepted, the namespace baseline
+    policy scoped, egress enforced — deny-all blocks, unrestricted baseline
+    reaches — and the probe pod up). ``namespace_policy=None`` makes the
+    baseline NetworkPolicy 404."""
     def pods_get(request):
         p = request.url.path
         if p.endswith("/flagpost-egress-probe"):  # phase 1: under deny-all policy
@@ -549,9 +621,14 @@ def _validate_router(
         httpx.Response(200, json={"items": []}) if namespace_ok
         else httpx.Response(403, json={"message": "forbidden"})
     )
+    policy_resp = (
+        httpx.Response(404, json={"message": "not found"}) if namespace_policy is None
+        else httpx.Response(namespace_policy_status, json=namespace_policy)
+    )
     return (
         _Router()
         .on("GET", "/version", httpx.Response(200, json={"gitVersion": "v1.30.2"}))
+        .on("GET", "/networkpolicies/flagpost-default-deny-egress", policy_resp)
         .on("POST", "/selfsubjectaccessreviews", _ssar_handler(cluster_admin=cluster_admin, denied_rights=denied_rights))
         .on("GET", lambda r: r.url.path.endswith("/deployments"), ns_resp)
         .on("POST", "/networkpolicies", httpx.Response(201, json={}))
@@ -583,9 +660,49 @@ async def test_validate_all_legs_pass():
     names = [l.name for l in legs]
     assert names == [
         "endpoint_reachable", "privilege_posture", "namespace_ready",
-        "network_policy_support", "egress_enforcement", "probe_run", "public_reachable",
+        "network_policy_support", "baseline_policy", "egress_enforcement", "probe_run",
+        "public_reachable",
     ]
     assert all(l.ok for l in legs), [(l.name, l.detail) for l in legs if not l.ok]
+
+
+@pytest.mark.parametrize(
+    "egress",
+    [
+        # The pre-GHSA-vgrr manifest: DNS ports with no destination scope.
+        [{"ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}]}],
+        # Scoped DNS alongside an unscoped rule is still a hole.
+        [_DNS_EGRESS, {"to": [], "ports": [{"protocol": "TCP", "port": 443}]}],
+    ],
+)
+async def test_validate_flags_an_unscoped_namespace_baseline(egress):
+    """GHSA-vgrr: the baseline is operator-applied, so an upgraded cluster keeps
+    an older copy until k8s/instances-rbac.yaml is re-applied. Test connection
+    says so, and the remaining legs still run."""
+    router = _validate_router(namespace_policy={"spec": {"egress": egress}})
+    prov = KubernetesProvisioner(_cfg(), transport=router.transport(), sleep=_nosleep, tcp_probe=_yes_dial)
+    legs = await prov.validate()
+    leg = _leg(legs, "baseline_policy")
+    assert leg.ok is False
+    assert "re-apply k8s/instances-rbac.yaml" in leg.detail
+    assert _leg(legs, "egress_enforcement").ok
+
+
+async def test_validate_flags_a_missing_namespace_baseline():
+    router = _validate_router(namespace_policy=None)
+    prov = KubernetesProvisioner(_cfg(), transport=router.transport(), sleep=_nosleep, tcp_probe=_yes_dial)
+    leg = _leg(await prov.validate(), "baseline_policy")
+    assert leg.ok is False
+    assert "not found" in leg.detail and "k8s/instances-rbac.yaml" in leg.detail
+
+
+@pytest.mark.parametrize("status", [403, 500])
+async def test_validate_flags_an_unreadable_namespace_baseline(status):
+    router = _validate_router(namespace_policy={"message": "nope"}, namespace_policy_status=status)
+    prov = KubernetesProvisioner(_cfg(), transport=router.transport(), sleep=_nosleep, tcp_probe=_yes_dial)
+    leg = _leg(await prov.validate(), "baseline_policy")
+    assert leg.ok is False
+    assert "cannot read NetworkPolicy" in leg.detail
 
 
 async def test_validate_posture_rejects_an_overprivileged_token():

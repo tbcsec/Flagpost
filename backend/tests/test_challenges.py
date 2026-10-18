@@ -511,6 +511,85 @@ async def test_challenge_yaml_deployment_block_roundtrips(client):
     assert "image" in d
 
 
+async def test_challenge_yaml_rejects_resource_limits_that_truncate_to_unlimited(client):
+    """GHSA-vgrr residual: a ctfcli zip (or a content pack, which imports
+    through it) can't smuggle in resource limits the provisioners would
+    int()-truncate to 0 — Docker's "unlimited" — nor a YAML ``.nan``. Each is a
+    per-challenge deployment error, and no deployment row is written."""
+    import io
+    import zipfile
+
+    import yaml
+    from sqlalchemy import select
+
+    from db import SessionLocal
+    from models.challenge_instancing import ChallengeDeployment
+
+    admin = await admin_token(client)
+    comp = await _make_competition(client)
+
+    bad = {
+        "Tiny CPU": {"cpu": 1e-10},
+        "Half Memory": {"memory_mb": 0.5},
+        "Half Pids": {"pids": 0.5},
+        "Below Floor": {"memory_mb": 8},
+        "All Truncating": {"cpu": 1e-10, "memory_mb": 0.5, "pids": 0.5},
+        "NaN CPU": {"cpu": float("nan")},  # safe_dump writes it as .nan
+    }
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for i, (title, limits) in enumerate(bad.items()):
+            zf.writestr(f"c{i}/challenge.yml", yaml.safe_dump({
+                "name": title, "category": "pwn", "description": "x", "value": 50,
+                "flags": [f"flag{{{i}}}"],
+                "extra": {"deployment": {
+                    "backend": "docker", "image": "img:1", "exposure": "tcp",
+                    "ports": [1337], "resource_limits": limits,
+                }},
+            }))
+        zf.writestr("ok/challenge.yml", yaml.safe_dump({
+            "name": "Sane Limits", "category": "pwn", "description": "x", "value": 50,
+            "flags": ["flag{ok}"],
+            "extra": {"deployment": {
+                "backend": "docker", "image": "img:1", "exposure": "tcp", "ports": [1337],
+                "resource_limits": {"cpu": 0.5, "memory_mb": 64, "pids": 32},
+            }},
+        }))
+        # YAML writes these as 512.0 / 64.0: whole numbers, so accepted as ints.
+        zf.writestr("whole/challenge.yml", yaml.safe_dump({
+            "name": "Whole Floats", "category": "pwn", "description": "x", "value": 50,
+            "flags": ["flag{whole}"],
+            "extra": {"deployment": {
+                "backend": "docker", "image": "img:1", "exposure": "tcp", "ports": [1337],
+                "resource_limits": {"memory_mb": 512.0, "pids": 64.0},
+            }},
+        }))
+
+    imp = await client.post(
+        f"/api/competitions/{comp}/challenges/import",
+        files={"file": ("c.zip", buf.getvalue(), "application/zip")}, headers=_auth(admin),
+    )
+    assert imp.status_code == 200, imp.text
+    errors = imp.json()["errors"]
+    for title in bad:
+        assert any(
+            e.startswith(f"{title}: deployment") and "resource_limits." in e for e in errors
+        ), (title, errors)
+
+    listing = {c["title"]: c["id"] for c in (await client.get(f"/api/competitions/{comp}/challenges", headers=_auth(admin))).json()}
+    async with SessionLocal() as db:
+        deps = {
+            d.challenge_id: d for d in (await db.scalars(
+                select(ChallengeDeployment).where(ChallengeDeployment.competition_id == comp)
+            )).all()
+        }
+    assert set(deps) == {listing["Sane Limits"], listing["Whole Floats"]}
+    assert deps[listing["Sane Limits"]].resource_limits == {"cpu": 0.5, "memory_mb": 64, "pids": 32}
+    whole = deps[listing["Whole Floats"]].resource_limits
+    assert whole == {"memory_mb": 512, "pids": 64}
+    assert all(type(v) is int for v in whole.values())
+
+
 async def test_connection_info_authored_and_withheld_while_locked(client):
     """#262: connection info reaches a competitor who can play the challenge, and
     is withheld while it's locked — it's an infrastructure address for content

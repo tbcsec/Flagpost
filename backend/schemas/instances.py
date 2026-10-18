@@ -16,6 +16,7 @@ are ``from_attributes`` and built with ``model_validate``.
 from __future__ import annotations
 
 import ipaddress
+import math
 import re
 from datetime import datetime
 from typing import Any
@@ -28,15 +29,20 @@ from models.challenge_instancing import (
     FLAG_MODES,
     FLAG_TEMPLATE_TOKEN,
 )
+from utils.provisioners import INTEGER_RESOURCES, RESOURCE_MAX, RESOURCE_MIN
 
 # --- deployment authoring ----------------------------------------------------
 
 
 # Resource-containment bounds (GHSA-vgrr). A challenge author must not be able
 # to disable the operator's fork-bomb/OOM guards: Docker reads a 0 cpu/memory/
-# pids as UNLIMITED, so 0 (and negative) is rejected here — absent means "use the
-# operator default", never unlimited. Upper bounds mirror the settings caps.
-_RESOURCE_MAX: dict[str, float] = {"cpu": 64, "memory_mb": 131072, "pids": 65536}
+# pids as UNLIMITED, and the provisioners int()-truncate, so a fraction that
+# truncates to 0 is as bad as 0 itself. So: whole numbers for memory/pids (256.0
+# counts, stored as 256), every value finite (NaN passes every comparison), and
+# nothing below the floors or above the caps — the same RESOURCE_MIN/MAX the
+# settings schema and the provisioners' final clamp read. Absent means "use the
+# operator default". The backup import normalises instead of rejecting (see
+# utils/backup._validate_deployment_row).
 # One host port is allocated per declared port; without a cap a single deployment
 # could claim the whole ephemeral host-port range and starve every other launch.
 _MAX_PORTS = 16
@@ -49,13 +55,23 @@ def _validate_resource_limits(limits: dict[str, Any] | None) -> str | None:
         if key not in limits:
             continue
         value = limits[key]
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        whole = key in INTEGER_RESOURCES
+        if isinstance(value, bool) or not isinstance(value, int if whole else (int, float)):
+            kind = "a whole number" if whole else "a number"
             return (
-                f"resource_limits.{key} must be a positive number "
+                f"resource_limits.{key} must be {kind} "
+                "(omit it to use the operator default)"
+            )
+        # An int is always finite; math.isfinite would overflow on a huge one.
+        if isinstance(value, float) and not math.isfinite(value):
+            return f"resource_limits.{key} must be a finite number"
+        if value < RESOURCE_MIN[key]:
+            return (
+                f"resource_limits.{key} must be at least {RESOURCE_MIN[key]} "
                 "(omit it to use the operator default; 0 would mean unlimited)"
             )
-        if value > _RESOURCE_MAX[key]:
-            return f"resource_limits.{key} exceeds the maximum {int(_RESOURCE_MAX[key])}"
+        if value > RESOURCE_MAX[key]:
+            return f"resource_limits.{key} exceeds the maximum {RESOURCE_MAX[key]}"
     return None
 
 
@@ -73,6 +89,21 @@ class DeploymentUpdate(BaseModel):
     per_subject_cap: int = Field(default=1, ge=1, le=100)
     flag_mode: str = "static"
     flag_template: str | None = None
+
+    @field_validator("resource_limits")
+    @classmethod
+    def _whole_number_limits(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        """A whole-number float for memory/pids (``256.0`` — JSON or YAML can
+        carry one) is the integer it names, so it is stored as that int. A real
+        fraction is left as-is for ``validate_shape`` to reject by name."""
+        if not v:
+            return v
+        out = dict(v)
+        for key in INTEGER_RESOURCES:
+            value = out.get(key)
+            if isinstance(value, float) and value.is_integer():
+                out[key] = int(value)
+        return out
 
     def validate_shape(self) -> str | None:
         """Return a human error if the spec is internally inconsistent, else
@@ -227,9 +258,17 @@ class InstanceSettingsUpdate(BaseModel):
     registry_credentials: str | None = None
     tcp_port_min: int | None = Field(default=None, ge=1, le=65535)
     tcp_port_max: int | None = Field(default=None, ge=1, le=65535)
-    default_cpu: float | None = Field(default=None, gt=0, le=64)
-    default_memory_mb: int | None = Field(default=None, ge=16, le=131072)
-    default_pids: int | None = Field(default=None, ge=16, le=65536)
+    # The same bounds a deployment override gets (GHSA-vgrr), so the operator
+    # default can't be one the provisioners would truncate to unlimited either.
+    default_cpu: float | None = Field(
+        default=None, ge=RESOURCE_MIN["cpu"], le=RESOURCE_MAX["cpu"]
+    )
+    default_memory_mb: int | None = Field(
+        default=None, ge=RESOURCE_MIN["memory_mb"], le=RESOURCE_MAX["memory_mb"]
+    )
+    default_pids: int | None = Field(
+        default=None, ge=RESOURCE_MIN["pids"], le=RESOURCE_MAX["pids"]
+    )
     max_concurrent: int | None = Field(default=None, ge=1, le=100000)
     egress_policy: str | None = None
     # HTTP routing base domain (#319). "" clears it; omitting leaves it untouched.

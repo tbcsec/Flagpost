@@ -173,6 +173,68 @@ async def test_deployment_validation_rejects_a_bad_shape(client):
     assert "image reference" in resp.json()["detail"]
 
 
+async def test_deployment_route_rejects_resource_limits_that_truncate_to_unlimited(client):
+    """GHSA-vgrr residual: the authoring route refuses limits the provisioners
+    would int()-truncate to 0 (Docker's "unlimited"), and NaN — which a JSON
+    body can carry and which passed every comparison. Nothing is persisted."""
+    import json
+
+    admin = await admin_token(client)
+    comp = await _make_competition(client, admin)
+    chal = await _make_challenge(client, comp, admin)
+    url = f"/api/competitions/{comp}/challenges/{chal}/deployment"
+    base = {"backend": "docker", "image_ref": "img:1", "exposure": "tcp", "ports": [1337]}
+
+    for limits in (
+        {"cpu": 1e-10},
+        {"cpu": 0.001},
+        {"memory_mb": 0.5},
+        {"memory_mb": 8},
+        {"pids": 0.5},
+        {"cpu": 1e-10, "memory_mb": 0.5, "pids": 0.5},
+    ):
+        resp = await client.put(
+            url, json={**base, "resource_limits": limits}, headers=_auth(admin)
+        )
+        assert resp.status_code == 400, (limits, resp.text)
+        assert "resource_limits." in resp.json()["detail"]
+
+    # Python's json (what the route parses with) accepts the bare NaN/Infinity
+    # tokens, so send them raw rather than trust the client to emit them.
+    for raw in ("NaN", "Infinity", "-Infinity"):
+        body = json.dumps(base)[:-1] + f', "resource_limits": {{"cpu": {raw}}}}}'
+        resp = await client.put(
+            url,
+            content=body,
+            headers={**_auth(admin), "Content-Type": "application/json"},
+        )
+        assert resp.status_code == 400, (raw, resp.text)
+        assert "resource_limits.cpu" in resp.json()["detail"]
+
+    # Every attempt was refused before the upsert — no spec exists.
+    got = await client.get(url, headers=_auth(admin))
+    assert got.status_code == 404
+
+    # The floors themselves are accepted.
+    ok = await client.put(
+        url,
+        json={**base, "resource_limits": {"cpu": 0.01, "memory_mb": 16, "pids": 16}},
+        headers=_auth(admin),
+    )
+    assert ok.status_code == 200, ok.text
+
+    # A whole-number float is accepted and stored as the integer it names.
+    whole = await client.put(
+        url,
+        json={**base, "resource_limits": {"memory_mb": 256.0, "pids": 64.0}},
+        headers=_auth(admin),
+    )
+    assert whole.status_code == 200, whole.text
+    stored = (await client.get(url, headers=_auth(admin))).json()["resource_limits"]
+    assert stored == {"memory_mb": 256, "pids": 64}
+    assert all(type(v) is int for v in stored.values())
+
+
 async def test_instanced_flag_exposed_on_challenge_reads(client):
     # The competitor-facing challenge list + detail carry `instanced` so the UI
     # knows which challenges offer a "Launch instance" panel — true only where a

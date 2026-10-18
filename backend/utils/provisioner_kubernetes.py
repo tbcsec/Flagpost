@@ -53,6 +53,7 @@ from utils.provisioners import (
     Provisioner,
     ProvisionerError,
     register_provisioner,
+    resource_limit,
 )
 
 logger = logging.getLogger(__name__)
@@ -140,6 +141,41 @@ _READY_BUDGET = 120.0
 # and — with automountServiceAccountToken:false, so no token is ever mounted —
 # gives the pod an identity that can do nothing even if that changed.
 _INSTANCE_SA = "flagpost-instance"
+
+# The namespace default-deny-egress baseline k8s/instances-rbac.yaml installs.
+# It is applied by the operator, not by Flagpost, so an upgrade doesn't change
+# it — the ``baseline_policy`` validate leg reads it back (GHSA-vgrr).
+_BASELINE_POLICY = "flagpost-default-deny-egress"
+
+
+def _dns_egress_rule() -> dict[str, Any]:
+    """The one port-53 egress rule an instance pod may have (GHSA-vgrr): DNS to
+    the cluster DNS pods only. Without a ``to`` selector the port-53 allowance
+    reaches *any* host, reopening a full outbound channel despite deny mode
+    advertising "no internet". The selector matches a standard CoreDNS/kube-dns
+    install (``k8s-app=kube-dns`` in ``kube-system``); an operator whose
+    resolver lives elsewhere adds a supplementary NetworkPolicy allowing DNS to
+    it (policies union — docs/CHALLENGE_INSTANCES.md) — but the safe default is
+    a scoped rule, not egress-to-any.
+
+    ``k8s/instances-rbac.yaml``'s namespace default-deny-egress baseline carries
+    this exact rule too, and must: NetworkPolicies are additive and the baseline
+    selects every instance pod, so a looser port-53 rule there reopens what this
+    one closes. ``test_shipped_baseline_networkpolicy_scopes_dns_to_kube_dns``
+    pins the manifest to this function, and the ``baseline_policy`` validate
+    leg flags a cluster still running an older, unscoped copy. A fresh dict per
+    call, so no caller can mutate a shared one."""
+    return {
+        "to": [
+            {
+                "namespaceSelector": {
+                    "matchLabels": {"kubernetes.io/metadata.name": "kube-system"}
+                },
+                "podSelector": {"matchLabels": {"k8s-app": "kube-dns"}},
+            }
+        ],
+        "ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}],
+    }
 
 
 def _resource_name(instance_id: str) -> str:
@@ -323,9 +359,12 @@ class KubernetesProvisioner(Provisioner):
         field, so they are an **operator responsibility** on the challenge nodes
         — called out in the deploy guide + threat model (slice 7), not silently
         assumed. cpu/memory limits below still bound the memory-heavy case."""
-        limits = spec.resource_limits or {}
-        cpu = float(limits.get("cpu", self._cfg.default_cpu))
-        memory_mb = int(limits.get("memory_mb", self._cfg.default_memory_mb))
+        # Clamped to the floors/caps right here, where they become runtime
+        # limits (GHSA-vgrr): a stored row may predate the authoring-schema
+        # floors, and an int()-truncated fraction would otherwise emit "0Mi".
+        limits = spec.resource_limits
+        cpu = resource_limit(limits, "cpu", self._cfg.default_cpu)
+        memory_mb = resource_limit(limits, "memory_mb", self._cfg.default_memory_mb)
 
         env = dict(spec.env)
         if spec.flag_plaintext is not None:
@@ -475,26 +514,9 @@ class KubernetesProvisioner(Provisioner):
         """Egress half of the per-instance NetworkPolicy (#320 D5) — the
         load-bearing isolation control. DNS is always allowed (a pod needs it to
         resolve anything, and kube-dns lives in the cluster range that ``allow``
-        mode otherwise excepts, so it is carved back in explicitly).
-
-        The DNS rule is scoped to the cluster DNS pods (GHSA-vgrr): without a
-        ``to`` selector the port-53 allowance reaches *any* host, reopening a full
-        outbound channel (DNS tunnelling, or a plain reverse shell to
-        ``attacker:53``) despite deny mode advertising "no internet". The default
-        selector matches a standard CoreDNS/kube-dns install (``k8s-app=kube-dns``
-        in ``kube-system``); an operator whose DNS lives elsewhere must relabel or
-        widen it — but the safe default is a scoped rule, not egress-to-any."""
-        dns = {
-            "to": [
-                {
-                    "namespaceSelector": {
-                        "matchLabels": {"kubernetes.io/metadata.name": "kube-system"}
-                    },
-                    "podSelector": {"matchLabels": {"k8s-app": "kube-dns"}},
-                }
-            ],
-            "ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}],
-        }
+        mode otherwise excepts, so it is carved back in explicitly), scoped to
+        the cluster DNS pods — see :func:`_dns_egress_rule`."""
+        dns = _dns_egress_rule()
         if self._cfg.egress_denied:
             # Deny mode (default): DNS only. Blocks the internet, the control
             # plane, peer instances and the metadata IP in one stroke — and
@@ -884,6 +906,9 @@ class KubernetesProvisioner(Provisioner):
         # 4. NetworkPolicy objects are accepted by the API.
         legs.append(await self._check_netpol_support())
 
+        # 4b. The operator-applied namespace baseline is present and scoped.
+        legs.append(await self._check_baseline_policy())
+
         # 5. The honest leg: does the CNI actually ENFORCE NetworkPolicy? A
         # deny-all-egress pod that still reaches the internet means policies are
         # accepted-but-inert — instances would not be isolated. ~20-30s.
@@ -993,6 +1018,50 @@ class KubernetesProvisioner(Provisioner):
         return CheckResult(
             "network_policy_support", False,
             f"cannot create a NetworkPolicy: {_status_detail(resp)}",
+        )
+
+    async def _check_baseline_policy(self) -> CheckResult:
+        """Read back the namespace default-deny-egress baseline (GHSA-vgrr). It
+        selects every instance pod and NetworkPolicies union, so an egress rule
+        in it with no ``to`` opens its ports to every destination for every
+        instance, whatever the per-instance policy says. The manifest is applied
+        by the operator, so a cluster bootstrapped from an older copy keeps that
+        copy until it is re-applied — this leg is what tells them. Missing is a
+        fail too: the bootstrap creates it, and without it nothing covers a pod
+        before its own policy is programmed."""
+        path = f"{self._net('networkpolicies')}/{_BASELINE_POLICY}"
+        reapply = "re-apply k8s/instances-rbac.yaml (kubectl apply -f k8s/instances-rbac.yaml)"
+        try:
+            resp = await self._request("GET", path, timeout=_TIMEOUT_QUICK)
+        except ProvisionerError as exc:
+            return CheckResult("baseline_policy", False, str(exc))
+        if resp.status_code == 404:
+            return CheckResult(
+                "baseline_policy", False,
+                f"NetworkPolicy '{_BASELINE_POLICY}' not found in namespace "
+                f"'{self._cfg.namespace}' — {reapply}",
+            )
+        if resp.status_code != 200:
+            return CheckResult(
+                "baseline_policy", False,
+                f"cannot read NetworkPolicy '{_BASELINE_POLICY}': {_status_detail(resp)}",
+            )
+        body = _json_or_none(resp)
+        if body is None:
+            return CheckResult(
+                "baseline_policy", False,
+                "the API returned a non-JSON response for the baseline NetworkPolicy",
+            )
+        rules = (body.get("spec") or {}).get("egress") or []
+        if any(not isinstance(r, dict) or not r.get("to") for r in rules):
+            return CheckResult(
+                "baseline_policy", False,
+                f"NetworkPolicy '{_BASELINE_POLICY}' has an egress rule with no "
+                f"destination scope (likely an older copy of the manifest); {reapply}",
+            )
+        return CheckResult(
+            "baseline_policy", True,
+            f"namespace baseline '{_BASELINE_POLICY}' present, every egress rule scoped",
         )
 
     def _probe_pod_body(

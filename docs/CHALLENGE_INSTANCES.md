@@ -59,14 +59,15 @@ This adds:
   reaches them here) and the Test-connection probe; **TCP/`none` instances do
   not use it** — see the next point.
 
-> **Peer isolation is automatic (GHSA-vgrr).** Each published-port (TCP) or
-> `none` instance is launched on its **own** throwaway bridge,
-> `flagpost-net-<instance_id>`, created and destroyed by Flagpost — so a
-> competitor who pops their own box can't reach a neighbour's over the Docker
-> network. You don't create these; the app does (it needs only the `NETWORKS` +
-> `POST` proxy scope already listed above). `exposure=http` instances stay on the
-> shared `flagpost-instances` bridge, so HTTP peers are *not* isolated from each
-> other yet (a documented residual — see `docs/THREAT_MODEL.md`).
+> **Peer isolation is automatic (GHSA-vgrr).** Each published-port (TCP)
+> instance is launched on its **own** throwaway bridge,
+> `flagpost-net-<instance_id>`, created and destroyed by Flagpost, and a `none`
+> instance gets no network at all — so a competitor who pops their own box can't
+> reach a neighbour's over the Docker network. You don't create these; the app
+> does (it needs only the `NETWORKS` + `POST` proxy scope already listed above).
+> `exposure=http` instances stay on the shared `flagpost-instances` bridge, so
+> HTTP peers are *not* isolated from each other yet (a documented residual — see
+> `docs/THREAT_MODEL.md`).
 
 > **Egress control (do this for a real event).** A normal bridge lets instances
 > reach the internet and the host by default. Block outbound from the instance
@@ -192,7 +193,43 @@ kubectl config view --raw --minify \
 baseline** NetworkPolicy — a belt-and-suspenders that isolates a freshly-created
 pod during the brief window before its own per-instance policy is programmed by
 the CNI (NetworkPolicies are additive, so an allow-mode instance's policy
-re-opens what it needs).
+re-opens what it needs). Its one allowance is DNS to the cluster DNS pods
+(`k8s-app=kube-dns` in `kube-system`), the same scope as each instance's own
+policy. **Upgrading?** Re-apply the file
+(`kubectl apply -f k8s/instances-rbac.yaml`) so an existing namespace picks up
+the scoped DNS rule (GHSA-vgrr); Test connection's `baseline_policy` leg stays
+red until you do.
+
+> **Cluster DNS that isn't kube-dns pods in `kube-system`?** NodeLocal
+> DNSCache (a node-local address), GKE Cloud DNS (the metadata-server address,
+> `169.254.169.254`) and OpenShift (pods in `openshift-dns`, port `5353`) resolve
+> elsewhere, so the built-in rule doesn't reach them and DNS fails inside
+> instances. Leave the built-in rule alone and add a **supplementary**
+> NetworkPolicy in the instance namespace that allows DNS egress to your resolver
+> — policies union, so it extends both the baseline and every instance's own
+> policy. Keep it scoped with a `to` (a rule without one opens its ports to every
+> address), and to the DNS port only:
+>
+> ```yaml
+> apiVersion: networking.k8s.io/v1
+> kind: NetworkPolicy
+> metadata:
+>   name: flagpost-dns-extra
+>   namespace: flagpost-instances
+> spec:
+>   podSelector: {}
+>   policyTypes: ["Egress"]
+>   egress:
+>     - to:
+>         - ipBlock: { cidr: 169.254.20.10/32 }   # your resolver's address
+>       ports:
+>         - { protocol: UDP, port: 53 }
+>         - { protocol: TCP, port: 53 }
+> ```
+>
+> On OpenShift, replace the `ipBlock` with a `namespaceSelector` for
+> `openshift-dns` plus a `podSelector` for its DNS pods, and use port `5353`. On
+> GKE Cloud DNS, the port-53-only rule leaves the metadata API (port 80) blocked.
 
 Then in **Admin → Site settings → Instances**:
 
@@ -209,9 +246,11 @@ Then in **Admin → Site settings → Instances**:
    cluster, Flagpost holds no rights on it).
 6. **Test connection.** The kubernetes legs are: API reachable, **privilege
    posture** (the SelfSubjectAccessReview allow/deny matrix), namespace operable,
-   NetworkPolicy accepted, **egress enforcement** (does the CNI actually block a
-   deny-all pod, or merely accept the policy?), NodePort public reachability, and
-   the HTTP ingress. A red leg names what to fix.
+   NetworkPolicy accepted, **baseline policy** (the namespace default-deny-egress
+   baseline is present and every egress rule in it is scoped), **egress
+   enforcement** (does the CNI actually block a deny-all pod, or merely accept the
+   policy?), NodePort public reachability, and the HTTP ingress. A red leg names
+   what to fix.
 
 > **A policy-enforcing CNI is required.** Flannel alone accepts NetworkPolicy
 > objects but does not enforce them — instances would not be isolated. Use

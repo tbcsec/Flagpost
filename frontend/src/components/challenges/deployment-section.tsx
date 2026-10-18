@@ -118,8 +118,10 @@ function DeploymentForm({
     }
     const resourceLimits: Record<string, number> = {};
     if (cpu) resourceLimits.cpu = clampNum(cpu, 0.1, 64, 1);
-    if (memoryMb) resourceLimits.memory_mb = clampNum(memoryMb, 16, 131072, 256);
-    if (pids) resourceLimits.pids = clampNum(pids, 16, 65536, 256);
+    // Memory and PIDs are whole numbers server-side (a fraction is refused), so
+    // round here — a fractional value saved by an older release re-saves cleanly.
+    if (memoryMb) resourceLimits.memory_mb = Math.round(clampNum(memoryMb, 16, 131072, 256));
+    if (pids) resourceLimits.pids = Math.round(clampNum(pids, 16, 65536, 256));
 
     const payload: ChallengeDeploymentUpdate = {
       backend: "docker",
@@ -233,6 +235,7 @@ function DeploymentForm({
             type="number"
             min={16}
             max={131072}
+            step={1}
             value={memoryMb}
             onChange={(e) => setMemoryMb(e.target.value)}
             placeholder={t("siteDefault")}
@@ -245,6 +248,7 @@ function DeploymentForm({
             type="number"
             min={16}
             max={65536}
+            step={1}
             value={pids}
             onChange={(e) => setPids(e.target.value)}
             placeholder={t("siteDefault")}

@@ -86,6 +86,22 @@ describe("DeploymentSection flag mode", () => {
   });
 });
 
+describe("DeploymentSection resource limits (GHSA-vgrr)", () => {
+  it("rounds memory and PIDs to whole numbers, keeps a fractional CPU", () => {
+    render();
+    fireEvent.change(screen.getByLabelText("CPUs"), { target: { value: "0.5" } });
+    fireEvent.change(screen.getByLabelText("Memory (MB)"), { target: { value: "256.6" } });
+    fireEvent.change(screen.getByLabelText("PIDs"), { target: { value: "64.4" } });
+    save();
+    expect(mockUpsert).toHaveBeenCalledTimes(1);
+    expect(mockUpsert.mock.calls[0][0].resource_limits).toEqual({
+      cpu: 0.5,
+      memory_mb: 257,
+      pids: 64,
+    });
+  });
+});
+
 describe("DeploymentSection HTTP exposure (#319)", () => {
   it("offers HTTP and sends exposure=http with the container port", () => {
     renderWithIntl(<DeploymentSection competitionId="c1" challengeId="ch1" />);

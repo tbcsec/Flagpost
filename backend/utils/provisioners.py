@@ -21,9 +21,89 @@ public demo on every merge).
 
 from __future__ import annotations
 
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
+
+# --- per-instance resource bounds (GHSA-vgrr) --------------------------------
+
+# The one source of truth for cpu/memory/pids bounds: the deployment-authoring
+# schema, the operator-default settings schema, and every provisioner's final
+# clamp all read these. Docker reads a 0 cpu/memory/pids as UNLIMITED, so no
+# value may reach a runtime as 0 — including one that int()-truncates there
+# (0.5 pids, or 1e-10 cpu → NanoCpus 0). cpu's floor is Docker's own minimum
+# (0.01 CPU); memory/pids floors match the operator settings'. memory_mb and
+# pids are whole numbers.
+RESOURCE_MIN: dict[str, float] = {"cpu": 0.01, "memory_mb": 16, "pids": 16}
+RESOURCE_MAX: dict[str, float] = {"cpu": 64, "memory_mb": 131072, "pids": 65536}
+INTEGER_RESOURCES = frozenset({"memory_mb", "pids"})
+
+
+def _finite_number(value: Any) -> int | float | None:
+    """``value`` if it is a usable number, else None. bool is an int subclass
+    but never a limit; an int is always finite (and may exceed float range, so
+    it is not passed to ``math.isfinite``, which would overflow)."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and math.isfinite(value):
+        return value
+    return None
+
+
+def _clamp(key: str, value: int | float) -> int | float:
+    """A finite ``value`` clamped into ``[RESOURCE_MIN, RESOURCE_MAX]`` for
+    ``key``; memory/pids truncated to an int (never below the integer floor)."""
+    value = min(max(value, RESOURCE_MIN[key]), RESOURCE_MAX[key])
+    return int(value) if key in INTEGER_RESOURCES else value
+
+
+def resource_limit(
+    limits: dict[str, Any] | None, key: str, default: float
+) -> float | int:
+    """The value a runtime limit is actually set to: the deployment's override
+    for ``key`` when it is a finite number, else the operator ``default`` —
+    clamped into ``[RESOURCE_MIN, RESOURCE_MAX]`` (an int for memory/pids).
+
+    Defence in depth behind the authoring schema (GHSA-vgrr): the lifecycle
+    service passes the stored ``resource_limits`` through raw and
+    ``validate_shape`` is not re-run at provision time, so a row written before
+    the floors existed can still carry 0, a fraction or NaN. Whatever arrives,
+    the runtime never sees a value that means "unlimited"."""
+    value = _finite_number((limits or {}).get(key, default))
+    if value is None:
+        value = _finite_number(default)
+    if value is None:
+        value = RESOURCE_MIN[key]
+    value = _clamp(key, value)
+    return value if key in INTEGER_RESOURCES else float(value)
+
+
+def normalise_resource_limits(limits: Any) -> Any:
+    """Bring a stored ``resource_limits`` mapping inside today's bounds by the
+    same rules as :func:`resource_limit`: a finite number is clamped (and made
+    an int for memory/pids); a non-finite, non-numeric or bool value is dropped,
+    so the operator default applies — exactly what the provisioners would have
+    run. Other keys pass through, and a non-mapping is returned untouched for
+    the caller's validation to reject.
+
+    For restoring rows an earlier release accepted (GHSA-vgrr tightened the
+    authoring bounds after v1.7.x): the backup import cleans rather than
+    refuses them, so an old backup still restores. Interactive authoring and
+    the ctfcli import keep *rejecting* such values — there the author is
+    present to fix them."""
+    if not isinstance(limits, dict):
+        return limits
+    out = {k: v for k, v in limits.items() if k not in RESOURCE_MIN}
+    for key in RESOURCE_MIN:
+        if key not in limits:
+            continue
+        value = _finite_number(limits[key])
+        if value is not None:
+            out[key] = _clamp(key, value)
+    return out
 
 
 @dataclass(frozen=True)

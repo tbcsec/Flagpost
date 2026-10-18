@@ -56,8 +56,8 @@ async def test_validate_all_legs_pass_on_real_k3s():
     by = {l.name: l for l in legs}
     # The security-critical legs must pass on a correctly-bootstrapped cluster.
     for name in ("endpoint_reachable", "privilege_posture", "namespace_ready",
-                 "network_policy_support", "egress_enforcement", "probe_run",
-                 "public_reachable"):
+                 "network_policy_support", "baseline_policy", "egress_enforcement",
+                 "probe_run", "public_reachable"):
         assert name in by, f"missing leg {name}\n{report}"
         assert by[name].ok, f"leg {name} failed:\n{report}"
     # The honest one: k3s's embedded kube-router enforces NetworkPolicy, so a

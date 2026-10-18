@@ -38,6 +38,7 @@ from utils.provisioners import (
     Provisioner,
     ProvisionerError,
     register_provisioner,
+    resource_limit,
 )
 
 # Every container Flagpost creates carries this label = "true". list() filters
@@ -452,10 +453,13 @@ class DockerProvisioner(Provisioner):
     def _container_body(self, spec: ProvisionSpec) -> dict[str, Any]:
         """Compose the hardened ``POST /containers/create`` payload. Every
         privileged field is pinned by Flagpost, not the author (ADR-0036 §1)."""
-        limits = spec.resource_limits or {}
-        cpu = float(limits.get("cpu", self._cfg.default_cpu))
-        memory_mb = int(limits.get("memory_mb", self._cfg.default_memory_mb))
-        pids = int(limits.get("pids", self._cfg.default_pids))
+        # Clamped to the floors/caps right here, where they become runtime
+        # limits (GHSA-vgrr): Docker reads a 0 NanoCpus/Memory/PidsLimit as
+        # UNLIMITED, and a stored row may predate the authoring-schema floors.
+        limits = spec.resource_limits
+        cpu = resource_limit(limits, "cpu", self._cfg.default_cpu)
+        memory_mb = resource_limit(limits, "memory_mb", self._cfg.default_memory_mb)
+        pids = resource_limit(limits, "pids", self._cfg.default_pids)
 
         env = dict(spec.env)
         if spec.flag_plaintext is not None:
@@ -471,7 +475,10 @@ class DockerProvisioner(Provisioner):
             "ReadonlyRootfs": True,
             "PidsLimit": pids,
             "Memory": memory_mb * 1024 * 1024,
-            "NanoCpus": int(cpu * 1_000_000_000),
+            # round(), not int(): a product like 2.01 * 1e9 lands a hair under
+            # the whole number, and int() would shave a nano-CPU off it. (The
+            # clamp above is what keeps the value off 0.)
+            "NanoCpus": round(cpu * 1_000_000_000),
             "RestartPolicy": {"Name": "no"},
             "AutoRemove": True,
             "Binds": [],

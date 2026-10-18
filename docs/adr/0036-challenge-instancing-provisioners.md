@@ -308,17 +308,21 @@ threat model (`docs/THREAT_MODEL.md`). Concrete choices made while implementing:
   every pin. Per-pod PID/fd caps have no in-manifest k8s form (kubelet
   `--pod-max-pids`) → operator responsibility, documented, not silently claimed.
 - **NetworkPolicy egress (D5)** is the enforced upgrade over docker's
-  host-firewall documentation: deny mode = DNS-only; allow mode = everything
-  except the metadata IPs (v4 + v6) and — per family, for dual-stack — the
-  configured cluster CIDRs. Enforcement needs a policy-enforcing CNI, which the
-  new `egress_enforcement` validate leg actively proves (a deny-all probe pod
-  with a no-policy positive control, so it can't false-pass on an air-gapped
-  node).
+  host-firewall documentation: deny mode = DNS-only (to the cluster DNS pods,
+  in the per-instance policy and the namespace baseline alike — GHSA-vgrr);
+  allow mode = everything except the metadata IPs (v4 + v6) and — per family,
+  for dual-stack — the configured cluster CIDRs. Enforcement needs a
+  policy-enforcing CNI, which the new `egress_enforcement` validate leg actively
+  proves (a deny-all probe pod with a no-policy positive control, so it can't
+  false-pass on an air-gapped node).
 - **Staged validate() (D8), seven legs:** reachable, privilege-posture
   (SelfSubjectAccessReview allow/deny matrix — a cluster-admin token fails,
   deliberately), namespace, netpol-support, egress-enforcement, probe-run +
   public-reachability (NodePort dial), http-ingress. The two non-API actions are
-  injectable seams reused from the docker kind.
+  injectable seams reused from the docker kind. (GHSA-vgrr later added a
+  baseline-policy leg after netpol-support: the operator-applied namespace
+  baseline exists and every egress rule in it is scoped, since an upgrade
+  doesn't re-apply the manifest.)
 - **e2e harness.** `docker-compose.instances-k8s.yml` boots single-node k3s in
   Docker; `scripts/e2e-instances-k8s.sh` applies the RBAC, mints a token, and
   runs opt-in tests (`backend/tests_e2e/`) that drive the REAL provisioner —
@@ -341,8 +345,9 @@ on that same host firewall, because every instance shared the one
 challenge hands the competitor a shell, so this was the live lateral-movement
 path the Kubernetes kind already closed with a per-instance NetworkPolicy.
 
-**Decision:** on Docker, a published-port (TCP) or `none` instance gets its **own**
-bridge, `flagpost-net-<instance_id>`, instead of the shared one. Peers land on
+**Decision:** on Docker, a published-port (TCP) instance gets its **own**
+bridge, `flagpost-net-<instance_id>`, instead of the shared one (a `none`
+instance already has no network at all — `NetworkMode: none`). Peers land on
 different bridges with no route between them — the same default-deny-between-peers
 posture the k8s NetworkPolicy gives, achieved with the network driver rather than
 a policy object. Reachability is unchanged: a TCP instance is still reached

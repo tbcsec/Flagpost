@@ -138,3 +138,28 @@ describe("InstancesSettingsPanel — kubernetes", () => {
     expect(toast).toHaveBeenCalled();
   });
 });
+
+describe("InstancesSettingsPanel — resource defaults", () => {
+  beforeEach(() => {
+    mockUpdate.mockClear();
+  });
+
+  it("rounds the memory and PID defaults to whole numbers (GHSA-vgrr)", () => {
+    settings = baseSettings({ backend: "docker" });
+    renderWithIntl(<InstancesSettingsPanel />);
+    fireEvent.change(screen.getByLabelText("Memory (MB)"), { target: { value: "300.5" } });
+    fireEvent.change(screen.getByLabelText("Process limit (PIDs)"), {
+      target: { value: "99.2" },
+    });
+    // A browser's own step validation refuses a fractional value at the button;
+    // submit the form directly to exercise the fallback rounding behind it.
+    const form = screen.getByRole("button", { name: "Save changes" }).closest("form");
+    expect(form).not.toBeNull();
+    fireEvent.submit(form as HTMLFormElement);
+
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    const payload = mockUpdate.mock.calls[0][0];
+    expect(payload.default_memory_mb).toBe(301);
+    expect(payload.default_pids).toBe(99);
+  });
+});

@@ -270,6 +270,10 @@ Two room idioms coexist, chosen per surface:
   shell-level socket, throttled per query key so bursts collapse. Ticket and
   announcement events stay off the allowlist — they have their own
   tighter-scoped rooms. Adding a live surface is a map entry, not a new room.
+  A ping is itself a disclosure — that something happened, and when — so it
+  goes only to rooms whose members may see the thing: a ticket's internal
+  notes (and their attachments) ping the staff-only `support/<competition_id>`
+  room, never the ticket room its competitor is in (#503).
 
 ### 4.2 Collaborative Editing
 

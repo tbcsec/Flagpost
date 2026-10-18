@@ -93,8 +93,9 @@ async def _attachment_or_404(
 
 async def _assert_message_visible(
     db: AsyncSession, competition_id: str, attachment: TicketAttachment, user: User
-) -> None:
-    """404 if the attachment hangs off an internal note the viewer can't read.
+):
+    """404 if the attachment hangs off an internal note the viewer can't read;
+    otherwise the message it hangs off.
 
     The thread filters internal *messages* out of a competitor's view; without
     this the images on those messages would still be fetchable by id, which
@@ -103,12 +104,11 @@ async def _assert_message_visible(
     message = await _message_or_404(
         db, competition_id, attachment.ticket_id, attachment.message_id
     )
-    if not message.is_internal:
-        return
-    if not await _can_see_internal(db, user, competition_id):
+    if message.is_internal and not await _can_see_internal(db, user, competition_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found"
         )
+    return message
 
 
 @router.post(
@@ -281,7 +281,7 @@ async def delete_ticket_attachment(
     attachment = await _attachment_or_404(
         db, competition_id, ticket_id, attachment_id
     )
-    await _assert_message_visible(db, competition_id, attachment, current_user)
+    message = await _assert_message_visible(db, competition_id, attachment, current_user)
 
     if attachment.uploader_user_id != current_user.id and not await _is_staff(
         db, current_user, competition_id
@@ -307,5 +307,7 @@ async def delete_ticket_attachment(
             "message_id": message_id,
             "attachment_id": attachment_id,
             "actor_user_id": current_user.id,
+            # So the live update can stay off a competitor's socket (#503).
+            "is_internal": message.is_internal,
         },
     )

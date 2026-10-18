@@ -77,9 +77,17 @@ class TicketOut(BaseModel):
     opener_name: str
     team_name: str | None
     assignee_name: str | None
+    # Messages the caller can see (internal notes count only for those who may
+    # read them).
     message_count: int
     kind: str = "support"
     created_at: datetime
+    # The staff queue's triage signals (#503): whose it is ("Mine"), the latest
+    # message the caller can see, and whether an open ticket's last public
+    # message came from its opener — someone waiting on staff.
+    assignee_user_id: str | None = None
+    last_activity_at: datetime | None = None
+    awaiting_staff: bool = False
 
 
 class TicketDetail(TicketOut):

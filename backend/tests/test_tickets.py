@@ -2,6 +2,7 @@
 ownership scoping, internal-note visibility, reopen-on-reply, the §3.2 events,
 and the live-thread WS broadcast."""
 
+import pytest
 from sqlalchemy import select
 
 from db import SessionLocal
@@ -245,3 +246,152 @@ async def test_live_thread_broadcast(client):
         frame = await ws.receive_json()
         assert frame["type"] == "ticket_message"
         assert frame["ticket_id"] == tk
+
+
+async def _list(client, comp, token) -> dict:
+    rows = (await client.get(f"/api/competitions/{comp}/tickets", headers=_auth(token))).json()
+    return {row["id"]: row for row in rows}
+
+
+async def _post(client, comp, tk, token, body, internal=False):
+    resp = await client.post(
+        f"/api/competitions/{comp}/tickets/{tk}/messages",
+        json={"body": body, "is_internal": internal},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200, resp.text
+
+
+async def test_queue_shows_who_is_waiting_and_who_has_it(client):
+    """#503: the staff queue's triage signals. A ticket waits on staff while its
+    opener spoke last in public; an internal note doesn't answer them."""
+    comp = await _competition(client)
+    ada = await _participant(client, comp, "ada@example.com")
+    admin = await admin_token(client)
+    admin_id = (await client.get("/api/auth/me", headers=_auth(admin))).json()["id"]
+    tk = await _open_ticket(client, comp, ada)
+
+    row = (await _list(client, comp, admin))[tk]
+    assert row["awaiting_staff"] is True
+    assert row["assignee_user_id"] is None
+    opened_at = row["last_activity_at"]
+    assert opened_at is not None
+
+    await _post(client, comp, tk, admin, "checking with the author", internal=True)
+    row = (await _list(client, comp, admin))[tk]
+    assert row["awaiting_staff"] is True  # still unanswered
+    assert row["last_activity_at"] > opened_at  # staff see their note's activity
+    # The competitor's view doesn't move for a note they can't see.
+    assert (await _list(client, comp, ada))[tk]["last_activity_at"] == opened_at
+
+    await _post(client, comp, tk, admin, "Try restarting the instance.")
+    assert (await _list(client, comp, admin))[tk]["awaiting_staff"] is False
+    await _post(client, comp, tk, ada, "Still broken.")
+    assert (await _list(client, comp, admin))[tk]["awaiting_staff"] is True
+
+    await client.post(f"/api/competitions/{comp}/tickets/{tk}/assign", json={}, headers=_auth(admin))
+    await client.post(f"/api/competitions/{comp}/tickets/{tk}/resolve", headers=_auth(admin))
+    row = (await _list(client, comp, admin))[tk]
+    assert row["assignee_user_id"] == admin_id
+    assert row["awaiting_staff"] is False  # resolved: nobody's waiting
+
+
+async def test_message_counts_match_the_thread_each_caller_sees(client):
+    comp = await _competition(client)
+    ada = await _participant(client, comp, "ada@example.com")
+    admin = await admin_token(client)
+    tk = await _open_ticket(client, comp, ada)
+    await _post(client, comp, tk, admin, "internal only", internal=True)
+    await _post(client, comp, tk, admin, "public reply")
+
+    assert (await _list(client, comp, ada))[tk]["message_count"] == 2
+    assert (await _list(client, comp, admin))[tk]["message_count"] == 3
+    detail = (await client.get(f"/api/competitions/{comp}/tickets/{tk}", headers=_auth(ada))).json()
+    assert detail["message_count"] == len(detail["messages"]) == 2
+
+
+async def test_staff_without_internal_notes_count_only_what_they_can_read(client):
+    """A desk role can work tickets without reading internal notes: its counts
+    leave the notes out too."""
+    from models.role import Role, RoleAssignment
+
+    comp = await _competition(client)
+    ada = await _participant(client, comp, "ada@example.com")
+    admin = await admin_token(client)
+    desk = await _register(client, "desk@example.com")
+    desk_id = (await client.get("/api/auth/me", headers=_auth(desk))).json()["id"]
+    async with SessionLocal() as session:
+        role = Role(name="Desk", scope="competition", permissions=["ticket_view", "ticket_respond", "ticket_assign"])
+        session.add(role)
+        await session.flush()
+        session.add(RoleAssignment(user_id=desk_id, competition_id=comp, role_id=role.id))
+        await session.commit()
+    tk = await _open_ticket(client, comp, ada)
+    await _post(client, comp, tk, admin, "internal only", internal=True)
+
+    assert (await _list(client, comp, desk))[tk]["message_count"] == 1
+    assert (await _list(client, comp, admin))[tk]["message_count"] == 2
+
+
+async def _in_room(room_type: str, room_id: str) -> None:
+    """A socket joins its room just after authenticating; wait until it has."""
+    import asyncio
+
+    from realtime import manager
+
+    for _ in range(200):
+        if manager.room_size(room_type, room_id):
+            return
+        await asyncio.sleep(0.01)
+
+
+async def _drain_silence(ws, timeout: float = 0.3) -> None:
+    import asyncio
+    import json
+
+    from utils.event_bus import event_bus
+
+    await event_bus.wait_for_background()
+    with pytest.raises((TimeoutError, asyncio.TimeoutError)):
+        while True:
+            raw = await ws.next_message(timeout)
+            frame = json.loads(raw.get("text") or "{}")
+            # Presence comes and goes on its own; it's not thread activity.
+            if frame.get("type") != "presence":
+                raise AssertionError(f"unexpected frame {raw}")
+
+
+async def test_internal_notes_stay_off_the_competitors_socket(client):
+    """#503: an internal note — even a body-less ping, and the chime it plays —
+    never reaches the competitor's ticket socket. Staff get it through the
+    staff-only support room, which refreshes the ticket they have open."""
+    from utils.event_bus import event_bus
+
+    comp = await _competition(client)
+    ada = await _participant(client, comp, "ada@example.com")
+    admin = await admin_token(client)
+    tk = await _open_ticket(client, comp, ada)
+
+    async with (
+        WsTestClient(main.app, f"/ws/ticket/{tk}") as competitor,
+        WsTestClient(main.app, f"/ws/support/{comp}") as staff,
+    ):
+        await competitor.send_json({"token": ada})
+        assert (await competitor.receive_json())["type"] == "auth_ok"
+        assert (await competitor.receive_json())["type"] == "presence"
+        await staff.send_json({"token": admin})
+        assert (await staff.receive_json())["type"] == "auth_ok"
+        await _in_room("support", comp)
+        await event_bus.wait_for_background()
+
+        await _post(client, comp, tk, admin, "checking with the author", internal=True)
+        update = await staff.receive_json()
+        assert update == {"type": "ticket_updated", "ticket_id": tk}
+        await _drain_silence(competitor)
+
+        # A public reply still reaches them live.
+        await _post(client, comp, tk, admin, "on it")
+        frame = await competitor.receive_json()
+        while frame["type"] == "presence":
+            frame = await competitor.receive_json()
+        assert frame["type"] == "ticket_message"

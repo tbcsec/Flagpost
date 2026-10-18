@@ -366,8 +366,14 @@ export interface Ticket {
   opener_name: string;
   team_name: string | null;
   assignee_name: string | null;
+  /** Messages the caller can see. */
   message_count: number;
   created_at: string;
+  /** The staff queue's triage signals (#503). */
+  assignee_user_id: string | null;
+  last_activity_at: string | null;
+  /** Open, and its opener wrote the latest public message. */
+  awaiting_staff: boolean;
 }
 
 export interface TicketDetail extends Ticket {

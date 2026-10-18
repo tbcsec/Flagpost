@@ -498,13 +498,63 @@ closed:
   sidebar identity block shows the username only (#301), and routine
   dependency updates.
 
+**v1.7.0** — module SDK & marketplace, cross-competition skills, challenge
+sharing ([milestone](https://github.com/tbcsec/flagpost/milestone/7)).
+**Shipped** (tagged `v1.7.0`, 2026-10-13) — every issue in the milestone is
+closed:
+
+- **Module SDK & marketplace** (epic #385, ADR-0040) — **descoped to v1**: the
+  open, mirrorable registry protocol, **Tier-0 content packs** (challenge and
+  theme packs through the existing validated importers), the code-based import
+  client with signature + digest verification, and the authoring SDK
+  (`backend/sdk/`). Tier 1 (declarative) and Tier 2 (signed code) modules were
+  closed as not-planned (owner decision, 2026-10-13).
+- **Cross-competition skills web** (#364, ADR-0039) — a personal skills radar
+  per competitor and an Administrator users × skills matrix, gated site-wide by
+  `skills_enabled`.
+- **Challenge sharing links** (#427) — revocable, expiring, use-capped invite
+  and view links with a public landing page.
+- **RustFS replaces MinIO** as the default object store, with vendor-neutral
+  `S3_*` configuration (ADR-0041; a deliberate hard break for `MINIO_*`).
+- An in-app **changelog** at `/changelog`, and a security-hardening pass from
+  the 2026-09-04 review (its advisories were published with v1.8.0).
+
+**v1.7.1** — a security and reliability patch (2026-10-14, no milestone):
+WebSocket revocation reaches every worker (GHSA-p679-w29c-326x, #462, ADR-0025
+amended), and four background handlers that the event bus's 10-second cap was
+silently cutting off get real time budgets (#452, #454–#456).
+
+**v1.8.0** — programming challenges: a code-execution judge
+([milestone](https://github.com/tbcsec/flagpost/milestone/8)). **Shipped**
+(tagged `v1.8.0`, 2026-10-18) — every issue in the milestone is closed:
+
+- **Code judge** (epic #446, ADR-0042, ARCHITECTURE §17) — an optional `judge`
+  module that ships inert. Authoring with test cases and limits (#447), an
+  isolated executor and worker loop off the event bus (#448), the competitor's
+  problem page with upload, editor and live verdicts (#449), the Judging page
+  with rejudge, override and reference-solution checks, plus clarifications
+  (#450), and ICPC/Kattis problem-package import/export, ignore-case checking,
+  tiered language multipliers and a C# preset (#451). Points-first; an
+  ICPC-style ranking mode is a later milestone.
+- **Admin per surface** (#477) — a narrow site-wide grant opens exactly the
+  Admin pages it covers.
+- **User guides** rewritten for v1.8.0 (#479).
+- **Security** — twelve private advisories fixed (and published, with two more
+  that v1.7.0 had already fixed): delegated-administration
+  containment, backup sections gated by their content's permissions, private
+  competition visibility for site-wide delegates, sign-in throttling and
+  session refresh, bounded archives, uploads and outbound responses, SSO login
+  integrity, scoreboard-freeze leaks, automation authorization, instancing
+  isolation and CSV export injection (#481–#499).
+
 ### Planned
 
 Summarised from the open milestones; the milestone pages are authoritative.
 
 The next milestone hasn't been opened yet — candidates live in the
-unmilestoned backlog (e.g. first-class Attack-Defense / King-of-the-Hill
-competition modes #267, browser-delivered attacker workstations #268).
+unmilestoned backlog (e.g. the ICPC-style ranking mode ADR-0042 defers,
+first-class Attack-Defense / King-of-the-Hill competition modes #267,
+browser-delivered attacker workstations #268).
 
 **Deferred this cycle:** the **Major League Cyber integration** (#59) was triaged
 out of v1.5.0 and closed as not-planned — its SSO half is subsumed by the
@@ -537,13 +587,14 @@ status so the reasoning isn't lost.
   now OIDC + SAML + LDAP under one `IdentityProvider` model; a fourth protocol is
   a new `kind`, not a new subsystem.
 - **Plugin marketplace & third-party modules** (Architecture §11) —
-  **partially lifted: in progress for v1.7.0** (ADR-0040, epic #385). The design
+  **partially lifted: shipped in v1.7.0, descoped to v1** (ADR-0040, epic #385). The design
   that unblocked it is a **tiered trust model** (content packs → declarative
   modules → signed code modules) over an **open, mirrorable registry protocol**
   with code-based import, so the low-risk tiers ship without waiting on the
   hardest problem. The manifest-driven module *mechanism* (§11.1) was always in
   use for the required-core features; what this lifts is opening that path to
-  registry-distributed modules. **Still deferred:** the isolation story for
+  registry-distributed modules. Tier 1 and Tier 2 were then closed as
+  not-planned (owner decision, 2026-10-13). **Still deferred:** the isolation story for
   genuinely *untrusted* third-party code (Tier 3, Architecture §15) — the tiering
   is deliberately structured so nothing shipping now depends on it.
 - **Multi-competition tenancy consolidation** (Architecture §6) — the

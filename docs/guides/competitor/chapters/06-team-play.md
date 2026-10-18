@@ -32,6 +32,10 @@ Use it as the team's memory: partial progress, working theories, payloads
 that *almost* worked. When someone rotates onto a challenge three hours in,
 the pad tells them everything that's been tried.
 
+A pad holds about 1 MB. Past that it shows *Too large to sync — shorten this
+note*, and your edits stay on your screen, unshared and unsaved, until you
+trim it. Keep long tool output out of the pad.
+
 ## Coordinating in practice
 
 1. **Claim loudly** — put "I'm on this" at the top of the pad so two people

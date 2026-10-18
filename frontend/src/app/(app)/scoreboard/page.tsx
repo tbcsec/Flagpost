@@ -48,20 +48,32 @@ import { cn } from "@/lib/utils";
 // Live scoreboard (Phase 7): REST initial load + WebSocket room updates. "You"
 // highlighting follows the scoring subject; the top three get a medal rank and
 // rows flash briefly when their points change on a live update.
+//
+// During a freeze a scoreboard_freeze holder can switch to the live standings
+// (#501). It starts on the frozen board each time, so a page left on a shared
+// screen shows what competitors see unless someone deliberately switches.
 
 export default function ScoreboardPage() {
   const { competitionId, data: competition } = useActiveCompetition();
   const t = useTranslations("scoreboard");
   const tn = useTranslations("common.nouns");
-  const board = useScoreboard(competitionId ?? "");
+  const access = useAccess();
+  const canFreeze = access.has("scoreboard_freeze");
+  // Keyed by competition, so switching competitions starts on the frozen board.
+  const [liveFor, setLiveFor] = useState<string | null>(null);
+  const liveView = liveFor !== null && liveFor === competitionId;
+  const showLive = canFreeze && liveView;
+  const board = useScoreboard(competitionId ?? "", { live: showLive });
   const isTeam = competition?.participation_mode !== "individual";
   const myTeam = useMyTeam(isTeam ? (competitionId ?? "") : "");
   const userId = useAuthStore((s) => s.user?.id);
-  const access = useAccess();
-  const canFreeze = access.has("scoreboard_freeze");
   const freeze = useFreezeScoreboard(competitionId ?? "");
   const confirm = useConfirm();
-  const frozen = board.data?.frozen ?? false;
+  // Frozen for competitors — true in the staff live view too, where these
+  // standings themselves aren't frozen.
+  const frozen = Boolean(board.data?.frozen || board.data?.live);
+  // An unfreeze ends the live view, so the next freeze starts on the frozen board.
+  if (liveView && board.data && !frozen) setLiveFor(null);
   const brackets = board.data?.brackets ?? [];
   const [bracketFilter, setBracketFilter] = useState<string>("all");
   const canAssignBrackets = access.has("edit_competition");
@@ -71,6 +83,7 @@ export default function ScoreboardPage() {
   const timeline = useScoreboardTimeline(
     competitionId ?? "",
     bracketFilter === "all" ? null : bracketFilter,
+    showLive,
   );
 
   async function toggleFreeze() {
@@ -109,11 +122,24 @@ export default function ScoreboardPage() {
   // transition (not a looping pulse) fades the highlight out on its own.
   // Change detection is the adjust-during-render pattern (compare against the
   // last seen points held in state); only the timed clear stays an effect.
+  // Switching between the frozen and live views isn't a live update: re-baseline
+  // without flashing once the other view's board has loaded, or the rows that
+  // light up would be exactly the ones that moved since the freeze.
+  const view = showLive ? "live" : "shared";
   const [flash, setFlash] = useState<{
     points: Record<string, number>;
     ids: Set<string>;
-  }>({ points: {}, ids: new Set() });
-  if (entries.some((e) => flash.points[e.subject_id] !== e.points)) {
+    view: string;
+  }>({ points: {}, ids: new Set(), view });
+  if (board.isPlaceholderData) {
+    // The previous view's board, still on screen: compare nothing yet.
+  } else if (flash.view !== view) {
+    setFlash({
+      points: Object.fromEntries(entries.map((e) => [e.subject_id, e.points])),
+      ids: new Set(),
+      view,
+    });
+  } else if (entries.some((e) => flash.points[e.subject_id] !== e.points)) {
     const changed = entries
       .filter(
         (e) =>
@@ -124,6 +150,7 @@ export default function ScoreboardPage() {
     setFlash({
       points: Object.fromEntries(entries.map((e) => [e.subject_id, e.points])),
       ids: new Set(changed),
+      view,
     });
   }
   const flashing = flash.ids;
@@ -190,17 +217,16 @@ export default function ScoreboardPage() {
         subtitle={
           <>
             {competition?.name ?? ""} · {t(isTeam ? "teamMode" : "individualMode")}
-            {frozen ? (
+            {frozen && (
               <Badge variant="secondary" className="ml-2 align-middle">
                 {t("frozen")}
               </Badge>
-            ) : (
-              live && (
-                <span className="ml-2 inline-flex items-center gap-1.5 text-primary">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
-                  {t("live")}
-                </span>
-              )
+            )}
+            {live && (!frozen || showLive) && (
+              <span className="ml-2 inline-flex items-center gap-1.5 text-primary">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+                {t("live")}
+              </span>
             )}
           </>
         }
@@ -210,7 +236,8 @@ export default function ScoreboardPage() {
               size="sm"
               variant={frozen ? "default" : "outline"}
               onClick={toggleFreeze}
-              disabled={freeze.isPending}
+              // No board yet (e.g. mid-switch) means no known freeze state.
+              disabled={freeze.isPending || !board.data}
             >
               {freeze.isPending
                 ? t("freeze.saving")
@@ -230,9 +257,29 @@ export default function ScoreboardPage() {
       )}
 
       {frozen && (
-        <div className="rounded-md border border-border bg-muted/40 px-4 py-2.5 text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">{t("frozenBanner.lead")}</span>{" "}
-          {t("frozenBanner.rest")}
+        <div
+          className={cn(
+            "flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-md border px-4 py-2.5 text-sm",
+            showLive
+              ? "border-warning/40 bg-warning/10"
+              : "border-border bg-muted/40 text-muted-foreground",
+          )}
+        >
+          <p>
+            <span className="font-medium text-foreground">
+              {showLive ? t("frozenBanner.liveLead") : t("frozenBanner.lead")}
+            </span>{" "}
+            {showLive ? t("frozenBanner.liveRest") : t("frozenBanner.rest")}
+          </p>
+          {canFreeze && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setLiveFor(showLive ? null : competitionId)}
+            >
+              {showLive ? t("frozenBanner.showFrozen") : t("frozenBanner.showLive")}
+            </Button>
+          )}
         </div>
       )}
 
@@ -297,7 +344,7 @@ export default function ScoreboardPage() {
           series={timeline.data.series}
           start={timeline.data.start}
           end={timeline.data.end}
-          frozen={frozen}
+          frozen={board.data?.frozen ?? false}
         />
       )}
 

@@ -16,6 +16,7 @@ const scoreboard: PublicScoreboard = {
   ],
   frozen: false,
   frozen_at: null,
+  live: false,
   brackets: [],
   name: "Summer CTF",
   start_at: null,

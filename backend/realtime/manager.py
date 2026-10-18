@@ -443,6 +443,14 @@ class ConnectionManager:
     def room_size(self, room_type: str, room_id: str) -> int:
         return len(self._rooms.get((room_type, room_id), ()))
 
+    def may_have_listeners(self, room_type: str, room_id: str) -> bool:
+        """Whether a broadcast to this room could reach anyone — the test for
+        skipping the work of building one. ``room_size`` sees only this worker's
+        sockets; with a relay attached the room may have members on a peer, so
+        assume it does (#501: a staff-only room is often empty on the worker
+        that handles the event)."""
+        return self._relay is not None or self.room_size(room_type, room_id) > 0
+
     async def broadcast(
         self,
         room_type: str,

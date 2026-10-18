@@ -1099,6 +1099,9 @@ export interface Scoreboard {
   /** True when these standings are a frozen snapshot (§13 scoreboard freeze). */
   frozen: boolean;
   frozen_at: string | null;
+  /** True when these are live standings read past a freeze in effect — the
+   *  staff view (#501). `frozen || live` = competitors see a frozen board. */
+  live: boolean;
   /** The competition's bracket/division vocab (empty = no brackets). */
   brackets: string[];
 }

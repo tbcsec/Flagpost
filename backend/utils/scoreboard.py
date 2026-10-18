@@ -238,9 +238,15 @@ async def compute_scoreboard(
     can see the true standings; otherwise a frozen board is computed **as of**
     the freeze instant, so standings publicly stop moving once it passes.
     ``bracket`` filters to one division and ranks within it (Phase 9, Group C).
+
+    ``frozen`` says whether *these* standings are a frozen snapshot; ``live``
+    says they were read past a freeze that is in effect. Either one means
+    competitors currently see a frozen board, which is what a staff view's
+    Freeze/Unfreeze control needs to know (#501).
     """
     team_mode = competition.participation_mode == "team"
-    as_of = None if live else freeze_cutoff(competition)
+    cutoff = freeze_cutoff(competition)
+    as_of = None if live else cutoff
 
     hint_costs = await _hint_costs_by_subject(db, competition.id, team_mode, as_of)
     adjustments = await _adjustments_by_subject(db, competition.id, team_mode, as_of)
@@ -329,6 +335,7 @@ async def compute_scoreboard(
         "entries": entries,
         "frozen": as_of is not None,
         "frozen_at": as_of.isoformat() if as_of is not None else None,
+        "live": live and cutoff is not None,
         "brackets": list(competition.brackets or []),
     }
 

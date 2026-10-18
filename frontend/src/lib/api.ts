@@ -943,17 +943,27 @@ export const submissionsApi = {
     ),
 };
 
+// `live` asks for the standings past a freeze; the server honours it only for a
+// scoreboard_freeze holder (#501).
+function scoreboardQuery(bracket?: string | null, live = false): string {
+  const params = new URLSearchParams();
+  if (bracket) params.set("bracket", bracket);
+  if (live) params.set("live", "true");
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
 export const scoreboardApi = {
   // Initial load only — live updates arrive over the scoreboard WS room (§4.1).
-  get: (competitionId: string, bracket?: string | null) =>
+  get: (competitionId: string, bracket?: string | null, live = false) =>
     apiFetch<Scoreboard>(
-      `/api/competitions/${competitionId}/scoreboard${bracket ? `?bracket=${encodeURIComponent(bracket)}` : ""}`,
+      `/api/competitions/${competitionId}/scoreboard${scoreboardQuery(bracket, live)}`,
     ),
   // Cumulative score-over-time for the chart beside the board (#348). Same
   // freeze + bracket scoping; refreshed via the activity room, not polled.
-  timeline: (competitionId: string, bracket?: string | null) =>
+  timeline: (competitionId: string, bracket?: string | null, live = false) =>
     apiFetch<ScoreboardTimeline>(
-      `/api/competitions/${competitionId}/scoreboard/timeline${bracket ? `?bracket=${encodeURIComponent(bracket)}` : ""}`,
+      `/api/competitions/${competitionId}/scoreboard/timeline${scoreboardQuery(bracket, live)}`,
     ),
   // Staff freeze/unfreeze the public board (scoreboard_freeze).
   freeze: (competitionId: string) =>

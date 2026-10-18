@@ -255,7 +255,10 @@ Design decisions:
 Two room idioms coexist, chosen per surface:
 
 - **Snapshot rooms** (scoreboard, announcements) push the full shared state —
-  right when everyone in the room sees the same thing.
+  right when everyone in the room sees the same thing. When one audience must
+  see a different state, it gets its own room rather than a filtered frame:
+  `scoreboard_live/<competition_id>` carries the live board to
+  `scoreboard_freeze` holders while a freeze holds `scoreboard` still (§13).
 - **Ping rooms** (tickets, and the per-competition **activity room**
   `activity/<competition_id>`) push tiny id-only frames and let each client
   refetch its own permission-filtered REST slice — required when the surface
@@ -1505,8 +1508,18 @@ submission is the one endpoint they have direct incentive to script.
   (default now; a future time schedules it). `compute_scoreboard` then computes
   the board **as of** that time for everyone — dynamic values by solve count at
   freeze, later solves/adjustments/awards/hint-costs excluded — and the WS room
-  serves that same frozen snapshot so it visibly stops moving. Staff read the
-  live board with `?live=true`. Emits `scoreboard.frozen` / `scoreboard.unfrozen`.
+  serves that same frozen snapshot so it visibly stops moving. A
+  `scoreboard_freeze` holder can switch the Scoreboard page to the live
+  standings (#501): `?live=true` on the REST reads, and the staff-only
+  `scoreboard_live` room, which re-broadcasts the live board on every scoring
+  event, including the post-cutoff ones the frozen shared room holds back.
+  The page starts on the frozen board, so one left on a shared screen shows
+  what competitors see. A live board says `live: true` (frozen for
+  competitors, not frozen itself), which keeps the Freeze/Unfreeze control
+  right. Across workers a room's members can't be seen from the worker
+  handling an event, so with a relay attached both rooms are built and sent
+  regardless (`manager.may_have_listeners`). Emits `scoreboard.frozen` /
+  `scoreboard.unfrozen`.
   The freeze is one concealment decision, not a property of one endpoint:
   every competitor-facing read of solve data takes the same cutoff through
   `scoreboard.visible_solve_cutoff` (`None` for a `scoreboard_freeze` holder) —

@@ -10,6 +10,7 @@ import base64
 import gzip
 import io
 import json
+import types
 import time
 import zipfile
 
@@ -391,8 +392,17 @@ async def test_resolve_refuses_a_stacked_encoding():
         await registry.resolve("https://registry.example", "8fy17", transport=transport)
 
 
-async def test_deeply_nested_resolve_json_is_refused_not_a_crash():
+async def test_deeply_nested_resolve_json_is_refused_not_a_crash(monkeypatch):
     deep = b"[" * 100_000 + b"]" * 100_000  # inside the 256 KiB cap
+    # Whether this depth exhausts the parser depends on the interpreter
+    # (3.14 parses it); either way it's a RegistryError, never a 500.
+    with pytest.raises(registry.RegistryError):
+        await registry.resolve("https://registry.example", "8fy17", transport=_serving(deep))
+
+    def _too_deep(_data):
+        raise RecursionError("maximum recursion depth exceeded")
+
+    monkeypatch.setattr(registry, "json", types.SimpleNamespace(loads=_too_deep, dumps=json.dumps))
     with pytest.raises(registry.RegistryError, match="nested too deeply"):
         await registry.resolve("https://registry.example", "8fy17", transport=_serving(deep))
 

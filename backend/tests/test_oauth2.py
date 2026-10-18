@@ -12,6 +12,7 @@ refused, which is meaningless if the code deciding that is mocked away.
 
 import asyncio
 import json
+import types
 import time
 
 import httpx
@@ -367,13 +368,35 @@ def _unreachable(request: httpx.Request) -> httpx.Response:
             200, headers={"Content-Encoding": "br"}, content=_Body(b"\x1b\x00")
         ),
         _unreachable,
-        lambda request: httpx.Response(200, content=_Body(b"[" * 100_000 + b"]" * 100_000)),
     ],
-    ids=["refused-coding", "unreachable", "nested-past-the-parser"],
+    ids=["refused-coding", "unreachable"],
 )
 async def test_a_failing_provider_call_is_an_oauth2_error(monkeypatch, response):
     """Each lands on the callback's existing redirect, not a 500."""
     _stub_http(monkeypatch, response)
+    with pytest.raises(OAuth2Error):
+        await oauth2_utils.exchange_code(
+            token_url=GITHUB_TOKEN,
+            code="c",
+            redirect_uri="https://x/cb",
+            client_id=CLIENT_ID,
+            client_secret="s",
+        )
+    with pytest.raises(OAuth2Error):
+        await oauth2_utils.fetch_json(GITHUB_USER, "t")
+
+
+async def test_json_nested_past_the_parser_is_an_oauth2_error(monkeypatch):
+    """Whether a given depth exhausts the parser depends on the interpreter, so
+    the parser's refusal is simulated: it lands on the callback's redirect."""
+
+    def _too_deep(_data):
+        raise RecursionError("maximum recursion depth exceeded")
+
+    monkeypatch.setattr(
+        oauth2_utils, "json", types.SimpleNamespace(loads=_too_deep, dumps=json.dumps)
+    )
+    _stub_http(monkeypatch, lambda request: httpx.Response(200, content=_Body(b"{}")))
     with pytest.raises(OAuth2Error):
         await oauth2_utils.exchange_code(
             token_url=GITHUB_TOKEN,

@@ -65,8 +65,9 @@ explicit configuration rather than inferred:
 - **Migrations move out of instance startup.** The entrypoint's
   `alembic upgrade head` is correct for one container; N tasks starting
   concurrently race it. Multi-instance deployments run migrations as a one-off
-  task (deploy step) and start web tasks with uvicorn directly. This is a
-  documented operational pattern, not a code change.
+  task (deploy step) and start web tasks with uvicorn directly — with the same
+  `--ws-max-size 2097152` every shipped launch passes (ARCHITECTURE §4.1,
+  GHSA-4wrj). This is a documented operational pattern, not a code change.
 
 Explicitly rejected: **sticky sessions** (nothing needs them — sockets pin
 naturally, sessions live in Postgres, rate limits in Redis) and **inferring

@@ -615,6 +615,61 @@ async def test_backup_import_rebuilds_the_test_data(client, object_storage, monk
     ]
 
 
+def test_rebuild_reads_no_further_than_the_headers_say():
+    """GHSA-4wrj: a member whose header understates its size is read only as
+    far as the header says — ``ZipFile.read`` would inflate the whole stream
+    first, so a small zip could cost gigabytes."""
+    import struct
+    import tracemalloc
+    import zlib
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("data/sample/001.in", b"\0" * (32 * 1024 * 1024))
+        zf.writestr("data/sample/001.ans", b"ok\n")
+    raw = bytearray(buf.getvalue())
+    # Both headers of the 32 MiB member claim four zero bytes (CRC and size).
+    crc = zlib.crc32(b"\0" * 4)
+    local, central = raw.find(b"PK\x03\x04"), raw.find(b"PK\x01\x02")
+    struct.pack_into("<I", raw, local + 14, crc)
+    struct.pack_into("<I", raw, local + 22, 4)
+    struct.pack_into("<I", raw, central + 16, crc)
+    struct.pack_into("<I", raw, central + 24, 4)
+
+    tracemalloc.start()
+    try:
+        _, rows = td.rebuild(bytes(raw), [{"id": "a", "sample": True}])
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert rows[0]["input_bytes"] == 4
+    assert peak < 8 * 1024 * 1024, peak
+
+
+async def test_backup_import_bounds_what_all_its_test_data_unpacks(client, object_storage, monkeypatch):
+    """GHSA-4wrj: the test data in one import is bounded together, not only per
+    problem, so a single document can't carry hundreds of maximal problems."""
+    admin = await admin_token(client)
+    comp = await _competition(client, admin)
+    for title in ("A", "B"):
+        chal = await _programming(client, admin, comp, title=title)
+        await _add(client, admin, comp, chal, "1 2", "3", sample=True)  # 6 bytes unpacked
+    async with SessionLocal() as db:
+        doc = await backup.export_data(db, object_storage, ["competitions"])
+    async with SessionLocal() as db:
+        await db.delete(await db.get(Competition, comp))
+        await db.commit()
+
+    monkeypatch.setattr(backup, "MAX_IMPORT_UNPACKED", 11)  # one problem's worth, not two
+    async with SessionLocal() as db:
+        with pytest.raises(backup.ImportError_):
+            await backup.import_data(db, InMemoryStorage(), doc, ["competitions"])
+    monkeypatch.setattr(backup, "MAX_IMPORT_UNPACKED", 12)
+    async with SessionLocal() as db:
+        result = await backup.import_data(db, InMemoryStorage(), doc, ["competitions"])
+    assert result["judge_problems"]["created"] == 2
+
+
 @pytest.mark.parametrize(
     "bad",
     [

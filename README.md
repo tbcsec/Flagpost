@@ -327,7 +327,7 @@ Node 20+ — the shipped images run 3.14 and 26, which is what CI tests):
 cd backend && python3 -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/alembic upgrade head        # against a reachable Postgres
-.venv/bin/uvicorn main:app --reload
+.venv/bin/uvicorn main:app --reload --ws-max-size 2097152
 
 # Frontend
 cd frontend && npm install && npm run dev

@@ -415,6 +415,25 @@ async def test_note_frames_are_rate_limited_per_user(client, monkeypatch):
                 await wb.receive_json(timeout=0.3)
 
 
+async def test_only_a_small_frame_is_a_ping_and_every_frame_counts(client, monkeypatch):
+    """A padded "ping" is no ping — it gets no pong and can't slip past the
+    budget — and in a room that handles frames every frame is charged before
+    it's parsed, so a flood of them can't run up parsing for free."""
+    from config import settings
+
+    monkeypatch.setattr(settings, "ws_message_rate_limit", 2)
+    doc, token_a, _ = await _two_members(client)
+    async with WsTestClient(main.app, f"/ws/note/{doc}") as wa:
+        await _join(wa, token_a)
+        await wa.send_json({"type": "ping", "pad": "x" * 1000})
+        with pytest.raises(asyncio.TimeoutError):
+            await wa.receive_json(timeout=0.3)
+        await wa.send_json({"type": "ping"})
+        assert await wa.receive_json() == {"type": "pong"}
+        await wa.send_json({"type": "ping", "pad": "x" * 1000})
+        assert await wa.expect_close() == 4429
+
+
 async def test_oversized_note_frame_is_dropped_before_parsing(client, monkeypatch):
     """A frame longer than the room accepts is dropped unparsed — its size never
     costs a JSON parse — and the socket keeps working."""
@@ -466,6 +485,8 @@ def test_every_uvicorn_launch_bounds_websocket_frames():
         "docker-compose.dev.yml",
         "docker-compose.demo.yml",
         ".claude/launch.json",
+        "README.md",
+        "CONTRIBUTING.md",
     ):
         launches = [
             line for line in (root / rel).read_text().splitlines()

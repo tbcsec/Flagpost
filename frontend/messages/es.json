@@ -37,7 +37,8 @@
       "alignHint": "El alineamiento no se aplica dentro de listas o bloques de código",
       "live": "Vivo",
       "connecting": "Conectando…",
-      "reconnecting": "Reconectando…"
+      "reconnecting": "Reconectando…",
+      "tooLarge": "Demasiado grande para sincronizar: acorta esta nota"
     },
     "presence": {
       "staffTitle": "{name} (personal)"

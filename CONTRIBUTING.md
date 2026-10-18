@@ -44,7 +44,7 @@ cd backend
 python3 -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/alembic upgrade head          # against a reachable Postgres
-.venv/bin/uvicorn main:app --reload
+.venv/bin/uvicorn main:app --reload --ws-max-size 2097152
 
 # Frontend — requires Node 20+ (CI and the shipped images run Node 26)
 cd frontend && npm install && npm run dev

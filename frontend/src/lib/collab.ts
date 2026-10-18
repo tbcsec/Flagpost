@@ -38,32 +38,63 @@ export interface CollabHandle {
   close: () => void;
 }
 
+/** The server's cap on a note's state (backend `plugins/collab`
+ *  MAX_STATE_BYTES): it drops a bigger update or persist, and refuses a
+ *  WebSocket frame much past it outright (closing 1009) — which a full-state
+ *  re-send on every reconnect would turn into a loop. So nothing over it is
+ *  ever sent; the note reports that it's too large to sync instead. */
+export const MAX_SYNC_BYTES = 1_048_576;
+
 /** Wire `doc` to the note room for `docKey`. Returns a handle; call `close()`
  *  on unmount (it flushes a final persist, unbinds, and closes the socket). */
 export function bindCollabDoc(
   doc: Y.Doc,
   docKey: string,
-  opts: { onStatus?: (status: RoomSocketStatus) => void } = {},
+  opts: {
+    onStatus?: (status: RoomSocketStatus) => void;
+    /** Whether the note has outgrown what the server will sync or store. */
+    onTooLarge?: (tooLarge: boolean) => void;
+  } = {},
 ): CollabHandle {
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
+  // Only an authed socket is sent to. Edits made while it's down aren't queued
+  // — the full state sent on the next "open" carries them, and a backlog of
+  // per-keystroke updates replayed first could trip the server's rate limit.
+  let live = false;
+  let tooLarge = false;
 
-  const fullState = () => bytesToBase64(Y.encodeStateAsUpdate(doc));
+  function setTooLarge(value: boolean) {
+    if (value === tooLarge) return;
+    tooLarge = value;
+    opts.onTooLarge?.(value);
+  }
+
+  /** Send the full merged state as `note_update` (peers merge it) or
+   *  `note_persist` (the server stores it) — unless it's over the cap. */
+  function sendFullState(type: "note_update" | "note_persist") {
+    const state = Y.encodeStateAsUpdate(doc);
+    setTooLarge(state.length > MAX_SYNC_BYTES);
+    if (tooLarge) return;
+    const encoded = bytesToBase64(state);
+    socket.send(type === "note_update" ? { type, update: encoded } : { type, state: encoded });
+  }
 
   function schedulePersist() {
     if (persistTimer) clearTimeout(persistTimer);
     persistTimer = setTimeout(() => {
-      socket.send({ type: "note_persist", state: fullState() });
+      if (live) sendFullState("note_persist");
     }, PERSIST_DEBOUNCE_MS);
   }
 
   const socket = openRoomSocket("note", docKey, {
     mode: "edit",
     onStatus: (status) => {
+      live = status === "open";
       opts.onStatus?.(status);
-      if (status === "open") {
+      if (live) {
         // On (re)connect, push our full state so peers merge our content and the
         // server persists any edits made while we were disconnected.
-        socket.send({ type: "note_update", update: fullState() });
+        sendFullState("note_update");
         schedulePersist();
       }
     },
@@ -80,6 +111,11 @@ export function bindCollabDoc(
 
   const onUpdate = (update: Uint8Array, origin: unknown) => {
     if (origin === REMOTE) return; // applied from the network — don't re-send
+    if (!live) return; // the full state on reconnect carries it
+    if (update.length > MAX_SYNC_BYTES) {
+      setTooLarge(true);
+      return;
+    }
     socket.send({ type: "note_update", update: bytesToBase64(update) });
     schedulePersist();
   };
@@ -89,7 +125,7 @@ export function bindCollabDoc(
     close() {
       if (persistTimer) clearTimeout(persistTimer);
       // Best-effort final persist so the last keystrokes survive the unmount.
-      socket.send({ type: "note_persist", state: fullState() });
+      if (live) sendFullState("note_persist");
       doc.off("update", onUpdate);
       socket.close();
     },

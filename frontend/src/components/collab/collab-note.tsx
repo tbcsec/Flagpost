@@ -26,9 +26,12 @@ export function CollabNote({ docKey }: { docKey: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const ydoc = React.useMemo(() => new Y.Doc(), [docKey]);
   const [status, setStatus] = React.useState<RoomSocketStatus>("connecting");
+  // Over the server's cap the note stops syncing (collab.MAX_SYNC_BYTES) — say
+  // so, rather than leaving edits silently local.
+  const [tooLarge, setTooLarge] = React.useState(false);
 
   React.useEffect(() => {
-    const handle = bindCollabDoc(ydoc, docKey, { onStatus: setStatus });
+    const handle = bindCollabDoc(ydoc, docKey, { onStatus: setStatus, onTooLarge: setTooLarge });
     // Only close the transport on cleanup — do NOT destroy the memoized doc:
     // React StrictMode double-invokes this effect, and the second run rebinds
     // the *same* doc, so destroying it here would bind a dead doc. The doc is
@@ -97,7 +100,8 @@ export function CollabNote({ docKey }: { docKey: string }) {
           active={active?.bulletList ?? false}
           onClick={() => editor.chain().focus().toggleBulletList().run()}
         />
-        <span className="ml-auto pr-1">
+        <span className="ml-auto flex items-center gap-3 pr-1">
+          {tooLarge && <span className="text-[11px] text-warning">{t("tooLarge")}</span>}
           <ConnectionDot status={status} />
         </span>
       </div>

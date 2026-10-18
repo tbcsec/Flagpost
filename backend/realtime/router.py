@@ -245,39 +245,41 @@ async def room_socket(
             # WS pings, so an idle socket has zero traffic and gets culled by
             # proxy / load-balancer idle timeouts. The client sends a tiny
             # ``{"type": "ping"}`` frame; answer it here, before any room
-            # dispatch, so a CRDT room's handler never sees it. The size gate
-            # keeps broadcast-only rooms' drain path parse-free for anything
-            # that can't be a ping, and a handler room's for anything longer
-            # than the room accepts (GHSA-4wrj) — such a frame is dropped
-            # before its size can cost a parse.
+            # dispatch, so a CRDT room's handler never sees it. Only a frame
+            # that small can be a ping, which keeps broadcast-only rooms' drain
+            # path parse-free for anything else.
+            small = len(raw) <= _PING_FRAME_MAX_BYTES
+            # A room with a handler (CRDT collab, §4.2) takes frames up to the
+            # length it declares; a longer one is dropped unparsed (GHSA-4wrj).
             handled = room.on_message is not None and (
                 room.max_frame_chars is None or len(raw) <= room.max_frame_chars
             )
+            if handled and not await rate_limiter.hit(
+                f"ws-message:{user.id}",
+                limit=settings.ws_message_rate_limit,
+                window_seconds=settings.ws_message_rate_window_seconds,
+            ):
+                # Each handled frame can fan out to the whole room (and across
+                # workers), so they're budgeted per user, charged before the
+                # parse so a flood costs no parsing either (GHSA-4wrj). Over
+                # it, close rather than drop: a dropped CRDT update would leave
+                # peers out of step, while the client's reconnect re-sends its
+                # full state.
+                await _close_quietly(websocket, 4429)
+                break
             frame: dict[str, Any] | None = None
-            if handled or len(raw) <= _PING_FRAME_MAX_BYTES:
+            if handled or small:
                 try:
                     parsed = json.loads(raw)
                 except ValueError:
                     parsed = None
                 frame = parsed if isinstance(parsed, dict) else None
-            if frame is not None and frame.get("type") == "ping":
+            if small and frame is not None and frame.get("type") == "ping":
                 await websocket.send_json({"type": "pong"})
                 continue
-            # Broadcast-only rooms drain (and ignore) client frames; rooms with a
-            # handler (CRDT collab, §4.2) get each parsed JSON frame dispatched.
+            # Broadcast-only rooms drain (and ignore) client frames; a handler
+            # room gets each parsed JSON frame dispatched.
             if handled and frame is not None:
-                # Each handled frame can fan out to the whole room (and across
-                # workers), so they're budgeted per user (GHSA-4wrj). Over it,
-                # close rather than drop: a dropped CRDT update would leave
-                # peers out of step, while the client's reconnect re-sends its
-                # full state.
-                if not await rate_limiter.hit(
-                    f"ws-message:{user.id}",
-                    limit=settings.ws_message_rate_limit,
-                    window_seconds=settings.ws_message_rate_window_seconds,
-                ):
-                    await _close_quietly(websocket, 4429)
-                    break
                 await room.on_message(user, room_type, room_id, websocket, frame)
     except WebSocketDisconnect:
         pass

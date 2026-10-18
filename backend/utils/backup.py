@@ -129,6 +129,11 @@ from utils.uploads import safe_filename
 
 SCHEMA_VERSION = 1
 
+# Everything the ``rebuild_object`` hooks may unpack across one import — the
+# problem-package import's ceiling (``problem_package.MAX_TOTAL_DECOMPRESSED``),
+# so a single document can't carry hundreds of maximal problems (GHSA-4wrj).
+MAX_IMPORT_UNPACKED = 512 * 1024 * 1024
+
 # The selectable export/import units, in the order the UI lists them.
 SECTIONS: tuple[str, ...] = (
     "site_settings",
@@ -219,10 +224,11 @@ class Spec:
     # secret is simply re-entered after a restore.
     secret_columns: tuple[str, ...] = ()
     # Columns an import must NEVER write, even when present in the payload. These
-    # are one-way security flags whose value is an install-local fact, not
-    # portable content: clearing `site_settings.setup_completed_at` on import
-    # would re-open the unauthenticated first-run setup wizard on a live install
-    # (security F2). Unlike `secret_columns` (dropped on *export*), these are
+    # are install-local facts, not portable content: clearing
+    # `site_settings.setup_completed_at` on import would re-open the
+    # unauthenticated first-run setup wizard on a live install (security F2), and
+    # the update check's state would let a document stop the check or hide its
+    # notice (GHSA-4wrj). Unlike `secret_columns` (dropped on *export*), these are
     # ignored on *import* — an attacker who hand-crafts the backup can't set them.
     immutable_columns: tuple[str, ...] = ()
     # Set for tables whose rows point at an object-storage blob. The engine then
@@ -234,12 +240,13 @@ class Spec:
     object_key_for: Callable[[dict], str] | None = None
     # For an object the app later *parses* (the judge's test-data zip), the
     # side-car bytes are re-derived on import instead of stored verbatim: called
-    # (off the event loop) with the validated row and the decoded bytes, it
-    # returns the bytes to store and may rewrite the row to match.
-    # ``validate_row`` never sees the bytes, so without this an archive's
-    # contents skip every authoring limit (GHSA-4wrj). Raises
+    # (off the event loop) with the validated row, the decoded bytes and how
+    # many bytes this import may still unpack (``MAX_IMPORT_UNPACKED``), it
+    # returns the bytes to store and how many it unpacked, and may rewrite the
+    # row to match. ``validate_row`` never sees the bytes, so without this an
+    # archive's contents skip every authoring limit (GHSA-4wrj). Raises
     # :class:`ImportError_` to reject.
-    rebuild_object: Callable[[dict, bytes], bytes] | None = None
+    rebuild_object: Callable[[dict, bytes, int], tuple[bytes, int]] | None = None
     # A per-row content validator run on import, right before the ORM row is
     # built. ``load_row`` does no content validation, so a table whose CRUD routes
     # enforce a content invariant (e.g. ``theme_presets``' ``#RRGGBB`` token
@@ -314,8 +321,10 @@ def _validate_site_settings_row(row: dict) -> None:
     /api/site-settings paint (the logo on its own public GET), so without this
     a hand-crafted backup could publish what no route accepts (#360 review,
     GHSA-4wrj). Strict, like ``_validate_deployment_row``: the raw stored types
-    are the contract. Only the columns present are judged — a partial row
-    leaves the rest as they are."""
+    are the contract. What's stored is the validated value, normalised as the
+    route would store it (unknown keys dropped from a demo account, domains
+    lower-cased, an empty notice null). Only the columns present are judged —
+    a partial row leaves the rest as they are."""
     from pydantic import ValidationError
 
     from routers.site_settings import MAX_LOGO_BYTES
@@ -334,6 +343,7 @@ def _validate_site_settings_row(row: dict) -> None:
     }
     for schema in (SiteSettingsUpdate, OperationalSettingsUpdate, RulesSettingsUpdate):
         fields = {key: val for key, val in baseline.items() if key in schema.model_fields}
+        present: list[str] = []
         for key in schema.model_fields:
             if key not in row or key not in columns:
                 continue
@@ -342,30 +352,38 @@ def _validate_site_settings_row(row: dict) -> None:
                     raise ImportError_(f"site_settings.{key} can't be empty")
                 continue  # an unset optional column
             fields[key] = row[key]
+            present.append(key)
         try:
-            schema.model_validate(fields, strict=True)
+            validated = schema.model_validate(fields, strict=True).model_dump()
         except ValidationError as exc:
             raise ImportError_(f"site_settings: {exc}") from exc
+        for key in present:
+            row[key] = validated[key]
 
     # The logo is held to the upload route's checks, and its served type is
-    # always the one sniffed from the bytes — never the document's say-so.
+    # always the one sniffed from the bytes — never the document's say-so. A
+    # logo that fails them (one stored before those checks existed, say) is
+    # left out rather than failing the restore: the current logo stays.
+    logo_keys = ("logo_data", "logo_content_type", "logo_updated_at")
     if "logo_data" not in row:
         row.pop("logo_content_type", None)
         return
-    content_type = None
-    if row["logo_data"] is not None:
-        try:
-            data = base64.b64decode(row["logo_data"], validate=True)
-        except (TypeError, ValueError) as exc:
-            raise ImportError_("site_settings.logo_data isn't base64") from exc
-        content_type = sniff_logo_type(data)
-        if (
-            not data
-            or len(data) > MAX_LOGO_BYTES
-            or content_type is None
-            or exceeds_pixel_budget(data, content_type)
-        ):
-            raise ImportError_("site_settings.logo_data isn't a logo the upload would accept")
+    if row["logo_data"] is None:
+        row["logo_content_type"] = None
+        return
+    try:
+        data = base64.b64decode(row["logo_data"], validate=True)
+    except (TypeError, ValueError):
+        data = b""
+    content_type = sniff_logo_type(data) if data else None
+    if (
+        content_type is None
+        or len(data) > MAX_LOGO_BYTES
+        or exceeds_pixel_budget(data, content_type)
+    ):
+        for key in logo_keys:
+            row.pop(key, None)
+        return
     row["logo_content_type"] = content_type
 
 
@@ -505,20 +523,20 @@ def _validate_page_row(row: dict) -> None:
         raise ImportError_(f"pages {row.get('slug')!r}: {exc}") from exc
 
 
-def _rebuild_judge_testdata(row: dict, blob: bytes) -> bytes:
+def _rebuild_judge_testdata(row: dict, blob: bytes, allowance: int) -> tuple[bytes, int]:
     """Store an imported problem's test data only as a zip rebuilt from its
     contents, held to the caps an upload is (GHSA-4wrj): exactly the members
-    the manifest implies, each within the per-file and per-problem limits. The
-    stored zip is what the problem page, the editor and the judge worker read,
-    so a crafted one must never reach storage; the manifest is rewritten from
-    what was actually read."""
+    the manifest implies, each within the per-file and per-problem limits, and
+    within what the import may still unpack. The stored zip is what the problem
+    page, the editor and the judge worker read, so a crafted one must never
+    reach storage; the manifest is rewritten from what was actually read."""
     from utils import judge_testdata as td
 
     try:
-        data, row["testcases"] = td.rebuild(blob, row["testcases"])
+        data, row["testcases"] = td.rebuild(blob, row["testcases"], budget=allowance)
     except td.TestdataError as exc:
         raise ImportError_(f"judge_problems {row.get('id')!r}: {exc}") from exc
-    return data
+    return data, sum(t["input_bytes"] + t["answer_bytes"] for t in row["testcases"])
 
 
 def _validate_judge_problem_row(row: dict) -> None:
@@ -646,7 +664,10 @@ _COMP = ("competition_id", "competition", True)
 SPECS: tuple[Spec, ...] = (
     Spec("site_settings", SiteSettings, "site_settings", singleton=True,
          secret_columns=("smtp_password",),
-         immutable_columns=("setup_completed_at",),
+         immutable_columns=(
+             "setup_completed_at", "last_update_check_at", "last_update_attempt_at",
+             "last_update_check_status", "latest_known_version", "dismissed_update_version",
+         ),
          validate_row=_validate_site_settings_row),
     # Custom pages (#198, ADR-0034). Site-level, no foreign keys and no secrets,
     # so it needs nothing but a natural key: `slug` is unique and is the page's
@@ -842,6 +863,7 @@ async def export_data(
 class _State:
     maps: dict[str, dict[str, str]] = field(default_factory=lambda: defaultdict(dict))
     skipped_competitions: set[str] = field(default_factory=set)
+    unpack_left: int = field(default_factory=lambda: MAX_IMPORT_UNPACKED)
 
 
 class ImportError_(ValueError):
@@ -1044,7 +1066,10 @@ async def _import_rows(
                 except (TypeError, ValueError) as exc:
                     raise ImportError_(f"{spec.table}: an attached object isn't base64") from exc
                 if spec.rebuild_object is not None:
-                    blob = await asyncio.to_thread(spec.rebuild_object, row, blob)
+                    blob, unpacked = await asyncio.to_thread(
+                        spec.rebuild_object, row, blob, state.unpack_left
+                    )
+                    state.unpack_left -= unpacked
 
             obj = spec.model(**load_row(spec.model, row))
             if actor_global is not None:

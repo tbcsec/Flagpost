@@ -37,7 +37,8 @@
       "alignHint": "Alignment doesn't apply inside lists or code blocks",
       "live": "Live",
       "connecting": "Connecting…",
-      "reconnecting": "Reconnecting…"
+      "reconnecting": "Reconnecting…",
+      "tooLarge": "Too large to sync — shorten this note"
     },
     "presence": {
       "staffTitle": "{name} (staff)"

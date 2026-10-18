@@ -235,11 +235,16 @@ Design decisions:
 - **Exponential backoff reconnect** (capped, with jitter) so a dropped
   connection doesn't hammer the server on reconnect storms.
 - **Inbound frames are bounded.** uvicorn runs with `--ws-max-size 2097152`
-  (2 MiB, every launch command — its default is 16 MiB), a room that handles
-  client frames declares the longest it accepts (anything longer is dropped
-  before it's parsed), and the frames such a room handles are rate-limited per
-  user (`ws_message_rate_limit`, closing the socket `4429` when exceeded) on top
-  of the per-user handshake limit (`ws_handshake_rate_limit`) (GHSA-4wrj).
+  (2 MiB; its default is 16 MiB) — on every launch: the image, the compose
+  files, the dev commands, and any command an operator writes themselves (a
+  multi-instance web task starts uvicorn directly, ADR-0031). A room that
+  handles client frames declares the longest it accepts (anything longer is
+  dropped before it's parsed), every frame sent to such a room is charged to a
+  per-user rate limit before it's parsed (`ws_message_rate_limit`, closing the
+  socket `4429` when exceeded), and only a small frame counts as a keepalive
+  ping — all on top of the per-user handshake limit (`ws_handshake_rate_limit`)
+  (GHSA-4wrj). The collab client never sends a frame over the server's cap, and
+  backs off rather than reconnecting at once after a `1009` or `4429` close.
 - **Debounced presence clearing.** When a connection drops, the "who's
   here" list isn't cleared instantly — a short grace period absorbs blips
   from brief reconnects so the UI doesn't flicker.

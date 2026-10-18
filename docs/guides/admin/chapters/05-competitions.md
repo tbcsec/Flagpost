@@ -12,17 +12,18 @@ actions.*
 mode** (team or individual), **Visibility** (*Private* by default, or
 *Public*), whether to publish a **public scoreboard**, an optional
 **Starts** / **Ends** schedule, and which optional **Modules** the event
-runs — AI Assistants, Analytics, Automations, Certificates, Challenge
-Instances, Code Judge, Feedback & Surveys, Post-Event Reports. All start on;
-switch off what the event won't use (judges can change this later in the
-competition's Settings → Modules). Rules, divisions, registration fields and
+runs — AI assistants, Analytics, Automations, Certificates, Challenge
+instances, Code judge, Feedback, Reports, each a tile with an on/off switch.
+All start on; switch off what the event won't use (judges can change this
+later in the competition's Settings → Modules). Rules, divisions, registration fields and
 the registration window are configured on the competition afterwards,
 usually by its judges.
 
 !!! note "Three modules need site setup first"
-    AI Assistants, Challenge Instances and Code Judge do nothing until you've
+    AI assistants, Challenge instances and Code judge do nothing until you've
     configured them under Site settings (AI — chapter 2; Instances and Code
-    judge — chapter 6). The per-competition toggle alone isn't enough.
+    judge — chapter 6). The per-competition switch alone isn't enough; their
+    tiles say *Needs site setup* until you have.
 
 ## Access
 

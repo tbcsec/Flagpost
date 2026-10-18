@@ -1,7 +1,7 @@
 A **programming problem** is solved by submitting a program rather than a
 flag — the ICPC-style problem: read standard input, print the answer. It's
 available once an administrator has set up the **code judge** (Admin → Site
-settings → Code judge) and the competition's **Code Judge** module is on.
+settings → Code judge) and the competition's **Code judge** module is on.
 
 ## Authoring a problem
 

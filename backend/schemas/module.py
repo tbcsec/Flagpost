@@ -12,6 +12,12 @@ class ModuleStateOut(BaseModel):
     # never toggleable. The admin inventory lists them locked alongside the
     # optional (per-competition toggleable) ones.
     required_core: bool
+    # The manifest's one-liner — developer-facing; the UI writes its own copy
+    # per module and falls back to this for one it doesn't know (#502).
+    description: str = ""
+    # An inert module (ai, instances, judge) whose site-wide switch is off:
+    # enabling it here does nothing until an administrator sets it up (#502).
+    needs_setup: bool = False
 
 
 class ModuleToggle(BaseModel):
@@ -27,3 +33,4 @@ class ModuleCatalogEntry(BaseModel):
     id: str
     name: str
     description: str
+    needs_setup: bool = False

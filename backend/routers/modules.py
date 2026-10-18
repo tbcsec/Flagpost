@@ -22,8 +22,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import require_permission
 from db import get_db
+from models.ai import AI_SETTINGS_ID, AiSettings
+from models.challenge_instancing import INSTANCE_SETTINGS_ID, InstanceSettings
 from models.competition import Competition
 from models.competition_module import CompetitionModule
+from models.judge import JUDGE_SETTINGS_ID, JudgeSettings
 from models.user import User
 from plugins.loader import all_manifests, loaded_manifest, optional_modules
 from schemas.module import ModuleCatalogEntry, ModuleStateOut, ModuleToggle
@@ -32,6 +35,37 @@ from utils.event_bus import event_bus
 router = APIRouter(
     prefix="/api/competitions/{competition_id}/modules", tags=["modules"]
 )
+
+# The modules that ship inert (§11.3): each has a site-wide master switch an
+# administrator turns on once it's configured, so a competition can enable one
+# and see nothing happen. The module lists say so (#502).
+_SITE_SWITCHES = {
+    "ai": (AiSettings, AI_SETTINGS_ID),
+    "instances": (InstanceSettings, INSTANCE_SETTINGS_ID),
+    "judge": (JudgeSettings, JUDGE_SETTINGS_ID),
+}
+
+
+async def _awaiting_site_setup(db: AsyncSession) -> set[str]:
+    """The inert modules whose site-wide switch is off (or never saved)."""
+    waiting = set()
+    for module_id, (model, row_id) in _SITE_SWITCHES.items():
+        row = await db.get(model, row_id)
+        if row is None or not row.enabled:
+            waiting.add(module_id)
+    return waiting
+
+
+def _state(manifest, enabled: bool, waiting: set[str]) -> ModuleStateOut:
+    return ModuleStateOut(
+        id=manifest.id,
+        name=manifest.name,
+        version=manifest.version,
+        enabled=enabled,
+        required_core=manifest.required_core,
+        description=manifest.description or "",
+        needs_setup=manifest.id in waiting,
+    )
 
 # Site-level catalog (not competition-scoped): the optional modules a new
 # competition can turn off at creation (#252). Kernel like the toggle router,
@@ -42,13 +76,17 @@ catalog_router = APIRouter(prefix="/api/modules", tags=["modules"])
 @catalog_router.get("", response_model=list[ModuleCatalogEntry])
 async def module_catalog(
     _user: User = Depends(require_permission("create_competition")),
+    db: AsyncSession = Depends(get_db),
 ) -> list[ModuleCatalogEntry]:
     """The optional (per-competition toggleable) modules, id-sorted — the source
     for the at-creation module picker, which runs before a competition exists so
     it can't use the competition-scoped inventory. Required-core modules are
     always on and never offered here."""
+    waiting = await _awaiting_site_setup(db)
     return [
-        ModuleCatalogEntry(id=m.id, name=m.name, description=m.description)
+        ModuleCatalogEntry(
+            id=m.id, name=m.name, description=m.description, needs_setup=m.id in waiting
+        )
         for m in sorted(optional_modules(), key=lambda m: m.id)
     ]
 
@@ -109,15 +147,14 @@ async def list_modules(
             )
         ).all()
     }
+    waiting = await _awaiting_site_setup(db)
     return [
-        ModuleStateOut(
-            id=m.id,
-            name=m.name,
-            version=m.version,
+        _state(
+            m,
             # Required-core is always on; an optional module has no override row =
             # the §11.3 default of enabled.
-            enabled=True if m.required_core else overrides.get(m.id, True),
-            required_core=m.required_core,
+            True if m.required_core else overrides.get(m.id, True),
+            waiting,
         )
         for m in sorted(all_manifests(), key=lambda m: (m.required_core, m.id))
     ]
@@ -166,10 +203,5 @@ async def toggle_module(
             "user_id": current_user.id,
         },
     )
-    return ModuleStateOut(
-        id=manifest.id,
-        name=manifest.name,
-        version=manifest.version,
-        enabled=body.enabled,
-        required_core=False,  # required-core was rejected above with 409
-    )
+    # required-core was rejected above with 409
+    return _state(manifest, body.enabled, await _awaiting_site_setup(db))

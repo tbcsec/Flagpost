@@ -3,7 +3,6 @@
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useCreateCompetition } from "@/lib/hooks/use-competitions";
+import { ModuleTile } from "@/components/competitions/module-tile";
 import { useModuleCatalog } from "@/lib/hooks/use-modules";
 import type { ParticipationMode, Visibility } from "@/lib/types";
 
@@ -198,45 +198,21 @@ export function CreateCompetitionDialog() {
             <div className="space-y-2">
               <Label>{t("modules")}</Label>
               <p className="text-xs text-muted-foreground">{t("modulesHint")}</p>
-              <ul className="rounded-md border border-border px-3">
-                {catalog.isLoading && (
-                  <li className="py-3 text-sm text-muted-foreground">
-                    {t("loadingModules")}
-                  </li>
-                )}
-                {catalog.data?.map((m) => {
-                  const enabled = !disabledModules.has(m.id);
-                  return (
-                    <li
+              {catalog.isLoading ? (
+                <p className="text-sm text-muted-foreground">{t("loadingModules")}</p>
+              ) : (
+                // The same tiles as Settings → Modules (#502).
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {catalog.data?.map((m) => (
+                    <ModuleTile
                       key={m.id}
-                      className="flex items-center justify-between gap-3 border-b border-border py-3 last:border-0"
-                    >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{m.name}</span>
-                          {enabled ? (
-                            <Badge variant="success">{t("badgeEnabled")}</Badge>
-                          ) : (
-                            <Badge variant="outline">{t("badgeDisabled")}</Badge>
-                          )}
-                        </div>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {m.description}
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant={enabled ? "outline" : "default"}
-                        size="sm"
-                        className="flex-shrink-0"
-                        onClick={() => toggleModule(m.id)}
-                      >
-                        {t(enabled ? "disable" : "enable")}
-                      </Button>
-                    </li>
-                  );
-                })}
-              </ul>
+                      module={m}
+                      enabled={!disabledModules.has(m.id)}
+                      onToggle={() => toggleModule(m.id)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

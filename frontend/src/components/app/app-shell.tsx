@@ -19,6 +19,7 @@ import {
   visibleCompNav,
 } from "@/components/app/nav-visibility";
 import { CompetitionSwitcher } from "@/components/app/competition-switcher";
+import { ModuleIcon } from "@/components/app/module-icons";
 import { JoinCompetitionPanel } from "@/components/competitions/join-competition-panel";
 import { visibleAdminSurfaces } from "@/lib/admin-surfaces";
 import { UserAvatar } from "@/components/ui/user-avatar";
@@ -48,53 +49,11 @@ import {
 } from "@/lib/hooks/use-notifications";
 import { useAuthStore } from "@/stores/auth";
 
-// Icons are the plain inline SVGs from the design mock — Flagpost ships no icon
-// library (design-system readme → Iconography), so glyphs live at their call
-// sites rather than as a dependency.
+// Icons are plain inline SVGs — Flagpost ships no icon library (design-system
+// readme → Iconography). They live in module-icons.tsx, shared with the module
+// tiles in Settings → Modules so a module looks the same in both (#502).
 type Icon = React.ReactNode;
-
-const dashIcon: Icon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="9" rx="1" /><rect x="14" y="3" width="7" height="5" rx="1" /><rect x="14" y="12" width="7" height="9" rx="1" /><rect x="3" y="16" width="7" height="5" rx="1" /></svg>
-);
-const scoreboardIcon: Icon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 21V13M12 21V7M16 21v-6M2 21h20" /><path d="m4 9 5-5 4 3 6-6" /></svg>
-);
-const peopleIcon: Icon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" /><circle cx="10" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-);
-const supportIcon: Icon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
-);
-const analyticsIcon: Icon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18" /><path d="m19 9-5 5-4-4-3 3" /></svg>
-);
-const boltIcon: Icon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z" /></svg>
-);
-const feedbackIcon: Icon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 3h6a2 2 0 0 1 2 2v0h1a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1a2 2 0 0 1 2-2z" /><path d="M9 12l2 2 4-4" /></svg>
-);
-const shieldIcon: Icon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2 4 6v6c0 5 3.4 8.7 8 10 4.6-1.3 8-5 8-10V6z" /></svg>
-);
-const lobbyIcon: Icon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9.5 12 3l9 6.5" /><path d="M5 9v11h14V9" /><path d="M9 20v-6h6v6" /></svg>
-);
-const settingsIcon: Icon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg>
-);
-
-const transcriptIcon: Icon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><path d="M8 8h8M8 12h5" /></svg>
-);
-
-const judgingIcon: Icon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m8 9-3 3 3 3" /><path d="m16 9 3 3-3 3" /><path d="m13 7-2 10" /></svg>
-);
-
-const instancesIcon: Icon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="7" rx="1" /><rect x="3" y="13" width="18" height="7" rx="1" /><path d="M7 7.5h.01M7 16.5h.01" /></svg>
-);
+const icon = (name: string): Icon => <ModuleIcon name={name} />;
 
 // `manage: true` items are shown only to a Judge/organiser of the active
 // competition (gated by useAccess); the rest are competitor-facing. `module`
@@ -127,25 +86,25 @@ const COMP_NAV: {
   module?: string;
   permission?: string;
 }[] = [
-  { href: "/", key: "dashboard", icon: dashIcon },
+  { href: "/", key: "dashboard", icon: icon("dashboard") },
   { href: "/challenges", key: "challenges", icon: <span className="text-base leading-none">⚑</span> },
-  { href: "/scoreboard", key: "scoreboard", icon: scoreboardIcon },
-  { href: "/participants", key: "participants", icon: peopleIcon },
-  { href: "/support", key: "support", icon: supportIcon },
-  { href: "/feedback", key: "feedback", icon: feedbackIcon, module: "feedback" },
-  { href: "/analytics", key: "analytics", icon: analyticsIcon, manage: true, module: "analytics" },
-  { href: "/automations", key: "automations", icon: boltIcon, manage: true, module: "automations" },
+  { href: "/scoreboard", key: "scoreboard", icon: icon("scoring") },
+  { href: "/participants", key: "participants", icon: icon("teams") },
+  { href: "/support", key: "support", icon: icon("tickets") },
+  { href: "/feedback", key: "feedback", icon: icon("feedback"), module: "feedback" },
+  { href: "/analytics", key: "analytics", icon: icon("analytics"), manage: true, module: "analytics" },
+  { href: "/automations", key: "automations", icon: icon("automations"), manage: true, module: "automations" },
   // Competitor-assistant transcript review (#98) — its own grant, not the
   // manage bundle, so a transcripts-only reviewer role reaches it.
-  { href: "/ai-transcripts", key: "aiTranscripts", icon: transcriptIcon, module: "ai", permission: "ai_view_transcripts" },
+  { href: "/ai-transcripts", key: "aiTranscripts", icon: icon("ai"), module: "ai", permission: "ai_view_transcripts" },
   // Running-instance ops (#266) — its own grant (instance_view), shown only when
   // the instances module is enabled for the competition.
-  { href: "/instances", key: "instances", icon: instancesIcon, module: "instances", permission: "instance_view" },
+  { href: "/instances", key: "instances", icon: icon("instances"), module: "instances", permission: "instance_view" },
   // The jury console (#450) — its own grant (judging_view), shown only when the
   // code judge module is on for the competition AND it has a programming
   // problem (see `hasProgrammingProblems` below).
-  { href: "/judging", key: "judging", icon: judgingIcon, module: "judge", permission: "judging_view" },
-  { href: "/settings", key: "settings", icon: settingsIcon, manage: true },
+  { href: "/judging", key: "judging", icon: icon("judge"), module: "judge", permission: "judging_view" },
+  { href: "/settings", key: "settings", icon: icon("settings"), manage: true },
 ];
 
 // The Admin sub-nav comes from the shared surface catalogue (lib/admin-surfaces,
@@ -356,7 +315,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <nav aria-label={t("mainNav")} className="flex flex-1 flex-col gap-1">
           {showLobby ? (
             <Link href="/lobby" title={t("nav.lobby")} className={navItem(isActive("/lobby"))}>
-              <span className="flex h-4 w-4 items-center justify-center">{lobbyIcon}</span>
+              <span className="flex h-4 w-4 items-center justify-center">{icon("lobby")}</span>
               {navExpanded && <span>{t("nav.lobby")}</span>}
             </Link>
           ) : (
@@ -411,7 +370,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 aria-expanded={adminOpen}
                 className={navItem(isAdminSection)}
               >
-                <span className="flex h-4 w-4 items-center justify-center">{shieldIcon}</span>
+                <span className="flex h-4 w-4 items-center justify-center">{icon("admin")}</span>
                 {navExpanded && (
                   <>
                     <span className="flex-1 text-left">{t("nav.admin")}</span>

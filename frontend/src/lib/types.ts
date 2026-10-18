@@ -864,6 +864,10 @@ export interface ModuleState {
   version: string;
   enabled: boolean;
   required_core: boolean;
+  /** The manifest's one-liner: the fallback when the UI has no copy of its own. */
+  description: string;
+  /** An inert module (AI, instances, code judge) not yet switched on site-wide. */
+  needs_setup: boolean;
 }
 
 /** A site-level catalog entry for an optional module — the at-creation module
@@ -872,6 +876,7 @@ export interface ModuleCatalogEntry {
   id: string;
   name: string;
   description: string;
+  needs_setup: boolean;
 }
 
 // --- Post-event reports (#134, ADR-0030) ------------------------------------

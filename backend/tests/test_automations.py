@@ -1323,10 +1323,14 @@ async def test_module_toggle_rbac_and_invariants(client):
         await client.get(f"/api/competitions/{comp}/modules", headers=_auth(admin))
     ).json()
     by_id = {m["id"]: m for m in listed}
-    assert by_id["automations"] == {
+    entry = by_id["automations"]
+    assert {k: entry[k] for k in ("id", "name", "version", "enabled", "required_core")} == {
         "id": "automations", "name": "Automations", "version": "1.0.0",
         "enabled": True, "required_core": False,
     }
+    # The manifest's one-liner rides along as the UI's fallback copy; only the
+    # inert modules ever need site setup (#502).
+    assert entry["description"] and entry["needs_setup"] is False
     # The inventory also lists required-core modules, locked on (§11.3).
     assert by_id["tickets"]["required_core"] is True
     assert by_id["tickets"]["enabled"] is True

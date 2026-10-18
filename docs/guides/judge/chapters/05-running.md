@@ -31,11 +31,13 @@ levers plus the schedule.*
   optional label, expiry and maximum joins; **Revoke** kills a link for
   good. Join links honour the registration window and stop admitting once
   the event ends.
-- **Modules** — the eight optional features: AI Assistants, Analytics,
-  Automations, Certificates, Challenge Instances, Code Judge, Feedback &
-  Surveys, Post-Event Reports. All start on; switch off what you won't use.
-  AI, Instances and Code Judge also need the administrator's site setup
-  before they do anything.
+- **Modules** — a tile for each of the eight optional features, with what
+  it does and an on/off switch: AI assistants, Analytics, Automations,
+  Certificates, Challenge instances, Code judge, Feedback, Reports. All
+  start on; switch off what you won't use. AI, instances and the code judge
+  also need the administrator's site setup before they do anything; their
+  tiles say *Needs site setup* until then. The always-on core modules are
+  listed below, folded away.
 
 ## The status gate
 

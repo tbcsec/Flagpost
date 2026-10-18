@@ -10,7 +10,8 @@ import type { TicketDetail, TicketMessage } from "@/lib/types";
 // A competitor's thread: a question is read-only once asked (#450), an
 // ordinary ticket is a conversation — and none of the staff tools appear.
 
-let detail: TicketDetail;
+let detail: TicketDetail | undefined;
+let detailError = false;
 let presence = { others: [] as { id: string; name: string }[], staffPresent: false };
 let replyError: Error | null = null;
 const reply = vi.fn();
@@ -18,7 +19,7 @@ const clarify = vi.fn();
 const upload = vi.fn();
 
 vi.mock("@/lib/hooks/use-tickets", () => ({
-  useTicket: () => ({ data: detail }),
+  useTicket: () => ({ data: detail, isError: detailError }),
   useReplyTicket: () => ({
     mutate: reply,
     reset: vi.fn(),
@@ -81,6 +82,7 @@ beforeEach(() => {
   };
 });
 afterEach(() => {
+  detailError = false;
   reply.mockReset();
   clarify.mockReset();
   upload.mockReset();
@@ -109,7 +111,7 @@ describe("a competitor's question", () => {
   });
 
   it("says when it's been answered", () => {
-    detail.status = "resolved";
+    detail!.status = "resolved";
     competitor();
     expect(screen.getByText(/^Answered\./)).toBeInTheDocument();
     // Opened from Support there's nowhere to ask from, so no button.
@@ -117,7 +119,7 @@ describe("a competitor's question", () => {
   });
 
   it("marks an answer whose clarification was withdrawn", () => {
-    detail.messages.push(
+    detail!.messages.push(
       message({ id: "m2", author_name: "judge", body: "", sent_to_all: true, withdrawn: true }),
     );
     competitor();
@@ -125,9 +127,20 @@ describe("a competitor's question", () => {
   });
 });
 
+describe("a ticket a link can't open (#508)", () => {
+  it("says it isn't available instead of waiting with a reply box", () => {
+    detail = undefined;
+    detailError = true;
+    competitor();
+    expect(screen.getByText(/This ticket isn't available/)).toBeInTheDocument();
+    expect(screen.queryByText("Loading…")).toBeNull();
+    expect(screen.queryByLabelText("Reply")).toBeNull();
+  });
+});
+
 describe("a competitor's support ticket", () => {
   beforeEach(() => {
-    detail.kind = "support";
+    detail!.kind = "support";
   });
 
   it("is a conversation with screenshots", () => {
@@ -141,7 +154,7 @@ describe("a competitor's support ticket", () => {
 
   it("sends staged screenshots with the reply", async () => {
     reply.mockImplementation((_vars, { onSuccess }) =>
-      onSuccess({ ...detail, messages: [...detail.messages, message({ id: "mine", author_user_id: "u1" })] }),
+      onSuccess({ ...detail!, messages: [...detail!.messages, message({ id: "mine", author_user_id: "u1" })] }),
     );
     competitor();
     fireEvent.click(screen.getByTestId("screenshots"));

@@ -8,8 +8,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
 import { notificationsApi } from "@/lib/api";
+import { competitionToSwitchTo } from "@/lib/notification-link";
 import { getDeliveryPrefs, setDeliveryPrefs } from "@/lib/notification-prefs";
-import type { NotificationPreferences } from "@/lib/types";
+import type { AppNotification, NotificationPreferences } from "@/lib/types";
 import { openRoomSocket } from "@/lib/ws";
 import { useAuthStore } from "@/stores/auth";
 
@@ -143,6 +144,20 @@ export function useMarkNotificationRead() {
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: notificationKeys.all }),
   });
+}
+
+/** What happens when a notification is activated in the bell: it's marked
+ *  read, and the competition it belongs to becomes active so its link (which
+ *  reads the competition from the store) lands on the right one (#508). */
+export function useOpenNotification() {
+  const markRead = useMarkNotificationRead();
+  const activeCompetitionId = useAuthStore((s) => s.activeCompetitionId);
+  const setActiveCompetition = useAuthStore((s) => s.setActiveCompetition);
+  return (n: AppNotification) => {
+    if (!n.read) markRead.mutate(n.id);
+    const target = competitionToSwitchTo(n, activeCompetitionId);
+    if (target) setActiveCompetition(target);
+  };
 }
 
 export function useMarkAllNotificationsRead() {

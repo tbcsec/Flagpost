@@ -37,16 +37,32 @@ export default function SupportPage() {
   if (!competitionId) {
     return <NoCompetition />;
   }
-  if (isStaff) {
-    // useSearchParams (the open ticket lives in the URL) needs a Suspense
-    // boundary to keep the route renderable statically.
-    return (
-      <Suspense fallback={<Skeleton className="h-96 w-full" />}>
-        <StaffSupport competitionId={competitionId} competitionName={competition?.name ?? ""} />
-      </Suspense>
-    );
+  // useSearchParams (the open ticket lives in the URL, for staff and for the
+  // competitor a notification brings here, #508) needs a Suspense boundary to
+  // keep the route renderable statically.
+  const View = isStaff ? StaffSupport : CompetitorSupport;
+  return (
+    <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+      <View competitionId={competitionId} competitionName={competition?.name ?? ""} />
+    </Suspense>
+  );
+}
+
+/** The open ticket, kept in the URL (`?ticket=`) so a link opens it. */
+function useOpenTicketParam() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const selectedId = params.get("ticket");
+  function select(id: string | null, { replace = false } = {}) {
+    const next = new URLSearchParams(params.toString());
+    if (id) next.set("ticket", id);
+    else next.delete("ticket");
+    const query = next.toString();
+    const url = query ? `${pathname}?${query}` : pathname;
+    (replace ? router.replace : router.push)(url, { scroll: false });
   }
-  return <CompetitorSupport competitionId={competitionId} competitionName={competition?.name ?? ""} />;
+  return { selectedId, select };
 }
 
 function StaffSupport({
@@ -58,9 +74,6 @@ function StaffSupport({
 }) {
   const tr = useTranslations("support");
   const ts = useTranslations("support.staff");
-  const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
   const userId = useAuthStore((s) => s.user?.id);
   // The competition support room: the live queue + new-ticket cue.
   useSupportQueueLive(competitionId, true);
@@ -70,16 +83,8 @@ function StaffSupport({
   // judge. Opening one adds a history entry and moving between tickets
   // replaces it, so Back returns to the queue rather than through every
   // ticket looked at.
-  const selectedId = params.get("ticket");
-  function select(id: string | null) {
-    const next = new URLSearchParams(params.toString());
-    if (id) next.set("ticket", id);
-    else next.delete("ticket");
-    const query = next.toString();
-    const url = query ? `${pathname}?${query}` : pathname;
-    if (id && selectedId) router.replace(url, { scroll: false });
-    else router.push(url, { scroll: false });
-  }
+  const { selectedId, select: selectParam } = useOpenTicketParam();
+  const select = (id: string | null) => selectParam(id, { replace: Boolean(id && selectedId) });
 
   const all = tickets.data ?? [];
   const open = all.filter((t) => t.status === "open").length;
@@ -159,7 +164,8 @@ function CompetitorSupport({
   const tn = useTranslations("common.nouns");
   const tickets = useTickets(competitionId);
   const [filter, setFilter] = useState<Filter>("all");
-  const [openId, setOpenId] = useState<string | null>(null);
+  // In the URL too, so a notification's link opens the thread (#508).
+  const { selectedId: openId, select: setOpenId } = useOpenTicketParam();
 
   const all = tickets.data ?? [];
   // Status tabs narrow first; the data-table hook then layers subject search +

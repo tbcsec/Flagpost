@@ -116,6 +116,13 @@ export function bindCollabDoc(
       setTooLarge(true);
       return;
     }
+    if (tooLarge) {
+      // An update was held back, so peers can't apply deltas built on it:
+      // send the whole state once it fits again (sendFullState rechecks).
+      sendFullState("note_update");
+      schedulePersist();
+      return;
+    }
     socket.send({ type: "note_update", update: bytesToBase64(update) });
     schedulePersist();
   };

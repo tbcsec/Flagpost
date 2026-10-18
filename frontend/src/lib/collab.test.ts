@@ -111,4 +111,26 @@ describe("bindCollabDoc", () => {
     expect(onTooLarge).toHaveBeenLastCalledWith(false);
     handle.close();
   });
+
+  it("re-syncs a live peer with the whole state once the note fits again", () => {
+    const doc = new Y.Doc();
+    const { sent, setStatus, handle } = bind(doc);
+    setStatus("open");
+    const text = doc.getText("notes");
+    text.insert(0, "base");
+    const peer = new Y.Doc();
+    for (const frame of sent.splice(0)) {
+      if (frame.type === "note_update") Y.applyUpdate(peer, base64ToBytes(frame.update!));
+    }
+    expect(peer.getText("notes").toString()).toBe("base");
+
+    text.insert(4, "x".repeat(MAX_SYNC_BYTES + 1)); // held back
+    text.delete(4, MAX_SYNC_BYTES + 1);
+    text.insert(4, "after"); // built on the held-back insert
+    for (const frame of sent.splice(0)) {
+      if (frame.type === "note_update") Y.applyUpdate(peer, base64ToBytes(frame.update!));
+    }
+    expect(peer.getText("notes").toString()).toBe("baseafter");
+    handle.close();
+  });
 });

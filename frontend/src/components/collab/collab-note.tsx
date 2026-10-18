@@ -36,7 +36,11 @@ export function CollabNote({ docKey }: { docKey: string }) {
     // React StrictMode double-invokes this effect, and the second run rebinds
     // the *same* doc, so destroying it here would bind a dead doc. The doc is
     // small and GC'd once the component (and its editor) unmount for real.
-    return () => handle.close();
+    return () => {
+      handle.close();
+      // A fresh binding (another note) only reports "too large" when it is.
+      setTooLarge(false);
+    };
   }, [ydoc, docKey]);
 
   const editor = useEditor(

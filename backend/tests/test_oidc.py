@@ -7,8 +7,11 @@ mocked away — the point of most of these cases is that a *bad* token is
 rejected, which is meaningless if nothing verifies signatures.
 """
 
+import asyncio
+import json
 import time
 
+import httpx
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -1348,3 +1351,140 @@ async def test_state_binding_cookie_stays_samesite_lax(client, idp):
     ]
     attrs = {a.strip().lower() for a in cookie.split(";")[1:]}
     assert {"samesite=lax", "httponly", "path=/api/auth"} <= attrs
+
+
+# --- bounded provider exchanges (GHSA-r7rp-46pp-x55q) -------------------------
+
+
+class _Stream:
+    """An async response body (as off the network), optionally dripped."""
+
+    def __init__(self, chunk: bytes, count: int = 1, delay: float = 0.0):
+        self.chunk, self.count, self.delay = chunk, count, delay
+
+    async def __aiter__(self):
+        for _ in range(self.count):
+            if self.delay:
+                await asyncio.sleep(self.delay)
+            yield self.chunk
+
+
+def _provider_answers(monkeypatch, handler):
+    """Every provider call goes through a real httpx client on ``handler``."""
+
+    async def _ok(url):
+        return None
+
+    monkeypatch.setattr(oidc_utils, "validate_issuer_url", _ok)
+    real_client = httpx.AsyncClient
+    transport = httpx.MockTransport(handler)
+    monkeypatch.setattr(
+        oidc_utils.httpx, "AsyncClient", lambda **kw: real_client(transport=transport, **kw)
+    )
+
+
+def _oversized_json(**fields) -> _Stream:
+    # Valid JSON carrying everything the caller wants, padded past the 1 MiB cap.
+    doc = json.dumps({**fields, "pad": "a" * (2 << 20)}).encode()
+    return _Stream(doc)
+
+
+async def test_an_oversized_provider_document_is_an_oidc_error(monkeypatch):
+    _provider_answers(
+        monkeypatch, lambda request: httpx.Response(200, content=_oversized_json(issuer="x"))
+    )
+    with pytest.raises(OidcError, match="oversized"):
+        await oidc_utils._get_json("https://idp.example/.well-known/openid-configuration")
+
+
+async def test_an_oversized_token_response_is_an_oidc_error(monkeypatch):
+    _provider_answers(
+        monkeypatch, lambda request: httpx.Response(200, content=_oversized_json(id_token="t"))
+    )
+    with pytest.raises(OidcError, match="oversized"):
+        await oidc_utils.exchange_code(
+            document={"token_endpoint": "https://idp.example/token"},
+            code="c",
+            redirect_uri="https://app.example/cb",
+            client_id="client",
+            client_secret="secret",
+            code_verifier="v",
+        )
+
+
+async def test_an_oversized_userinfo_response_is_dropped(monkeypatch):
+    _provider_answers(
+        monkeypatch,
+        lambda request: httpx.Response(200, content=_oversized_json(email="who@example.com")),
+    )
+    info = await oidc_utils.fetch_userinfo(
+        {"userinfo_endpoint": "https://idp.example/userinfo"}, "access"
+    )
+    assert info == {}
+
+
+async def test_a_dripping_provider_hits_the_overall_deadline(monkeypatch):
+    # Bytes keep coming, so the per-read timeout never fires; ~3s in all.
+    monkeypatch.setattr(oidc_utils, "_HTTP_DEADLINE", 0.3)
+    _provider_answers(
+        monkeypatch, lambda request: httpx.Response(200, content=_Stream(b" ", 60, 0.05))
+    )
+    started = time.monotonic()
+    with pytest.raises(OidcError, match="took longer"):
+        await oidc_utils._get_json("https://idp.example/.well-known/openid-configuration")
+    assert time.monotonic() - started < 2.0
+
+
+def _br_coded(request: httpx.Request) -> httpx.Response:
+    return httpx.Response(200, headers={"Content-Encoding": "br"}, content=_Stream(b"\x1b\x00"))
+
+
+def _unreachable(request: httpx.Request) -> httpx.Response:
+    raise httpx.ConnectError("connection refused", request=request)
+
+
+@pytest.mark.parametrize(
+    "handler",
+    [
+        _br_coded,
+        _unreachable,
+        lambda request: httpx.Response(200, content=_Stream(b"<html>down</html>")),
+        lambda request: httpx.Response(200, content=_Stream(b"[" * 100_000 + b"]" * 100_000)),
+        lambda request: httpx.Response(200, content=_Stream(b'["not", "an", "object"]')),
+    ],
+    ids=["refused-coding", "unreachable", "not-json", "nested-past-the-parser", "not-an-object"],
+)
+async def test_a_failing_discovery_redirects_instead_of_a_500(client, monkeypatch, handler):
+    """Every way the discovery fetch can fail lands on the login route's
+    provider-unavailable redirect, through the real discover()."""
+    _provider_answers(monkeypatch, handler)
+    monkeypatch.setattr(oidc_utils, "_discovery_cache", {})
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+
+    resp = await client.get("/api/auth/oidc/testidp/login", follow_redirects=False)
+    assert resp.status_code == 302, resp.text
+    assert resp.headers["location"].endswith("/login?error=provider_unavailable")
+
+
+@pytest.mark.parametrize(
+    "handler",
+    [
+        _br_coded,
+        _unreachable,
+        lambda request: httpx.Response(200, content=_Stream(b"[" * 100_000 + b"]" * 100_000)),
+        lambda request: httpx.Response(200, content=_Stream(b'"id_token"')),
+    ],
+    ids=["refused-coding", "unreachable", "nested-past-the-parser", "not-an-object"],
+)
+async def test_a_failing_token_exchange_is_an_oidc_error(monkeypatch, handler):
+    _provider_answers(monkeypatch, handler)
+    with pytest.raises(OidcError):
+        await oidc_utils.exchange_code(
+            document={"token_endpoint": "https://idp.example/token"},
+            code="c",
+            redirect_uri="https://app.example/cb",
+            client_id="client",
+            client_secret="secret",
+            code_verifier="v",
+        )

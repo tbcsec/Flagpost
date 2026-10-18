@@ -22,6 +22,8 @@ can't be used to make the server probe arbitrary addresses.
 
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 
 from config import settings as app_settings
@@ -29,6 +31,11 @@ from models.judge import JudgeSettings
 from utils.provisioners import CheckResult
 
 _TIMEOUT = 10.0
+# httpx's timeout is per operation, so it never fires while bytes keep arriving.
+# Each probe as a whole is bounded too (a connect plus one read window, for a
+# status line), and no probe body is ever read, since only status and headers
+# decide a leg (GHSA-r7rp-46pp-x55q).
+_PROBE_DEADLINE = 2 * _TIMEOUT
 
 # Verbs the proxy must refuse with 403 (the instancing posture probes, kept in
 # step with utils/provisioner_docker.validate). The exec probe targets
@@ -39,6 +46,20 @@ _MUST_BE_DENIED = (
     ("volumes", "GET", "/volumes"),
     ("build", "POST", "/build"),
 )
+
+
+async def _probe(http: httpx.AsyncClient, method: str, path: str) -> httpx.Response:
+    """Send one probe and return its response with the body unread. Past
+    ``_PROBE_DEADLINE`` it raises ``httpx.TimeoutException``, so callers report
+    it like any other transport failure."""
+    try:
+        async with asyncio.timeout(_PROBE_DEADLINE):
+            async with http.stream(method, path) as response:
+                return response
+    except TimeoutError:
+        raise httpx.TimeoutException(
+            f"{method} {path} took longer than {_PROBE_DEADLINE:.0f}s"
+        ) from None
 
 
 def effective_endpoint(settings: JudgeSettings) -> tuple[str | None, bool]:
@@ -58,7 +79,7 @@ async def check_endpoint(
         base_url=url.rstrip("/"), timeout=_TIMEOUT, transport=transport
     ) as http:
         try:
-            ping = await http.get("/_ping")
+            ping = await _probe(http, "GET", "/_ping")
         except httpx.HTTPError as exc:
             legs.append(
                 CheckResult("endpoint_reachable", False, f"couldn't reach {url}: {exc}")
@@ -85,7 +106,7 @@ async def check_endpoint(
         notes: list[str] = []
         for label, method, path in _MUST_BE_DENIED:
             try:
-                resp = await http.request(method, path)
+                resp = await _probe(http, method, path)
             except httpx.HTTPError as exc:
                 ok = False
                 notes.append(f"{label}: probe failed ({exc})")

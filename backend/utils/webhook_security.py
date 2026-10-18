@@ -6,12 +6,13 @@ challenge titles, ticket subjects — are competitor-controlled by design (§5.4
 "team and challenge names are adversarial input"). That splits into four
 independent hardenings, all applied by ``_execute_webhook``:
 
-1. :func:`validate_webhook_url` — SSRF guard run **before every call** (not
-   just at rule save): the host is resolved and *every* resolved IP checked
-   against the blocked ranges, so a name that resolves partly to a public and
-   partly to an internal address (DNS-rebinding) is refused. An unresolvable
-   host is refused too (can't prove it safe). Redirects are not followed by the
-   caller, so a 302 to an internal target can't bounce past this.
+1. :func:`resolve_pinned_target` — SSRF guard run **before every call** (rule
+   save only checks the scheme): the host is resolved and *every* resolved IP
+   checked against the blocked ranges, so a name that resolves partly to a
+   public and partly to an internal address (DNS-rebinding) is refused. An
+   unresolvable host is refused too (can't prove it safe). Redirects are not
+   followed by the caller, so a 302 to an internal target can't bounce past
+   this.
 2. :func:`sanitize_headers` — strips caller-uncontrollable headers from the
    admin header set so a rule can't forge origin or smuggle credentials.
 3. :func:`escape_for_content_type` — escapes a substituted value for the body's
@@ -24,9 +25,10 @@ independent hardenings, all applied by ``_execute_webhook``:
 
 The resolve-then-connect TOCTOU is now closed by :func:`resolve_pinned_target`,
 which pins the connection to a validated IP (ADR-0013 amendment, GHSA-r7rp), and
-``_execute_webhook`` streams the response without buffering its body so a hostile
-target can't exhaust memory. Residual risk (see ADR-0013): destination-rate
-limiting is still the open §15 question, deliberately out of this phase.
+``_execute_webhook`` streams the response without buffering its body, under an
+overall deadline, so a hostile target can exhaust neither memory nor time.
+Residual risk (see ADR-0013): destination-rate limiting is still the open §15
+question, deliberately out of this phase.
 """
 
 from __future__ import annotations
@@ -162,8 +164,10 @@ async def _resolve_validated(url: str) -> tuple[str, int, str, list[str]]:
 
 async def validate_webhook_url(url: str) -> None:
     """Raise :class:`WebhookSecurityError` unless ``url`` is a safe http(s)
-    target (§5.4). Used at rule-save time; the fire path uses
-    :func:`resolve_pinned_target` so the checked address is the connected one."""
+    target (§5.4). A bare check with no app caller today: rule save only
+    scheme-checks the URL (``schemas/automation.py``), and the fire path uses
+    :func:`resolve_pinned_target`, which runs this same check and pins the
+    connection so the checked address is the connected one."""
     await _resolve_validated(url)
 
 

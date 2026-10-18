@@ -387,6 +387,57 @@ async def test_check_reports_an_unreachable_endpoint():
     assert [(leg.name, leg.ok) for leg in legs] == [("endpoint_reachable", False)]
 
 
+async def test_check_never_reads_a_probe_body():
+    """GHSA-r7rp-46pp-x55q: only status and headers decide a leg, so a body that
+    never ends (bytes keep coming, so no per-read timeout fires) can't hold the
+    check open or grow memory."""
+    import asyncio
+
+    import httpx
+
+    from utils.judge_connection import check_endpoint
+
+    class _Endless:
+        async def __aiter__(self):
+            while True:
+                await asyncio.sleep(0.01)
+                yield b"x" * 1024
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        status = 200 if request.url.path == "/_ping" else 403
+        return httpx.Response(status, headers={"Api-Version": "1.47"}, content=_Endless())
+
+    legs = await asyncio.wait_for(
+        check_endpoint("http://judge-proxy:2375", transport=httpx.MockTransport(handler)), 5
+    )
+    assert [(leg.name, leg.ok) for leg in legs] == [
+        ("endpoint_reachable", True),
+        ("proxy_restricted", True),
+    ]
+
+
+async def test_a_hanging_probe_is_cut_off_by_its_deadline(monkeypatch):
+    import asyncio
+
+    import httpx
+
+    from utils import judge_connection
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        await asyncio.sleep(10)  # never answers within the deadline
+        return httpx.Response(200)
+
+    monkeypatch.setattr(judge_connection, "_PROBE_DEADLINE", 0.2)
+    legs = await asyncio.wait_for(
+        judge_connection.check_endpoint(
+            "http://judge-proxy:2375", transport=httpx.MockTransport(handler)
+        ),
+        3,
+    )
+    assert [(leg.name, leg.ok) for leg in legs] == [("endpoint_reachable", False)]
+    assert "took longer" in legs[0].detail
+
+
 async def test_check_only_ever_probes_the_saved_endpoint(client, monkeypatch):
     """Never a URL from the request: otherwise the check would let the server
     be pointed at arbitrary addresses."""

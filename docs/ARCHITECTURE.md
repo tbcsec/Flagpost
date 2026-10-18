@@ -536,9 +536,11 @@ and challenge names are adversarial input by design.
 IPv6 unwrapped), refuses an unresolvable host, and the caller keeps redirects
 off. Escaping + defang apply to a webhook's optional `body_template` (where an
 admin composes a message with `{field}` placeholders); a templateless webhook
-sends the structured event as `json=`, which needs no escaping. Two residual
-gaps are called out in ADR-0013 and §15: the resolve-then-connect TOCTOU (no
-connection pinning yet) and destination rate-limiting.
+sends the structured event as `json=`, which needs no escaping. The connection
+is pinned to the validated IP (closing the resolve-then-connect TOCTOU), the
+response body is never buffered, and the whole action, DNS lookup included,
+runs under an overall deadline (ADR-0013 amendments, GHSA-r7rp). The residual
+gap called out in ADR-0013 and §15 is destination rate-limiting.
 
 ### 5.5 Suggested Frontend: Visual Rule Builder
 
@@ -1682,8 +1684,8 @@ Keep this section honest — update as decisions are made:
   before that ships.
 - Rate limiting / abuse prevention on the automation engine's webhook
   action, beyond the SSRF/header/value hardening in §5.4 (that part landed
-  in Tier 3 Phase 2, ADR-0013; also still open there: the resolve-then-connect
-  TOCTOU / connection pinning). Rate limiting needs to be sensible
+  in Tier 3 Phase 2, ADR-0013; connection pinning closed the resolve-then-connect
+  TOCTOU in v1.7.0). Rate limiting needs to be sensible
   rather than a flat cap: a single rule can legitimately fire thousands of
   times in quick succession on a large event (e.g. a "challenge solved"
   notification rule during a 1,000+ competitor competition isn't abuse,

@@ -30,6 +30,7 @@ and must land before any public release.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from dataclasses import dataclass
@@ -196,8 +197,35 @@ async def _execute_send_email(db, rule, event_name, payload, config) -> None:
 
 # --- webhook (§5.3): outbound HTTP call, hardened per §5.4 -------------------
 
+# httpx's timeout is per operation — connect, each write, each read — not per
+# request, so it never fires while bytes keep arriving: a target that drips its
+# response headers a byte at a time holds the call open for as long as it drips.
+WEBHOOK_IO_TIMEOUT_S = 5.0
+# The deadline covers the whole action: the DNS lookup behind the SSRF check
+# (no timeout of its own, and the rule's author may run the name server), then a
+# connect, a request write and the status line plus headers — three
+# per-operation windows. An honest resolver answers in a fraction of one, so
+# 3 x the per-operation timeout is what an honest-but-slow target can need
+# (GHSA-r7rp-46pp-x55q).
+WEBHOOK_DEADLINE_S = 3 * WEBHOOK_IO_TIMEOUT_S
+
 
 async def _execute_webhook(db, rule, event_name, payload, config) -> None:
+    try:
+        async with asyncio.timeout(WEBHOOK_DEADLINE_S):
+            await _send_webhook(rule, event_name, payload, config)
+    except TimeoutError:
+        # Raised on, like any transport failure, to the engine's per-action
+        # isolation — just with a message that names the cause.
+        raise TimeoutError(
+            f"webhook POST {config['url']} exceeded its "
+            f"{WEBHOOK_DEADLINE_S:.0f}s deadline"
+        ) from None
+
+
+async def _send_webhook(rule, event_name, payload, config) -> None:
+    """The webhook action itself; ``_execute_webhook`` runs it under the
+    deadline."""
     import httpx
 
     url = config["url"]
@@ -239,8 +267,12 @@ async def _execute_webhook(db, rule, event_name, payload, config) -> None:
     # pinned IP URL with the original hostname as TLS SNI, and stream the
     # response so its body is never buffered — a hostile target that streams an
     # endless body (timeout is per-read, so it never fires while bytes flow)
-    # can't exhaust worker memory. Only the status line is consumed (GHSA-r7rp).
-    async with httpx.AsyncClient(timeout=5.0, follow_redirects=False) as client:
+    # can't exhaust worker memory. Only the status line is consumed, and the
+    # caller runs all of this, DNS lookup included, under WEBHOOK_DEADLINE_S,
+    # so it can't be held open by a slow drip either (GHSA-r7rp).
+    async with httpx.AsyncClient(
+        timeout=WEBHOOK_IO_TIMEOUT_S, follow_redirects=False
+    ) as client:
         async with client.stream(
             "POST", target.url, extensions=target.extensions, **request_kwargs
         ) as response:

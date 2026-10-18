@@ -56,7 +56,9 @@ vi.mock("@/components/support/staff-ticket-view", async () => {
     },
   };
 });
-vi.mock("@/components/support/ticket-thread", () => ({ TicketThread: () => null }));
+vi.mock("@/components/support/ticket-thread", () => ({
+  TicketThread: ({ ticketId }: { ticketId: string }) => <div>thread {ticketId}</div>,
+}));
 vi.mock("@/components/support/new-ticket-dialog", () => ({
   NewTicketDialog: () => <button type="button">New ticket</button>,
 }));
@@ -116,5 +118,21 @@ describe("Support for a competitor", () => {
     expect(screen.getAllByRole("button", { name: "New ticket" }).length).toBeGreaterThan(0);
     expect(screen.queryByRole("group", { name: "Quick filters" })).toBeNull();
     expect(screen.getByText(/1 message/)).toBeInTheDocument();
+  });
+
+  it("opens the ticket a notification links to, and clears it on close (#508)", () => {
+    isStaff = false;
+    search = "ticket=t1";
+    renderWithIntl(<SupportPage />);
+    expect(screen.getByText("thread t1")).toBeInTheDocument();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    expect(push).toHaveBeenCalledWith("/support", { scroll: false });
+  });
+
+  it("puts a ticket it opens into the URL", () => {
+    isStaff = false;
+    renderWithIntl(<SupportPage />);
+    fireEvent.click(screen.getByText("Instance won't start"));
+    expect(push).toHaveBeenCalledWith("/support?ticket=t1", { scroll: false });
   });
 });

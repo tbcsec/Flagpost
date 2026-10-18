@@ -17,10 +17,14 @@ arrive with the automation engine.
 
 from __future__ import annotations
 
-# Deep link target for ticket notifications. The support page reads the active
-# competition from the client store, so a bare path is right here (the
-# notification still carries competition_id for context/filtering).
-_SUPPORT_LINK = "/support"
+
+
+def ticket_link(ticket_id: str) -> str:
+    """Where a ticket notification takes you: that ticket, open on the Support
+    page (#508). The page reads the competition from the client store — the
+    bell switches to the notification's ``competition_id`` before following
+    the link — so the path itself stays bare."""
+    return f"/support?ticket={ticket_id}"
 
 
 def setup(app, event_bus, db_factory) -> None:
@@ -45,6 +49,7 @@ def setup(app, event_bus, db_factory) -> None:
         *,
         type: str,
         title: str,
+        ticket_id: str,
         body: str | None = None,
         competition_id: str | None = None,
     ) -> None:
@@ -55,7 +60,7 @@ def setup(app, event_bus, db_factory) -> None:
             type=type,
             title=title,
             body=body,
-            link=_SUPPORT_LINK,
+            link=ticket_link(ticket_id),
             competition_id=competition_id,
         )
         if not made:
@@ -78,6 +83,7 @@ def setup(app, event_bus, db_factory) -> None:
                 staff,
                 type="ticket.created",
                 title="New support ticket",
+                ticket_id=ticket_id,
                 body=payload.get("subject"),
                 competition_id=competition_id,
             )
@@ -95,6 +101,7 @@ def setup(app, event_bus, db_factory) -> None:
                 [assignee],
                 type="ticket.assigned",
                 title="A ticket was assigned to you",
+                ticket_id=ticket_id,
                 competition_id=competition_id,
             )
 
@@ -113,6 +120,7 @@ def setup(app, event_bus, db_factory) -> None:
                 [ticket.opener_user_id],
                 type="ticket.resolved",
                 title="Your ticket was resolved",
+                ticket_id=ticket_id,
                 body=ticket.subject,
                 competition_id=competition_id,
             )
@@ -152,6 +160,7 @@ def setup(app, event_bus, db_factory) -> None:
                 recipients,
                 type="ticket.message_posted",
                 title="New reply on a ticket",
+                ticket_id=ticket_id,
                 body=ticket.subject,
                 competition_id=competition_id,
             )

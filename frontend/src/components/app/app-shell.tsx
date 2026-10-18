@@ -43,10 +43,11 @@ import { cn } from "@/lib/utils";
 import { useRelativeTime } from "@/lib/hooks/use-relative-time";
 import {
   useMarkAllNotificationsRead,
-  useMarkNotificationRead,
+  useOpenNotification,
   useNotificationPreferences,
   useNotifications,
 } from "@/lib/hooks/use-notifications";
+import { safeNotificationLink } from "@/lib/notification-link";
 import { useAuthStore } from "@/stores/auth";
 
 // Icons are plain inline SVGs — Flagpost ships no icon library (design-system
@@ -508,7 +509,7 @@ function Topbar({
   // Keep the delivery-hint cache (sound/browser) warm for the ticket cue + WS
   // handler, which read it outside React.
   useNotificationPreferences();
-  const markRead = useMarkNotificationRead();
+  const openNotification = useOpenNotification();
   const markAllRead = useMarkAllNotificationsRead();
   const items = notifications ?? [];
   const unreadCount = items.reduce((n, item) => (item.read ? n : n + 1), 0);
@@ -648,17 +649,10 @@ function Topbar({
                     </div>
                   );
                   const onActivate = () => {
-                    if (!n.read) markRead.mutate(n.id);
+                    openNotification(n);
                     setNotifOpen(false);
                   };
-                  // Only ever follow an internal, same-origin path — never an
-                  // absolute/scheme URL. Notification links are server-built
-                  // today, but this defends against a future producer letting a
-                  // "javascript:"/"//evil.com" value reach an anchor href.
-                  const safeLink =
-                    n.link && n.link.startsWith("/") && !n.link.startsWith("//")
-                      ? n.link
-                      : null;
+                  const safeLink = safeNotificationLink(n.link);
                   return (
                     <li
                       key={n.id}

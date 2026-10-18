@@ -48,6 +48,16 @@ export function TicketThread({
 
   const t = ticket.data;
   const isQuestion = t?.kind === "question";
+  // A link to a ticket that isn't theirs, or is gone, 404s (#508): say so
+  // rather than sit on "Loading…" over a reply box that can't send.
+  if (ticket.isError && !t) {
+    return (
+      <DialogHeader>
+        <DialogTitle>{tr("thread.fallbackTitle")}</DialogTitle>
+        <DialogDescription>{tr("staff.notFound")}</DialogDescription>
+      </DialogHeader>
+    );
+  }
   // The 5-image cap is per ticket, so the picker has to count what's already on
   // the thread — not just what's staged on this reply. A competitor's thread
   // omits internal notes, so their count can undershoot; the server still

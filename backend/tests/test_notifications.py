@@ -148,6 +148,41 @@ async def test_resolve_notifies_opener(client):
     assert ada_notifs[0]["body"] == "RSA hint?"
 
 
+async def test_ticket_notifications_link_to_their_ticket(client):
+    """#508: every ticket notification opens that ticket, not the bare Support
+    page — for staff and for the competitor alike."""
+    comp = await _competition(client)
+    admin = await admin_token(client)
+    ada = await _participant(client, comp, "ada@example.com")
+    ticket = await _open_ticket(client, comp, ada)
+    link = f"/support?ticket={ticket}"
+
+    await client.post(
+        f"/api/competitions/{comp}/tickets/{ticket}/assign",
+        json={"assignee_user_id": None},
+        headers=_auth(admin),
+    )
+    await client.post(
+        f"/api/competitions/{comp}/tickets/{ticket}/messages",
+        json={"body": "any update?"},
+        headers=_auth(ada),
+    )
+    staff = {n["type"]: n for n in await _notifications(client, admin)}
+    assert set(staff) == {"ticket.created", "ticket.assigned", "ticket.message_posted"}
+    assert {n["link"] for n in staff.values()} == {link}
+    assert {n["competition_id"] for n in staff.values()} == {comp}
+
+    await client.post(
+        f"/api/competitions/{comp}/tickets/{ticket}/messages",
+        json={"body": "fixed"},
+        headers=_auth(admin),
+    )
+    await client.post(f"/api/competitions/{comp}/tickets/{ticket}/resolve", headers=_auth(admin))
+    opener = {n["type"]: n for n in await _notifications(client, ada)}
+    assert set(opener) == {"ticket.message_posted", "ticket.resolved"}
+    assert {n["link"] for n in opener.values()} == {link}
+
+
 # --- ownership scoping + read state ------------------------------------------
 
 

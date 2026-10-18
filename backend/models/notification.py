@@ -43,7 +43,8 @@ class Notification(Base, TimestampMixin):
     type: Mapped[str] = mapped_column(String, nullable=False)
     title: Mapped[str] = mapped_column(String, nullable=False)
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Optional in-app deep link (e.g. "/competitions/<id>/support?ticket=<id>").
+    # Optional in-app deep link (e.g. "/support?ticket=<id>"; the client reads
+    # the competition from its store, switching to competition_id first).
     link: Mapped[str | None] = mapped_column(String, nullable=True)
     # Null = unread; set to the read timestamp when the user marks it read.
     read_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)

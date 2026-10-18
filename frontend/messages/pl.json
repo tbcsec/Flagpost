@@ -2837,6 +2837,7 @@
       "importFailed": "Import failed",
       "importing": "Importing…",
       "importSelected": "Import selected",
+      "notImportable": "Not imported — beyond your permissions: {sections}",
       "importComplete": "Import complete",
       "importResultRow": "<mono>{table}</mono>: {created} added, {skipped} skipped"
     },

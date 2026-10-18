@@ -127,14 +127,15 @@ export function useDeleteLogo() {
 
 // --- Platform export / import (Admin → Site settings) ---
 
-/** The selectable export/import sections offered by the backend. */
-export function useBackupSections() {
+/** The sections the viewer may export (or import) — the backend filters them
+ *  by the viewer's grants, so this follows the default staleness rather than
+ *  being cached for good: a role change must be able to reach it. */
+export function useBackupSections(direction: "export" | "import") {
   const authed = useAuthStore((s) => s.status === "authenticated");
   return useQuery({
-    queryKey: ["backup", "sections"],
-    queryFn: siteSettingsApi.backupSections,
+    queryKey: ["backup", "sections", direction],
+    queryFn: () => siteSettingsApi.backupSections(direction),
     enabled: authed,
-    staleTime: Infinity,
   });
 }
 

@@ -1132,3 +1132,22 @@ async def test_ctfcli_export_takes_only_its_own_competitions_attachments(client,
     resp = await client.get(f"/api/competitions/{comp}/challenges/export", headers=_auth(admin))
     with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
         assert sorted(zf.namelist()) == ["mine/challenge.yml", "mine/mine.txt"]
+
+
+async def test_ctfcli_import_refuses_merge_keys(client):
+    """Merges that name one mapping several times, level upon level, cost
+    exponential time inside the YAML loader — refused before any flattening."""
+    import time
+    import zipfile
+
+    lines = ["name: Merged", "b0: &b0 {" + ", ".join(f"k{i}: v" for i in range(10)) + "}"]
+    lines += [f"b{i}: &b{i} {{<<: [" + ", ".join([f"*b{i - 1}"] * 4) + f"], z{i}: 1}}" for i in range(1, 10)]
+    comp = await _make_competition(client)
+    started = time.perf_counter()
+    resp = await _ctfcli_import(
+        client, comp, _ctfcli_bundle([("m/challenge.yml", "\n".join(lines), zipfile.ZIP_DEFLATED)])
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["created"] == 0
+    assert any("merge keys" in e for e in resp.json()["errors"])
+    assert time.perf_counter() - started < 5

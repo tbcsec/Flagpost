@@ -2087,7 +2087,8 @@ chunk whole, past any read bound), an aggregate decompressed ceiling that counts
 every byte inflated, an
 entry cap counted from the entries' own signatures before `zipfile` builds its
 directory (the end records can lie), a problem-count cap, symlinks followed only inside their own problem, YAML whose aliases
-can't expand past a node or character budget, and the judge's own test-data caps (16 MB a
+can't expand past a node or character budget (and no merge keys, whose
+flattening is exponential inside the loader), and the judge's own test-data caps (16 MB a
 file, 64 MB a problem — a package over them is refused, not truncated). A
 problem that fails in any unforeseen way is refused alone, not the whole zip.
 Parsing is pure and runs in a thread — but CPython's regex engine holds the GIL,

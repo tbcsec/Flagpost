@@ -103,3 +103,30 @@ def test_a_long_list_that_holds_itself_is_checked_in_bounded_memory():
 def test_nesting_too_deep_to_parse_is_a_yaml_error():
     with pytest.raises(yaml.YAMLError, match="nested too deeply"):
         load_yaml("[" * 2000 + "]" * 2000)
+
+
+def _merge_fan_out(levels: int, fan: int) -> str:
+    """Each level merges the one below it ``fan`` times over: flattening that
+    is exponential inside the loader, from a few hundred bytes."""
+    lines = ["b0: &b0 {" + ", ".join(f"k{i}: v" for i in range(10)) + "}"]
+    for i in range(1, levels):
+        lines.append(f"b{i}: &b{i} {{<<: [" + ", ".join([f"*b{i - 1}"] * fan) + f"], z{i}: 1}}")
+    return "\n".join(lines) + f"\ntop: *b{levels - 1}\n"
+
+
+@pytest.mark.parametrize("doc", [_merge_fan_out(10, 4), "a: &a {x: 1}\nb: {!!merge '<<': *a}\n"])
+def test_merge_keys_are_refused_before_they_are_flattened(doc):
+    import time
+
+    started = time.perf_counter()
+    with pytest.raises(yaml.YAMLError, match="merge keys"):
+        load_yaml(doc)
+    assert time.perf_counter() - started < 0.5
+    # A quoted '<<' is just a key.
+    assert load_yaml("a: {'<<': 1}\n") == {"a": {"<<": 1}}
+
+
+@pytest.mark.parametrize("doc", ["n: " + "9" * 5000 + "\n", "released: 2024-13-45\n"])
+def test_a_value_python_wont_build_is_a_yaml_error(doc):
+    with pytest.raises(yaml.YAMLError, match="can't be read"):
+        load_yaml(doc)

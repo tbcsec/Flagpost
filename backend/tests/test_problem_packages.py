@@ -314,6 +314,11 @@ def test_yaml_nested_too_deeply_is_invalid_yaml():
     assert "isn't valid YAML" in _refused(pf.build_package(files, root=pf.SHORTNAME))
 
 
+def test_merge_keys_and_unbuildable_values_are_invalid_yaml():
+    assert "isn't valid YAML" in _refused(_pkg(yaml_extra="base: &base {x: 1}\nmore: {<<: *base}\n"))
+    assert "isn't valid YAML" in _refused(_pkg(yaml_extra="big: " + "9" * 5000 + "\n"))
+
+
 def test_a_hostile_ini_is_linear():
     # A run of blank lines once made the time-limit search quadratic (~3 s
     # here, ~30 min at the 1 MB manifest cap); linear, it's milliseconds.

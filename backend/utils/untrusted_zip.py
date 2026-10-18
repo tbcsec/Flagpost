@@ -87,14 +87,33 @@ def unique_name(name: str, used: set[str]) -> str:
     return candidate
 
 
+class _Loader(yaml.SafeLoader):
+    """``SafeLoader`` without merge keys (``<<``). Flattening merges that name
+    the same mapping several times, level upon level, costs exponential time
+    inside the loader itself — before any check on its (small) result can run
+    — and no format read here uses them."""
+
+    def flatten_mapping(self, node):
+        for key_node, _ in node.value:
+            if key_node.tag == "tag:yaml.org,2002:merge":
+                raise yaml.constructor.ConstructorError(
+                    None, None, "merge keys (<<) aren't accepted", key_node.start_mark
+                )
+        super().flatten_mapping(node)
+
+
 def load_yaml(raw: bytes | str) -> object:
-    """``yaml.safe_load``, except that a document nested too deeply for the
-    parser's recursion (``[[[[…]]]]``) raises the ``yaml.YAMLError`` it is,
-    not a ``RecursionError`` that no caller expects."""
+    """``yaml.safe_load`` without merge keys, and with every way a document can
+    fail raised as the ``yaml.YAMLError`` it is: nesting too deep for the
+    parser's recursion (``[[[[…]]]]``), or a value Python won't build — an
+    integer past its digit limit, an impossible date — which would otherwise
+    escape as a RecursionError or ValueError that no caller expects."""
     try:
-        return yaml.safe_load(raw)
+        return yaml.load(raw, Loader=_Loader)  # noqa: S506 — a SafeLoader
     except RecursionError as exc:
         raise yaml.YAMLError("the document is nested too deeply") from exc
+    except ValueError as exc:
+        raise yaml.YAMLError(f"a value can't be read: {exc}") from exc
 
 
 def yaml_too_large(tree: object, max_nodes: int, max_chars: int) -> bool:

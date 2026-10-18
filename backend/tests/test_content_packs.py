@@ -422,3 +422,14 @@ async def test_a_manifest_nested_too_deeply_is_a_pack_error(client):
     resp = await _install(client, token, _pack_with_manifest_text("[" * 2000 + "]" * 2000))
     assert resp.status_code == 400, resp.text
     assert "nested too deeply" in resp.json()["detail"]
+
+
+async def test_a_manifest_with_merge_keys_or_an_unbuildable_value_is_a_pack_error(client):
+    token = await admin_token(client)
+    for extra, phrase in (
+        ("base: &base {x: 1}\nmore: {<<: *base}\n", "merge keys"),
+        ("big: " + "9" * 5000 + "\n", "can't be read"),
+    ):
+        resp = await _install(client, token, _pack_with_manifest_text(_THEME_MANIFEST + extra))
+        assert resp.status_code == 400, resp.text
+        assert phrase in resp.json()["detail"]

@@ -187,9 +187,17 @@ def setup(app, event_bus, db_factory) -> None:
         # REST path via visible_solve_cutoff ("one unfiltered path defeats the
         # whole feature"). Suppress the whole ping for these events until
         # unfreeze; staff read the REST board (unfrozen for them) as the live view.
+        # The same goes for the pings that travel with a solve: every graded
+        # submission — the correct one included — pings challenge.attempted, only
+        # a solver can rate, and a hint reveal is a score movement too. The room
+        # is one shared broadcast, so it can't keep pinging staff alone: their
+        # attempt counters refresh on their next read until unfreeze.
         if event_name in (
             "challenge.solved",
             "challenge.solve_revoked",
+            "challenge.attempted",
+            "challenge.rated",
+            "challenge.hint_requested",
             "score.adjusted",
             "achievement.awarded",
         ):

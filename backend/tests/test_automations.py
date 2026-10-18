@@ -665,6 +665,67 @@ async def test_personal_rule_stops_when_its_owner_loses_the_trigger(client):
     assert (await _trigger_counts())["Test rule"] == 1
 
 
+async def test_personal_rule_sees_a_frozen_solve_as_its_owner_does(client):
+    """GHSA-r7j2: under a scoreboard freeze the submit result withholds first
+    blood and a dynamic challenge's live worth. A personal rule fires on its
+    owner's own solve and reports back to them, so it mustn't hand those over —
+    not through a template, nor through a condition. Organiser rules keep the
+    real payload."""
+    from utils.scoring import dynamic_value
+
+    comp = await _competition(client)
+    admin = await admin_token(client)
+    dyn = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges",
+            json={
+                "title": "Dyn", "points": 500, "scoring_type": "dynamic",
+                "min_points": 100, "decay": 10, "flag": "flag{dyn}",
+            },
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    await client.post(f"/api/competitions/{comp}/challenges/{dyn}/publish", headers=_auth(admin))
+    static = await _challenge(client, comp, title="Static", points=100, flag="flag{s}")
+    ada = await _participant(client, comp, "ada@example.com")
+
+    report = {"type": "notify", "target": "self", "title": "pts={points} fb={is_first_blood}"}
+    first = {"type": "notify", "target": "self", "title": "first blood"}
+    for name, conditions, action in (
+        ("Report", [], report),
+        ("First", [{"field": "is_first_blood", "operator": "equals", "value": True}], first),
+    ):
+        resp = await client.post(
+            "/api/automations/personal",
+            json=_notify_rule(competition_id=comp, name=name, conditions=conditions, actions=[action]),
+            headers=_auth(ada),
+        )
+        assert resp.status_code == 201, resp.text
+    await _create_rule(
+        client, admin, comp, name="Org",
+        actions=[{
+            "type": "notify", "target": "role", "role_name": "Administrator",
+            "title": "org pts={points} fb={is_first_blood}",
+        }],
+    )
+    assert (
+        await client.post(f"/api/competitions/{comp}/scoreboard/freeze", json={}, headers=_auth(admin))
+    ).status_code == 200
+
+    await _solve(client, comp, dyn, ada, flag="flag{dyn}")
+    await _solve(client, comp, static, ada, flag="flag{s}")
+
+    # Her own rules see what her submit result shows: no first blood, and no
+    # live worth on the dynamic challenge (a static one's fixed points stay).
+    titles = sorted(n["title"] for n in await _notifications(client, ada))
+    assert titles == ["pts=100 fb=None", "pts=None fb=None"], titles
+    # The organiser's rule still sees the real solve.
+    org = sorted(n["title"] for n in await _notifications(client, admin))
+    assert org == sorted(
+        [f"org pts={dynamic_value(500, 100, 10, 1)} fb=True", "org pts=100 fb=True"]
+    ), org
+
+
 # --- the engine + executors, driven by real events ---------------------------
 
 

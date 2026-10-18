@@ -21,15 +21,21 @@ class SubmitResult(BaseModel):
     # True when the flag was correct but the subject had already solved the
     # challenge — no points are awarded a second time (§13.2 idempotency).
     already_solved: bool = False
-    points_awarded: int = 0
+    # Null when a competitor solves a dynamic challenge under a scoreboard freeze:
+    # its worth is a function of the live solve count the freeze hides
+    # (GHSA-r7j2).
+    points_awarded: int | None = 0
     # True only on the first correct solve of this challenge in the competition.
-    is_first_blood: bool = False
+    # Null when a competitor solves under a scoreboard freeze — it would say
+    # whether anyone has solved the challenge since the cutoff.
+    is_first_blood: bool | None = False
     # Guesses left for the subject on a multiple-choice challenge under the
     # competition-wide cap (null = no cap, not multiple-choice, or already solved).
     attempts_remaining: int | None = None
     # The base worth before the multiple-choice wrong-guess penalty (#148), so the
     # solve result can show "reduced from N". Null unless a penalty actually
-    # lowered this award (i.e. points_awarded < full_value).
+    # lowered this award (i.e. points_awarded < full_value), and null whenever
+    # points_awarded is.
     full_value: int | None = None
     # The subject's *current* worth going forward after this attempt, under the
     # wrong-guess penalty (#148) — returned on an incorrect guess so the client can

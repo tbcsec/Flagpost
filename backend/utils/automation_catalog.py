@@ -35,8 +35,12 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
         "is_first_blood",
         # True when a rejudge/override granted it (#450), so a rule can skip.
         "regrade",
+        # The solve's time (backdated for a judged solve), ISO 8601.
+        "solved_at",
     ],
-    "challenge.solve_revoked": ["competition_id", "challenge_id", "user_id", "team_id"],
+    "challenge.solve_revoked": [
+        "competition_id", "challenge_id", "user_id", "team_id", "solved_at",
+    ],
     "challenge.published": ["competition_id", "challenge_id", "user_id", "title"],
     "challenge.created": ["competition_id", "challenge_id", "user_id", "title"],
     "challenge.updated": ["competition_id", "challenge_id"],

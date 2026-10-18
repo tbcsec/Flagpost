@@ -15,6 +15,7 @@ from __future__ import annotations
 def setup(app, event_bus, db_factory) -> None:
     from auth.deps import user_has_permission
     from models.challenge import Challenge
+    from models.competition import Competition
     from realtime import register_room_type
     from routers.attachments import router as attachments_router
     from routers.categories import router as categories_router
@@ -28,6 +29,7 @@ def setup(app, event_bus, db_factory) -> None:
     app.include_router(submissions_router)
 
     from db import ensure_aware_utc, utcnow
+    from utils.competition_status import is_playable
 
     async def authorize_challenge(db, user, challenge_id: str) -> bool:
         challenge = await db.get(Challenge, challenge_id)
@@ -45,7 +47,11 @@ def setup(app, event_bus, db_factory) -> None:
             challenge.release_at is None
             or ensure_aware_utc(challenge.release_at) <= utcnow()
         )
-        if visible:
+        # And the #221 status gate (GHSA-r7j2): the REST detail 403s a competitor
+        # unless the competition is running (require_playable), so the presence
+        # room must too — before the start and after the end. Staff bypass.
+        competition = await db.get(Competition, challenge.competition_id)
+        if visible and competition is not None and is_playable(competition):
             return True
         return await user_has_permission(
             db, user.id, "challenge_edit", challenge.competition_id

@@ -532,3 +532,93 @@ async def test_incorrect_guess_no_subject_value_when_penalty_off(client):
     r = (await client.post(submit, json={"flag": "London"}, headers=auth)).json()
     assert r["subject_value"] is None
     assert r["attempts_remaining"] == 1
+
+
+async def test_incorrect_guess_subject_value_uses_frozen_solve_count(client):
+    """GHSA-r7j2: on a dynamic challenge the reduced worth returned after a wrong
+    guess is derived from the solve count — so under a freeze it must use the
+    count as of the cutoff, like the card it replaces, not the live one."""
+    from utils.scoring import dynamic_value, penalised_value
+
+    admin = await admin_token(client)
+    initial, minp, decay, pct = 200, 20, 10, 25
+    comp = await _mc_competition(client, admin, limit=None, penalty=pct)
+    cid = await _mc_challenge(
+        client, admin, comp,
+        points=initial, scoring_type="dynamic", min_points=minp, decay=decay,
+    )
+    submit = f"/api/competitions/{comp}/challenges/{cid}/submit"
+
+    async def player(email):
+        token, uid = await _register(client, email)
+        await _assign_participant(uid, comp)
+        return _auth(token)
+
+    first = await player("first@example.com")
+    assert (await client.post(submit, json={"flag": "Paris"}, headers=first)).json()["correct"]
+    fr = await client.post(
+        f"/api/competitions/{comp}/scoreboard/freeze", json={}, headers=_auth(admin)
+    )
+    assert fr.status_code == 200
+    second = await player("second@example.com")
+    assert (await client.post(submit, json={"flag": "Paris"}, headers=second)).json()["correct"]
+
+    frozen_worth = penalised_value(dynamic_value(initial, minp, decay, 1), pct, 1)
+    live_worth = penalised_value(dynamic_value(initial, minp, decay, 2), pct, 1)
+    assert frozen_worth != live_worth
+    guesser = await player("guesser@example.com")
+    r = (await client.post(submit, json={"flag": "London"}, headers=guesser)).json()
+    assert r["correct"] is False
+    assert r["subject_value"] == frozen_worth
+
+
+async def test_frozen_ticker_keeps_multiple_choice_penalty(client):
+    """GHSA-r7j2: the frozen recent-solves ticker re-values each solve as of the
+    cutoff, and must net the solve's stored wrong-guess penalty exactly as the
+    frozen board does — not hand the penalised solver the gross value."""
+    admin = await admin_token(client)
+    comp = await _mc_competition(client, admin, limit=None, penalty=25)
+    cid = await _mc_challenge(client, admin, comp, points=200)
+    submit = f"/api/competitions/{comp}/challenges/{cid}/submit"
+    dinged, dinged_id = await _register(client, "dinged@example.com")
+    await _assign_participant(dinged_id, comp)
+    for wrong in ("London", "Berlin"):
+        await client.post(submit, json={"flag": wrong}, headers=_auth(dinged))
+    assert (
+        await client.post(submit, json={"flag": "Paris"}, headers=_auth(dinged))
+    ).json()["points_awarded"] == 100
+    fr = await client.post(
+        f"/api/competitions/{comp}/scoreboard/freeze", json={}, headers=_auth(admin)
+    )
+    assert fr.status_code == 200
+
+    recent = (
+        await client.get(
+            f"/api/competitions/{comp}/dashboard/recent-solves", headers=_auth(dinged)
+        )
+    ).json()
+    assert [r["points"] for r in recent] == [100]
+
+
+async def test_frozen_penalised_dynamic_solve_hides_full_value(client):
+    """GHSA-r7j2: on a dynamic challenge the pre-penalty worth (``full_value``)
+    is the live value as surely as ``points_awarded`` is, so a penalised solve
+    under a freeze nulls both for a competitor."""
+    admin = await admin_token(client)
+    comp = await _mc_competition(client, admin, limit=None, penalty=25)
+    cid = await _mc_challenge(
+        client, admin, comp,
+        points=200, scoring_type="dynamic", min_points=20, decay=10,
+    )
+    submit = f"/api/competitions/{comp}/challenges/{cid}/submit"
+    fr = await client.post(
+        f"/api/competitions/{comp}/scoreboard/freeze", json={}, headers=_auth(admin)
+    )
+    assert fr.status_code == 200
+    token, uid = await _register(client, "late@example.com")
+    await _assign_participant(uid, comp)
+    await client.post(submit, json={"flag": "London"}, headers=_auth(token))
+    res = (await client.post(submit, json={"flag": "Paris"}, headers=_auth(token))).json()
+    assert res["correct"] is True
+    assert res["points_awarded"] is None
+    assert res["full_value"] is None

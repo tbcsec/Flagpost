@@ -235,6 +235,10 @@ async def emit_grade(
                 "team_id": team_id,
                 "points": outcome.points_awarded,
                 "is_first_blood": outcome.is_first_blood,
+                # The solve time every read path uses (backdated for a judged
+                # solve), so a listener can tell whether the solve falls before
+                # a scoreboard freeze's cutoff (GHSA-r7j2).
+                "solved_at": outcome.submission.created_at.isoformat(),
             },
         )
 
@@ -254,6 +258,12 @@ class RegradeOutcome:
     # They held an award before and after, but on a different submission —
     # its solve time (the board's tie-break) changed.
     moved: bool = False
+    # The solve time of the award granted, or of the award revoked.
+    solved_at: datetime | None = None
+
+
+def _iso(value: datetime | None) -> str | None:
+    return value.isoformat() if value is not None else None
 
 
 def _subject_rows(subject):
@@ -289,11 +299,14 @@ async def regrade(
     # waited for the challenge lock must be what we change, not a stale copy
     # (an unchanged-looking attribute set on a stale object emits no UPDATE).
     await db.refresh(row)
-    previous_award = await db.scalar(
-        select(Submission.id).where(
-            mine, Submission.is_correct.is_(True), Submission.is_duplicate.is_(False)
+    previous = (
+        await db.execute(
+            select(Submission.id, Submission.created_at).where(
+                mine, Submission.is_correct.is_(True), Submission.is_duplicate.is_(False)
+            )
         )
-    )
+    ).first()
+    previous_award = previous.id if previous is not None else None
     had_award = previous_award is not None
 
     row.is_correct = correct
@@ -354,6 +367,11 @@ async def regrade(
         points_awarded=points,
         is_first_blood=is_first_blood,
         moved=has_award and had_award and winner.id != previous_award,
+        solved_at=(
+            winner.created_at
+            if winner is not None
+            else previous.created_at if previous is not None else None
+        ),
     )
 
 
@@ -391,6 +409,7 @@ async def emit_regrade(
                 # was already paid before the solve was revoked). Revoking a
                 # solve doesn't undo actions automations took on it.
                 "regrade": True,
+                "solved_at": _iso(outcome.solved_at),
             },
         )
     elif outcome.revoked:
@@ -401,5 +420,8 @@ async def emit_regrade(
                 "challenge_id": challenge_id,
                 "user_id": user_id,
                 "team_id": team_id,
+                # When the revoked solve was made — whether it sits before a
+                # scoreboard freeze's cutoff (GHSA-r7j2).
+                "solved_at": _iso(outcome.solved_at),
             },
         )

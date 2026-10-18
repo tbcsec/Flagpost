@@ -52,7 +52,12 @@ from schemas.dashboard import (
     UnsolvedChallenge,
 )
 from utils.scoreboard import compute_scoreboard, visible_solve_cutoff
-from utils.scoring import resolve_subject, solved_challenge_ids
+from utils.scoring import (
+    challenge_value,
+    resolve_subject,
+    solve_counts,
+    solved_challenge_ids,
+)
 
 router = APIRouter(
     prefix="/api/competitions/{competition_id}/dashboard", tags=["dashboard"]
@@ -73,7 +78,7 @@ async def _load_competition(db: AsyncSession, competition_id: str) -> Competitio
 @router.get("/stats", response_model=DashboardStats)
 async def dashboard_stats(
     competition_id: str,
-    _user: User = Depends(require_permission("challenge_view")),
+    current_user: User = Depends(require_permission("challenge_view")),
     db: AsyncSession = Depends(get_db),
 ) -> DashboardStats:
     competition = await _load_competition(db, competition_id)
@@ -83,15 +88,16 @@ async def dashboard_stats(
             Submission.competition_id == competition_id
         )
     )
-    total_solves = await db.scalar(
-        select(func.count(Submission.id)).where(
-            Submission.competition_id == competition_id, *_AWARDED
-        )
-    )
+    # Solve totals are solve data: a live count ticking up under a frozen board
+    # times every post-cutoff solve, so they take the freeze cutoff (GHSA-r7j2).
+    solved = [Submission.competition_id == competition_id, *_AWARDED]
+    cutoff = await visible_solve_cutoff(db, competition, current_user)
+    if cutoff is not None:
+        solved.append(Submission.created_at <= cutoff)
+    total_solves = await db.scalar(select(func.count(Submission.id)).where(*solved))
     recent_solves_1h = await db.scalar(
         select(func.count(Submission.id)).where(
-            Submission.competition_id == competition_id,
-            *_AWARDED,
+            *solved,
             Submission.created_at >= utcnow() - timedelta(hours=1),
         )
     )
@@ -136,8 +142,9 @@ async def recent_solves(
             Submission.team_id,
             Submission.user_id,
             Submission.points_awarded,
+            Submission.mc_penalty,
             Submission.created_at,
-            Challenge.title,
+            Challenge,
         )
         .join(Challenge, Challenge.id == Submission.challenge_id)
         .where(Submission.competition_id == competition_id, *_AWARDED)
@@ -190,11 +197,28 @@ async def recent_solves(
         )
         name_for = lambda r: names.get(r.user_id, "—")  # noqa: E731
 
+    # Frozen: value each solve as the frozen board does (GHSA-r7j2). The stored
+    # points_awarded is re-valued on every later solve of a dynamic challenge, so
+    # the live figure is the live solve count in disguise. As of the cutoff, a
+    # solve is worth the challenge's value at the cutoff's solve count — the value
+    # the frozen browse list shows — net of its own multiple-choice penalty.
+    counts = (
+        await solve_counts(db, competition_id, as_of=cutoff)
+        if cutoff is not None
+        else None
+    )
+
+    def points_for(r) -> int:
+        if counts is None:
+            return r.points_awarded
+        worth = challenge_value(r.Challenge, counts.get(r.Challenge.id, 0))
+        return max(0, worth - (r.mc_penalty or 0))
+
     return [
         RecentSolve(
             subject_name=name_for(r),
-            challenge_title=r.title,
-            points=r.points_awarded,
+            challenge_title=r.Challenge.title,
+            points=points_for(r),
             at=r.created_at,
         )
         for r in rows

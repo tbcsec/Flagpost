@@ -364,6 +364,131 @@ async def test_freeze_covers_every_endpoint_that_exposes_solve_data(client):
     assert len(after) == 1
 
 
+async def _participant(client, comp: str, email: str) -> tuple[str, str]:
+    token, uid = await _register(client, email)
+    async with __import__("db").SessionLocal() as s:
+        from sqlalchemy import select
+        from models.role import Role, RoleAssignment
+        role = await s.scalar(select(Role).where(Role.name == "Participant"))
+        s.add(RoleAssignment(user_id=uid, competition_id=comp, role_id=role.id))
+        await s.commit()
+    return token, uid
+
+
+async def _dynamic_challenge(client, comp: str, flag: str) -> str:
+    admin = await admin_token(client)
+    chal = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges",
+            json={
+                "title": f"Dyn {flag}",
+                "points": 500,
+                "scoring_type": "dynamic",
+                "min_points": 100,
+                "decay": 10,
+                "flag": flag,
+            },
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    await client.post(
+        f"/api/competitions/{comp}/challenges/{chal}/publish", headers=_auth(admin)
+    )
+    return chal
+
+
+async def test_frozen_ticker_and_stats_are_valued_as_of_the_cutoff(client):
+    """GHSA-r7j2 (residual of the freeze fix): hiding post-cutoff rows wasn't
+    enough. A dynamic challenge re-values every solver on each new solve, so the
+    ticker's stored points for a *pre*-cutoff solve fell live — the live solve
+    count in disguise — and the stats tiles counted every solve outright."""
+    from utils.scoring import dynamic_value
+
+    comp = await _make_competition(client, mode="individual")
+    chal = await _dynamic_challenge(client, comp, "flag{dyn}")
+    admin = await admin_token(client)
+    early, _ = await _participant(client, comp, "early@example.com")
+    late, _ = await _participant(client, comp, "late@example.com")
+
+    assert (await _submit(client, comp, chal, early, "flag{dyn}")).json()["correct"]
+    assert (
+        await client.post(
+            f"/api/competitions/{comp}/scoreboard/freeze", json={}, headers=_auth(admin)
+        )
+    ).status_code == 200
+    assert (await _submit(client, comp, chal, late, "flag{dyn}")).json()["correct"]
+
+    one, two = dynamic_value(500, 100, 10, 1), dynamic_value(500, 100, 10, 2)
+    assert one != two
+
+    # The competitor's ticker: the pre-cutoff solve only, worth what it was at
+    # the cutoff — not the value the post-cutoff solve decayed it to.
+    recent = (
+        await client.get(
+            f"/api/competitions/{comp}/dashboard/recent-solves", headers=_auth(early)
+        )
+    ).json()
+    assert [(r["subject_name"], r["points"]) for r in recent] == [("early", one)]
+    stats = (
+        await client.get(f"/api/competitions/{comp}/dashboard/stats", headers=_auth(early))
+    ).json()
+    assert stats["total_solves"] == 1
+    assert stats["recent_solves_1h"] == 1
+
+    # Staff keep the live picture.
+    staff_recent = (
+        await client.get(
+            f"/api/competitions/{comp}/dashboard/recent-solves", headers=_auth(admin)
+        )
+    ).json()
+    assert sorted((r["subject_name"], r["points"]) for r in staff_recent) == [
+        ("early", two),
+        ("late", two),
+    ]
+    staff_stats = (
+        await client.get(f"/api/competitions/{comp}/dashboard/stats", headers=_auth(admin))
+    ).json()
+    assert staff_stats["total_solves"] == 2
+
+
+async def test_frozen_submit_result_hides_first_blood_and_dynamic_worth(client):
+    """GHSA-r7j2: a competitor's own solve result under a freeze mustn't say what
+    the board hides — whether anyone solved it since the cutoff (first blood), or
+    a dynamic challenge's live worth (a function of the solve count). "Correct"
+    stands, and a static challenge's fixed points give nothing away."""
+    comp = await _make_competition(client, mode="individual")
+    dyn = await _dynamic_challenge(client, comp, "flag{dyn}")
+    static = await _published_challenge(client, comp, "flag{s}", 100)
+    admin = await admin_token(client)
+    player, _ = await _participant(client, comp, "ada@example.com")
+    assert (
+        await client.post(
+            f"/api/competitions/{comp}/scoreboard/freeze", json={}, headers=_auth(admin)
+        )
+    ).status_code == 200
+
+    res = (await _submit(client, comp, dyn, player, "flag{dyn}")).json()
+    assert res["correct"] is True
+    assert res["points_awarded"] is None
+    assert res["is_first_blood"] is None
+    # (full_value, the penalised case, is pinned in test_multiple_choice.)
+
+    res = (await _submit(client, comp, static, player, "flag{s}")).json()
+    assert res["correct"] is True
+    assert res["points_awarded"] == 100
+    assert res["is_first_blood"] is None
+
+    # A wrong guess carries nothing to hide, frozen or not.
+    res = (await _submit(client, comp, static, player, "nope")).json()
+    assert res["correct"] is False and res["is_first_blood"] is False
+
+    # Staff (scoreboard_freeze) get the live figures, as on the board.
+    res = (await _submit(client, comp, dyn, admin, "flag{dyn}")).json()
+    assert res["correct"] is True
+    assert isinstance(res["points_awarded"], int)
+    assert res["is_first_blood"] is False
+
+
 async def test_recent_solves_hides_unreleased_challenge_titles(client):
     """Staff test-solve before publishing, which creates awarded rows.
 

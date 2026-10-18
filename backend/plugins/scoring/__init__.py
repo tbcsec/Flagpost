@@ -17,7 +17,12 @@ from __future__ import annotations
 
 
 def setup(app, event_bus, db_factory) -> None:
+    import hashlib
+    import json
+    from datetime import datetime
+
     from auth.deps import user_has_permission
+    from db import ensure_aware_utc
     from models.competition import Competition
     from realtime import manager, register_room_type
     from routers.public_scoreboard import router as public_router
@@ -25,6 +30,7 @@ def setup(app, event_bus, db_factory) -> None:
     from utils.scoreboard import (
         cached_scoreboard,
         compute_scoreboard,
+        freeze_cutoff,
         invalidate_scoreboard,
     )
     from utils.scoreboard_timeline import invalidate_timeline
@@ -62,6 +68,38 @@ def setup(app, event_bus, db_factory) -> None:
 
     register_room_type("scoreboard", authorize=authorize, snapshot=snapshot)
 
+    # Freeze containment (GHSA-r7j2): while the board is frozen, a frame sent
+    # on a post-cutoff event is timed to that event whatever it carries — and
+    # comparing boards can't rule that out, because the frozen board also moves
+    # with no event of its own (a team renamed, a team created), which the next
+    # post-cutoff solve would then carry out. So while frozen the room decides
+    # from the triggering event: a freeze/unfreeze always goes out; a solve, or
+    # a revoked solve, only when that solve is dated at or before the cutoff (a
+    # backdated judge verdict, a rejudge of a pre-cutoff solve); hint costs,
+    # adjustments and awards are stamped when they happen — after the cutoff —
+    # so never. Staff read the live board over REST (``?live=true``).
+    def _moves_frozen_board(event_name: str, payload: dict, cutoff) -> bool:
+        if event_name in ("scoreboard.frozen", "scoreboard.unfrozen"):
+            return True
+        if event_name in ("challenge.solved", "challenge.solve_revoked"):
+            try:
+                solved_at = ensure_aware_utc(
+                    datetime.fromisoformat(payload["solved_at"])
+                )
+            except (KeyError, TypeError, ValueError):
+                return False  # no usable solve time: fail closed
+            return solved_at <= cutoff
+        return False
+
+    # The frozen board last sent, per competition, so an event that passes the
+    # gate but leaves the board as it was sends nothing.
+    held: dict[str, str] = {}
+
+    def _digest(board: dict) -> str:
+        return hashlib.sha256(
+            json.dumps(board, sort_keys=True, default=str).encode()
+        ).hexdigest()
+
     async def broadcast_scoreboard(event_name: str, payload: dict) -> None:
         competition_id = payload.get("competition_id")
         if not competition_id:
@@ -73,7 +111,19 @@ def setup(app, event_bus, db_factory) -> None:
             competition = await db.get(Competition, competition_id)
             if competition is None:
                 return
+            cutoff = freeze_cutoff(competition)
+            if cutoff is not None and not _moves_frozen_board(
+                event_name, payload, cutoff
+            ):
+                return
             board = await compute_scoreboard(db, competition)
+        if not board["frozen"]:
+            held.pop(competition_id, None)
+        else:
+            digest = _digest(board)
+            if held.get(competition_id) == digest:
+                return
+            held[competition_id] = digest
         await manager.broadcast(
             "scoreboard", competition_id, {"type": "scoreboard", **board}
         )

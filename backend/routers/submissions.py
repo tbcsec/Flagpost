@@ -43,6 +43,7 @@ from utils.event_bus import event_bus
 from utils.flags import verify_regex_flag, verify_static_flag
 from utils.grading import emit_grade, lock_subject, record_grade
 from utils.instance_grading import deployment_flag_mode, grade_unique
+from utils.scoreboard import visible_solve_cutoff
 from utils.scoring import (
     challenge_value,
     penalised_value,
@@ -235,6 +236,18 @@ async def submit_flag(
             },
         )
 
+    # Under a freeze (GHSA-r7j2) a competitor's own result mustn't say what the
+    # frozen board hides: whether anyone has solved this since the cutoff (first
+    # blood), or — for a dynamic challenge, whose worth is a function of its solve
+    # count — the live value. "Correct" stands; those fields go null until
+    # unfreeze. Staff (scoreboard_freeze) get the live figures, as on the board.
+    cutoff = await visible_solve_cutoff(db, competition, current_user)
+    if cutoff is not None and grade.award:
+        is_first_blood = None
+        if challenge.scoring_type == "dynamic":
+            points_awarded = None
+            base_value = None
+
     attempts_remaining: int | None = None
     subject_value: int | None = None
     penalty_pct = competition.mc_penalty_pct
@@ -250,18 +263,18 @@ async def submit_flag(
         if penalty_pct:
             # The subject's worth going forward, so the client can drop the shown
             # value live rather than waiting for a challenge refetch (#148). Base
-            # is the current value (static points, or the dynamic worth at the live
-            # solve count); null when nothing's been docked yet.
+            # is the current value (static points, or the dynamic worth at the
+            # solve count — as of the freeze cutoff for a frozen-out competitor,
+            # like the card it replaces); null when nothing's been docked yet.
+            solved = [
+                Submission.challenge_id == challenge_id,
+                Submission.is_correct.is_(True),
+                Submission.is_duplicate.is_(False),
+            ]
+            if cutoff is not None:
+                solved.append(Submission.created_at <= cutoff)
             solve_count = (
-                (
-                    await db.scalar(
-                        select(func.count(Submission.id)).where(
-                            Submission.challenge_id == challenge_id,
-                            Submission.is_correct.is_(True),
-                            Submission.is_duplicate.is_(False),
-                        )
-                    )
-                )
+                (await db.scalar(select(func.count(Submission.id)).where(*solved)))
                 or 0
                 if challenge.scoring_type == "dynamic"
                 else 0

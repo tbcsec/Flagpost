@@ -196,13 +196,46 @@ async def test_solve_delta_carries_decayed_value_for_dynamic(client):
         assert 100 <= second["value"] < 500  # decayed after the first solve, floored
 
 
-async def test_solve_ping_suppressed_under_freeze(client):
-    """GHSA-r7j2: under a freeze the challenge.solved ping is suppressed
-    ENTIRELY — even the bare id-only ping leaks that a team just solved at time
-    T, which the freeze conceals on the REST path. The attempt ping (no score
-    movement) still flows."""
-    comp, chal = await _competition_with_challenge(client)
+async def test_scoring_pings_suppressed_under_freeze(client):
+    """GHSA-r7j2: under a freeze no ping that times a solve reaches the room.
+    challenge.solved is suppressed ENTIRELY — even the bare id-only ping leaks
+    that a team just solved at time T, which the freeze conceals on the REST
+    path — and so are the pings that travel with a solve: every graded
+    submission pings challenge.attempted (the correct one included), only a
+    solver can rate, and a hint reveal moves the score. Non-scoring activity
+    still flows, which is what makes the silence meaningful."""
+    from utils.event_bus import event_bus
+
     admin = await admin_token(client)
+    comp = (
+        await client.post(
+            "/api/competitions",
+            json={
+                "name": "CTF",
+                "participation_mode": "team",
+                "visibility": "public",
+                "challenge_ratings_enabled": True,
+            },
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    chal = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges",
+            json={"title": "Chal", "points": 100, "flag": "flag{win}"},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    await client.post(
+        f"/api/competitions/{comp}/challenges/{chal}/publish", headers=_auth(admin)
+    )
+    hint = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges/{chal}/hints",
+            json={"body": "Look closer", "cost": 10},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
     watcher = await _joined_participant(client, comp, "fw@example.com", "FW")
     actor = await _joined_participant(client, comp, "fa@example.com", "FA")
 
@@ -214,20 +247,34 @@ async def test_solve_ping_suppressed_under_freeze(client):
     async with WsTestClient(main.app, f"/ws/activity/{comp}") as ws:
         await ws.send_json({"token": watcher})
         assert (await ws.receive_json())["type"] == "auth_ok"
-        await client.post(
-            f"/api/competitions/{comp}/challenges/{chal}/submit",
-            json={"flag": "flag{win}"},
+
+        submit = f"/api/competitions/{comp}/challenges/{chal}/submit"
+        wrong = await client.post(submit, json={"flag": "nope"}, headers=_auth(actor))
+        assert wrong.json()["correct"] is False
+        revealed = await client.post(
+            f"/api/competitions/{comp}/challenges/{chal}/hints/{hint}/reveal",
             headers=_auth(actor),
         )
-        assert (await ws.receive_json())["event"] == "challenge.attempted"
-        # No challenge.solved ping arrives while frozen — drain until the socket
-        # goes quiet and assert none was a solve.
-        try:
-            while True:
-                frame = await asyncio.wait_for(ws.receive_json(), timeout=1.0)
-                assert frame.get("event") != "challenge.solved", frame
-        except (asyncio.TimeoutError, TimeoutError):
-            pass  # quiet → suppression confirmed
+        assert revealed.status_code == 200, revealed.text
+        right = await client.post(submit, json={"flag": "flag{win}"}, headers=_auth(actor))
+        assert right.json()["correct"] is True
+        rated = await client.post(
+            f"/api/competitions/{comp}/challenge-ratings/{chal}",
+            json={"rating": 4},
+            headers=_auth(actor),
+        )
+        assert rated.status_code == 204, rated.text
+        await event_bus.wait_for_background()
+
+        # A non-scoring event still pings. Frames arrive in order, so had any of
+        # the above pinged, it would be read here first.
+        await _joined_participant(client, comp, "late@example.com", "Late")
+        frame = await ws.receive_json()
+        assert frame["event"] in (
+            "team.created",
+            "team.member_joined",
+            "competition.member_joined",
+        ), frame
 
 
 async def test_solve_delta_omitted_for_a_hidden_challenge(client):

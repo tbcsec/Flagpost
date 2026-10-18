@@ -426,20 +426,25 @@ function ChallengeDialogBody({
       onSuccess: (r) => {
         setFlag("");
         if (r.correct) {
+          // Under a scoreboard freeze a dynamic challenge's points come back
+          // null (they'd reveal the live solve count), so say so instead.
+          const points = r.points_awarded;
           toast(
             r.is_first_blood ? t("detail.firstBlood") : t("detail.solved"),
             {
               description:
-                r.full_value != null && r.full_value > r.points_awarded
-                  ? t("solveToast.descriptionReduced", {
-                      title: challenge.title,
-                      points: r.points_awarded,
-                      full: r.full_value,
-                    })
-                  : t("solveToast.description", {
-                      title: challenge.title,
-                      points: r.points_awarded,
-                    }),
+                points == null
+                  ? t("solveToast.descriptionNoPoints", { title: challenge.title })
+                  : r.full_value != null && r.full_value > points
+                    ? t("solveToast.descriptionReduced", {
+                        title: challenge.title,
+                        points,
+                        full: r.full_value,
+                      })
+                    : t("solveToast.description", {
+                        title: challenge.title,
+                        points,
+                      }),
               variant: "success",
             },
           );
@@ -516,14 +521,16 @@ function ChallengeDialogBody({
           <div className="text-base font-semibold text-success">
             {result.is_first_blood ? t("detail.firstBlood") : t("detail.solved")}
           </div>
-          <div className="font-mono text-sm text-muted-foreground">
-            {t("detail.pointsAwarded", { points: result.points_awarded })}
-            {result.full_value != null && result.full_value > result.points_awarded && (
-              <span className="ml-1 text-xs">
-                {t("detail.reducedFrom", { value: result.full_value })}
-              </span>
-            )}
-          </div>
+          {result.points_awarded != null && (
+            <div className="font-mono text-sm text-muted-foreground">
+              {t("detail.pointsAwarded", { points: result.points_awarded })}
+              {result.full_value != null && result.full_value > result.points_awarded && (
+                <span className="ml-1 text-xs">
+                  {t("detail.reducedFrom", { value: result.full_value })}
+                </span>
+              )}
+            </div>
+          )}
           <ChallengeRatingPrompt competitionId={competitionId} challenge={challenge} />
         </div>
       ) : alreadySolved ? (

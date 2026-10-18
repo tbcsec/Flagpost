@@ -50,7 +50,9 @@ from utils.untrusted_zip import (
     READ_ERRORS,
     ArchiveRefused,
     check_member_count,
+    load_yaml,
     read_bounded,
+    yaml_too_large,
 )
 
 # A pack's uncompressed size is capped so a malformed or hostile archive can't
@@ -62,6 +64,8 @@ from utils.untrusted_zip import (
 MAX_PACK_UNCOMPRESSED = 200 * 1024 * 1024  # 200 MiB
 MAX_PACK_MEMBERS = MAX_MEMBERS
 _MAX_TEXT_BYTES = 1 * 1024 * 1024  # plugin.yaml, themes.json (~1,400 presets)
+_MAX_YAML_NODES = 10_000  # plugin.yaml once its aliases are expanded…
+_MAX_YAML_CHARS = 4 * _MAX_TEXT_BYTES  # …and its scalars' length
 
 _THEMES_MEMBER = "payload/themes.json"
 _CHALLENGES_MEMBER = "payload/challenges.zip"
@@ -103,11 +107,15 @@ def _open_pack(pack_bytes: bytes) -> zipfile.ZipFile:
 def _manifest_from_zip(zf: zipfile.ZipFile) -> ManifestModel:
     raw = _read_member(zf, "plugin.yaml", _MAX_TEXT_BYTES)
     try:
-        data = yaml.safe_load(raw) or {}
+        data = load_yaml(raw) or {}
     except yaml.YAMLError as exc:
         raise PackError(f"pack manifest is not valid YAML: {exc}") from exc
     if not isinstance(data, dict):
         raise PackError("pack manifest is not a mapping")
+    # Validation walks every alias as a separate value, so a short manifest
+    # whose aliases nest a few levels deep costs exponential time and memory.
+    if yaml_too_large(data, _MAX_YAML_NODES, _MAX_YAML_CHARS):
+        raise PackError("pack manifest is too large once its aliases are expanded")
     try:
         manifest = ManifestModel.model_validate(data)
     except ValidationError as exc:
@@ -207,8 +215,9 @@ async def apply_pack(
     the caller emits the single ``platform.content_pack_installed`` event
     afterward (commit-then-emit; bulk import emits no per-row events).
     """
-    zf = _open_pack(pack_bytes)
-    manifest = _manifest_from_zip(zf)
+    # Unpacking and validating untrusted bytes stays off the event loop.
+    zf = await asyncio.to_thread(_open_pack, pack_bytes)
+    manifest = await asyncio.to_thread(_manifest_from_zip, zf)
     _check_compat(manifest)
     pack_type = manifest.pack.pack_type  # guaranteed present when kind == pack
 

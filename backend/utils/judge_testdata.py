@@ -24,6 +24,9 @@ from utils.untrusted_zip import MAX_MEMBERS, ArchiveRefused, check_member_count,
 # swallow the object store or a backup.
 MAX_FILE_BYTES = 16 * 1024 * 1024
 MAX_TOTAL_BYTES = 64 * 1024 * 1024
+# Two zip entries a case, so the shared entry cap allows this many — the most a
+# problem package can bring in, and so the most the editor accepts too.
+MAX_CASES = MAX_MEMBERS // 2
 
 
 @dataclass
@@ -61,6 +64,8 @@ def ordered(cases: list[Testcase]) -> list[Testcase]:
 
 
 def check_sizes(cases: list[Testcase]) -> None:
+    if len(cases) > MAX_CASES:
+        raise TestdataError(f"A problem can have at most {MAX_CASES:,} test cases.")
     total = 0
     for case in cases:
         for label, blob in (("input", case.input), ("expected output", case.answer)):
@@ -104,11 +109,11 @@ def load(storage: ObjectStorage, key: str | None, rows: list[dict]) -> list[Test
     stored bytes, and this runs on every judging and problem view."""
     if not key or not rows:
         return []
+    if len(rows) > MAX_CASES:  # a manifest no write path could have made
+        raise TestdataError("The stored test data is malformed.")
     blob = storage.get(key)
     try:
-        # Two entries a case, so a problem with more cases than the shared cap
-        # allows for is still read.
-        check_member_count(blob, max(MAX_MEMBERS, 2 * len(rows)))
+        check_member_count(blob, MAX_MEMBERS)
     except ArchiveRefused as exc:
         raise TestdataError("The stored test data is malformed.") from exc
     total = 0

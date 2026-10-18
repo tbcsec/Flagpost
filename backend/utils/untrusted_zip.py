@@ -13,6 +13,9 @@ reads through these helpers, so the containment is the same everywhere:
   before any cap is checked.
 - **Size**, never trusted from the header: a member is read up to a limit, and
   whatever was inflated to find out it's too big is the caller's to count.
+
+The YAML those archives carry gets the same treatment: ``load_yaml`` and
+``yaml_too_large`` bound what a parsed manifest can expand to.
 """
 
 from __future__ import annotations
@@ -21,6 +24,8 @@ import lzma
 import posixpath
 import zipfile
 import zlib
+
+import yaml
 
 # Members in one zip — generous for a contest's worth of problems or a ctfcli
 # bundle, and about 11 MB of directory objects at most.
@@ -82,20 +87,39 @@ def unique_name(name: str, used: set[str]) -> str:
     return candidate
 
 
-def yaml_too_large(tree: object, limit: int) -> bool:
-    """Whether a parsed YAML document has more than ``limit`` nodes once its
-    aliases are expanded. Aliases share nodes, so a few hundred bytes can
-    become gigabytes the moment anything ``str()``s a value."""
+def load_yaml(raw: bytes | str) -> object:
+    """``yaml.safe_load``, except that a document nested too deeply for the
+    parser's recursion (``[[[[…]]]]``) raises the ``yaml.YAMLError`` it is,
+    not a ``RecursionError`` that no caller expects."""
+    try:
+        return yaml.safe_load(raw)
+    except RecursionError as exc:
+        raise yaml.YAMLError("the document is nested too deeply") from exc
+
+
+def yaml_too_large(tree: object, max_nodes: int, max_chars: int) -> bool:
+    """Whether a parsed YAML document, its aliases expanded, has more than
+    ``max_nodes`` nodes or more than ``max_chars`` characters of scalars (keys
+    included). Aliases share nodes, so a few hundred bytes can become
+    gigabytes the moment anything ``str()``s a value — through sheer node
+    count, or one long string named over and over. Without aliases a
+    document's scalars never outgrow its own size."""
     stack: list = [tree]
-    seen = 0
+    nodes = chars = 0
     while stack:
         node = stack.pop()
-        seen += 1
-        if seen > limit:
-            return True
-        if isinstance(node, dict):
+        nodes += 1
+        if isinstance(node, (str, bytes)):
+            chars += len(node)
+        elif isinstance(node, int):
+            chars += node.bit_length() // 3  # about its digits
+        elif isinstance(node, dict):
             stack.extend(node.keys())
             stack.extend(node.values())
-        elif isinstance(node, list):
+        elif isinstance(node, (list, tuple, set, frozenset)):  # !!omap/!!pairs/!!set too
             stack.extend(node)
+        # Whatever is still stacked counts once it's popped, so the stack never
+        # outgrows the budget — not even for a long list that holds itself.
+        if nodes + len(stack) > max_nodes or chars > max_chars:
+            return True
     return False

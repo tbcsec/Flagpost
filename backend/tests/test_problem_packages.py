@@ -302,6 +302,18 @@ def test_a_yaml_alias_bomb_is_refused_before_anything_expands_it():
     assert time.perf_counter() - started < 2
 
 
+def test_one_long_string_aliased_many_times_is_refused():
+    # A handful of nodes, but str(meta["validation"]) would be 5 MB of text.
+    blob = _pkg(yaml_extra=f"pad: &s {'a' * 50_000}\nvalidation: [" + ", ".join(["*s"] * 100) + "]\n")
+    assert "aliases" in _refused(blob)
+
+
+def test_yaml_nested_too_deeply_is_invalid_yaml():
+    files = pf.legacy_files()
+    files["problem.yaml"] = "[" * 2000 + "]" * 2000
+    assert "isn't valid YAML" in _refused(pf.build_package(files, root=pf.SHORTNAME))
+
+
 def test_a_hostile_ini_is_linear():
     # A run of blank lines once made the time-limit search quadratic (~3 s
     # here, ~30 min at the 1 MB manifest cap); linear, it's milliseconds.

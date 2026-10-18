@@ -1074,3 +1074,61 @@ def test_safe_filename_leaves_a_file_name_and_nothing_else(raw, expected):
     from utils.uploads import safe_filename
 
     assert safe_filename(raw) == expected
+
+
+async def test_ctfcli_import_refuses_one_long_string_aliased_many_times(client):
+    """Few nodes, but str() of the description would be 5 MB of text from a
+    manifest of a few KB — counted by length, not just by node."""
+    import zipfile
+
+    manifest = (
+        "name: Long\ncategory: misc\n"
+        f"pad: &s {'a' * 50_000}\n"
+        "description: [" + ", ".join(["*s"] * 100) + "]\n"
+    )
+    comp = await _make_competition(client)
+    resp = await _ctfcli_import(
+        client, comp, _ctfcli_bundle([("long/challenge.yml", manifest, zipfile.ZIP_DEFLATED)])
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["created"] == 0
+    assert any("aliases" in e for e in body["errors"])
+
+
+async def test_ctfcli_import_reports_yaml_nested_too_deeply(client):
+    import zipfile
+
+    comp = await _make_competition(client)
+    blob = _ctfcli_bundle([("deep/challenge.yml", "[" * 2000 + "]" * 2000, zipfile.ZIP_DEFLATED)])
+    resp = await _ctfcli_import(client, comp, blob)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["created"] == 0
+    assert any("nested too deeply" in e for e in resp.json()["errors"])
+
+
+async def test_ctfcli_export_takes_only_its_own_competitions_attachments(client, object_storage):
+    import io
+    import zipfile
+
+    admin = await admin_token(client)
+    comp = await _make_competition(client)
+    other = await _make_competition(client)
+    chal = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges",
+            json={"title": "Mine", "points": 10},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    async with SessionLocal() as session:
+        for owner, name in ((comp, "mine.txt"), (other, "theirs.txt")):
+            key = f"{owner}/{chal}/{name}"
+            object_storage.put(key, b"x", "application/octet-stream")
+            session.add(Attachment(competition_id=owner, challenge_id=chal, filename=name,
+                                   object_key=key, content_type="application/octet-stream",
+                                   size_bytes=1))
+        await session.commit()
+    resp = await client.get(f"/api/competitions/{comp}/challenges/export", headers=_auth(admin))
+    with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+        assert sorted(zf.namelist()) == ["mine/challenge.yml", "mine/mine.txt"]

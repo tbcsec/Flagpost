@@ -603,5 +603,28 @@ def test_stored_test_data_entry_count_is_capped_before_parsing(object_storage, m
     td.load(object_storage, *_stored_testdata(object_storage, [b"1\n"], extra=2))
     with pytest.raises(td.TestdataError, match="malformed"):
         td.load(object_storage, *_stored_testdata(object_storage, [b"1\n"], extra=3))
-    # Two entries a case: a problem with more cases than the cap is still read.
-    assert len(td.load(object_storage, *_stored_testdata(object_storage, [b"1\n"] * 3))) == 3
+
+
+def test_the_test_case_count_is_capped_on_read_and_write(object_storage, monkeypatch):
+    # A restored backup's manifest decides how many cases a load looks for: no
+    # more than any write path could have made, checked before storage is read.
+    monkeypatch.setattr(td, "MAX_CASES", 2)
+    key, rows = _stored_testdata(object_storage, [b"1\n"] * 3)
+    object_storage.delete(key)
+    with pytest.raises(td.TestdataError, match="malformed"):
+        td.load(object_storage, key, rows)
+    cases = [td.Testcase(id=str(i), sample=False, input=b"1", answer=b"1") for i in range(3)]
+    with pytest.raises(td.TestdataError, match="at most 2 test cases"):
+        td.check_sizes(cases)
+    td.check_sizes(cases[:2])
+
+
+async def test_the_editor_stops_at_the_test_case_cap(client, monkeypatch):
+    monkeypatch.setattr(td, "MAX_CASES", 1)
+    admin, comp, chal = await _setup(client)
+    await _add(client, admin, comp, chal)
+    resp = await client.post(
+        f"{_base(comp, chal)}/testcases", json={"input": "1", "answer": "1", "sample": False},
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 413 and "at most 1 test cases" in resp.json()["detail"]

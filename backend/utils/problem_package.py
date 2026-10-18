@@ -53,6 +53,7 @@ from utils.untrusted_zip import (
     READ_ERRORS,
     ArchiveRefused,
     check_member_count,
+    load_yaml,
     read_bounded,
     unique_name,
     yaml_too_large,
@@ -68,6 +69,7 @@ MAX_PROBLEMS = 200  # problems in one contest zip
 _MAX_YAML_NODES = 10_000  # a manifest's size once its aliases are expanded
 MAX_TOTAL_DECOMPRESSED = 512 * 1024 * 1024  # everything read, across the import
 MAX_MANIFEST_BYTES = 1 * 1024 * 1024  # problem.yaml, test_group.yaml, …
+_MAX_YAML_CHARS = 4 * MAX_MANIFEST_BYTES  # a manifest's scalars, its aliases expanded
 MAX_STATEMENT_BYTES = 1 * 1024 * 1024  # a statement's source
 MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024  # a statement PDF, image or attachment
 MAX_SOURCE_BYTES = 128 * 1024  # a reference solution (the submission cap)
@@ -256,12 +258,12 @@ def _under(z: _Zip, root: str, *dirs: str) -> list[str]:
 
 def _yaml(z: _Zip, name: str, root: str) -> dict:
     try:
-        loaded = yaml.safe_load(z.read(name, root, MAX_MANIFEST_BYTES)) or {}
+        loaded = load_yaml(z.read(name, root, MAX_MANIFEST_BYTES)) or {}
     except yaml.YAMLError as exc:
         raise Refused(f"{_short(name, root)} isn't valid YAML") from exc
     if not isinstance(loaded, dict):
         raise Refused(f"{_short(name, root)} isn't a YAML mapping")
-    if yaml_too_large(loaded, _MAX_YAML_NODES):
+    if yaml_too_large(loaded, _MAX_YAML_NODES, _MAX_YAML_CHARS):
         raise Refused(f"{_short(name, root)} is too large once its aliases are expanded")
     return loaded
 

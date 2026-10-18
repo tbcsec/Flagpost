@@ -46,6 +46,7 @@ from utils.richtext import doc_to_text
 from utils.untrusted_zip import (
     ArchiveRefused,
     check_member_count,
+    load_yaml,
     read_bounded,
     unique_name,
     yaml_too_large,
@@ -65,6 +66,7 @@ _MAX_MEMBER_BYTES = 50 * 1024 * 1024         # per bundled file — parity with 
 _MAX_TOTAL_DECOMPRESSED = 512 * 1024 * 1024  # aggregate across the whole import
 _MAX_MEMBERS = 20_000                        # entries in the zip
 _MAX_YAML_NODES = 10_000                     # a challenge.yml once its aliases are expanded
+_MAX_YAML_CHARS = 4 * _MAX_MANIFEST_BYTES     # …and its scalars' length, likewise
 
 
 class _Skip(Exception):
@@ -121,14 +123,14 @@ def _open_bundle(zip_bytes: bytes) -> "zipfile.ZipFile":
 def _parse_manifest(zf: "zipfile.ZipFile", name: str, budget: _Budget) -> dict:
     raw = _read_member(zf, name, _MAX_MANIFEST_BYTES, budget)
     try:
-        spec = yaml.safe_load(raw) or {}
+        spec = load_yaml(raw) or {}
     except yaml.YAMLError as exc:
         raise _Skip(f"{name}: {exc}") from exc
     if not isinstance(spec, dict):
         raise _Skip(f"{name}: not a YAML mapping")
     # YAML aliases share nodes, so a few hundred bytes can expand to gigabytes
     # the moment the importer str()s a value below.
-    if yaml_too_large(spec, _MAX_YAML_NODES):
+    if yaml_too_large(spec, _MAX_YAML_NODES, _MAX_YAML_CHARS):
         raise _Skip(f"{name}: too large once its aliases are expanded")
     return spec
 

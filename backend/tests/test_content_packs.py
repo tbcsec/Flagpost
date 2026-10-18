@@ -385,3 +385,40 @@ async def test_a_refused_challenge_bundle_is_a_pack_error(client, monkeypatch):
     resp = await _install(client, token, pack, comp_id)
     assert resp.status_code == 400, resp.text
     assert "too many files" in resp.json()["detail"]
+
+
+def _pack_with_manifest_text(plugin_yaml: str) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("plugin.yaml", plugin_yaml)
+        zf.writestr("payload/themes.json", json.dumps([_theme_preset("aliased")]))
+    return buf.getvalue()
+
+
+_THEME_MANIFEST = (
+    "manifest_version: 2\nid: test.theme-pack\nname: Theme Pack\nversion: 1.0.0\n"
+    "kind: pack\npack: {pack_type: theme, target: site}\n"
+)
+
+
+async def test_a_manifest_whose_aliases_nest_is_refused_before_validation(client):
+    # Validation walks every alias as its own value: six levels of nine is half
+    # a million values from a few hundred bytes. Refused before that walk.
+    import time
+
+    levels = ["a0: &a0 [x, x, x, x, x, x, x, x, x]"]
+    levels += [f"a{i}: &a{i} [" + ", ".join([f"*a{i - 1}"] * 9) + "]" for i in range(1, 7)]
+    plugin = _THEME_MANIFEST + "\n".join(levels) + "\ndependencies: *a6\n"
+    token = await admin_token(client)
+    started = time.perf_counter()
+    resp = await _install(client, token, _pack_with_manifest_text(plugin))
+    assert resp.status_code == 400, resp.text
+    assert "aliases" in resp.json()["detail"]
+    assert time.perf_counter() - started < 5
+
+
+async def test_a_manifest_nested_too_deeply_is_a_pack_error(client):
+    token = await admin_token(client)
+    resp = await _install(client, token, _pack_with_manifest_text("[" * 2000 + "]" * 2000))
+    assert resp.status_code == 400, resp.text
+    assert "nested too deeply" in resp.json()["detail"]

@@ -12,10 +12,14 @@ import { CertificateReleaseWatcher } from "@/components/certificates/certificate
 import { UpdateNotice } from "@/components/admin/update-notice";
 import { HelpMenu } from "@/components/app/help-menu";
 import {
+  isCompetitionScopedPath,
   shouldCheckProgrammingProblems,
   shouldRedirectToLobby,
+  shouldShowJoinPanel,
   visibleCompNav,
 } from "@/components/app/nav-visibility";
+import { CompetitionSwitcher } from "@/components/app/competition-switcher";
+import { JoinCompetitionPanel } from "@/components/competitions/join-competition-panel";
 import { visibleAdminSurfaces } from "@/lib/admin-surfaces";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { LanguageMenu } from "@/components/app/language-menu";
@@ -24,8 +28,7 @@ import { PoweredByFooter } from "@/components/app/powered-by-footer";
 import { Lockup } from "@/components/brand/flagpost-mark";
 import { PaletteMenu } from "@/components/theme/palette-menu";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/select";
-import { pickActiveCompetitionId } from "@/lib/competition-selection";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useCompetitions } from "@/lib/hooks/use-competitions";
 import { severityStyle } from "@/lib/announcement-severity";
 import { useActivityLive } from "@/lib/hooks/use-activity";
@@ -227,18 +230,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // from non-admins, and swap the whole competition nav for a Lobby link when a
   // signed-in user has no competition access yet.
   const showLobby = access.ready && access.inLobby;
+  // The switcher also lists public competitions this user hasn't joined
+  // (#478). On one of those, competition pages show a join panel instead of a
+  // page the server would refuse, and nothing competition-scoped is fetched.
+  const memberOfActive = access.ready && access.memberOfActive;
+  const joinFirst = shouldShowJoinPanel({
+    ...access,
+    hasActiveCompetition: Boolean(activeCompetition),
+    pathname,
+  });
+  // Until permissions and the competition list are in, a competition page
+  // can't know whether to render or offer a join — and rendering would send
+  // requests the server refuses for a competition you haven't joined.
+  const settling =
+    Boolean(activeCompetitionId) &&
+    isCompetitionScopedPath(pathname) &&
+    ((!access.ready && !access.failed) || allCompetitions === undefined);
   // Optional modules disabled for the active competition drop out of the nav
   // (§11.3). Member-readable, so it gates competitors' nav too. Until it loads
   // we don't filter — modules are on by default, so hiding-then-showing would
   // flicker more than the rare disabled case.
   const enabledModules = useEnabledModules(
     activeCompetitionId ?? "",
-    Boolean(activeCompetitionId) && access.ready && !access.inLobby,
+    Boolean(activeCompetitionId) && memberOfActive,
   );
   // The competition's activity room (#18): one shell-level socket that turns
   // backend event pings into query refreshes, so every page under the shell is
-  // live. Gated like the modules query — a lobby user has no room access.
-  useActivityLive(access.ready && !access.inLobby ? activeCompetitionId : null);
+  // live. Gated like the modules query — a non-member has no room access.
+  useActivityLive(memberOfActive ? activeCompetitionId : null);
   // Judging shows only once the competition has a programming problem.
   const hasProgrammingProblems = useHasProgrammingProblems(
     activeCompetitionId ?? "",
@@ -466,7 +485,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         />
         {/* Live announcement banner on competition-scoped pages (not Admin,
             which is global, nor the lobby, which has no active competition). */}
-        {!isAdminSection && pathname !== "/lobby" && <AnnouncementBanner />}
+        {!isAdminSection && pathname !== "/lobby" && memberOfActive && <AnnouncementBanner />}
         <main id="main-content" className="flex-1 overflow-y-auto p-4 md:p-8">
           {/* A min-height flex column so the footer sits at the bottom on short
               pages (mt-auto) without stretching the content grid's rows. */}
@@ -478,6 +497,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     {t("adminNoAccess")}
                   </p>
                 </div>
+              ) : settling ? (
+                <Skeleton className="h-64 w-full" />
+              ) : joinFirst && activeCompetition ? (
+                <JoinCompetitionPanel competition={activeCompetition} />
               ) : (
                 children
               )}
@@ -497,7 +520,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           module is enabled before rendering anything. Fixed-positioned, so its
           place at the shell root — an ancestor with no transform — keeps it
           anchored to the viewport. */}
-      {access.ready && !access.inLobby && !isAdminSection && activeCompetitionId && (
+      {memberOfActive && !isAdminSection && activeCompetitionId && (
         <AiAssistantMount
           competitionId={activeCompetitionId}
           competitionName={activeCompetition?.name}
@@ -520,15 +543,6 @@ function Topbar({
   // Announcement severity chips translate through the announcements namespace.
   const ta = useTranslations("announcements");
   const rel = useRelativeTime();
-  const activeCompetitionId = useAuthStore((s) => s.activeCompetitionId);
-  const setActiveCompetition = useAuthStore((s) => s.setActiveCompetition);
-  const { data: allCompetitions } = useCompetitions();
-  // Archived competitions drop out of the switcher (they're closed out) — but
-  // keep the current selection visible even if it was just archived.
-  const competitions = (allCompetitions ?? []).filter(
-    (c) => !c.archived_at || c.id === activeCompetitionId,
-  );
-
   const [notifOpen, setNotifOpen] = React.useState(false);
   const notifRef = React.useRef<HTMLDivElement>(null);
   const { data: notifications } = useNotifications();
@@ -540,20 +554,6 @@ function Topbar({
   const items = notifications ?? [];
   const unreadCount = items.reduce((n, item) => (item.read ? n : n + 1), 0);
   const hasUnread = unreadCount > 0;
-
-  // Resolve the active competition once the list loads: keep the current (or
-  // localStorage-restored, #316) selection when it's still visible, otherwise
-  // fall back to the first. This both seeds the initial default and corrects a
-  // stale/foreign restored id (deleted competition, or a different user on this
-  // browser) — leaving the switcher pointing at something the user can't load.
-  React.useEffect(() => {
-    if (!competitions || competitions.length === 0) return;
-    const next = pickActiveCompetitionId(
-      activeCompetitionId,
-      competitions.map((c) => c.id),
-    );
-    if (next && next !== activeCompetitionId) setActiveCompetition(next);
-  }, [activeCompetitionId, competitions, setActiveCompetition]);
 
   React.useEffect(() => {
     function onDown(e: MouseEvent) {
@@ -584,19 +584,7 @@ function Topbar({
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
       </button>
-      {showSwitcher && competitions && competitions.length > 0 && (
-        <Select
-          value={activeCompetitionId ?? ""}
-          onChange={(e) => setActiveCompetition(e.target.value)}
-          className="h-9 w-44 md:w-60"
-        >
-          {competitions.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </Select>
-      )}
+      <CompetitionSwitcher visible={showSwitcher} />
       {isAdminSection && (
         <span className="text-xs text-muted-foreground">
           {t("adminGlobalScope")}

@@ -51,8 +51,10 @@ the mail and try again.
 
 ## How do I get into the next event on this site?
 
-Open the invite link your organisers send, or go to `/lobby` to see public
-competitions and enter an invite code. Your account carries over.
+Open the invite link your organisers send, or press **Join** (a **+** on a
+phone) beside the competition switcher: the lobby lists public competitions
+and takes an invite code. Public events also appear in the switcher under
+**Open to join**. Your account carries over.
 
 ## Who can read my challenge notes?
 

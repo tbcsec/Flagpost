@@ -53,9 +53,19 @@ export function useOnJoined() {
   const queryClient = useQueryClient();
   const setActiveCompetition = useAuthStore((s) => s.setActiveCompetition);
   return (joined: Competition) => {
-    queryClient.invalidateQueries({ queryKey: competitionKeys.all });
-    queryClient.invalidateQueries({ queryKey: ["permissions"] });
+    // Listed before it's made active: a private competition joined by code
+    // isn't in the list until the refetch lands, and the switcher would
+    // otherwise correct the selection away from it (#478).
+    queryClient.setQueryData<Competition[]>(competitionKeys.all, (old) =>
+      old?.some((c) => c.id === joined.id) ? old : [...(old ?? []), joined],
+    );
     setActiveCompetition(joined.id);
+    // Returned, so a join stays pending until permissions show the membership —
+    // on stale ones the shell would keep offering to join (#478).
+    return Promise.all([
+      queryClient.invalidateQueries({ queryKey: competitionKeys.all }),
+      queryClient.invalidateQueries({ queryKey: ["permissions"] }),
+    ]);
   };
 }
 

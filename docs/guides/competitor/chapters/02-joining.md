@@ -14,8 +14,10 @@ Until you've joined your first competition you land in the **Lobby**
 instead: **Public competitions** list a **Join** button, and **Join with an
 invite code** takes the code your organisers gave you. (This is the
 *competition* code — a team's invite code goes on the Participants page,
-chapter 6.) To join a later event, use its invite link, or open `/lobby`
-directly.
+chapter 6.) To join a later event, use its invite link, pick it under
+**Open to join** in the competition switcher and press **Join competition**,
+or press **Join** beside the switcher (a **+** on a phone) to get back to
+the lobby.
 
 Some events ask for **a few details** as you join — affiliation, shirt size,
 dietary needs. Required ones must be filled before **Join** enables; change

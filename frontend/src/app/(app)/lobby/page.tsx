@@ -6,25 +6,27 @@ import { useState } from "react";
 
 import { SectionHeader } from "@/components/app/section-header";
 import { RulesAcceptModal } from "@/components/competitions/rules-accept-modal";
-import { JoinFieldsDialog } from "@/components/registration/join-fields-dialog";
+import {
+  useJoinErrorHandler,
+  usePublicJoin,
+} from "@/components/competitions/use-public-join";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  useCompetitions,
-  useJoinByCode,
-  useJoinCompetition,
-} from "@/lib/hooks/use-competitions";
+import { useCompetitions, useJoinByCode } from "@/lib/hooks/use-competitions";
 import { GUIDE_PDFS } from "@/lib/guides";
+import { useAccess } from "@/lib/hooks/use-permissions";
 import { useAcceptRules, useFetchRules } from "@/lib/hooks/use-rules";
 import { rulesGateRejection, rulesPromptMode } from "@/lib/rules-prompt";
-import type { RegistrationValues, RichTextDoc } from "@/lib/types";
+import type { RichTextDoc } from "@/lib/types";
+import { useAuthStore } from "@/stores/auth";
 import { toast } from "@/stores/toast";
 
-// A pending rules prompt (#57) in front of a join. Acceptance is recorded
-// either through the accept endpoint (public join — the competition is
-// visible, so its id is known) or by retrying the code join with
-// accept_rules=true (private competitions stay undisclosed pre-code).
+// A pending rules prompt (#57) in front of an invite-code join. Acceptance is
+// recorded either through the accept endpoint (rules shown after the join) or
+// by retrying the code join with accept_rules=true (private competitions stay
+// undisclosed pre-code). Public joins run their own prompt (usePublicJoin).
 type RulesPrompt = {
   mode: "accept" | "display";
   rules: RichTextDoc | null;
@@ -32,26 +34,25 @@ type RulesPrompt = {
   proceed: () => void;
 };
 
-// Lobby — where a competitor who isn't in any competition lands. Joining is now
-// fully wired: self-serve for public competitions (the list below) and by
-// invite code for private ones. On success the shell's nav switches out of the
-// lobby (permissions are refetched) and the joined competition becomes active.
+// Lobby — where a competitor who isn't in any competition lands, and where
+// anyone comes back to join another (the switcher's "Join a competition",
+// #478). Self-serve for public competitions (the list below) and by invite
+// code for private ones. On success the shell's nav switches out of the lobby
+// (permissions are refetched) and the joined competition becomes active.
 export default function LobbyPage() {
   const t = useTranslations("lobby");
   const tc = useTranslations("common");
   const router = useRouter();
   const { data: competitions } = useCompetitions();
-  const join = useJoinCompetition();
+  const access = useAccess();
+  const setActiveCompetition = useAuthStore((s) => s.setActiveCompetition);
   const joinByCode = useJoinByCode();
   const fetchRules = useFetchRules();
   const acceptRules = useAcceptRules();
+  const joinError = useJoinErrorHandler();
   const [code, setCode] = useState("");
   const [prompt, setPrompt] = useState<RulesPrompt | null>(null);
-  // A public competition selected for join — collect its custom fields (#350)
-  // before running the rules-gate + join flow.
-  const [joining, setJoining] = useState<{ id: string; name: string } | null>(
-    null,
-  );
+  const publicJoin = usePublicJoin({ onJoined });
 
   // Public and not archived — an archived competition is closed to new joiners.
   const publicComps = (competitions ?? []).filter(
@@ -63,24 +64,9 @@ export default function LobbyPage() {
     router.push("/");
   }
 
-  function joinError(err: unknown) {
-    // The email-verification gate (#74) is a 403 with a fixed message — route
-    // to the profile page (verify banner + resend button) instead of a
-    // dead-end toast. Duck-typed (status/message) rather than an ApiError
-    // import — components reach the API only through hooks (ARCHITECTURE.md §8).
-    const e = err as { status?: unknown; message?: unknown };
-    if (e.status === 403 && typeof e.message === "string" && e.message.includes("Verify your email")) {
-      toast(t("cantJoin"), {
-        description: t("verifyEmailHint", { message: e.message }),
-        variant: "destructive",
-      });
-      router.push("/profile");
-      return;
-    }
-    toast(t("cantJoin"), {
-      description: (err as Error).message,
-      variant: "destructive",
-    });
+  function openCompetition(id: string) {
+    setActiveCompetition(id);
+    router.push("/");
   }
 
   function onJoinByCode(e: React.FormEvent) {
@@ -129,38 +115,6 @@ export default function LobbyPage() {
     );
   }
 
-  async function onPublicJoin(
-    compId: string,
-    name: string,
-    fieldValues: RegistrationValues = {},
-  ) {
-    const fire = () =>
-      join.mutate(
-        { id: compId, fieldValues },
-        {
-          onSuccess: () => {
-            setPrompt(null);
-            onJoined(name);
-          },
-          onError: joinError,
-        },
-      );
-    // Pre-check the rules so the prompt appears before the join attempt; if
-    // the check itself fails, fire anyway — the server gate still protects.
-    const state = await fetchRules(compId).catch(() => null);
-    const mode = state ? rulesPromptMode(state) : null;
-    if (mode) {
-      setPrompt({
-        mode,
-        rules: state!.rules,
-        acceptVia: { kind: "api", competitionId: compId },
-        proceed: fire,
-      });
-    } else {
-      fire();
-    }
-  }
-
   function onPromptConfirm() {
     if (!prompt) return;
     if (prompt.mode === "display") {
@@ -184,7 +138,7 @@ export default function LobbyPage() {
     <>
       <SectionHeader
         title={t("title")}
-        subtitle={t("subtitle")}
+        subtitle={access.inLobby ? t("subtitle") : t("subtitleMember")}
         actions={
           // First-visit orientation: the bundled Competitor guide.
           <Button variant="ghost" asChild>
@@ -200,7 +154,7 @@ export default function LobbyPage() {
           open
           mode={prompt.mode}
           rules={prompt.rules}
-          pending={acceptRules.isPending || joinByCode.isPending || join.isPending}
+          pending={acceptRules.isPending || joinByCode.isPending}
           onConfirm={onPromptConfirm}
           onCancel={() => setPrompt(null)}
         />
@@ -246,13 +200,22 @@ export default function LobbyPage() {
                     {tc(`visibility.${c.visibility}`)}
                   </div>
                 </div>
-                <Button
-                  size="sm"
-                  disabled={join.isPending}
-                  onClick={() => setJoining({ id: c.id, name: c.name })}
-                >
-                  {t("join")}
-                </Button>
+                {access.isMemberOf(c.id) ? (
+                  <div className="flex items-center gap-2">
+                    <Badge variant="muted">{t("joinedBadge")}</Badge>
+                    <Button size="sm" variant="outline" onClick={() => openCompetition(c.id)}>
+                      {t("open")}
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    size="sm"
+                    disabled={publicJoin.isPending}
+                    onClick={() => publicJoin.start(c.id, c.name)}
+                  >
+                    {t("join")}
+                  </Button>
+                )}
               </div>
             ))}
             {publicComps.length === 0 && (
@@ -262,18 +225,7 @@ export default function LobbyPage() {
         </CardContent>
       </Card>
 
-      {joining && (
-        <JoinFieldsDialog
-          competitionId={joining.id}
-          competitionName={joining.name}
-          onCancel={() => setJoining(null)}
-          onSubmit={(fieldValues: RegistrationValues) => {
-            const target = joining;
-            setJoining(null);
-            void onPublicJoin(target.id, target.name, fieldValues);
-          }}
-        />
-      )}
+      {publicJoin.dialogs}
     </>
   );
 }

@@ -8,10 +8,15 @@
 // selection here — so a stale or foreign id transparently falls back to the
 // first instead of leaving the switcher pointing at a competition the user
 // can't load.
+//
+// The fallback prefers a competition the user has joined (#478): the list also
+// carries public competitions they haven't, and landing on one of those shows
+// a join prompt instead of their own event.
 export function pickActiveCompetitionId(
   currentId: string | null | undefined,
   visibleIds: readonly string[],
+  isMember: (id: string) => boolean = () => true,
 ): string | null {
   if (currentId && visibleIds.includes(currentId)) return currentId;
-  return visibleIds[0] ?? null;
+  return visibleIds.find(isMember) ?? visibleIds[0] ?? null;
 }

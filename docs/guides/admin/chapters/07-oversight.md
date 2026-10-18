@@ -67,7 +67,7 @@ teams, scores, tickets…), automation rules, the audit log — to one JSON
 file, and imports one **additively**: records that already exist (a
 competition by name, a user by name or email) are skipped, never
 overwritten. Each section beyond site settings needs the permission that
-governs it — roles *manage roles*, automation rules *create automations*,
+governs it — roles *manage roles*, automation rules *view* and *create automations*,
 and competitions every competition permission plus *create competitions*.
 Two depend on the direction: accounts import with *manage users* but export
 (every password hash and email) only for a full Administrator, and the audit

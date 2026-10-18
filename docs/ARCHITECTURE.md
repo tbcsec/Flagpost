@@ -409,12 +409,20 @@ class AutomationRule:
   to the permission that governs observing it (`utils/automation_catalog.py`
   `TRIGGER_PERMISSIONS` — role/user/site events need the global admin
   permission, staff events a staff competition permission, member-visible
-  events `challenge_view`). Creating or editing an **org** rule checks the
-  creator holds that permission in the rule's scope, and the `/catalog` trigger
-  list is filtered the same way — so a Judge can't automate on (and exfiltrate)
-  `role.assigned` in their competition. **Personal** rules need no such check:
-  they only ever fire for events the owner *caused*, so they can't surface data
-  the owner didn't already act on.
+  events `challenge_view`). Creating or editing a rule — org **or personal** —
+  checks the author holds that permission in the rule's scope (a global-scope
+  permission site-wide, a competition one in the rule's competition), and the
+  `/catalog` trigger list is filtered the same way — so a Judge can't automate
+  on (and exfiltrate) `role.assigned` in their competition. Personal rules
+  need it too, though they only fire for events their owner caused: being an
+  event's subject doesn't entitle you to observe it (a competitor must not
+  learn that a staff-only anti-cheat signal fired about them). Because a
+  personal rule can also reach the table without passing that check (a backup
+  import, a row older than it) or outlive its owner's grant, the **engine
+  re-checks the owner every time a personal rule would run** and skips it if
+  the check fails — no actions, no `trigger_count`, no
+  `automation.rule_triggered`. At run time a personal rule with no competition
+  is checked in the competition the event happened in.
 - **Scoping**: a rule with `competition_id = None` fires across every
   competition; scoping to one competition is the common case for
   organiser-authored rules. Creating/editing a competition's rules takes
@@ -444,7 +452,8 @@ automatically automatable, with no extra wiring per feature.
 As built (Tier 3 Phase 1): the engine subscribes on the **background lane**
 (ADR-0012), so evaluation and actions never hold up the request that emitted
 the event; conditions are AND-ed (`equals`, `not_equals`, `contains`,
-`gt`/`gte`/`lt`/`lte`, `exists`/`not_exists`); every fire updates
+`gt`/`gte`/`lt`/`lte`, `exists`/`not_exists`); a matched personal rule first
+re-passes trigger authorization against its owner (§5.1); every fire updates
 `trigger_count`/`last_triggered_at` and emits `automation.rule_triggered`.
 Two loop guards: `automation.*` events are never evaluated as triggers, and a
 **cascade-depth cap** stops a chain of rules whose actions' events trigger

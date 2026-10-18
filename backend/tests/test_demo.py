@@ -84,7 +84,7 @@ async def test_demo_disables_outbound_automation_actions(monkeypatch):
         called.append(cfg["type"])
 
     monkeypatch.setitem(aa.ACTIONS, "webhook", aa.ActionSpec(marker))
-    rule = type("R", (), {"id": "r1"})()
+    rule = type("R", (), {"id": "r1", "owner_user_id": None})()  # an org rule
 
     monkeypatch.setattr(settings, "demo_mode", True)
     await aa.execute_action(None, rule, "challenge.solved", {}, {"type": "webhook"})

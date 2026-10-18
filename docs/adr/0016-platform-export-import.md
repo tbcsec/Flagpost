@@ -108,7 +108,7 @@ that permission, decided in one place (`routers/site_settings._section_refusals`
 | `users` | the whole permission catalog (an Administrator): it carries every account's password hash and email | `manage_users` — additive, never touches an existing account |
 | `roles` | `manage_roles` | `manage_roles`, plus grant containment |
 | `competitions` | every competition-scope permission site-wide, plus `create_competition` | the same |
-| `automations` | `automation_create` | the same |
+| `automations` | `automation_view` + `automation_create` (exporting reads rule configs) | the same, plus each rule's trigger authorized against the importer, and personal rules validated as personal (GHSA-x8v4-p7x5-v6c8) |
 | `audit_log` | `view_audit_log` | the whole catalog: imported entries read as recorded history |
 
 `pages` rides the `site_settings` section (older files carry it there, so it

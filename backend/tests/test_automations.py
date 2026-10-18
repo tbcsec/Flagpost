@@ -1258,6 +1258,31 @@ async def test_webhook_header_drip_is_cut_off_by_the_overall_deadline(monkeypatc
     assert elapsed < 2.0  # the deadline, not the server's ~3s drip, ended it
 
 
+async def test_webhook_dns_lookup_runs_inside_the_overall_deadline(monkeypatch):
+    # GHSA-r7rp-46pp-x55q: the SSRF check's DNS lookup has no timeout of its own,
+    # and the rule's author may run the name server. A lookup that hangs must be
+    # ended by the action's deadline like the rest of the exchange.
+    import time
+    from types import SimpleNamespace
+
+    from utils import automation_actions, webhook_security
+
+    async def _slow_resolve(url):
+        await asyncio.sleep(3)
+        raise webhook_security.WebhookSecurityError("unresolvable")
+
+    monkeypatch.setattr(webhook_security, "resolve_pinned_target", _slow_resolve)
+    monkeypatch.setattr(automation_actions, "WEBHOOK_DEADLINE_S", 0.3)
+    rule = SimpleNamespace(id="r1", name="slow-dns")
+
+    started = time.monotonic()
+    with pytest.raises(TimeoutError, match="deadline"):
+        await automation_actions._execute_webhook(
+            None, rule, "challenge.solved", {}, {"url": "http://hooks.example.com/hook"}
+        )
+    assert time.monotonic() - started < 2.0
+
+
 async def test_cascade_depth_guard_stops_rule_loops(client):
     comp = await _competition(client)
     chal = await _challenge(client, comp)

@@ -10,6 +10,9 @@ The point of most of these cases is that a *bad* or unverifiable identity is
 refused, which is meaningless if the code deciding that is mocked away.
 """
 
+import json
+
+import httpx
 import pytest
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -266,38 +269,16 @@ async def test_no_verification_evidence_means_unverified(idp):
 # --- the token exchange's failure shapes -------------------------------------
 
 
-class _FakeResponse:
-    def __init__(self, status_code: int, payload):
-        self.status_code = status_code
-        self._payload = payload
-
-    def json(self):
-        if isinstance(self._payload, Exception):
-            raise self._payload
-        return self._payload
-
-
-class _FakeClient:
-    def __init__(self, response):
-        self._response = response
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc):
-        return False
-
-    async def post(self, *args, **kwargs):
-        return self._response
-
-    async def get(self, *args, **kwargs):
-        return self._response
-
-
-def _stub_http(monkeypatch, response):
+def _stub_http(monkeypatch, response: httpx.Response):
+    """Answer every provider call with ``response``, through a real httpx client
+    on a mock transport, so the bounded read path runs as in production."""
     monkeypatch.setattr(oauth2_utils, "validate_endpoint_url", _passthrough)
+    real_client = httpx.AsyncClient
+    transport = httpx.MockTransport(lambda request: response)
     monkeypatch.setattr(
-        oauth2_utils.httpx, "AsyncClient", lambda **kw: _FakeClient(response)
+        oauth2_utils.httpx,
+        "AsyncClient",
+        lambda **kw: real_client(transport=transport, **kw),
     )
 
 
@@ -308,7 +289,7 @@ async def _passthrough(url):
 async def test_token_error_reported_with_http_200_is_caught(monkeypatch):
     """GitHub answers a bad or replayed code with **200** and an `error` key.
     A status-only check would sail past it and fail confusingly later."""
-    _stub_http(monkeypatch, _FakeResponse(200, {"error": "bad_verification_code"}))
+    _stub_http(monkeypatch, httpx.Response(200, json={"error": "bad_verification_code"}))
     with pytest.raises(OAuth2Error, match="bad_verification_code"):
         await oauth2_utils.exchange_code(
             token_url=GITHUB_TOKEN,
@@ -320,7 +301,7 @@ async def test_token_error_reported_with_http_200_is_caught(monkeypatch):
 
 
 async def test_token_response_without_an_access_token_is_rejected(monkeypatch):
-    _stub_http(monkeypatch, _FakeResponse(200, {"token_type": "bearer"}))
+    _stub_http(monkeypatch, httpx.Response(200, json={"token_type": "bearer"}))
     with pytest.raises(OAuth2Error, match="no access_token"):
         await oauth2_utils.exchange_code(
             token_url=GITHUB_TOKEN,
@@ -329,6 +310,37 @@ async def test_token_response_without_an_access_token_is_rejected(monkeypatch):
             client_id=CLIENT_ID,
             client_secret="s",
         )
+
+
+class _Body:
+    """An async response body, as off the network, so the bounded read runs."""
+
+    def __init__(self, data: bytes):
+        self.data = data
+
+    async def __aiter__(self):
+        yield self.data
+
+
+async def test_an_oversized_token_response_is_refused(monkeypatch):
+    """GHSA-r7rp-46pp-x55q: the provider's answer is read under a cap."""
+    doc = json.dumps({"access_token": "t", "pad": "a" * (2 << 20)}).encode()
+    _stub_http(monkeypatch, httpx.Response(200, content=_Body(doc)))
+    with pytest.raises(OAuth2Error, match="oversized"):
+        await oauth2_utils.exchange_code(
+            token_url=GITHUB_TOKEN,
+            code="c",
+            redirect_uri="https://x/cb",
+            client_id=CLIENT_ID,
+            client_secret="s",
+        )
+
+
+async def test_an_oversized_profile_is_refused(monkeypatch):
+    doc = json.dumps({"id": 1, "pad": "a" * (2 << 20)}).encode()
+    _stub_http(monkeypatch, httpx.Response(200, content=_Body(doc)))
+    with pytest.raises(OAuth2Error, match="oversized"):
+        await oauth2_utils.fetch_json(GITHUB_USER, "t")
 
 
 # --- write-time config validation --------------------------------------------

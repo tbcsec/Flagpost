@@ -7,6 +7,7 @@ installs, a tampered or untrusted one is refused.
 
 import asyncio
 import base64
+import gzip
 import io
 import json
 import time
@@ -347,3 +348,77 @@ async def test_oversized_artifact_is_refused_by_the_install_route(client, monkey
     assert resp.json()["detail"] == "the artifact is too large"
     async with SessionLocal() as s:
         assert await s.get(ThemePreset, "toolarge") is None
+
+
+# --- compressed bodies and malformed payloads (GHSA-r7rp-46pp-x55q) ----------
+
+
+def _resolve_body(**overrides) -> dict:
+    body = {
+        "schema_version": 1,
+        "code": "8fy17",
+        "resolved": {"id": "reg.theme-pack", "name": "Registry Theme", "version": "1.0.0", "kind": "pack"},
+        "publisher": {"id": "acme", "name": "ACME", "verified": True},
+        "artifact": {"url": _ARTIFACT_URL, "digest": "sha256:" + "0" * 64},
+        "requires_flagpost": {"min": "1.0.0"},
+        "capabilities": [],
+    }
+    body.update(overrides)
+    return body
+
+
+def _serving(resolve_body: bytes, headers: dict | None = None) -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "/resolve/" in request.url.path:
+            # Streamed, as off the network, so the raw-read path runs.
+            return httpx.Response(200, headers=headers or {}, content=_Drip(resolve_body, 1))
+        return httpx.Response(200, content=b"never fetched")
+
+    return httpx.MockTransport(handler)
+
+
+async def test_resolve_accepts_one_stored_gzip_layer():
+    doc = json.dumps(_resolve_body()).encode()
+    transport = _serving(gzip.compress(doc), {"Content-Encoding": "gzip"})
+    resolved = await registry.resolve("https://registry.example", "8fy17", transport=transport)
+    assert resolved.id == "reg.theme-pack"
+
+
+async def test_resolve_refuses_a_stacked_encoding():
+    doc = json.dumps(_resolve_body()).encode()
+    transport = _serving(gzip.compress(gzip.compress(doc)), {"Content-Encoding": "gzip, gzip"})
+    with pytest.raises(registry.RegistryError, match="refusing Content-Encoding"):
+        await registry.resolve("https://registry.example", "8fy17", transport=transport)
+
+
+async def test_deeply_nested_resolve_json_is_refused_not_a_crash():
+    deep = b"[" * 100_000 + b"]" * 100_000  # inside the 256 KiB cap
+    with pytest.raises(registry.RegistryError, match="nested too deeply"):
+        await registry.resolve("https://registry.example", "8fy17", transport=_serving(deep))
+
+
+async def test_a_nested_publisher_is_refused_by_the_resolve_route(client):
+    # Nested past the response serializer's depth limit, which answers a 500.
+    nested: object = "x"
+    for _ in range(300):
+        nested = [nested]
+    token = await admin_token(client)
+    body = _resolve_body(publisher={"id": "acme", "name": nested})
+    _use(_serving(json.dumps(body).encode()))
+    resp = await client.post("/api/marketplace/resolve", json={"code": "8fy17"}, headers=_auth(token))
+    assert resp.status_code == 400, resp.text
+    assert "publisher" in resp.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    "url",
+    [123, "http://cdn.example/\x00pack", "https://", "file:///etc/passwd"],
+    ids=["not-a-string", "invalid", "no-host", "not-http"],
+)
+async def test_a_malformed_artifact_url_is_refused_by_the_install_route(client, url):
+    token = await admin_token(client)
+    body = _resolve_body(artifact={"url": url, "digest": "sha256:" + "0" * 64})
+    _use(_serving(json.dumps(body).encode()))
+    resp = await client.post("/api/marketplace/install", json={"code": "8fy17"}, headers=_auth(token))
+    assert resp.status_code == 400, resp.text
+    assert "artifact.url" in resp.json()["detail"]

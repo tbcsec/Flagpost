@@ -538,9 +538,9 @@ off. Escaping + defang apply to a webhook's optional `body_template` (where an
 admin composes a message with `{field}` placeholders); a templateless webhook
 sends the structured event as `json=`, which needs no escaping. The connection
 is pinned to the validated IP (closing the resolve-then-connect TOCTOU), the
-response body is never buffered, and the whole exchange runs under an overall
-deadline (ADR-0013 amendments, GHSA-r7rp). The residual gap called out in
-ADR-0013 and §15 is destination rate-limiting.
+response body is never buffered, and the whole action, DNS lookup included,
+runs under an overall deadline (ADR-0013 amendments, GHSA-r7rp). The residual
+gap called out in ADR-0013 and §15 is destination rate-limiting.
 
 ### 5.5 Suggested Frontend: Visual Rule Builder
 

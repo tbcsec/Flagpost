@@ -28,11 +28,14 @@ second implementation of it.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 from typing import TYPE_CHECKING, Any
 
 import httpx
 
+from utils import http_bounded
 from utils import oidc as oidc_utils
 from utils.oidc import OidcError
 
@@ -42,6 +45,11 @@ if TYPE_CHECKING:  # pragma: no cover - typing only, avoids a runtime import cyc
 logger = logging.getLogger("oauth2")
 
 _HTTP_TIMEOUT = 10.0
+# Bounded like the OIDC transport's exchanges (GHSA-r7rp-46pp-x55q): the whole
+# exchange (a connect plus one read window) and the body, which for a token or
+# profile response is a few KiB.
+_HTTP_DEADLINE = 2 * _HTTP_TIMEOUT
+_MAX_RESPONSE_BYTES = 1024 * 1024
 
 # GitHub's REST API rejects requests that arrive without a User-Agent, so this
 # is a functional requirement rather than politeness.
@@ -70,6 +78,24 @@ async def validate_endpoint_url(url: str) -> None:
         await oidc_utils.validate_issuer_url(url)
     except OidcError as exc:
         raise OAuth2Error(str(exc)) from exc
+
+
+async def _request(method: str, url: str, **kwargs) -> tuple[httpx.Response, bytes]:
+    """One bounded exchange with the provider (see ``oidc._request``); a breach
+    of the cap or the deadline is an :class:`OAuth2Error`, transport failures
+    propagate as before."""
+    try:
+        async with asyncio.timeout(_HTTP_DEADLINE):
+            async with httpx.AsyncClient(
+                timeout=_HTTP_TIMEOUT, follow_redirects=False
+            ) as client:
+                return await http_bounded.fetch(
+                    client, method, url, max_bytes=_MAX_RESPONSE_BYTES, **kwargs
+                )
+    except TimeoutError as exc:
+        raise OAuth2Error(f"{method} {url} took longer than {_HTTP_DEADLINE:.0f}s") from exc
+    except http_bounded.BodyTooLarge as exc:
+        raise OAuth2Error(f"{method} {url} returned an oversized response") from exc
 
 
 async def exchange_code(
@@ -105,14 +131,11 @@ async def exchange_code(
     if code_verifier:
         data["code_verifier"] = code_verifier
 
-    async with httpx.AsyncClient(
-        timeout=_HTTP_TIMEOUT, follow_redirects=False
-    ) as client:
-        response = await client.post(token_url, data=data, headers=_JSON_HEADERS)
+    response, body = await _request("POST", token_url, data=data, headers=_JSON_HEADERS)
     if response.status_code != 200:
         raise OAuth2Error(f"token endpoint returned {response.status_code}")
     try:
-        payload = response.json()
+        payload = json.loads(body)
     except ValueError as exc:
         raise OAuth2Error("token endpoint did not return JSON") from exc
     if not isinstance(payload, dict):
@@ -132,14 +155,11 @@ async def fetch_json(url: str, access_token: str) -> Any:
     """GET a JSON document from the provider as the authenticated user."""
     await validate_endpoint_url(url)
     headers = {**_JSON_HEADERS, "Authorization": f"Bearer {access_token}"}
-    async with httpx.AsyncClient(
-        timeout=_HTTP_TIMEOUT, follow_redirects=False
-    ) as client:
-        response = await client.get(url, headers=headers)
+    response, body = await _request("GET", url, headers=headers)
     if response.status_code != 200:
         raise OAuth2Error(f"GET {url} returned {response.status_code}")
     try:
-        return response.json()
+        return json.loads(body)
     except ValueError as exc:
         raise OAuth2Error(f"GET {url} did not return JSON") from exc
 

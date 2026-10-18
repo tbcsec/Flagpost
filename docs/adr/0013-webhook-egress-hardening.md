@@ -101,20 +101,34 @@ Still residual: destination rate-limiting / coalescing (the §15 question) — a
 rule may legitimately fire thousands of times on a large event, so a naive cap
 is still wrong. Unchanged by this amendment.
 
-## Amendment — GHSA-r7rp-46pp-x55q follow-up: time bounded too
+## Amendment — GHSA-r7rp-46pp-x55q follow-up: time and compressed bodies bounded
 
-Item 2 above bounded the response **body**, not the request's **time**. The same
+Item 2 above bounded the response **body**, not the action's **time**. The same
 per-read `timeout` meant a target that dripped its response *headers* a byte at
 a time held the call open — only the automations handler ceiling ended it. The
-whole exchange (connect, request, status line + headers) now runs under an
-overall deadline, `automation_actions.WEBHOOK_DEADLINE_S` = 3 × the 5s
-per-operation timeout, so one webhook action is bounded in both memory and
-time. Pinning, SNI and `follow_redirects=False` are unchanged.
+whole action — the DNS lookup behind the SSRF check, then connect, request,
+status line + headers — now runs under an overall deadline,
+`automation_actions.WEBHOOK_DEADLINE_S` = 3 × the 5s per-operation timeout.
+Pinning, SNI and `follow_redirects=False` are unchanged.
 
-The same follow-up held the other operator-trusted egress that still buffered
-whole responses to the same standard: the marketplace registry client
-(`utils/marketplace_registry.py`, ADR-0040) now streams both the resolve
-response and the artifact download with a byte cap (checked against
-`Content-Length` up front and against the decoded bytes as they arrive) and an
-overall deadline. Trusting a registry's content is not trusting its size or
-pace.
+The deadline bounds one action, not a rule. A rule's actions (up to 10) can
+together outlast the automations handler ceiling, which then cancels the rest
+of the run; and a time rule runs inline on the shared scheduler tick, where the
+per-action deadline is the only bound on how long it holds the tick.
+
+Counting bytes as they arrive bounds an uncompressed body but not a compressed
+one: httpx decodes each chunk with no limit on what it expands to. The same
+follow-up added `utils/http_bounded.fetch`, a shared reader that refuses an
+over-cap `Content-Length` up front, asks for `Accept-Encoding: identity`, reads
+the body raw and decodes at most one gzip/deflate layer itself within the cap
+(a static mirror may serve a stored encoding whatever was asked), and refuses
+any other coding. It reads, each under an overall deadline:
+
+- the marketplace registry client (ADR-0040): the resolve response (256 KiB,
+  then shape-checked before use) and the artifact download (200 MiB);
+- the daily update check (64 KiB), which runs on the shared scheduler tick;
+- the OIDC discovery, JWKS, token and userinfo responses and the plain-OAuth2
+  token and userinfo responses (1 MiB; ADR-0021, ADR-0033).
+
+The judge's connection check (ADR-0042) reads no response body at all and
+bounds each probe with a deadline.

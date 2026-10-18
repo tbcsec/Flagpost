@@ -201,16 +201,38 @@ async def _execute_send_email(db, rule, event_name, payload, config) -> None:
 # request, so it never fires while bytes keep arriving: a target that drips its
 # response headers a byte at a time holds the call open for as long as it drips.
 WEBHOOK_IO_TIMEOUT_S = 5.0
-# The whole exchange is a connect, a request write and the status line plus
-# headers — three per-operation windows — so 3 x the per-operation timeout is
-# what an honest-but-slow target can need. Past it the call is abandoned, which
-# keeps a single webhook well inside the automations handler ceiling
-# (plugins/automations EVALUATE_HANDLER_TIMEOUT) instead of consuming all of it
+# The deadline covers the whole action: the DNS lookup behind the SSRF check
+# (no timeout of its own, and the rule's author may run the name server), then a
+# connect, a request write and the status line plus headers — three
+# per-operation windows. An honest resolver answers in a fraction of one, so
+# 3 x the per-operation timeout is what an honest-but-slow target can need
 # (GHSA-r7rp-46pp-x55q).
+#
+# It bounds one action, not a rule. A rule carries up to 10 actions
+# (schemas/automation.py), so its worst case is past the automations handler
+# ceiling (plugins/automations EVALUATE_HANDLER_TIMEOUT), which then cancels the
+# rest of the run — logged by the engine. A time rule runs inline on the shared
+# scheduler tick with no handler ceiling at all; there this deadline, times the
+# rule's webhook actions, is what bounds how long the rule holds the tick.
 WEBHOOK_DEADLINE_S = 3 * WEBHOOK_IO_TIMEOUT_S
 
 
 async def _execute_webhook(db, rule, event_name, payload, config) -> None:
+    try:
+        async with asyncio.timeout(WEBHOOK_DEADLINE_S):
+            await _send_webhook(rule, event_name, payload, config)
+    except TimeoutError:
+        # Raised on, like any transport failure, to the engine's per-action
+        # isolation — just with a message that names the cause.
+        raise TimeoutError(
+            f"webhook POST {config['url']} exceeded its "
+            f"{WEBHOOK_DEADLINE_S:.0f}s deadline"
+        ) from None
+
+
+async def _send_webhook(rule, event_name, payload, config) -> None:
+    """The webhook action itself; ``_execute_webhook`` runs it under the
+    deadline."""
     import httpx
 
     url = config["url"]
@@ -253,23 +275,15 @@ async def _execute_webhook(db, rule, event_name, payload, config) -> None:
     # response so its body is never buffered — a hostile target that streams an
     # endless body (timeout is per-read, so it never fires while bytes flow)
     # can't exhaust worker memory. Only the status line is consumed, and the
-    # whole exchange runs under WEBHOOK_DEADLINE_S, so it can't be held open by
-    # a slow drip either (GHSA-r7rp).
-    try:
-        async with asyncio.timeout(WEBHOOK_DEADLINE_S):
-            async with httpx.AsyncClient(
-                timeout=WEBHOOK_IO_TIMEOUT_S, follow_redirects=False
-            ) as client:
-                async with client.stream(
-                    "POST", target.url, extensions=target.extensions, **request_kwargs
-                ) as response:
-                    status_code = response.status_code
-    except TimeoutError:
-        # Raised on, like any transport failure, to the engine's per-action
-        # isolation — just with a message that names the cause.
-        raise TimeoutError(
-            f"webhook POST {url} exceeded its {WEBHOOK_DEADLINE_S:.0f}s deadline"
-        ) from None
+    # caller runs all of this, DNS lookup included, under WEBHOOK_DEADLINE_S,
+    # so it can't be held open by a slow drip either (GHSA-r7rp).
+    async with httpx.AsyncClient(
+        timeout=WEBHOOK_IO_TIMEOUT_S, follow_redirects=False
+    ) as client:
+        async with client.stream(
+            "POST", target.url, extensions=target.extensions, **request_kwargs
+        ) as response:
+            status_code = response.status_code
     logger.info("webhook: rule %s POST %s -> %s", rule.id, url, status_code)
 
 

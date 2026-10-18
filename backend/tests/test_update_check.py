@@ -6,7 +6,11 @@ deployment (which is what makes `requests ≈ deployments` hold without an
 identifier).
 """
 
+import asyncio
+import gzip
 import json
+import time
+import tracemalloc
 
 import pytest
 from sqlalchemy import select
@@ -41,6 +45,8 @@ def endpoint(monkeypatch):
 
         def __init__(self):
             self.status_code = state["status"]
+            self.headers = {}
+            self.is_stream_consumed = False
 
         async def __aenter__(self):
             return self
@@ -48,7 +54,7 @@ def endpoint(monkeypatch):
         async def __aexit__(self, *args):
             return False
 
-        async def aiter_bytes(self):
+        async def aiter_raw(self):
             payload = state["payload"]
             raw = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
             # Chunked, so the size cap is exercised the way a real stream would
@@ -184,9 +190,12 @@ async def test_sends_only_the_version(client, endpoint):
     call = endpoint["calls"][0]
     assert call["params"] == {"version": "1.0.0"}
     # No cookies, no auth, no install id — the User-Agent carries the version
-    # that's already in the query string and nothing else.
-    assert set(call["headers"]) == {"User-Agent"}
+    # that's already in the query string and nothing else. Accept-Encoding only
+    # replaces httpx's own default, asking for an uncompressed answer so its
+    # size cap holds (GHSA-r7rp-46pp-x55q); it says nothing about the install.
+    assert set(call["headers"]) == {"User-Agent", "Accept-Encoding"}
     assert call["headers"]["User-Agent"] == "Flagpost/1.0.0"
+    assert call["headers"]["Accept-Encoding"] == "identity"
 
 
 async def test_records_the_result(client, endpoint):
@@ -371,6 +380,80 @@ async def test_oversized_response_is_refused(client, endpoint):
     site = await _reload()
     assert site.last_update_check_status == "error"
     assert site.latest_known_version is None
+
+
+class _Loopback:
+    """A real HTTP server on loopback that answers with ``respond(writer)``."""
+
+    def __init__(self, respond):
+        self.respond = respond
+        self.writers: list[asyncio.StreamWriter] = []
+
+    async def _serve(self, reader, writer):
+        self.writers.append(writer)
+        try:
+            await reader.readuntil(b"\r\n\r\n")
+            await self.respond(writer)
+        except (ConnectionError, asyncio.IncompleteReadError):
+            pass  # the client gave up
+        finally:
+            writer.close()
+
+    async def __aenter__(self):
+        self.server = await asyncio.start_server(self._serve, "127.0.0.1", 0)
+        return f"http://127.0.0.1:{self.server.sockets[0].getsockname()[1]}/v1/check"
+
+    async def __aexit__(self, *exc):
+        self.server.close()
+        for writer in self.writers:
+            writer.close()
+        await self.server.wait_closed()
+
+
+async def test_compressed_bomb_is_refused_without_expanding(monkeypatch):
+    """httpx decodes a compressed chunk with no limit on its output, so the
+    64 KiB cap alone didn't hold against a few hundred bytes of stacked gzip
+    (GHSA-r7rp-46pp-x55q)."""
+    bomb = gzip.compress(gzip.compress(bytes(64 << 20), 9), 9)
+
+    async def respond(writer):
+        writer.write(
+            b"HTTP/1.1 200 OK\r\nContent-Encoding: gzip, gzip\r\n"
+            b"Content-Length: " + str(len(bomb)).encode() + b"\r\n\r\n" + bomb
+        )
+        await writer.drain()
+
+    async with _Loopback(respond) as url:
+        monkeypatch.setattr(app_settings, "update_check_url", url, raising=False)
+        tracemalloc.start()
+        try:
+            status, latest = await update_check._fetch("1.0.0")
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+    assert latest is None and status != "ok"
+    assert peak < 8 << 20
+
+
+async def test_a_slow_drip_is_cut_off_by_the_overall_deadline(monkeypatch):
+    """The per-read timeout never fires while bytes keep coming, and the check
+    runs inline on the shared scheduler tick."""
+
+    async def respond(writer):
+        writer.write(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")
+        for _ in range(60):  # ~3s of one-byte chunks
+            writer.write(b"1\r\n \r\n")
+            await writer.drain()
+            await asyncio.sleep(0.05)
+
+    monkeypatch.setattr(update_check, "_HTTP_DEADLINE", 0.3)
+    async with _Loopback(respond) as url:
+        monkeypatch.setattr(app_settings, "update_check_url", url, raising=False)
+        started = time.monotonic()
+        status, latest = await update_check._fetch("1.0.0")
+        elapsed = time.monotonic() - started
+    assert (status, latest) == ("unreachable", None)
+    assert elapsed < 2.0  # the deadline, not the server's ~3s drip, ended it
 
 
 def test_absurd_version_does_not_reach_int():

@@ -29,6 +29,7 @@ Three things it deliberately does not do:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -40,6 +41,7 @@ from auth.setup import instance_needs_setup
 from config import settings
 from db import ensure_aware_utc, utcnow
 from models.site_settings import SITE_SETTINGS_ID, SiteSettings
+from utils import http_bounded
 
 logger = logging.getLogger("update_check")
 
@@ -48,6 +50,11 @@ CHECK_INTERVAL = timedelta(hours=24)
 # tick, so an endpoint outage doesn't turn every install into a hammer.
 RETRY_INTERVAL = timedelta(hours=1)
 _HTTP_TIMEOUT = 10.0
+# httpx's timeout is per operation, so it never fires while bytes keep arriving.
+# The check runs inline on the shared scheduler tick (time rules, releases,
+# reapers), so the whole exchange is bounded too: a connect plus one read
+# window, for an answer this small (GHSA-r7rp-46pp-x55q).
+_HTTP_DEADLINE = 2 * _HTTP_TIMEOUT
 # The answer is `{"latest": "1.2.3"}`. 64 KiB is absurdly generous and still
 # bounds what a hostile response can make us allocate.
 _MAX_RESPONSE_BYTES = 64 * 1024
@@ -172,37 +179,35 @@ async def run_check(db_factory) -> None:
 async def _fetch(version: str) -> tuple[str, str | None]:
     """Return ``(status, latest_version)``. Never raises."""
     try:
-        async with httpx.AsyncClient(
-            timeout=_HTTP_TIMEOUT, follow_redirects=False
-        ) as client:
-            # Streamed with a hard cap rather than read whole: the answer is a
-            # few dozen bytes, and a compromised endpoint returning an endless
-            # body would otherwise be a memory exhaustion of every deployment
-            # that asks.
-            async with client.stream(
-                "GET",
-                settings.update_check_url,
-                params={"version": version},
-                headers={"User-Agent": f"Flagpost/{version}"},
-            ) as response:
-                if response.status_code != 200:
-                    logger.info(
-                        "update check: endpoint returned %s", response.status_code
-                    )
-                    return "error", None
-                body = b""
-                async for chunk in response.aiter_bytes():
-                    body += chunk
-                    if len(body) > _MAX_RESPONSE_BYTES:
-                        logger.info("update check: response exceeded the size cap")
-                        return "error", None
+        async with asyncio.timeout(_HTTP_DEADLINE):
+            async with httpx.AsyncClient(
+                timeout=_HTTP_TIMEOUT, follow_redirects=False
+            ) as client:
+                # Read with a hard cap rather than whole: the answer is a few
+                # dozen bytes, and a compromised endpoint returning an endless
+                # (or compressed-to-explode) body would otherwise be a memory
+                # exhaustion of every deployment that asks.
+                response, body = await http_bounded.fetch(
+                    client,
+                    "GET",
+                    settings.update_check_url,
+                    max_bytes=_MAX_RESPONSE_BYTES,
+                    params={"version": version},
+                    headers={"User-Agent": f"Flagpost/{version}"},
+                )
+    except http_bounded.BodyTooLarge:
+        logger.info("update check: response exceeded the size cap")
+        return "error", None
     except Exception:  # noqa: BLE001 — offline is a normal state, not an error
         logger.info("update check: endpoint unreachable", exc_info=True)
         return "unreachable", None
+    if response.status_code != 200:
+        logger.info("update check: endpoint returned %s", response.status_code)
+        return "error", None
 
     try:
         payload = json.loads(body)
-    except ValueError:
+    except (ValueError, RecursionError):  # not JSON, or nested past the parser
         logger.info("update check: response was not JSON")
         return "error", None
     if not isinstance(payload, dict):

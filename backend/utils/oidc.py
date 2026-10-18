@@ -28,8 +28,10 @@ vulnerability rather than a bug:
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
+import json
 import logging
 import re
 import secrets
@@ -42,6 +44,7 @@ import jwt
 from jwt import PyJWKSet
 
 from config import settings
+from utils import http_bounded
 from utils.webhook_security import _ip_is_blocked, _resolve_host
 
 logger = logging.getLogger("oidc")
@@ -69,6 +72,14 @@ _TENANT_ID_RE = re.compile(
 _DISCOVERY_TTL_SECONDS = 3600
 _JWKS_TTL_SECONDS = 3600
 _HTTP_TIMEOUT = 10.0
+# httpx's timeout is per operation, so it never fires while bytes keep arriving;
+# each exchange as a whole is bounded too: a connect plus one read window, for
+# exchanges this small (GHSA-r7rp-46pp-x55q).
+_HTTP_DEADLINE = 2 * _HTTP_TIMEOUT
+# Discovery documents, JWKS, token and userinfo responses are a few KiB (an
+# Entra token carrying group claims, tens of KiB). 1 MiB is generous and still
+# bounds what a hostile response can make us hold.
+_MAX_RESPONSE_BYTES = 1024 * 1024
 
 # (document, fetched_at) keyed by issuer / jwks_uri.
 _discovery_cache: dict[str, tuple[dict[str, Any], float]] = {}
@@ -118,15 +129,31 @@ async def validate_issuer_url(url: str) -> None:
             raise OidcError(f"issuer host {host!r} resolves to a blocked address")
 
 
+async def _request(method: str, url: str, **kwargs) -> tuple[httpx.Response, bytes]:
+    """One exchange with the provider, bounded: the body is read through
+    ``http_bounded`` under ``_MAX_RESPONSE_BYTES`` and the whole exchange under
+    ``_HTTP_DEADLINE``; either breach is an :class:`OidcError`. Transport and
+    decoding failures propagate as ``httpx.HTTPError``, as they always have."""
+    try:
+        async with asyncio.timeout(_HTTP_DEADLINE):
+            async with httpx.AsyncClient(
+                timeout=_HTTP_TIMEOUT, follow_redirects=False
+            ) as client:
+                return await http_bounded.fetch(
+                    client, method, url, max_bytes=_MAX_RESPONSE_BYTES, **kwargs
+                )
+    except TimeoutError as exc:
+        raise OidcError(f"{method} {url} took longer than {_HTTP_DEADLINE:.0f}s") from exc
+    except http_bounded.BodyTooLarge as exc:
+        raise OidcError(f"{method} {url} returned an oversized response") from exc
+
+
 async def _get_json(url: str) -> dict[str, Any]:
     await validate_issuer_url(url)
-    async with httpx.AsyncClient(
-        timeout=_HTTP_TIMEOUT, follow_redirects=False
-    ) as client:
-        response = await client.get(url)
+    response, body = await _request("GET", url)
     if response.status_code != 200:
         raise OidcError(f"GET {url} returned {response.status_code}")
-    return response.json()
+    return json.loads(body)
 
 
 async def discover(issuer: str, *, issuer_template: str | None = None) -> dict[str, Any]:
@@ -221,13 +248,10 @@ async def exchange_code(
     if client_secret:
         data.pop("client_id")
 
-    async with httpx.AsyncClient(
-        timeout=_HTTP_TIMEOUT, follow_redirects=False
-    ) as client:
-        response = await client.post(token_endpoint, data=data, auth=auth)
+    response, body = await _request("POST", token_endpoint, data=data, auth=auth)
     if response.status_code != 200:
         raise OidcError(f"token endpoint returned {response.status_code}")
-    payload = response.json()
+    payload = json.loads(body)
     if "id_token" not in payload:
         raise OidcError("token response contained no id_token")
     return payload
@@ -311,17 +335,14 @@ async def fetch_userinfo(
         return {}
     try:
         await validate_issuer_url(endpoint)
-        async with httpx.AsyncClient(
-            timeout=_HTTP_TIMEOUT, follow_redirects=False
-        ) as client:
-            response = await client.get(
-                endpoint, headers={"Authorization": f"Bearer {access_token}"}
-            )
+        response, body = await _request(
+            "GET", endpoint, headers={"Authorization": f"Bearer {access_token}"}
+        )
         if response.status_code == 200:
-            body = response.json()
+            data = json.loads(body)
             # Valid JSON isn't necessarily an object; the caller indexes it.
-            if isinstance(body, dict):
-                return body
+            if isinstance(data, dict):
+                return data
             logger.warning("userinfo response was not a JSON object; ignoring it")
     except Exception:  # noqa: BLE001 — optional enrichment, never fatal
         logger.warning("userinfo lookup failed", exc_info=True)

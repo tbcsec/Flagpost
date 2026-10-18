@@ -171,9 +171,9 @@ async def resolve_identity(
     #    no ownership proof and the account is live immediately, so linking on the
     #    address alone lets an attacker pre-register victim@corp (unverified) and
     #    have the victim's real SSO login land in the attacker's account. An
-    #    unverified match falls through to JIT provisioning (a fresh account)
-    #    instead. Admin-created accounts are stamped verified at creation, so they
-    #    still link.
+    #    unverified match is refused outright (IdentityRejected, below) — neither
+    #    linked nor JIT-provisioned. Admin-created accounts are stamped verified at
+    #    creation, so they still link.
     existing: User | None = None
     if email_trusted:
         match = await db.scalar(

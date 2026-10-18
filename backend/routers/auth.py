@@ -21,8 +21,9 @@ from fastapi import (
     Response,
     status,
 )
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from auth.deps import get_current_user
 from auth.external_identity import IdentityRejected, resolve_identity
@@ -91,7 +92,9 @@ REFRESH_COOKIE_PATH = "/api/auth"
 # valid callback URL to a victim, fixating the attacker's session into the
 # victim's browser (security F3). Requiring a matching httpOnly cookie the victim
 # never received closes that (RFC 6749 §10.12). Lax so it rides the top-level
-# redirect back from the IdP; path-scoped to the auth routes.
+# redirect back from the IdP; path-scoped to the auth routes. SAML binds its
+# login with its own cookie (routers/saml): its ACS is a cross-site POST, which
+# a Lax cookie never rides.
 SSO_STATE_COOKIE_NAME = "sso_login_state"
 SSO_STATE_COOKIE_PATH = "/api/auth"
 
@@ -108,10 +111,12 @@ def set_sso_state_cookie(response: Response, state: str, max_age_seconds: int) -
     )
 
 
-def sso_state_cookie_matches(request: Request, state: str) -> bool:
+def sso_state_cookie_matches(
+    request: Request, state: str, *, cookie_name: str = SSO_STATE_COOKIE_NAME
+) -> bool:
     """True iff the callback carries the state-binding cookie set at login and it
     matches the `state` the provider echoed back (constant-time)."""
-    cookie = request.cookies.get(SSO_STATE_COOKIE_NAME)
+    cookie = request.cookies.get(cookie_name)
     return bool(cookie) and secrets.compare_digest(cookie, state)
 
 
@@ -213,6 +218,8 @@ async def _send_verification_email(db: AsyncSession, user: User) -> None:
             user_id=user.id,
             token_hash=_hash_token(raw),
             expires_at=utcnow() + timedelta(hours=24),
+            # Bound to the address it's mailed to (GHSA-42m4) — see verify_email.
+            email=user.email,
         )
     )
     await db.commit()
@@ -401,14 +408,14 @@ async def _directory_login(
                 email_verified=False,
                 claims={"name": found.display_name} if found.display_name else {},
             )
-        except IdentityRejected:
-            # Unreachable for a closed provider (the admission gate doesn't
-            # apply, and the API forces LDAP posture closed) — but a drifted
-            # row lands on the gate, and a gated refusal must stay a generic
-            # failed login here, not a 500.
+        except IdentityRejected as exc:
+            # Reachable: an email_is_authoritative directory whose `mail`
+            # matches a local account that never verified it is refused rather
+            # than linked (email_unverified_conflict, GHSA-42m4), and a drifted
+            # posture lands on the admission gate. Either way it stays a generic
+            # failed login here, not a 500 — and not a disclosure of which.
             logger.warning(
-                "LDAP provider %s rejected by admission policy — posture drift?",
-                provider.slug,
+                "LDAP provider %s refused the identity: %s", provider.slug, exc.code
             )
             continue
         return user, keys[provider.id]
@@ -851,6 +858,11 @@ async def change_email(
         # and then swapping to another would be a trivial bypass of the gate.
         current_user.email_verified_at = None
 
+    # Write the reset even when the loaded value was already None: SQLAlchemy
+    # leaves an unchanged attribute out of the UPDATE, so a /verify-email of the
+    # *previous* address committing after this request loaded the row would
+    # survive the switch and land on the new address (GHSA-42m4).
+    flag_modified(current_user, "email_verified_at")
     await _drop_tokens(db, PasswordResetToken, current_user.id)
     await _drop_tokens(db, EmailVerificationToken, current_user.id)
     await db.commit()
@@ -918,11 +930,30 @@ async def _deliver_password_reset(user_id: str, email: str) -> None:
     try:
         raw = secrets.token_urlsafe(32)
         async with SessionLocal() as db:
+            # Re-read the address in this session (GHSA-42m4): forgot-password
+            # matched it before this task ran, and an email change committing
+            # in between would otherwise mail the old address a link to the
+            # account that has moved on. The token records the address either
+            # way, which is what /reset-password enforces.
+            current = await db.scalar(
+                select(User.email).where(
+                    User.id == user_id, User.is_active.is_(True)
+                )
+            )
+            if current is None or current.lower() != email.strip().lower():
+                logger.info(
+                    "forgot-password for user %s skipped: address changed or "
+                    "account disabled since the request",
+                    user_id,
+                )
+                return
             db.add(
                 PasswordResetToken(
                     user_id=user_id,
                     token_hash=_hash_token(raw),
                     expires_at=utcnow() + timedelta(hours=1),
+                    # The stored spelling, so redeeming compares like with like.
+                    email=current,
                 )
             )
             await db.commit()
@@ -930,7 +961,7 @@ async def _deliver_password_reset(user_id: str, email: str) -> None:
         base = origins[0] if origins else ""
         link = f"{base}/reset-password?token={raw}"
         await mailer.send_email(
-            [email],
+            [current],
             "Reset your password",
             f"Someone requested a password reset for your account.\n\n"
             f"Use this link within the next hour to choose a new password:\n{link}\n\n"
@@ -1003,28 +1034,50 @@ async def reset_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This reset link is invalid or has expired",
         )
-    user = await db.get(User, token.user_id)
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Account not found"
+    user_id, token_id, token_email = token.user_id, token.id, token.email
+    new_hash = await ahash_password(body.new_password)
+    changed = 0
+    # The link proves control of the address it was mailed to (GHSA-42m4), so
+    # the password write is conditional on the account still holding it — one
+    # UPDATE, no read-then-write gap for an email change to slip into. A token
+    # minted before tokens carried their address (NULL) resets nothing.
+    if token_email:
+        changed = (
+            await db.execute(
+                update(User)
+                .where(
+                    User.id == user_id,
+                    func.lower(User.email) == func.lower(token_email),
+                )
+                .values(password_hash=new_hash)
+                .execution_options(synchronize_session=False)
+            )
+        ).rowcount
+    if changed != 1:
+        await db.execute(
+            delete(PasswordResetToken).where(PasswordResetToken.id == token_id)
         )
-    user.password_hash = await ahash_password(body.new_password)
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This reset link is invalid or has expired",
+        )
     # Invalidate the token(s) + every session.
-    await _drop_tokens(db, PasswordResetToken, user.id)
+    await _drop_tokens(db, PasswordResetToken, user_id)
     for session in (
         await db.execute(
             select(RefreshSession).where(
-                RefreshSession.user_id == user.id,
+                RefreshSession.user_id == user_id,
                 RefreshSession.revoked_at.is_(None),
             )
         )
     ).scalars().all():
         session.revoked_at = utcnow()
-    revoked_tokens = await revoke_user_api_tokens(db, user.id)
+    revoked_tokens = await revoke_user_api_tokens(db, user_id)
     await db.commit()
-    await event_bus.emit("user.password_changed", {"user_id": user.id})
+    await event_bus.emit("user.password_changed", {"user_id": user_id})
     # Self-service recovery: the account holder is the actor.
-    await emit_revoked(revoked_tokens, user_id=user.id, actor_id=user.id)
+    await emit_revoked(revoked_tokens, user_id=user_id, actor_id=user_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -1038,7 +1091,14 @@ async def verify_email(
     rate_limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> Response:
     """Confirm an account's email from a valid, unexpired verification token.
-    Generic 400 on either an invalid or expired token — no enumeration."""
+    Generic 400 on either an invalid or expired token — no enumeration.
+
+    The token proves control of the address it was **mailed to**, nothing else
+    (GHSA-42m4). So the stamp is one conditional UPDATE keyed on that address,
+    not a read of the user row and a later write: a /change-email committing in
+    between would otherwise have the stamp land on the *new* address, verifying
+    a mailbox the holder never proved — which is what trusted-email SSO linking
+    and the join gate both believe."""
     await _throttle(rate_limiter, f"verify-email:{body.token[:16]}")
     token = await db.scalar(
         select(EmailVerificationToken).where(
@@ -1050,22 +1110,44 @@ async def verify_email(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This verification link is invalid or has expired",
         )
-    user = await db.get(User, token.user_id)
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Account not found"
-        )
-    user.email_verified_at = utcnow()
-    for t in (
-        await db.execute(
-            select(EmailVerificationToken).where(
-                EmailVerificationToken.user_id == user.id
+    user_id, token_id, token_email = token.user_id, token.id, token.email
+    stamped = 0
+    # A token minted before tokens carried their address (email is NULL) can't
+    # be tied to one, so it verifies nothing; the user requests a fresh link.
+    if token_email:
+        stamped = (
+            await db.execute(
+                update(User)
+                .where(
+                    User.id == user_id,
+                    # Both sides lowered by the database, so the comparison
+                    # can't drift from what the DB considers the same address.
+                    func.lower(User.email) == func.lower(token_email),
+                )
+                .values(email_verified_at=utcnow())
+                .execution_options(synchronize_session=False)
             )
+        ).rowcount
+    if stamped != 1:
+        # The account no longer holds the address this link was mailed to (or
+        # is gone). Retire just this link: the account's current address may
+        # already have a fresh one in flight, which must keep working.
+        await db.execute(
+            delete(EmailVerificationToken).where(EmailVerificationToken.id == token_id)
         )
-    ).scalars().all():
-        await db.delete(t)
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "This verification link no longer matches your account's email "
+                "address — request a new one"
+            ),
+        )
+    await db.execute(
+        delete(EmailVerificationToken).where(EmailVerificationToken.user_id == user_id)
+    )
     await db.commit()
-    await event_bus.emit("user.email_verified", {"user_id": user.id})
+    await event_bus.emit("user.email_verified", {"user_id": user_id})
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

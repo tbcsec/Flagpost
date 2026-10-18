@@ -534,6 +534,7 @@
         "account_disabled": "That account has been disabled. Contact an administrator.",
         "domain_not_allowed": "Your account isn't permitted to sign in to this instance. Contact an administrator.",
         "registration_closed": "This instance isn't accepting new accounts. Contact an administrator.",
+        "email_unverified_conflict": "This email address belongs to an account that hasn't verified it. Sign in to that account with its password and verify the email first, or contact an administrator.",
         "default": "Single sign-on failed. Please try again, or sign in with a password."
       },
       "demo": {

@@ -233,6 +233,8 @@ async def test_forgot_and_reset_password_flow(client, monkeypatch):
     monkeypatch.setattr(mailer, "send_email", _capture)
 
     await _register(client, "forgetful@example.com", password="oldpassword1", name="Fp")
+    old_refresh = client.cookies.get("refresh_token")
+    assert old_refresh
 
     # Requesting a reset always 202s (even for an unknown address).
     assert (await client.post("/api/auth/forgot-password", json={"email": "forgetful@example.com"})).status_code == 204
@@ -243,6 +245,9 @@ async def test_forgot_and_reset_password_flow(client, monkeypatch):
 
     # Reset with the token, then the new password works and the old one doesn't.
     assert (await client.post("/api/auth/reset-password", json={"token": token, "new_password": "brandnew1"})).status_code == 204
+    # A reset ends every existing session.
+    client.cookies.clear()
+    assert (await client.post("/api/auth/refresh", cookies={"refresh_token": old_refresh})).status_code == 401
     assert (await client.post("/api/auth/login", json={"identifier": "forgetful@example.com", "password": "brandnew1"})).status_code == 200
     assert (await client.post("/api/auth/login", json={"identifier": "forgetful@example.com", "password": "oldpassword1"})).status_code == 401
 
@@ -275,6 +280,125 @@ async def test_forgot_password_matches_email_case_insensitively(client, monkeypa
     )
     assert resp.status_code == 204
     assert len(sent) == 1
+
+
+def _capture_mail(monkeypatch) -> list[tuple]:
+    from utils import mailer
+
+    sent: list[tuple] = []
+
+    async def _capture(to, subject, body):
+        sent.append((to, subject, body))
+        return True
+
+    monkeypatch.setattr(mailer, "send_email", _capture)
+    return sent
+
+
+async def test_reset_link_is_not_minted_for_an_address_the_account_left(
+    client, monkeypatch
+):
+    """GHSA-42m4: the reset link is minted after forgot-password answers. An
+    admin moving the account to another address in between must not leave the
+    old mailbox holding a working link to it — nothing is minted or mailed."""
+    from routers import auth as auth_router
+    from models.password_reset import PasswordResetToken
+    from tests.conftest import admin_token
+
+    sent = _capture_mail(monkeypatch)
+    admin = await admin_token(client)
+    reg = await _register(client, "old@example.com", name="Mover")
+    user_id = reg.json()["user"]["id"]
+    real_session_local = auth_router.SessionLocal
+
+    class _MovedFirst:
+        """The minting session — opened only after the admin's change commits."""
+
+        async def __aenter__(self):
+            moved = await client.patch(
+                f"/api/users/{user_id}",
+                json={"email": "new@example.com"},
+                headers={"Authorization": f"Bearer {admin}"},
+            )
+            assert moved.status_code == 200, moved.text
+            self._inner = real_session_local()
+            return await self._inner.__aenter__()
+
+        async def __aexit__(self, *exc):
+            return await self._inner.__aexit__(*exc)
+
+    monkeypatch.setattr(auth_router, "SessionLocal", _MovedFirst)
+    resp = await client.post("/api/auth/forgot-password", json={"email": "old@example.com"})
+    assert resp.status_code == 204
+    monkeypatch.setattr(auth_router, "SessionLocal", real_session_local)
+
+    assert [m for m in sent if m[1] == "Reset your password"] == []
+    async with SessionLocal() as session:
+        assert (await session.scalars(select(PasswordResetToken))).all() == []
+
+
+async def test_reset_link_only_works_while_the_account_holds_its_address(
+    client, monkeypatch
+):
+    """GHSA-42m4: a reset link proves the address it was mailed to. If the
+    account has moved to another address by the time the link is used — here,
+    after a change whose token sweep ran before this link committed — the link
+    resets nothing."""
+    import re
+
+    from sqlalchemy import update
+
+    from models.user import User
+
+    sent = _capture_mail(monkeypatch)
+    reg = await _register(client, "old@example.com", password="oldpassword1", name="Mover")
+    user_id = reg.json()["user"]["id"]
+    await client.post("/api/auth/forgot-password", json={"email": "old@example.com"})
+    link = re.search(r"token=([\w\-]+)", sent[0][2]).group(1)
+    async with SessionLocal() as session:
+        await session.execute(
+            update(User).where(User.id == user_id).values(email="new@example.com")
+        )
+        await session.commit()
+
+    resp = await client.post(
+        "/api/auth/reset-password", json={"token": link, "new_password": "brandnew1"}
+    )
+    assert resp.status_code == 400, resp.text
+    for password, expected in (("oldpassword1", 200), ("brandnew1", 401)):
+        login = await client.post(
+            "/api/auth/login", json={"identifier": "Mover", "password": password}
+        )
+        assert login.status_code == expected, password
+
+
+async def test_reset_link_minted_before_links_carried_their_address_is_refused(
+    client, monkeypatch
+):
+    """A reset token from before tokens recorded their address can't be tied
+    to one, so it's refused (they expire within the hour anyway)."""
+    import re
+
+    from sqlalchemy import update
+
+    from models.password_reset import PasswordResetToken
+
+    sent = _capture_mail(monkeypatch)
+    await _register(client, "legacy@example.com", password="oldpassword1", name="Legacy")
+    await client.post("/api/auth/forgot-password", json={"email": "legacy@example.com"})
+    link = re.search(r"token=([\w\-]+)", sent[0][2]).group(1)
+    async with SessionLocal() as session:
+        await session.execute(update(PasswordResetToken).values(email=None))
+        await session.commit()
+
+    resp = await client.post(
+        "/api/auth/reset-password", json={"token": link, "new_password": "brandnew1"}
+    )
+    assert resp.status_code == 400, resp.text
+    login = await client.post(
+        "/api/auth/login", json={"identifier": "Legacy", "password": "oldpassword1"}
+    )
+    assert login.status_code == 200
 
 
 async def test_refresh_token_reuse_revokes_the_family(client, monkeypatch):

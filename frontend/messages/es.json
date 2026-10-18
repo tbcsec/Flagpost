@@ -534,6 +534,7 @@
         "account_disabled": "Esa cuenta ha sido deshabilitada. Contacte a un administrador.",
         "domain_not_allowed": "Tu cuenta no puede iniciar sesión en esta instancia. Contacta a un administrador.",
         "registration_closed": "Esta instancia no acepta nuevas cuentas. Contacte a un administrador.",
+        "email_unverified_conflict": "This email address belongs to an account that hasn't verified it. Sign in to that account with its password and verify the email first, or contact an administrator.",
         "default": "Error de inicio de sesión único. Por favor, inténtalo de nuevo o inicia sesión con una contraseña."
       },
       "demo": {

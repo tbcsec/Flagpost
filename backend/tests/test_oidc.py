@@ -471,6 +471,90 @@ async def test_unverified_email_does_not_hijack_an_existing_account(client, idp)
     assert new_user.email is None
 
 
+async def test_userinfo_fills_an_email_the_id_token_lacked(client, idp):
+    """Some providers only expose the address at userinfo; an answer about the
+    ID token's own subject is used."""
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+    state, _ = await _begin_login(client, idp)
+    idp["token_response"] = {
+        "id_token": _id_token(nonce=idp["nonce"], email=None),
+        "access_token": "x",
+    }
+    idp["userinfo"] = {
+        "sub": "idp-subject-1",
+        "email": "info@example.com",
+        "email_verified": True,
+    }
+    resp = await client.get(
+        f"/api/auth/oidc/testidp/callback?code=abc&state={state}",
+        follow_redirects=False,
+    )
+    assert "/auth/callback" in resp.headers["location"]
+    async with SessionLocal() as session:
+        identity = await session.scalar(select(UserExternalIdentity))
+        user = await session.get(User, identity.user_id)
+    assert user.email == "info@example.com"
+
+
+@pytest.mark.parametrize("userinfo_sub", ["someone-else", None])
+async def test_userinfo_about_another_subject_fails_the_login(
+    client, idp, userinfo_sub
+):
+    """GHSA-42m4 / OIDC Core §5.3.2: a userinfo answer whose ``sub`` isn't the ID
+    token's (or that has none) describes someone else, so its verified email
+    must not steer this login onto that address's local account — the login
+    is refused rather than linked."""
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+    reg = await client.post(
+        "/api/auth/register",
+        json={
+            "display_name": "victim",
+            "password": "password123",
+            "email": "victim@example.com",
+        },
+    )
+    await _verify_local_email(reg.json()["user"]["id"])
+
+    state, _ = await _begin_login(client, idp)
+    idp["token_response"] = {
+        "id_token": _id_token(nonce=idp["nonce"], email=None),
+        "access_token": "x",
+    }
+    idp["userinfo"] = {"email": "victim@example.com", "email_verified": True}
+    if userinfo_sub is not None:
+        idp["userinfo"]["sub"] = userinfo_sub
+    resp = await client.get(
+        f"/api/auth/oidc/testidp/callback?code=abc&state={state}",
+        follow_redirects=False,
+    )
+    assert "error=invalid_token" in resp.headers["location"]
+    async with SessionLocal() as session:
+        assert (await session.scalars(select(UserExternalIdentity))).all() == []
+
+
+async def test_fetch_userinfo_ignores_a_non_object_body(monkeypatch):
+    """Valid JSON that isn't an object is no userinfo — not a 500 when the
+    callback goes to read an email out of it."""
+    import httpx
+
+    real_client = httpx.AsyncClient
+
+    def _client(**kwargs):
+        return real_client(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(200, json=["sso@example.com"])
+            ),
+            **kwargs,
+        )
+
+    monkeypatch.setattr(oidc_utils.httpx, "AsyncClient", _client)
+    monkeypatch.setattr(oidc_utils, "validate_issuer_url", lambda url: _noop())
+    info = await oidc_utils.fetch_userinfo(_discovery(), "stub-access-token")
+    assert info == {}
+
+
 # --- the callback: rejection paths ------------------------------------------
 
 
@@ -632,6 +716,8 @@ async def test_return_to_cannot_become_an_open_redirect(client, idp):
         "https://evil.example.com",
         "/\tevil",
         "/ evil",
+        # `$` would match just before a trailing newline (GHSA-42m4).
+        "/challenges\n",
     ],
 )
 def test_return_to_allowlist_rejects_redirect_bypasses(probe):
@@ -1248,3 +1334,17 @@ async def test_callback_rejected_without_the_state_binding_cookie(client, idp):
     assert "error=invalid_state" in resp.headers["location"]
     # And no session was planted.
     assert "refresh_token" not in resp.headers.get("set-cookie", "")
+
+
+async def test_state_binding_cookie_stays_samesite_lax(client, idp):
+    """The OIDC/OAuth2 binding cookie comes back on a top-level GET redirect, so
+    Lax carries it; only SAML's cross-site POST needs SameSite=None, with its
+    own cookie (GHSA-42m4)."""
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+    resp = await client.get("/api/auth/oidc/testidp/login", follow_redirects=False)
+    (cookie,) = [
+        c for c in resp.headers.get_list("set-cookie") if c.startswith("sso_login_state=")
+    ]
+    attrs = {a.strip().lower() for a in cookie.split(";")[1:]}
+    assert {"samesite=lax", "httponly", "path=/api/auth"} <= attrs

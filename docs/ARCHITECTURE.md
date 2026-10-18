@@ -893,12 +893,22 @@ PKCE and `state`**; the callback validates the ID token (signature via cached
 JWKS, plus `iss`/`aud`/`exp`/`nonce` — `iss` by exact match, or, for a
 tenant-templated multi-tenant Entra provider, against the token's own `tid`
 substituted into the configured template, ADR-0032) and then resolves identity
-(`auth/external_identity.resolve_identity`):
+(`auth/external_identity.resolve_identity`). An email the ID token lacks may come
+from the userinfo endpoint, but only an answer whose `sub` equals the ID token's
+— any other refuses the login (OIDC Core §5.3.2):
 
 - **`(provider_id, subject)` matches** → existing linked user.
 - **First contact with a trusted email** (open: the IdP asserts
   `email_verified: true`; closed: the admin set `email_is_authoritative`) →
-  link to the local account with that address.
+  link to the local account with that address, **if that account has verified
+  it** — an unverified match is refused rather than linked (GHSA-42m4).
+  Because linking trusts that stamp, a verification link — like a
+  password-reset link — acts only on the address it was mailed to. A
+  self-service change of address clears the stamp. An address an
+  Administrator sets — creating an account, importing one, or editing it — is
+  stamped verified, the Administrator vouching for it; one a narrower
+  `manage_users` delegate sets is left unverified, so a delegate can't plant an
+  address they control for an identity-provider login to link to.
 - **Otherwise** → JIT-create a user holding **Participant only**, mirroring the
   rule that public registration never grants above Participant. The #118
   admission gate (registration-open + domain allowlist) applies to **open**
@@ -921,7 +931,11 @@ identically regardless of how the user got in. Provider `client_secret`s are
 stored **encrypted** (`utils/crypto.EncryptedString`) rather than plaintext,
 per ADR-0020 — they must be retrieved to call the token endpoint. **SAML 2.0
 (#100) shipped** as a second redirect provider `kind` on the ADR-0022 framework
-(SP-initiated, python3-saml, signature-before-trust). **LDAP (#101) shipped**
+(SP-initiated, python3-saml, signature-before-trust). Its ACS is a cross-site
+POST, which a `SameSite=Lax` cookie never rides, so SAML binds the login to
+the browser with its own `SameSite=None; Secure` state cookie: an IdP on
+another site needs the install served over HTTPS (over plain HTTP the cookie
+falls back to Lax and only a same-site IdP works). **LDAP (#101) shipped**
 as the first non-redirect `kind` (ADR-0022 §5): it has no login button —
 `POST /api/auth/login` falls through to a directory bind (`utils/ldap`, ldap3,
 TLS-mandatory, RFC 4515-escaped search, stable-id subject) only after local

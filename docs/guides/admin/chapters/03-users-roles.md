@@ -18,6 +18,12 @@ once and blocks sign-in; everything they did survives with attribution),
 team memberships included; prefer a ban). You cannot ban or delete
 yourself, or the last active Administrator.
 
+Changing someone's email cancels any reset or verification links sent to the
+old address. As a full Administrator, the new address is marked verified — you
+vouch for it, as when you create or import an account; a delegate with *manage
+users* but not the whole role leaves addresses they set unverified. Changing
+only the capitalisation changes nothing.
+
 The **API tokens** panel at the bottom lists every personal token on the
 platform; **Revoke** kills any of them immediately. That's your lever when a
 credential leaks.

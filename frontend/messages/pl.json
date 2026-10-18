@@ -534,6 +534,7 @@
         "account_disabled": "To konto zostało wyłączone. Skontaktuj się z administratorem.",
         "domain_not_allowed": "Twoje konto nie może się zalogować w tej instancji. Skontaktuj się z administratorem.",
         "registration_closed": "Ta instancja nie akceptuje nowych kont. Skontaktuj się z administratorem.",
+        "email_unverified_conflict": "This email address belongs to an account that hasn't verified it. Sign in to that account with its password and verify the email first, or contact an administrator.",
         "default": "Pojedyncze logowanie nie powiodło się. Spróbuj ponownie lub zaloguj się hasłem."
       },
       "demo": {

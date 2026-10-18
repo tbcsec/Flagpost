@@ -29,3 +29,8 @@ class EmailVerificationToken(Base, TimestampMixin):
         String, unique=True, index=True, nullable=False
     )
     expires_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)
+    # The address this token was mailed to (GHSA-42m4): redeeming it verifies
+    # only while the account still holds this address, so a token can't be
+    # spent on an address its holder switched to in the meantime. Null only on
+    # a token minted before the column existed — /verify-email refuses those.
+    email: Mapped[str | None] = mapped_column(String, nullable=True)

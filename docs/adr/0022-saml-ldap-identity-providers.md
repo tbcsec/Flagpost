@@ -165,7 +165,11 @@ Mandatory, enforced and tested:
   (like the other auth screens). Its terminal handshake mirrors OIDC's — set the
   refresh cookie and 302 to the frontend, which calls `/api/auth/refresh` so no
   token rides a URL — and carries `set-cookie` across the `RedirectResponse`
-  explicitly, as the OIDC callback already must.
+  explicitly, as the OIDC callback already must. *(Amended: it does need one
+  cookie inbound — the login's browser-binding state cookie, parity with the
+  OIDC `state` cookie (GHSA-42m4). The POST is cross-site, so that cookie is
+  `SameSite=None; Secure`, and SAML with an IdP on another site needs the SP
+  served over HTTPS.)*
 - Expose an **SP metadata GET endpoint** (ACS URL + SP cert), so an IdP admin can
   consume it instead of hand-transcribing. SP private key is `EncryptedString`;
   a server-side IdP-metadata fetch goes through the ADR-0013 SSRF blocklist.

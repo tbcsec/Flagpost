@@ -190,6 +190,21 @@
       "competitor": "Competitor guide",
       "judge": "Judge guide",
       "admin": "Admin guide"
+    },
+    "joinCompetition": {
+      "title": "You haven't joined this competition",
+      "description": "Join it to see its challenges, scoreboard and announcements.",
+      "join": "Join competition",
+      "lobby": "Browse competitions",
+      "closedTitle": "This competition isn't open to new competitors",
+      "closedDescription": "You can't join it from here. If you have an invite code, enter it in the lobby."
+    },
+    "switcher": {
+      "label": "Competition",
+      "joined": "Your competitions",
+      "joinable": "Open to join",
+      "join": "Join",
+      "joinAnother": "Join a competition"
     }
   },
   "scoreboard": {
@@ -514,7 +529,10 @@
     "publicTitle": "Public competitions",
     "publicDescription": "Open to join right now",
     "empty": "No public competitions right now.",
-    "readGuide": "Competitor guide"
+    "readGuide": "Competitor guide",
+    "subtitleMember": "Join another competition: pick a public one below, or enter an invite code.",
+    "joinedBadge": "Joined",
+    "open": "Open"
   },
   "auth": {
     "login": {

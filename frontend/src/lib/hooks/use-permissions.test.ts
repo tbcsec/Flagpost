@@ -59,6 +59,40 @@ describe("deriveAccess", () => {
     expect(a.inLobby).toBe(false);
   });
 
+  it("tells joined competitions from public ones they haven't joined (#478)", () => {
+    const competitor = deriveAccess(
+      { global: [], by_competition: { c1: ["challenge_view"] } },
+      "c2",
+    );
+    expect(competitor.inLobby).toBe(false);
+    expect(competitor.seesEveryCompetition).toBe(false);
+    expect(competitor.isMemberOf("c1")).toBe(true);
+    expect(competitor.isMemberOf("c2")).toBe(false);
+    expect(competitor.memberOfActive).toBe(false);
+    // A role with no challenge access still makes you a member.
+    const ticketsOnly = deriveAccess(
+      { global: [], by_competition: { c1: ["ticket_view"] } },
+      "c1",
+    );
+    expect(ticketsOnly.memberOfActive).toBe(true);
+  });
+
+  it("a competition-scope grant held globally is membership everywhere", () => {
+    const moderator = deriveAccess(
+      { global: ["ticket_view"], by_competition: {} },
+      "any",
+    );
+    expect(moderator.seesEveryCompetition).toBe(true);
+    expect(moderator.memberOfActive).toBe(true);
+    // Global-scope grants alone aren't.
+    const auditor = deriveAccess({ global: ["view_audit_log"], by_competition: {} }, "any");
+    expect(auditor.seesEveryCompetition).toBe(false);
+    expect(auditor.memberOfActive).toBe(false);
+    // And with nothing active, nothing is — not even for a global grant.
+    expect(deriveAccess({ global: [], by_competition: {} }, null).memberOfActive).toBe(false);
+    expect(deriveAccess({ global: ["ticket_view"], by_competition: {} }, null).memberOfActive).toBe(false);
+  });
+
   it("a new user with nothing is in the lobby with no Admin", () => {
     const a = deriveAccess({ global: [], by_competition: {} }, null);
     expect(a.isAdmin).toBe(false);

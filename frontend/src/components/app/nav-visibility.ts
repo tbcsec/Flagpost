@@ -69,3 +69,42 @@ export function shouldRedirectToLobby(viewer: {
   if (viewer.isAdmin && viewer.pathname.startsWith("/admin")) return false;
   return true;
 }
+
+/** Whether `pathname` is a page about the active competition — everything in
+ *  the app shell except the global Admin section, the lobby and your profile.
+ *  On a competition the viewer hasn't joined, these show a join panel (#478). */
+export function isCompetitionScopedPath(pathname: string): boolean {
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) return false;
+  if (pathname === "/lobby" || pathname === "/profile") return false;
+  return true;
+}
+
+/** Whether to show the join panel in place of the page: the viewer has some
+ *  competition access (not the lobby), but not to the active competition. */
+export function shouldShowJoinPanel(viewer: {
+  ready: boolean;
+  inLobby: boolean;
+  memberOfActive: boolean;
+  hasActiveCompetition: boolean;
+  pathname: string;
+}): boolean {
+  return (
+    viewer.ready &&
+    !viewer.inLobby &&
+    viewer.hasActiveCompetition &&
+    !viewer.memberOfActive &&
+    isCompetitionScopedPath(viewer.pathname)
+  );
+}
+
+/** The switcher's entries: split into joined and open-to-join groups for a
+ *  viewer who isn't in every competition, once there's one of each (#478). */
+export function switcherGroups<T extends { id: string }>(
+  competitions: T[],
+  viewer: { ready: boolean; seesEveryCompetition: boolean; isMemberOf: (id: string) => boolean },
+): { joined: T[]; joinable: T[] } | null {
+  if (!viewer.ready || viewer.seesEveryCompetition) return null;
+  const joined = competitions.filter((c) => viewer.isMemberOf(c.id));
+  const joinable = competitions.filter((c) => !viewer.isMemberOf(c.id));
+  return joined.length > 0 && joinable.length > 0 ? { joined, joinable } : null;
+}

@@ -20,6 +20,16 @@ describe("pickActiveCompetitionId", () => {
     expect(pickActiveCompetitionId("gone", ids)).toBe("a");
   });
 
+  it("falls back to a joined competition before an unjoined public one (#478)", () => {
+    const joined = new Set(["c"]);
+    expect(pickActiveCompetitionId(null, ids, (id) => joined.has(id))).toBe("c");
+    expect(pickActiveCompetitionId("gone", ids, (id) => joined.has(id))).toBe("c");
+    // An explicit choice of an unjoined one stands — that's how you browse.
+    expect(pickActiveCompetitionId("a", ids, (id) => joined.has(id))).toBe("a");
+    // Joined nowhere: the first, as before.
+    expect(pickActiveCompetitionId(null, ids, () => false)).toBe("a");
+  });
+
   it("returns null when there are no competitions", () => {
     expect(pickActiveCompetitionId("a", [])).toBeNull();
     expect(pickActiveCompetitionId(null, [])).toBeNull();

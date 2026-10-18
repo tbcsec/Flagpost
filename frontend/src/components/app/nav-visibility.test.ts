@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  isCompetitionScopedPath,
+  shouldShowJoinPanel,
+  switcherGroups,
   shouldCheckProgrammingProblems,
   shouldRedirectToLobby,
   visibleCompNav,
@@ -88,5 +91,56 @@ describe("the lobby redirect", () => {
     // …but not elsewhere, and not someone who can't open Admin at all.
     expect(go("/challenges", true)).toBe(true);
     expect(go("/admin/events", false)).toBe(true);
+  });
+});
+
+describe("a competition the viewer hasn't joined (#478)", () => {
+  const member = { ready: true, inLobby: false, memberOfActive: true, hasActiveCompetition: true };
+
+  it("treats everything but Admin, the lobby and the profile as competition pages", () => {
+    for (const path of ["/", "/challenges", "/scoreboard", "/support", "/settings", "/administrators"]) {
+      expect(isCompetitionScopedPath(path), path).toBe(true);
+    }
+    for (const path of ["/admin", "/admin/users", "/lobby", "/profile"]) {
+      expect(isCompetitionScopedPath(path), path).toBe(false);
+    }
+  });
+
+  it("shows the join panel on competition pages of an unjoined competition", () => {
+    const visitor = { ...member, memberOfActive: false };
+    expect(shouldShowJoinPanel({ ...visitor, pathname: "/challenges" })).toBe(true);
+    expect(shouldShowJoinPanel({ ...visitor, pathname: "/profile" })).toBe(false);
+    expect(shouldShowJoinPanel({ ...visitor, pathname: "/admin/events" })).toBe(false);
+  });
+
+  it("never for a member, the lobby, before permissions load, or with nothing active", () => {
+    expect(shouldShowJoinPanel({ ...member, pathname: "/" })).toBe(false);
+    const visitor = { ...member, memberOfActive: false, pathname: "/" };
+    expect(shouldShowJoinPanel({ ...visitor, inLobby: true })).toBe(false);
+    expect(shouldShowJoinPanel({ ...visitor, ready: false })).toBe(false);
+    expect(shouldShowJoinPanel({ ...visitor, hasActiveCompetition: false })).toBe(false);
+  });
+
+  it("groups the switcher into joined and open-to-join for a competitor", () => {
+    const comps = [{ id: "a" }, { id: "b" }, { id: "c" }];
+    const viewer = { ready: true, seesEveryCompetition: false, isMemberOf: (id: string) => id === "b" };
+    expect(switcherGroups(comps, viewer)).toEqual({
+      joined: [{ id: "b" }],
+      joinable: [{ id: "a" }, { id: "c" }],
+    });
+  });
+
+  it("keeps one flat list when there's nothing to tell apart", () => {
+    const comps = [{ id: "a" }, { id: "b" }];
+    const competitor = { ready: true, seesEveryCompetition: false };
+    expect(switcherGroups(comps, { ...competitor, isMemberOf: () => true })).toBeNull();
+    expect(switcherGroups(comps, { ...competitor, isMemberOf: () => false })).toBeNull();
+    // An Administrator is in every competition; and nothing before permissions
+    // load — even for a membership that would otherwise split the list.
+    const onlyA = (id: string) => id === "a";
+    expect(
+      switcherGroups(comps, { ready: true, seesEveryCompetition: true, isMemberOf: onlyA }),
+    ).toBeNull();
+    expect(switcherGroups(comps, { ...competitor, ready: false, isMemberOf: onlyA })).toBeNull();
   });
 });

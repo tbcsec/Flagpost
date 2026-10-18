@@ -1216,13 +1216,7 @@
   },
   "support": {
     "title": "Soutien",
-    "openCount": "{count} ouvert",
     "yourTickets": "vos billets",
-    "stats": {
-      "all": "Tous les tickets",
-      "open": "Ouvert",
-      "resolved": "Résolu"
-    },
     "status": {
       "all": "Tous",
       "open": "Ouvert",
@@ -1262,7 +1256,6 @@
       "internalNote": "note interne",
       "replyAria": "Répondre",
       "replyPlaceholder": "Écrire une réponse…",
-      "internalCheckbox": "Note interne",
       "assignToMe": "Assigner à moi",
       "assignedToast": "Assigné à vous",
       "resolve": "Résoudre",
@@ -1270,7 +1263,6 @@
       "sending": "Envoi de…",
       "send": "Envoyer",
       "replyPartialToast": "Réponse envoyée, mais {files} n'a pas pu être attachée",
-      "staffNotes": "Notes du personnel",
       "staffNotesDesc": "Un bloc de travail partagé pour le personnel de ce ticket — jamais montré au concurrent, en direct lorsque vous tapez.",
       "sentToAll": "Envoyé à tous",
       "sentToAllToast": "Réponse envoyée — et publiée pour tous comme clarification",
@@ -1283,7 +1275,6 @@
         "noComment": "Pas de commentaire",
         "readStatement": "Relire l'énoncé"
       },
-      "toAllCheckbox": "Envoyer aussi à tous comme clarification",
       "toAllQuestion": "La question, telle que tout le monde la verra",
       "toAllHint": "Tout le monde voit cette question avec votre réponse, sur le problème et en annonce — sans le nom de l'auteur. Retirez tout ce qui révèle qui l'a posée ou sa façon de résoudre le problème.",
       "sendToAll": "Envoyer à tous",
@@ -1317,6 +1308,47 @@
     "questionStatus": {
       "open": "sans réponse",
       "resolved": "répondu"
+    },
+    "staff": {
+      "summary": "{open} open · {waiting} waiting on staff",
+      "statusLabel": "Ticket status",
+      "focusLabel": "Quick filters",
+      "focus": {
+        "waiting": "Waiting on staff",
+        "mine": "Mine",
+        "unassigned": "Unassigned"
+      },
+      "waiting": "Waiting on staff",
+      "unassigned": "Unassigned",
+      "noMatch": "No tickets here.",
+      "noMatchSearch": "No tickets match your search.",
+      "pickTitle": "Pick a ticket",
+      "pickDescription": "Choose a ticket from the queue to read and answer it.",
+      "backToQueue": "Back to queue",
+      "notFound": "This ticket isn't available. It may have been deleted, or the link is wrong.",
+      "assignedToYou": "Assigned to you",
+      "detail": {
+        "from": "From",
+        "challenge": "Challenge",
+        "assignee": "Assigned to",
+        "opened": "Opened",
+        "lastActivity": "Last activity"
+      },
+      "tabs": {
+        "conversation": "Conversation",
+        "notes": "Staff notes"
+      },
+      "mode": {
+        "label": "Send as",
+        "reply": "Reply",
+        "answer": "Answer",
+        "internal": "Internal note",
+        "everyone": "Clarification for everyone",
+        "replyHint": "{name} will see this.",
+        "internalHint": "Only staff see internal notes."
+      },
+      "sendInternal": "Add note",
+      "internalPlaceholder": "A note for staff…"
     }
   },
   "feedback": {

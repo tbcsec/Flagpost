@@ -16,7 +16,7 @@ caller decides the status, so the module stays free of the request layer.
 
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -47,17 +47,57 @@ async def can_see_internal(
     )
 
 
-async def message_count(db: AsyncSession, ticket_id: str) -> int:
-    return (
-        await db.scalar(
-            select(func.count(TicketMessage.id)).where(
-                TicketMessage.ticket_id == ticket_id
-            )
+class _ThreadStats:
+    """What a ticket's summary row needs from its messages, as one caller sees
+    them: how many there are, when the latest landed, and who wrote the latest
+    public one."""
+
+    __slots__ = ("count", "last_at", "last_public_author")
+
+    def __init__(self) -> None:
+        self.count = 0
+        self.last_at = None
+        self.last_public_author: str | None = None
+
+    def add(self, author_id: str, created_at, is_internal: bool, include_internal: bool) -> None:
+        """Fold in the next message, oldest first. Internal notes count, and move
+        the activity time, only for a caller who may read them — otherwise the
+        count would say a note exists that the caller can't see."""
+        if not is_internal:
+            self.last_public_author = author_id
+        if is_internal and not include_internal:
+            return
+        self.count += 1
+        self.last_at = created_at
+
+
+async def _thread_stats(
+    db: AsyncSession, competition_id: str, ticket_ids: list[str], *, include_internal: bool
+) -> dict[str, _ThreadStats]:
+    """One query for every listed ticket's thread (the list used to count each
+    ticket separately)."""
+    stats = {ticket_id: _ThreadStats() for ticket_id in ticket_ids}
+    if not ticket_ids:
+        return stats
+    rows = await db.execute(
+        select(
+            TicketMessage.ticket_id,
+            TicketMessage.author_user_id,
+            TicketMessage.created_at,
+            TicketMessage.is_internal,
         )
-    ) or 0
+        .where(
+            TicketMessage.competition_id == competition_id,
+            TicketMessage.ticket_id.in_(ticket_ids),
+        )
+        .order_by(TicketMessage.created_at)
+    )
+    for ticket_id, author_id, created_at, is_internal in rows:
+        stats[ticket_id].add(author_id, created_at, is_internal, include_internal)
+    return stats
 
 
-def _row_to_out(row, count: int) -> TicketOut:
+def _row_to_out(row, stats: _ThreadStats) -> TicketOut:
     ticket, opener_name, team_name, challenge_title, assignee_name = row
     return TicketOut(
         id=ticket.id,
@@ -68,9 +108,15 @@ def _row_to_out(row, count: int) -> TicketOut:
         opener_name=opener_name,
         team_name=team_name,
         assignee_name=assignee_name,
-        message_count=count,
+        message_count=stats.count,
         kind=ticket.kind,
         created_at=ticket.created_at,
+        assignee_user_id=ticket.assignee_user_id,
+        last_activity_at=stats.last_at or ticket.created_at,
+        awaiting_staff=(
+            ticket.status == "open"
+            and stats.last_public_author == ticket.opener_user_id
+        ),
     )
 
 
@@ -103,7 +149,13 @@ async def list_visible_tickets(
     if status_filter in ("open", "resolved"):
         stmt = stmt.where(Ticket.status == status_filter)
     rows = (await db.execute(stmt)).all()
-    return [_row_to_out(row, await message_count(db, row[0].id)) for row in rows]
+    stats = await _thread_stats(
+        db,
+        competition_id,
+        [row[0].id for row in rows],
+        include_internal=await can_see_internal(db, user, competition_id),
+    )
+    return [_row_to_out(row, stats[row[0].id]) for row in rows]
 
 
 async def visible_ticket_row(
@@ -138,8 +190,6 @@ async def ticket_detail(
     row = (
         await db.execute(_base_select(competition_id).where(Ticket.id == ticket_id))
     ).first()
-    summary = _row_to_out(row, await message_count(db, ticket_id))
-
     show_internal = await can_see_internal(db, user, competition_id)
     msg_stmt = (
         select(TicketMessage, User.display_name)
@@ -150,6 +200,12 @@ async def ticket_detail(
     if not show_internal:
         msg_stmt = msg_stmt.where(TicketMessage.is_internal.is_(False))
     rows = (await db.execute(msg_stmt)).all()
+    # The summary's figures from the thread just read — it already holds every
+    # public message, and the internal ones exactly when the caller may see them.
+    stats = _ThreadStats()
+    for m, _ in rows:
+        stats.add(m.author_user_id, m.created_at, m.is_internal, show_internal)
+    summary = _row_to_out(row, stats)
 
     # One query for the whole thread's attachments, grouped in Python — a
     # per-message query would be N+1 on a long ticket. Messages the viewer

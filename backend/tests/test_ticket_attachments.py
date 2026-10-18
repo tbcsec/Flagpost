@@ -441,3 +441,65 @@ async def test_large_but_legitimate_screenshot_accepted(client):
     resp = await _attach(client, comp, ticket, message, token, content=tall,
                          name="page.png")
     assert resp.status_code == 201
+
+
+async def test_internal_note_attachments_stay_off_the_competitors_socket(client):
+    """#503: adding or removing an image on an internal note pings staff (the
+    support room), never the competitor's ticket socket."""
+    import asyncio
+    import json
+
+    import pytest
+
+    import main
+    from realtime import manager
+    from tests.ws_client import WsTestClient
+    from utils.event_bus import event_bus
+
+    admin, comp = await _competition(client)
+    token = await _participant(client, comp, "p@example.com")
+    ticket, _ = await _open_ticket(client, comp, token)
+    note = (
+        await client.post(
+            f"/api/competitions/{comp}/tickets/{ticket}/messages",
+            json={"body": "internal", "is_internal": True},
+            headers=_auth(admin),
+        )
+    ).json()
+    note_msg = note["messages"][-1]["id"]
+
+    async def quiet(ws):
+        await event_bus.wait_for_background()
+        with pytest.raises((TimeoutError, asyncio.TimeoutError)):
+            while True:
+                raw = await ws.next_message(0.3)
+                frame = json.loads(raw.get("text") or "{}")
+                # Presence comes and goes on its own; it's not thread activity.
+                if frame.get("type") != "presence":
+                    raise AssertionError(f"unexpected frame {raw}")
+
+    async with (
+        WsTestClient(main.app, f"/ws/ticket/{ticket}") as competitor,
+        WsTestClient(main.app, f"/ws/support/{comp}") as staff,
+    ):
+        await competitor.send_json({"token": token})
+        assert (await competitor.receive_json())["type"] == "auth_ok"
+        await staff.send_json({"token": admin})
+        assert (await staff.receive_json())["type"] == "auth_ok"
+        for _ in range(200):
+            if manager.room_size("support", comp) and manager.room_size("ticket", ticket):
+                break
+            await asyncio.sleep(0.01)
+        await quiet(competitor)
+
+        attachment = (await _attach(client, comp, ticket, note_msg, admin)).json()
+        assert await staff.receive_json() == {"type": "ticket_updated", "ticket_id": ticket}
+        await quiet(competitor)
+
+        resp = await client.delete(
+            f"/api/competitions/{comp}/tickets/{ticket}/attachments/{attachment['id']}",
+            headers=_auth(admin),
+        )
+        assert resp.status_code == 204
+        assert await staff.receive_json() == {"type": "ticket_updated", "ticket_id": ticket}
+        await quiet(competitor)

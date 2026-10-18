@@ -301,7 +301,6 @@ export function ProblemClarifications({
             <TicketThread
               competitionId={competitionId}
               ticketId={openId}
-              isStaff={false}
               onAskAgain={() => {
                 setOpenId(null);
                 setAsking(true);

@@ -120,7 +120,7 @@ TRIGGER_FIELDS: dict[str, list[str]] = {
     ],
     "ticket.attachment_deleted": [
         "competition_id", "ticket_id", "message_id", "attachment_id",
-        "actor_user_id",
+        "actor_user_id", "is_internal",
     ],
     "score.adjusted": [
         "competition_id", "user_id", "team_id", "points", "reason",

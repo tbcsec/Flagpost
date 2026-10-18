@@ -21,11 +21,18 @@ Announce *before* competitors notice, not after the tickets arrive.
 *Tickets are live conversations — replies stream in real time on both sides,
 and staff have their own tools alongside.*
 
-Competitor tickets arrive in **Support**, with the open count on your
-dashboard. In a thread: **Assign to me** claims it, **Internal note** keeps a
-reply from the competitor, **Staff notes** is a live pad for staff only, and
-**Resolve** closes it. Competitors see *A judge is looking at this ticket*
-while you have it open.
+Competitor tickets arrive in **Support**: the queue on one side, the open
+ticket beside it (on a phone, one after the other), with the open count on
+your dashboard. **Waiting on staff**, **Mine** and **Unassigned** narrow the
+queue, and a dot marks a ticket whose competitor wrote last. Each ticket has
+its own link, so you can send one to another judge.
+
+On a ticket, **Assign to me** and **Resolve** sit at the top, apart from
+what you're writing. Below the conversation, choose what you're sending —
+**Reply**, an **Internal note** only staff see, or, on a ticket about a
+challenge, a **Clarification for everyone** — and the box changes colour to
+match. **Staff notes** is its own tab: a live pad for staff only.
+Competitors see *A judge is looking at this ticket* while you have it open.
 
 Working principles: **acknowledge fast, resolve second**; **reproduce before
 you rule** ("the flag won't submit" is a claim — check it in a safe place);
@@ -39,10 +46,10 @@ On a programming problem, competitors can **Ask the judges** privately. The
 question lands in Support tagged **Question** — one message you answer with
 **Send answer** (or a quick answer: *No comment*, *Read the problem
 statement*); they can't reply, only ask again. If the answer helps everyone,
-tick **Also send to everyone as a clarification**: edit *The question, as
-everyone will see it* — strip anything that gives away who asked or how
-they're solving it — and **Send to everyone**. The same checkbox works on
-any ticket about a challenge.
+choose **Clarification for everyone**: edit *The question, as everyone will
+see it* — strip anything that gives away who asked or how they're solving
+it — and **Send to everyone**. The same option works on any ticket about a
+challenge.
 
 You can also **Post a clarification** straight from a challenge, and
 **Withdraw** one later: it stays listed, marked withdrawn, with its answer

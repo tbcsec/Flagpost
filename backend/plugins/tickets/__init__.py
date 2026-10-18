@@ -77,9 +77,13 @@ def setup(app, event_bus, db_factory) -> None:
     @event_bus.on("ticket.message_posted", owner="tickets")
     async def on_message(event_name: str, payload: dict) -> None:
         ticket_id = payload.get("ticket_id")
-        if ticket_id:
+        # An internal note stays off the ticket room, which the competitor is
+        # in: even a body-less frame (and the chime it plays) would tell them
+        # one was written. Staff pick it up from the support room below, which
+        # refreshes the ticket they have open (#503).
+        if ticket_id and not payload.get("is_internal"):
             # No body in the frame — clients refetch the permission-filtered
-            # thread, so an internal note never reaches a competitor's socket.
+            # thread.
             await manager.broadcast(
                 "ticket",
                 ticket_id,
@@ -116,12 +120,18 @@ def setup(app, event_bus, db_factory) -> None:
         # Reuses the ticket_updated frame, so the thread refetches (and picks up
         # the new image) without a client-side WS change. Not ticket_message —
         # attaching shouldn't fire the §4.4 audio cue a second time on top of
-        # the message that carried it.
+        # the message that carried it. An internal note's attachment goes to
+        # staff only, like the note itself (#503).
         ticket_id = payload.get("ticket_id")
-        if ticket_id:
-            await manager.broadcast(
-                "ticket", ticket_id, {"type": "ticket_updated", "ticket_id": ticket_id}
-            )
+        if not ticket_id:
+            return
+        frame = {"type": "ticket_updated", "ticket_id": ticket_id}
+        if not payload.get("is_internal"):
+            await manager.broadcast("ticket", ticket_id, frame)
+            return
+        competition_id = payload.get("competition_id")
+        if competition_id:
+            await manager.broadcast("support", competition_id, frame)
 
     @event_bus.on("ticket.assigned", owner="tickets")
     async def on_assigned(event_name: str, payload: dict) -> None:

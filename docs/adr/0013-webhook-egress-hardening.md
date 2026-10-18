@@ -111,22 +111,18 @@ status line + headers — now runs under an overall deadline,
 `automation_actions.WEBHOOK_DEADLINE_S` = 3 × the 5s per-operation timeout.
 Pinning, SNI and `follow_redirects=False` are unchanged.
 
-The deadline bounds one action, not a rule. A rule's actions (up to 10) can
-together outlast the automations handler ceiling, which then cancels the rest
-of the run; and a time rule runs inline on the shared scheduler tick, where the
-per-action deadline is the only bound on how long it holds the tick.
-
 Counting bytes as they arrive bounds an uncompressed body but not a compressed
 one: httpx decodes each chunk with no limit on what it expands to. The same
 follow-up added `utils/http_bounded.fetch`, a shared reader that refuses an
 over-cap `Content-Length` up front, asks for `Accept-Encoding: identity`, reads
-the body raw and decodes at most one gzip/deflate layer itself within the cap
-(a static mirror may serve a stored encoding whatever was asked), and refuses
-any other coding. It reads, each under an overall deadline:
+the body raw and decodes at most one gzip or zlib-wrapped deflate layer itself
+within the cap, counting the raw bytes too (a static mirror may serve a stored
+encoding whatever was asked), and refuses any other coding. It reads, each
+under an overall deadline:
 
 - the marketplace registry client (ADR-0040): the resolve response (256 KiB,
   then shape-checked before use) and the artifact download (200 MiB);
-- the daily update check (64 KiB), which runs on the shared scheduler tick;
+- the daily update check (64 KiB);
 - the OIDC discovery, JWKS, token and userinfo responses and the plain-OAuth2
   token and userinfo responses (1 MiB; ADR-0021, ADR-0033).
 

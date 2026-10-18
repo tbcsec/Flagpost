@@ -207,13 +207,6 @@ WEBHOOK_IO_TIMEOUT_S = 5.0
 # per-operation windows. An honest resolver answers in a fraction of one, so
 # 3 x the per-operation timeout is what an honest-but-slow target can need
 # (GHSA-r7rp-46pp-x55q).
-#
-# It bounds one action, not a rule. A rule carries up to 10 actions
-# (schemas/automation.py), so its worst case is past the automations handler
-# ceiling (plugins/automations EVALUATE_HANDLER_TIMEOUT), which then cancels the
-# rest of the run — logged by the engine. A time rule runs inline on the shared
-# scheduler tick with no handler ceiling at all; there this deadline, times the
-# rule's webhook actions, is what bounds how long the rule holds the tick.
 WEBHOOK_DEADLINE_S = 3 * WEBHOOK_IO_TIMEOUT_S
 
 

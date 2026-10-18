@@ -217,8 +217,8 @@ signed URL MAY be issued for paid downloads; if so the resolution's `expires_at`
 bounds it. The instance bounds both calls itself: the resolution and the artifact
 are each read under a byte cap (200 MiB for an artifact) and an overall deadline
 (5 minutes for an artifact), so a mirror must serve within those. It asks for an
-uncompressed response; a stored `gzip` (or `deflate`) `Content-Encoding` is still
-accepted, any other content coding is refused.
+uncompressed response; a stored `gzip` (or zlib-wrapped `deflate`)
+`Content-Encoding` is still accepted, any other content coding is refused.
 
 ### 5.4 Mirroring & air-gap
 

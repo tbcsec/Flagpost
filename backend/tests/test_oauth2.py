@@ -10,7 +10,9 @@ The point of most of these cases is that a *bad* or unverifiable identity is
 refused, which is meaningless if the code deciding that is mocked away.
 """
 
+import asyncio
 import json
+import time
 
 import httpx
 import pytest
@@ -269,12 +271,14 @@ async def test_no_verification_evidence_means_unverified(idp):
 # --- the token exchange's failure shapes -------------------------------------
 
 
-def _stub_http(monkeypatch, response: httpx.Response):
-    """Answer every provider call with ``response``, through a real httpx client
-    on a mock transport, so the bounded read path runs as in production."""
+def _stub_http(monkeypatch, response):
+    """Answer every provider call with ``response`` (or ``response(request)``
+    when it's a handler), through a real httpx client on a mock transport, so
+    the bounded read path runs as in production."""
     monkeypatch.setattr(oauth2_utils, "validate_endpoint_url", _passthrough)
     real_client = httpx.AsyncClient
-    transport = httpx.MockTransport(lambda request: response)
+    handler = response if callable(response) else (lambda request: response)
+    transport = httpx.MockTransport(handler)
     monkeypatch.setattr(
         oauth2_utils.httpx,
         "AsyncClient",
@@ -341,6 +345,54 @@ async def test_an_oversized_profile_is_refused(monkeypatch):
     _stub_http(monkeypatch, httpx.Response(200, content=_Body(doc)))
     with pytest.raises(OAuth2Error, match="oversized"):
         await oauth2_utils.fetch_json(GITHUB_USER, "t")
+
+
+class _Drip:
+    """One byte at a time, for ~3s: bytes keep coming, so no per-read timeout fires."""
+
+    async def __aiter__(self):
+        for _ in range(60):
+            await asyncio.sleep(0.05)
+            yield b" "
+
+
+def _unreachable(request: httpx.Request) -> httpx.Response:
+    raise httpx.ConnectError("connection refused", request=request)
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        lambda request: httpx.Response(
+            200, headers={"Content-Encoding": "br"}, content=_Body(b"\x1b\x00")
+        ),
+        _unreachable,
+        lambda request: httpx.Response(200, content=_Body(b"[" * 100_000 + b"]" * 100_000)),
+    ],
+    ids=["refused-coding", "unreachable", "nested-past-the-parser"],
+)
+async def test_a_failing_provider_call_is_an_oauth2_error(monkeypatch, response):
+    """Each lands on the callback's existing redirect, not a 500."""
+    _stub_http(monkeypatch, response)
+    with pytest.raises(OAuth2Error):
+        await oauth2_utils.exchange_code(
+            token_url=GITHUB_TOKEN,
+            code="c",
+            redirect_uri="https://x/cb",
+            client_id=CLIENT_ID,
+            client_secret="s",
+        )
+    with pytest.raises(OAuth2Error):
+        await oauth2_utils.fetch_json(GITHUB_USER, "t")
+
+
+async def test_a_dripping_provider_hits_the_overall_deadline(monkeypatch):
+    monkeypatch.setattr(oauth2_utils, "_HTTP_DEADLINE", 0.3)
+    _stub_http(monkeypatch, lambda request: httpx.Response(200, content=_Drip()))
+    started = time.monotonic()
+    with pytest.raises(OAuth2Error, match="took longer"):
+        await oauth2_utils.fetch_json(GITHUB_USER, "t")
+    assert time.monotonic() - started < 2.0
 
 
 # --- write-time config validation --------------------------------------------

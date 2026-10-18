@@ -89,10 +89,20 @@ def _malformed(what: str) -> RegistryError:
     return RegistryError(f"malformed resolve response: {what}")
 
 
+def _is_text(value: str) -> bool:
+    """Encodable as UTF-8. JSON's ``\\ud800`` escapes decode to lone surrogates,
+    which the confirmation response can't serialize (a 500), so they're refused."""
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
 def _string(value: object, field: str, *, optional: bool = False) -> str | None:
     if value is None and optional:
         return None
-    if not isinstance(value, str):
+    if not isinstance(value, str) or not _is_text(value):
         raise _malformed(f"{field} is not a string")
     return value
 
@@ -100,8 +110,13 @@ def _string(value: object, field: str, *, optional: bool = False) -> str | None:
 def _flat_object(value: object, field: str) -> dict:
     """The spec's publisher / signature / requires_flagpost: an object of
     scalars. Anything nested is refused here, because it would otherwise reach
-    the confirmation response, whose serializer refuses deep nesting with a 500."""
-    if not isinstance(value, dict) or not all(isinstance(v, _SCALARS) for v in value.values()):
+    the confirmation response, whose serializer refuses deep nesting with a 500;
+    so is a key or string value that isn't encodable text, for the same reason."""
+    if not isinstance(value, dict) or not all(
+        isinstance(v, _SCALARS) and (not isinstance(v, str) or _is_text(v))
+        and _is_text(k)
+        for k, v in value.items()
+    ):
         raise _malformed(f"{field} is not a flat object")
     return value
 
@@ -130,7 +145,7 @@ def _parse(data: object) -> ResolvedArtifact:
         signature = data.get("signature")
         capabilities = data.get("capabilities") or []
         if not isinstance(capabilities, list) or not all(
-            isinstance(c, str) for c in capabilities
+            isinstance(c, str) and _is_text(c) for c in capabilities
         ):
             raise _malformed("capabilities is not a list of strings")
         return ResolvedArtifact(

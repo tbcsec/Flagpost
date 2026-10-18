@@ -81,9 +81,9 @@ async def validate_endpoint_url(url: str) -> None:
 
 
 async def _request(method: str, url: str, **kwargs) -> tuple[httpx.Response, bytes]:
-    """One bounded exchange with the provider (see ``oidc._request``); a breach
-    of the cap or the deadline is an :class:`OAuth2Error`, transport failures
-    propagate as before."""
+    """One bounded exchange with the provider (see ``oidc._request``). Any
+    failure — the cap, the deadline, transport, decoding — is an
+    :class:`OAuth2Error`, which the callback answers with its redirect."""
     try:
         async with asyncio.timeout(_HTTP_DEADLINE):
             async with httpx.AsyncClient(
@@ -96,6 +96,8 @@ async def _request(method: str, url: str, **kwargs) -> tuple[httpx.Response, byt
         raise OAuth2Error(f"{method} {url} took longer than {_HTTP_DEADLINE:.0f}s") from exc
     except http_bounded.BodyTooLarge as exc:
         raise OAuth2Error(f"{method} {url} returned an oversized response") from exc
+    except httpx.HTTPError as exc:
+        raise OAuth2Error(f"{method} {url} failed: {exc}") from exc
 
 
 async def exchange_code(
@@ -136,7 +138,7 @@ async def exchange_code(
         raise OAuth2Error(f"token endpoint returned {response.status_code}")
     try:
         payload = json.loads(body)
-    except ValueError as exc:
+    except (ValueError, RecursionError) as exc:  # not JSON, or nested past the parser
         raise OAuth2Error("token endpoint did not return JSON") from exc
     if not isinstance(payload, dict):
         raise OAuth2Error("token endpoint returned a non-object payload")
@@ -160,7 +162,7 @@ async def fetch_json(url: str, access_token: str) -> Any:
         raise OAuth2Error(f"GET {url} returned {response.status_code}")
     try:
         return json.loads(body)
-    except ValueError as exc:
+    except (ValueError, RecursionError) as exc:  # not JSON, or nested past the parser
         raise OAuth2Error(f"GET {url} did not return JSON") from exc
 
 

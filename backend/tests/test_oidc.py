@@ -1433,3 +1433,58 @@ async def test_a_dripping_provider_hits_the_overall_deadline(monkeypatch):
     with pytest.raises(OidcError, match="took longer"):
         await oidc_utils._get_json("https://idp.example/.well-known/openid-configuration")
     assert time.monotonic() - started < 2.0
+
+
+def _br_coded(request: httpx.Request) -> httpx.Response:
+    return httpx.Response(200, headers={"Content-Encoding": "br"}, content=_Stream(b"\x1b\x00"))
+
+
+def _unreachable(request: httpx.Request) -> httpx.Response:
+    raise httpx.ConnectError("connection refused", request=request)
+
+
+@pytest.mark.parametrize(
+    "handler",
+    [
+        _br_coded,
+        _unreachable,
+        lambda request: httpx.Response(200, content=_Stream(b"<html>down</html>")),
+        lambda request: httpx.Response(200, content=_Stream(b"[" * 100_000 + b"]" * 100_000)),
+        lambda request: httpx.Response(200, content=_Stream(b'["not", "an", "object"]')),
+    ],
+    ids=["refused-coding", "unreachable", "not-json", "nested-past-the-parser", "not-an-object"],
+)
+async def test_a_failing_discovery_redirects_instead_of_a_500(client, monkeypatch, handler):
+    """Every way the discovery fetch can fail lands on the login route's
+    provider-unavailable redirect, through the real discover()."""
+    _provider_answers(monkeypatch, handler)
+    monkeypatch.setattr(oidc_utils, "_discovery_cache", {})
+    admin = await admin_token(client)
+    await _create_provider(client, admin)
+
+    resp = await client.get("/api/auth/oidc/testidp/login", follow_redirects=False)
+    assert resp.status_code == 302, resp.text
+    assert resp.headers["location"].endswith("/login?error=provider_unavailable")
+
+
+@pytest.mark.parametrize(
+    "handler",
+    [
+        _br_coded,
+        _unreachable,
+        lambda request: httpx.Response(200, content=_Stream(b"[" * 100_000 + b"]" * 100_000)),
+        lambda request: httpx.Response(200, content=_Stream(b'"id_token"')),
+    ],
+    ids=["refused-coding", "unreachable", "nested-past-the-parser", "not-an-object"],
+)
+async def test_a_failing_token_exchange_is_an_oidc_error(monkeypatch, handler):
+    _provider_answers(monkeypatch, handler)
+    with pytest.raises(OidcError):
+        await oidc_utils.exchange_code(
+            document={"token_endpoint": "https://idp.example/token"},
+            code="c",
+            redirect_uri="https://app.example/cb",
+            client_id="client",
+            client_secret="secret",
+            code_verifier="v",
+        )

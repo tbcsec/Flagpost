@@ -6,6 +6,7 @@ raw-read path runs (an in-memory ``httpx.Response`` is read at construction).
 
 import asyncio
 import gzip
+import os
 import tracemalloc
 import zlib
 
@@ -91,6 +92,42 @@ async def test_a_gzip_bomb_stops_at_the_cap_without_expanding():
         tracemalloc.stop()
     # Decoding stopped one byte past the cap, not at the 16 MiB on offer.
     assert peak < 2 << 20
+
+
+_GZIP_HEADER = b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff"
+
+
+@pytest.mark.parametrize(
+    "chunks",
+    [
+        # Empty stored deflate blocks: valid input that never decodes to a byte.
+        [_GZIP_HEADER] + [b"\x00\x00\x00\xff\xff" * 13_107] * 200,
+        # A stored file name (FNAME flag) that never ends.
+        [_GZIP_HEADER[:3] + b"\x08" + _GZIP_HEADER[4:]] + [b"A" * 65_536] * 200,
+    ],
+    ids=["empty-deflate-blocks", "endless-file-name"],
+)
+async def test_compressed_input_that_decodes_to_nothing_is_still_capped(chunks):
+    body = _Body(*chunks)
+    response = httpx.Response(200, headers={"Content-Encoding": "gzip"}, content=body)
+    with pytest.raises(http_bounded.BodyTooLarge):
+        await _fetch(response, 4096)
+    assert body.pulled == 2  # the header, then the first chunk past the raw cap
+
+
+async def test_an_incompressible_gzip_body_at_the_cap_is_accepted():
+    # Stored, not compressed: on the wire it is a little *larger* than decoded,
+    # which the raw-byte allowance must leave room for.
+    doc = os.urandom(65_536)
+    raw = gzip.compress(doc)
+    assert len(raw) > len(doc)
+    response = httpx.Response(
+        200,
+        headers={"Content-Encoding": "gzip", "Content-Length": str(len(raw))},
+        content=_Body(raw),
+    )
+    _, got = await _fetch(response, 65_536)
+    assert got == doc
 
 
 async def test_an_endless_uncompressed_body_is_cut_off_at_the_cap():

@@ -3,17 +3,19 @@
 Counting bytes as they arrive is not enough with httpx alone: it decodes a
 compressed body chunk by chunk with no limit on what one chunk expands to, so a
 few hundred bytes of brotli — or gzip stacked on gzip — become gigabytes inside
-a single decode call, before a caller's byte count ever sees them. Outbound
-calls that read a body therefore read it through :func:`fetch`, which:
+a single decode call, before a caller's byte count ever sees them. :func:`fetch`
+reads a body so that the cap holds:
 
-- refuses a ``Content-Length`` over the cap before reading anything;
-- asks for ``Accept-Encoding: identity``, so a conforming server doesn't
+- it refuses a ``Content-Length`` over the cap before reading anything;
+- it asks for ``Accept-Encoding: identity``, so a conforming server doesn't
   compress at all;
-- reads the body raw and decodes at most **one** gzip/deflate layer itself,
-  with ``max_length`` so no single step can produce more than the cap allows.
+- it reads the body raw and decodes at most **one** gzip or zlib-wrapped
+  deflate layer itself, with ``max_length`` so no single step can produce more
+  than the cap allows, and counts the raw bytes too, so input that decodes to
+  nothing (a long gzip header, empty deflate blocks) can't stream on unbounded.
   One layer stays accepted because a static host (a mirror on object storage)
   can serve a stored ``Content-Encoding`` whatever the request asked for;
-- refuses br, zstd, stacked and unknown codings instead of decoding them.
+- it refuses br, zstd, stacked and unknown codings instead of decoding them.
 
 A refused or malformed coding raises ``httpx.DecodingError`` — what httpx raises
 for a body it can't decode — so callers keep the error handling they already
@@ -34,7 +36,15 @@ _INFLATE_CODINGS = frozenset({"gzip", "x-gzip", "deflate"})
 
 
 class BodyTooLarge(Exception):
-    """The response declared, or decoded to, more than the caller's cap."""
+    """The response declared, sent or decoded to more than the caller's cap."""
+
+
+def _raw_limit(max_bytes: int, compressed: bool) -> int:
+    """Wire bytes allowed for a body capped at ``max_bytes`` decoded. An
+    uncompressed body is the cap exactly. A compressed one gets deflate's
+    worst-case expansion (5 bytes per 64 KiB stored block, under 1/4096 of the
+    size) plus 1 KiB for the gzip frame and a stored file name."""
+    return max_bytes + max_bytes // 4096 + 1024 if compressed else max_bytes
 
 
 def _inflater_for(response: httpx.Response):
@@ -55,13 +65,14 @@ def _inflater_for(response: httpx.Response):
 async def read_body(response: httpx.Response, max_bytes: int) -> bytes:
     """Read a streamed response's body, decoded, holding no more than
     ``max_bytes`` of it at any point. See the module docstring."""
+    inflater = _inflater_for(response)
+    raw_limit = _raw_limit(max_bytes, inflater is not None)
     try:
         declared = int(response.headers.get("content-length", ""))
     except ValueError:  # absent, or not a number: count instead
         declared = None
-    if declared is not None and declared > max_bytes:
+    if declared is not None and declared > raw_limit:
         raise BodyTooLarge
-    inflater = _inflater_for(response)
     if response.is_stream_consumed:
         # Only a response built in memory (a mock transport's) arrives already
         # read — httpx reads it at construction — so all that's left to bound
@@ -71,10 +82,12 @@ async def read_body(response: httpx.Response, max_bytes: int) -> bytes:
         return response.content
 
     size = 0
-    raw_seen = False
+    raw_size = 0
     chunks: list[bytes] = []
     async for data in response.aiter_raw():
-        raw_seen = raw_seen or bool(data)
+        raw_size += len(data)
+        if raw_size > raw_limit:
+            raise BodyTooLarge
         while data:
             if inflater is None:
                 out, data = data, b""
@@ -96,7 +109,7 @@ async def read_body(response: httpx.Response, max_bytes: int) -> bytes:
             if size > max_bytes:
                 raise BodyTooLarge
             chunks.append(out)
-    if inflater is not None and raw_seen and not inflater.eof:
+    if inflater is not None and raw_size and not inflater.eof:
         raise httpx.DecodingError("truncated compressed body")
     return b"".join(chunks)
 

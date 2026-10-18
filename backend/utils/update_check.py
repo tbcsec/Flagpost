@@ -50,10 +50,9 @@ CHECK_INTERVAL = timedelta(hours=24)
 # tick, so an endpoint outage doesn't turn every install into a hammer.
 RETRY_INTERVAL = timedelta(hours=1)
 _HTTP_TIMEOUT = 10.0
-# httpx's timeout is per operation, so it never fires while bytes keep arriving.
-# The check runs inline on the shared scheduler tick (time rules, releases,
-# reapers), so the whole exchange is bounded too: a connect plus one read
-# window, for an answer this small (GHSA-r7rp-46pp-x55q).
+# httpx's timeout is per operation, so it never fires while bytes keep arriving;
+# the whole exchange is bounded too: a connect plus one read window, for an
+# answer this small (GHSA-r7rp-46pp-x55q).
 _HTTP_DEADLINE = 2 * _HTTP_TIMEOUT
 # The answer is `{"latest": "1.2.3"}`. 64 KiB is absurdly generous and still
 # bounds what a hostile response can make us allocate.

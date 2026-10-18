@@ -422,3 +422,23 @@ async def test_a_malformed_artifact_url_is_refused_by_the_install_route(client, 
     resp = await client.post("/api/marketplace/install", json={"code": "8fy17"}, headers=_auth(token))
     assert resp.status_code == 400, resp.text
     assert "artifact.url" in resp.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"resolved": {"id": "reg.theme-pack", "name": "bad \ud800", "version": "1.0.0", "kind": "pack"}},
+        {"publisher": {"id": "acme", "name": "\udfff"}},
+        {"publisher": {"id": "acme", "name": "ACME", "\ud800": True}},
+        {"capabilities": ["network", "\ud800"]},
+    ],
+    ids=["resolved-field", "publisher-value", "publisher-key", "capability"],
+)
+async def test_a_lone_surrogate_is_refused_by_the_resolve_route(client, overrides):
+    # JSON's \ud800 escape decodes to a lone surrogate, which the confirmation
+    # response can't encode; it must be a 400, not a 500.
+    token = await admin_token(client)
+    _use(_serving(json.dumps(_resolve_body(**overrides)).encode()))
+    resp = await client.post("/api/marketplace/resolve", json={"code": "8fy17"}, headers=_auth(token))
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["detail"].startswith("malformed resolve response")

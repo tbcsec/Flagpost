@@ -95,10 +95,7 @@ async def validate_issuer_url(url: str) -> None:
     """Refuse anything but a public https endpoint (ADR-0021).
 
     Re-resolved on every fetch rather than trusted from configuration time, so
-    DNS that changes after a provider is saved is re-checked. The connection is
-    not pinned to the checked address, though: httpx resolves again to connect,
-    so a resolve-then-connect TOCTOU remains on this OIDC path. (Webhooks closed
-    theirs by pinning — ADR-0013 amendment.)
+    DNS that changes after a provider is saved is re-checked.
     """
     parts = urlsplit(url)
     if parts.scheme != "https":
@@ -132,8 +129,9 @@ async def validate_issuer_url(url: str) -> None:
 async def _request(method: str, url: str, **kwargs) -> tuple[httpx.Response, bytes]:
     """One exchange with the provider, bounded: the body is read through
     ``http_bounded`` under ``_MAX_RESPONSE_BYTES`` and the whole exchange under
-    ``_HTTP_DEADLINE``; either breach is an :class:`OidcError`. Transport and
-    decoding failures propagate as ``httpx.HTTPError``, as they always have."""
+    ``_HTTP_DEADLINE``. Any failure — either breach, a transport error, a body
+    that can't be decoded — is an :class:`OidcError`, so the routes answer with
+    their provider-unavailable / invalid-token redirect rather than a 500."""
     try:
         async with asyncio.timeout(_HTTP_DEADLINE):
             async with httpx.AsyncClient(
@@ -146,6 +144,20 @@ async def _request(method: str, url: str, **kwargs) -> tuple[httpx.Response, byt
         raise OidcError(f"{method} {url} took longer than {_HTTP_DEADLINE:.0f}s") from exc
     except http_bounded.BodyTooLarge as exc:
         raise OidcError(f"{method} {url} returned an oversized response") from exc
+    except httpx.HTTPError as exc:
+        raise OidcError(f"{method} {url} failed: {exc}") from exc
+
+
+def _json_object(body: bytes, what: str) -> dict[str, Any]:
+    """Parse a provider response that must be a JSON object, or raise
+    :class:`OidcError` (not JSON, nested past the parser, or not an object)."""
+    try:
+        data = json.loads(body)
+    except (ValueError, RecursionError) as exc:
+        raise OidcError(f"{what} did not return JSON") from exc
+    if not isinstance(data, dict):
+        raise OidcError(f"{what} did not return a JSON object")
+    return data
 
 
 async def _get_json(url: str) -> dict[str, Any]:
@@ -153,7 +165,7 @@ async def _get_json(url: str) -> dict[str, Any]:
     response, body = await _request("GET", url)
     if response.status_code != 200:
         raise OidcError(f"GET {url} returned {response.status_code}")
-    return json.loads(body)
+    return _json_object(body, f"GET {url}")
 
 
 async def discover(issuer: str, *, issuer_template: str | None = None) -> dict[str, Any]:
@@ -251,7 +263,7 @@ async def exchange_code(
     response, body = await _request("POST", token_endpoint, data=data, auth=auth)
     if response.status_code != 200:
         raise OidcError(f"token endpoint returned {response.status_code}")
-    payload = json.loads(body)
+    payload = _json_object(body, "token endpoint")
     if "id_token" not in payload:
         raise OidcError("token response contained no id_token")
     return payload
@@ -339,11 +351,9 @@ async def fetch_userinfo(
             "GET", endpoint, headers={"Authorization": f"Bearer {access_token}"}
         )
         if response.status_code == 200:
-            data = json.loads(body)
-            # Valid JSON isn't necessarily an object; the caller indexes it.
-            if isinstance(data, dict):
-                return data
-            logger.warning("userinfo response was not a JSON object; ignoring it")
+            # Valid JSON isn't necessarily an object; a non-object is refused
+            # here and, like any failure, ignored below.
+            return _json_object(body, "userinfo endpoint")
     except Exception:  # noqa: BLE001 — optional enrichment, never fatal
         logger.warning("userinfo lookup failed", exc_info=True)
     return {}

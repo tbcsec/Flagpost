@@ -952,7 +952,8 @@ async def _deliver_password_reset(user_id: str, email: str) -> None:
                     user_id=user_id,
                     token_hash=_hash_token(raw),
                     expires_at=utcnow() + timedelta(hours=1),
-                    email=email,
+                    # The stored spelling, so redeeming compares like with like.
+                    email=current,
                 )
             )
             await db.commit()
@@ -960,7 +961,7 @@ async def _deliver_password_reset(user_id: str, email: str) -> None:
         base = origins[0] if origins else ""
         link = f"{base}/reset-password?token={raw}"
         await mailer.send_email(
-            [email],
+            [current],
             "Reset your password",
             f"Someone requested a password reset for your account.\n\n"
             f"Use this link within the next hour to choose a new password:\n{link}\n\n"

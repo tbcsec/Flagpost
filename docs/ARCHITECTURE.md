@@ -904,9 +904,11 @@ from the userinfo endpoint, but only an answer whose `sub` equals the ID token's
   it** — an unverified match is refused rather than linked (GHSA-42m4).
   Because linking trusts that stamp, a verification link — like a
   password-reset link — acts only on the address it was mailed to. A
-  self-service change of address clears the stamp; an address an administrator
-  sets is stamped verified, the administrator vouching for it as at account
-  creation.
+  self-service change of address clears the stamp. An address an
+  Administrator sets — creating an account, importing one, or editing it — is
+  stamped verified, the Administrator vouching for it; one a narrower
+  `manage_users` delegate sets is left unverified, so a delegate can't plant an
+  address they control for an identity-provider login to link to.
 - **Otherwise** → JIT-create a user holding **Participant only**, mirroring the
   rule that public registration never grants above Participant. The #118
   admission gate (registration-open + domain allowlist) applies to **open**

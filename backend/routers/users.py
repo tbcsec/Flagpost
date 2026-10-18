@@ -24,7 +24,7 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth.containment import assert_may_manage_account
+from auth.containment import assert_may_manage_account, holds_every_permission
 from auth.deps import require_permission
 from auth.identity import display_name_taken, email_taken
 from auth.security import ahash_many, ahash_password
@@ -167,9 +167,9 @@ async def create_user(
         email=body.email,
         display_name=body.display_name,
         password_hash=await ahash_password(body.password),
-        # Admin-created accounts are exempt from email verification (#74) — an
-        # administrator minting the account is itself the vouching step.
-        email_verified_at=utcnow(),
+        # An Administrator minting the account vouches for its address (#74),
+        # exempting it from verification; a narrower delegate's doesn't.
+        email_verified_at=await _vouched_at(db, current_user),
     )
     db.add(user)
     await db.commit()
@@ -239,15 +239,15 @@ async def import_users(
             # the cores-sized bulk pool (#207) so a large import finishes under
             # a timeout without oversubscribing the login pool. Order preserved.
             hashes = await ahash_many([p.password for p in to_create])
+            vouched_at = await _vouched_at(db, current_user)
             new_users: dict[int, User] = {}
             for plan, pw_hash in zip(to_create, hashes):
                 account = User(
                     email=plan.email,
                     display_name=plan.display_name,
                     password_hash=pw_hash,
-                    # Same vouching rule as single create (#74): the admin
-                    # minting the account is the verification step.
-                    email_verified_at=utcnow(),
+                    # Same vouching rule as single create (#74).
+                    email_verified_at=vouched_at,
                 )
                 db.add(account)
                 new_users[plan.line] = account
@@ -328,6 +328,15 @@ async def import_users(
     )
 
 
+async def _vouched_at(db: AsyncSession, actor: User):
+    """When ``actor`` setting an account's address counts as verifying it: now,
+    for an Administrator (#74). A narrower ``manage_users`` delegate's doesn't
+    count (GHSA-42m4) — trusted-email SSO linking believes a verified address,
+    so vouching would let a delegate plant one they control on an account and
+    have an identity-provider login linked to it, quietly and for good."""
+    return utcnow() if await holds_every_permission(db, actor) else None
+
+
 @router.patch("/{user_id}", response_model=UserAccountOut)
 async def update_user(
     user_id: str,
@@ -343,13 +352,13 @@ async def update_user(
                 status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
             )
         if (user.email or "").lower() != body.email.lower():
-            # The administrator vouches for the address they set, exactly as at
-            # account creation (#74) — so the stamp is theirs, not carried over
-            # from the old address (GHSA-42m4), and trusted-email SSO linking
-            # and the join gate believe it. Links mailed to the old address die
-            # with it, as on self-service /change-email. A change of letter
-            # case alone is the same address and keeps both.
-            user.email_verified_at = utcnow()
+            # The stamp is the editor's, not carried over from the old address
+            # (GHSA-42m4): an Administrator vouches for the address they set,
+            # as at account creation (#74); a narrower delegate's edit leaves it
+            # unproven. Links mailed to the old address die with it, as on
+            # self-service /change-email. A change of letter case alone is the
+            # same address and keeps both.
+            user.email_verified_at = await _vouched_at(db, current_user)
             for token_model in (EmailVerificationToken, PasswordResetToken):
                 await db.execute(
                     delete(token_model).where(token_model.user_id == user.id)

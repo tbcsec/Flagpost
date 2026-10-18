@@ -283,3 +283,54 @@ async def test_delete_user_and_guards(client):
     other = await _register(client, "other@example.com")
     resp = await client.delete(f"/api/users/{admin_me['id']}", headers=_auth(other))
     assert resp.status_code == 403
+
+
+async def _help_desk(client) -> str:
+    from models.role import Role, RoleAssignment
+
+    token = await _register(client, "desk@example.com")
+    desk_id = (await client.get("/api/auth/me", headers=_auth(token))).json()["id"]
+    async with SessionLocal() as db:
+        role = Role(name="Help desk", scope="global", permissions=["manage_users", "view_all_users"])
+        db.add(role)
+        await db.flush()
+        db.add(RoleAssignment(user_id=desk_id, competition_id=None, role_id=role.id))
+        await db.commit()
+    return token
+
+
+async def test_only_an_administrator_vouches_for_an_address(client):
+    """GHSA-42m4: trusted-email SSO linking believes a verified address, so a
+    narrower manage_users delegate setting one — at create, by CSV or by edit —
+    leaves it unproven; only an Administrator's word verifies it."""
+    await admin_token(client)
+    desk = await _help_desk(client)
+
+    created = await client.post(
+        "/api/users",
+        json={"email": "ceo@corp.example", "display_name": "ceo", "password": "password123"},
+        headers=_auth(desk),
+    )
+    assert created.status_code == 201, created.text
+    assert await _verified_at(created.json()["id"]) is None
+
+    imported = await client.post(
+        "/api/users/import",
+        files={"file": ("u.csv", b"display_name,email,password\ncfo,cfo@corp.example,password123\n", "text/csv")},
+        headers=_auth(desk),
+    )
+    assert imported.status_code in (200, 201), imported.text
+    async with SessionLocal() as db:
+        cfo = await db.scalar(select(User).where(User.display_name == "cfo"))
+    assert cfo is not None and cfo.email_verified_at is None
+
+    token = await _register(client, "player@example.com")
+    player_id = (await client.get("/api/auth/me", headers=_auth(token))).json()["id"]
+    async with SessionLocal() as db:
+        (await db.get(User, player_id)).email_verified_at = utcnow()
+        await db.commit()
+    moved = await client.patch(
+        f"/api/users/{player_id}", json={"email": "mine@desk.example"}, headers=_auth(desk)
+    )
+    assert moved.status_code == 200, moved.text
+    assert await _verified_at(player_id) is None

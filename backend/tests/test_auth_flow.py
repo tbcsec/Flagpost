@@ -233,6 +233,8 @@ async def test_forgot_and_reset_password_flow(client, monkeypatch):
     monkeypatch.setattr(mailer, "send_email", _capture)
 
     await _register(client, "forgetful@example.com", password="oldpassword1", name="Fp")
+    old_refresh = client.cookies.get("refresh_token")
+    assert old_refresh
 
     # Requesting a reset always 202s (even for an unknown address).
     assert (await client.post("/api/auth/forgot-password", json={"email": "forgetful@example.com"})).status_code == 204
@@ -243,6 +245,9 @@ async def test_forgot_and_reset_password_flow(client, monkeypatch):
 
     # Reset with the token, then the new password works and the old one doesn't.
     assert (await client.post("/api/auth/reset-password", json={"token": token, "new_password": "brandnew1"})).status_code == 204
+    # A reset ends every existing session.
+    client.cookies.clear()
+    assert (await client.post("/api/auth/refresh", cookies={"refresh_token": old_refresh})).status_code == 401
     assert (await client.post("/api/auth/login", json={"identifier": "forgetful@example.com", "password": "brandnew1"})).status_code == 200
     assert (await client.post("/api/auth/login", json={"identifier": "forgetful@example.com", "password": "oldpassword1"})).status_code == 401
 

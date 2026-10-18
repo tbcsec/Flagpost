@@ -13,7 +13,7 @@
       "runtimeExecutable": "sh",
       "runtimeArgs": [
         "-c",
-        "cd backend && export DATABASE_URL=\"${DATABASE_URL:-sqlite+aiosqlite:///./dev.db}\" && .venv/bin/alembic upgrade head && exec .venv/bin/uvicorn main:app --reload --host 0.0.0.0 --port 8000"
+        "cd backend && export DATABASE_URL=\"${DATABASE_URL:-sqlite+aiosqlite:///./dev.db}\" && .venv/bin/alembic upgrade head && exec .venv/bin/uvicorn main:app --reload --host 0.0.0.0 --port 8000 --ws-max-size 2097152"
       ],
       "port": 8000
     }

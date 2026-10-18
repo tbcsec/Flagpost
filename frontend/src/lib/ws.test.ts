@@ -34,7 +34,7 @@ class FakeWebSocket {
   sent: string[] = [];
   onopen: (() => void) | null = null;
   onmessage: ((e: { data: string }) => void) | null = null;
-  onclose: (() => void) | null = null;
+  onclose: ((e?: { code: number }) => void) | null = null;
   onerror: (() => void) | null = null;
   constructor(public url: string) {
     FakeWebSocket.instances.push(this);
@@ -53,6 +53,10 @@ class FakeWebSocket {
   }
   serverSend(obj: unknown) {
     this.onmessage?.({ data: JSON.stringify(obj) });
+  }
+  serverClose(code: number) {
+    this.readyState = 3;
+    this.onclose?.({ code });
   }
 }
 
@@ -106,5 +110,66 @@ describe("keepalive ping (ADR-0031)", () => {
     // And no ping before auth on a fresh socket: nothing to keep alive yet.
     const fresh = new FakeWebSocket("ws://x");
     void fresh;
+  });
+});
+
+describe("reconnecting", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(1); // each backoff at its full cap
+    FakeWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  const latest = () => FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
+  function authed() {
+    const sock = latest();
+    sock.serverOpen();
+    sock.serverSend({ type: "auth_ok" });
+    return sock;
+  }
+  function expectReconnectAfter(delayMs: number) {
+    const before = FakeWebSocket.instances.length;
+    vi.advanceTimersByTime(delayMs - 1);
+    expect(FakeWebSocket.instances.length).toBe(before);
+    vi.advanceTimersByTime(1);
+    expect(FakeWebSocket.instances.length).toBe(before + 1);
+  }
+
+  it("resets the backoff after a healthy connection, but not after a refusal", () => {
+    const handle = openRoomSocket("note", "d1", { onMessage: vi.fn() });
+    // An ordinary drop after auth_ok: back after the base delay, every time.
+    authed().serverClose(1006);
+    expectReconnectAfter(1_000);
+    authed().serverClose(1006);
+    expectReconnectAfter(1_000);
+    // Refused — a frame too big (1009) or too many (4429): it keeps growing,
+    // even though each reconnect authenticates fine.
+    authed().serverClose(1009);
+    expectReconnectAfter(2_000);
+    authed().serverClose(4429);
+    expectReconnectAfter(4_000);
+    authed().serverClose(1009);
+    expectReconnectAfter(8_000);
+    handle.close();
+  });
+
+  it("drops frames queued for a connection that dropped, keeps ones sent after", () => {
+    const handle = openRoomSocket("note", "d1", { onMessage: vi.fn() });
+    const first = latest();
+    first.serverOpen();
+    handle.send({ type: "stale" }); // queued: not authed yet
+    first.serverClose(1006);
+    handle.send({ type: "fresh" }); // requested during the reconnect
+    vi.advanceTimersByTime(1_000);
+    const second = authed();
+    expect(second.sent.map((f) => JSON.parse(f).type)).toEqual([undefined, "fresh"]);
+    handle.close();
   });
 });

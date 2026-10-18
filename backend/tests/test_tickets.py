@@ -179,6 +179,29 @@ async def test_resolve_requires_staff_and_reply_reopens(client):
     assert reopened.json()["status"] == "open"
 
 
+async def test_competitor_replies_are_throttled_staff_replies_are_not(client, monkeypatch):
+    """GHSA-4wrj: a competitor's reply can notify the whole staff queue, so
+    replies are rate-limited per user, like opening tickets. Staff replies
+    notify only the opener and stay unthrottled."""
+    import routers.tickets as tickets_router
+
+    monkeypatch.setattr(tickets_router, "_TICKET_REPLY_LIMIT", 2)
+    comp = await _competition(client)
+    ada = await _participant(client, comp, "ada@example.com")
+    admin = await admin_token(client)
+    tk = await _open_ticket(client, comp, ada)
+    url = f"/api/competitions/{comp}/tickets/{tk}/messages"
+
+    for _ in range(2):
+        assert (await client.post(url, json={"body": "more"}, headers=_auth(ada))).status_code == 200
+    resp = await client.post(url, json={"body": "again"}, headers=_auth(ada))
+    assert resp.status_code == 429
+    for _ in range(3):
+        assert (await client.post(url, json={"body": "on it"}, headers=_auth(admin))).status_code == 200
+    thread = (await client.get(f"/api/competitions/{comp}/tickets/{tk}", headers=_auth(ada))).json()
+    assert [m["body"] for m in thread["messages"]].count("again") == 0
+
+
 async def test_assign_sets_assignee_and_emits(client):
     comp = await _competition(client)
     ada = await _participant(client, comp, "ada@example.com")

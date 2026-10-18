@@ -4,6 +4,8 @@ limits / comparison / language overrides, the publish gate, and test data
 riding backup, clone, challenge delete and the competition purge. Nothing here
 runs code; judging arrives in #448."""
 
+import base64
+import copy
 import io
 import zipfile
 
@@ -536,6 +538,138 @@ async def test_backup_import_drops_a_foreign_object_key(client, object_storage):
     assert problem.object_key is None and problem.testcases == []
 
 
+def _zip_b64(members: dict[str, bytes], compression: int = zipfile.ZIP_STORED) -> str:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=compression) as zf:
+        for name, data in members.items():
+            zf.writestr(name, data)
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+async def test_backup_import_rebuilds_the_test_data(client, object_storage, monkeypatch):
+    """GHSA-4wrj: an imported test-data zip is held to the caps an upload is
+    and stored as a fresh build of what it holds, never as sent — the problem
+    page, the editor and the judge all read it. A member the manifest doesn't
+    name, a missing one, one over the per-file cap (refused from its header,
+    before anything inflates), a compression zipfile can't inflate in bounded
+    steps, or a broken archive rejects the import."""
+    admin, comp, chal = await _setup(client)
+    await _add(client, admin, comp, chal, "1 2", "3", sample=True)
+    await _add(client, admin, comp, chal, "4 5", "9")
+    async with SessionLocal() as db:
+        doc = await backup.export_data(db, object_storage, ["competitions"])
+    async with SessionLocal() as db:
+        await db.delete(await db.get(Competition, comp))
+        await db.commit()
+    exported = base64.b64decode(doc["data"]["judge_problems"][0]["_object_data"])
+    with zipfile.ZipFile(io.BytesIO(exported)) as zf:
+        members = {name: zf.read(name) for name in zf.namelist()}
+
+    def _with(blob: str) -> dict:
+        crafted = copy.deepcopy(doc)
+        crafted["data"]["judge_problems"][0]["_object_data"] = blob
+        return crafted
+
+    for blob in (
+        _zip_b64({**members, "data/secret/002.in": b"junk"}),
+        _zip_b64({k: v for k, v in members.items() if k != "data/secret/001.ans"}),
+        _zip_b64(members, zipfile.ZIP_BZIP2),
+        base64.b64encode(b"not a zip").decode(),
+    ):
+        async with SessionLocal() as db:
+            with pytest.raises(backup.ImportError_):
+                await backup.import_data(db, InMemoryStorage(), _with(blob), ["competitions"])
+
+    reads: list[str] = []
+    real_read = zipfile.ZipFile.read
+    with monkeypatch.context() as patch:
+        patch.setattr(td, "MAX_FILE_BYTES", 3)
+        patch.setattr(
+            zipfile.ZipFile, "read",
+            lambda self, name, pwd=None: reads.append(name) or real_read(self, name, pwd),
+        )
+        async with SessionLocal() as db:
+            with pytest.raises(backup.ImportError_):
+                await backup.import_data(db, InMemoryStorage(), doc, ["competitions"])
+    assert reads == []
+
+    # A sound archive — stored uncompressed, members out of order, sizes in the
+    # manifest wrong — is accepted, rebuilt in our own layout, and re-manifested.
+    crafted = _with(_zip_b64(dict(reversed(members.items()))))
+    for entry in crafted["data"]["judge_problems"][0]["testcases"]:
+        entry["input_bytes"] = 999
+    storage = InMemoryStorage()
+    async with SessionLocal() as db:
+        await backup.import_data(db, storage, crafted, ["competitions"])
+    async with SessionLocal() as db:
+        problem = await db.scalar(select(JudgeProblem))
+    assert [t["input_bytes"] for t in problem.testcases] == [4, 4]
+    with zipfile.ZipFile(io.BytesIO(storage.get(problem.object_key))) as zf:
+        assert zf.namelist() == [
+            "data/sample/001.in", "data/sample/001.ans", "data/secret/001.in", "data/secret/001.ans",
+        ]
+        assert {info.compress_type for info in zf.infolist()} == {zipfile.ZIP_DEFLATED}
+    cases = td.load(storage, problem.object_key, problem.testcases)
+    assert [(c.sample, c.input, c.answer) for c in cases] == [
+        (True, b"1 2\n", b"3\n"), (False, b"4 5\n", b"9\n"),
+    ]
+
+
+def test_rebuild_reads_no_further_than_the_headers_say():
+    """GHSA-4wrj: a member whose header understates its size is read only as
+    far as the header says — ``ZipFile.read`` would inflate the whole stream
+    first, so a small zip could cost gigabytes."""
+    import struct
+    import tracemalloc
+    import zlib
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("data/sample/001.in", b"\0" * (32 * 1024 * 1024))
+        zf.writestr("data/sample/001.ans", b"ok\n")
+    raw = bytearray(buf.getvalue())
+    # Both headers of the 32 MiB member claim four zero bytes (CRC and size).
+    crc = zlib.crc32(b"\0" * 4)
+    local, central = raw.find(b"PK\x03\x04"), raw.find(b"PK\x01\x02")
+    struct.pack_into("<I", raw, local + 14, crc)
+    struct.pack_into("<I", raw, local + 22, 4)
+    struct.pack_into("<I", raw, central + 16, crc)
+    struct.pack_into("<I", raw, central + 24, 4)
+
+    tracemalloc.start()
+    try:
+        _, rows = td.rebuild(bytes(raw), [{"id": "a", "sample": True}])
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert rows[0]["input_bytes"] == 4
+    assert peak < 8 * 1024 * 1024, peak
+
+
+async def test_backup_import_bounds_what_all_its_test_data_unpacks(client, object_storage, monkeypatch):
+    """GHSA-4wrj: the test data in one import is bounded together, not only per
+    problem, so a single document can't carry hundreds of maximal problems."""
+    admin = await admin_token(client)
+    comp = await _competition(client, admin)
+    for title in ("A", "B"):
+        chal = await _programming(client, admin, comp, title=title)
+        await _add(client, admin, comp, chal, "1 2", "3", sample=True)  # 6 bytes unpacked
+    async with SessionLocal() as db:
+        doc = await backup.export_data(db, object_storage, ["competitions"])
+    async with SessionLocal() as db:
+        await db.delete(await db.get(Competition, comp))
+        await db.commit()
+
+    monkeypatch.setattr(backup, "MAX_IMPORT_UNPACKED", 11)  # one problem's worth, not two
+    async with SessionLocal() as db:
+        with pytest.raises(backup.ImportError_):
+            await backup.import_data(db, InMemoryStorage(), doc, ["competitions"])
+    monkeypatch.setattr(backup, "MAX_IMPORT_UNPACKED", 12)
+    async with SessionLocal() as db:
+        result = await backup.import_data(db, InMemoryStorage(), doc, ["competitions"])
+    assert result["judge_problems"]["created"] == 2
+
+
 @pytest.mark.parametrize(
     "bad",
     [
@@ -628,3 +762,14 @@ async def test_the_editor_stops_at_the_test_case_cap(client, monkeypatch):
         headers=_auth(admin),
     )
     assert resp.status_code == 413 and "at most 1 test cases" in resp.json()["detail"]
+
+
+def test_rebuild_counts_entries_before_parsing_the_zip():
+    """A restored archive's entry count is checked on the raw bytes, before
+    zipfile builds a directory for it, and its manifest is held to the case cap."""
+    blob = b"PK\x01\x02" * (td.MAX_MEMBERS + 1)
+    with pytest.raises(td.TestdataError, match="too many files"):
+        td.rebuild(blob, [{"id": "a", "sample": True}])
+    rows = [{"id": f"c{i}", "sample": False} for i in range(td.MAX_CASES + 1)]
+    with pytest.raises(td.TestdataError, match="more cases"):
+        td.rebuild(b"", rows)

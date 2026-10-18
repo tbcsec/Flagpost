@@ -286,7 +286,8 @@ without Redis) — and beyond one box to **multiple instances behind a load
 balancer** (the AWS ECS/Fargate + ALB + S3 + RDS + ElastiCache topology is a
 supported target). To run **without Docker**: build & serve the frontend with
 `npm run build && npm run start`, and run the backend with `alembic upgrade head`
-then `uvicorn main:app` (no `--reload`) behind your own TLS-terminating proxy.
+then `uvicorn main:app --ws-max-size 2097152` (no `--reload`) behind your own
+TLS-terminating proxy.
 
 ### 📌 Versioned images (pull instead of build)
 
@@ -326,7 +327,7 @@ Node 20+ — the shipped images run 3.14 and 26, which is what CI tests):
 cd backend && python3 -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/alembic upgrade head        # against a reachable Postgres
-.venv/bin/uvicorn main:app --reload
+.venv/bin/uvicorn main:app --reload --ws-max-size 2097152
 
 # Frontend
 cd frontend && npm install && npm run dev

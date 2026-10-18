@@ -145,3 +145,71 @@ def load(storage: ObjectStorage, key: str | None, rows: list[dict]) -> list[Test
                 )
             )
     return cases
+
+
+def rebuild(
+    blob: bytes, rows: list[dict], *, budget: int = MAX_TOTAL_BYTES
+) -> tuple[bytes, list[dict]]:
+    """Re-derive test data that arrived from outside — a backup's object
+    side-car — rather than storing the archive as sent (GHSA-4wrj). It must hold
+    exactly the members its manifest names, within the caps an upload is held
+    to and within ``budget`` (what the caller still allows to be unpacked);
+    what's stored is then a fresh :func:`build_zip` of what was read, with the
+    manifest rewritten to match. ``rows`` is the shape-checked manifest.
+    Raises :class:`TestdataError`."""
+    if len(rows) > MAX_CASES:
+        raise TestdataError("The test data has more cases than a problem allows.")
+    try:
+        # Counted on the raw bytes before zipfile builds its directory.
+        check_member_count(blob, MAX_MEMBERS)
+    except ArchiveRefused as exc:
+        raise TestdataError(str(exc)) from exc
+    stub = [Testcase(id=r["id"], sample=r["sample"], input=b"", answer=b"") for r in rows]
+    named = _entry_names(stub)
+    expected = sorted(f"{stem}{ext}" for _, stem in named for ext in (".in", ".ans"))
+    try:
+        with zipfile.ZipFile(io.BytesIO(blob)) as zf:
+            infos = zf.infolist()
+            if sorted(info.filename for info in infos) != expected:
+                raise TestdataError("The test data doesn't match its test-case list.")
+            # Judged from the headers before anything inflates; the reads below
+            # then stop at each header's size, so these bound what's unpacked.
+            # Stored or deflated only: zipfile inflates those in bounded steps,
+            # but a bzip2 or LZMA chunk whole — and our own zips never use them.
+            if any(
+                info.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED)
+                for info in infos
+            ):
+                raise TestdataError("The test data uses an unsupported compression.")
+            declared = sum(info.file_size for info in infos)
+            if any(info.file_size > MAX_FILE_BYTES for info in infos) or declared > MAX_TOTAL_BYTES:
+                raise TestdataError("The test data is larger than a problem allows.")
+            if declared > budget:
+                raise TestdataError("The test data is more than this import may unpack.")
+            cases = [
+                Testcase(
+                    id=case.id,
+                    sample=case.sample,
+                    input=_read_declared(zf, f"{stem}.in"),
+                    answer=_read_declared(zf, f"{stem}.ans"),
+                )
+                for case, stem in named
+            ]
+    except TestdataError:
+        raise
+    except Exception as exc:  # noqa: BLE001 — a corrupt, truncated or lying archive
+        raise TestdataError("The test data isn't a readable zip.") from exc
+    check_sizes(cases)
+    return build_zip(cases), manifest(cases)
+
+
+def _read_declared(zf: zipfile.ZipFile, name: str) -> bytes:
+    """A member, read no further than its header's size: ``ZipFile.read``
+    inflates the whole stream before trimming to that size, so a header that
+    understates would be no bound at all."""
+    info = zf.getinfo(name)
+    with zf.open(info) as handle:
+        data = handle.read(info.file_size + 1)
+    if len(data) != info.file_size:
+        raise TestdataError("The test data doesn't match its own sizes.")
+    return data

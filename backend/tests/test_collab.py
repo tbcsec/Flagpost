@@ -6,6 +6,8 @@ snapshot, live relay to *other* members (no self-echo), and per-doc isolation.""
 import asyncio
 import base64
 
+import pytest
+
 from tests.conftest import admin_token
 from tests.ws_client import WsTestClient
 
@@ -371,3 +373,129 @@ async def test_updates_do_not_cross_documents(client):
         assert (await w2b.receive_json())["type"] == "auth_ok"
         snap = await w2b.receive_json()
         assert base64.b64decode(snap["update"]) == b"t2-state"
+
+
+# --- Inbound frame bounds (GHSA-4wrj) ---------------------------------------
+
+
+async def _two_members(client):
+    """A team scratchpad and two of its members: (doc_key, token_a, token_b)."""
+    comp, chal = await _competition_with_challenge(client)
+    token_a, team_id, code = await _make_team(client, comp, "a@example.com", "Alpha")
+    token_b = await _join_team(client, comp, "b@example.com", code)
+    return f"team_challenge:{team_id}:{chal}", token_a, token_b
+
+
+async def _join(ws, token) -> None:
+    await ws.send_json({"token": token})
+    assert (await ws.receive_json())["type"] == "auth_ok"
+    assert (await ws.receive_json())["type"] == "note_snapshot"
+
+
+async def test_note_frames_are_rate_limited_per_user(client, monkeypatch):
+    """Every note_update fans out to the room, so a user's handled frames are
+    budgeted; over it the socket is closed 4429 (its reconnect re-sends the
+    full state) and the excess frame is never relayed."""
+    from config import settings
+
+    monkeypatch.setattr(settings, "ws_message_rate_limit", 2)
+    doc, token_a, token_b = await _two_members(client)
+    async with WsTestClient(main.app, f"/ws/note/{doc}") as wa:
+        await _join(wa, token_a)
+        async with WsTestClient(main.app, f"/ws/note/{doc}") as wb:
+            await _join(wb, token_b)
+            await asyncio.sleep(0.05)  # let B's join land (see the relay test)
+            for i in range(2):
+                await wa.send_json({"type": "note_update", "update": _b64(b"d%d" % i)})
+                relayed = await wb.receive_json()
+                assert base64.b64decode(relayed["update"]) == b"d%d" % i
+            await wa.send_json({"type": "note_update", "update": _b64(b"d2")})
+            assert await wa.expect_close() == 4429
+            with pytest.raises(asyncio.TimeoutError):
+                await wb.receive_json(timeout=0.3)
+
+
+async def test_only_a_small_frame_is_a_ping_and_every_frame_counts(client, monkeypatch):
+    """A padded "ping" is no ping — it gets no pong and can't slip past the
+    budget — and in a room that handles frames every frame is charged before
+    it's parsed, so a flood of them can't run up parsing for free."""
+    from config import settings
+
+    monkeypatch.setattr(settings, "ws_message_rate_limit", 2)
+    doc, token_a, _ = await _two_members(client)
+    async with WsTestClient(main.app, f"/ws/note/{doc}") as wa:
+        await _join(wa, token_a)
+        await wa.send_json({"type": "ping", "pad": "x" * 1000})
+        with pytest.raises(asyncio.TimeoutError):
+            await wa.receive_json(timeout=0.3)
+        await wa.send_json({"type": "ping"})
+        assert await wa.receive_json() == {"type": "pong"}
+        await wa.send_json({"type": "ping", "pad": "x" * 1000})
+        assert await wa.expect_close() == 4429
+
+
+async def test_oversized_note_frame_is_dropped_before_parsing(client, monkeypatch):
+    """A frame longer than the room accepts is dropped unparsed — its size never
+    costs a JSON parse — and the socket keeps working."""
+    import dataclasses
+    import importlib
+    import json
+    import types
+
+    # The module, not the APIRouter the realtime package re-exports by that name.
+    ws_router = importlib.import_module("realtime.router")
+    monkeypatch.setitem(
+        ws_router._room_types, "note",
+        dataclasses.replace(ws_router._room_types["note"], max_frame_chars=200),
+    )
+    parsed: list[int] = []
+
+    def loads(raw):
+        parsed.append(len(raw))
+        return json.loads(raw)
+
+    monkeypatch.setattr(ws_router, "json", types.SimpleNamespace(loads=loads))
+    doc, token_a, token_b = await _two_members(client)
+    async with WsTestClient(main.app, f"/ws/note/{doc}") as wa:
+        await _join(wa, token_a)
+        async with WsTestClient(main.app, f"/ws/note/{doc}") as wb:
+            await _join(wb, token_b)
+            await asyncio.sleep(0.05)
+            await wa.send_json({"type": "note_update", "update": _b64(b"x" * 600)})
+            await wa.send_json({"type": "note_update", "update": _b64(b"small")})
+            relayed = await wb.receive_json()
+            assert base64.b64decode(relayed["update"]) == b"small"
+    assert parsed and max(parsed) <= 200
+
+
+def test_every_uvicorn_launch_bounds_websocket_frames():
+    """uvicorn accepts 16 MiB WebSocket frames by default. Every place the
+    backend is launched passes one smaller --ws-max-size, still above the
+    longest frame a note room accepts."""
+    import re
+    from pathlib import Path
+
+    from plugins.collab import _MAX_FRAME_CHARS
+
+    root = Path(__file__).resolve().parents[2]
+    sizes: set[int] = set()
+    for rel in (
+        "backend/Dockerfile",
+        "backend/docker-entrypoint.sh",
+        "docker-compose.dev.yml",
+        "docker-compose.demo.yml",
+        ".claude/launch.json",
+        "README.md",
+        "CONTRIBUTING.md",
+    ):
+        launches = [
+            line for line in (root / rel).read_text().splitlines()
+            if "uvicorn" in line and "main:app" in line
+        ]
+        assert launches, f"no uvicorn launch found in {rel}"
+        for line in launches:
+            match = re.search(r'--ws-max-size"?,?\s*"?(\d+)', line)
+            assert match, f"{rel} launches uvicorn without --ws-max-size"
+            sizes.add(int(match.group(1)))
+    assert len(sizes) == 1, sizes
+    assert sizes.pop() > _MAX_FRAME_CHARS

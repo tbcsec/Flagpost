@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 
-import { base64ToBytes, bytesToBase64 } from "@/lib/collab";
+import { base64ToBytes, bindCollabDoc, bytesToBase64, MAX_SYNC_BYTES } from "@/lib/collab";
+import { openRoomSocket, type RoomSocketStatus } from "@/lib/ws";
+
+vi.mock("@/lib/ws", () => ({ openRoomSocket: vi.fn() }));
 
 describe("base64 <-> bytes", () => {
   it("round-trips arbitrary binary, including high bytes and zeros", () => {
@@ -50,5 +53,84 @@ describe("Y.js updates survive the base64 transport and converge", () => {
     const fresh = new Y.Doc();
     Y.applyUpdate(fresh, base64ToBytes(snapshot));
     expect(fresh.getText("notes").toString()).toBe("persisted content");
+  });
+});
+
+describe("bindCollabDoc", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  /** Bind `doc` to a stand-in socket: records what's sent, drives the status. */
+  function bind(doc: Y.Doc) {
+    const sent: { type: string; update?: string; state?: string }[] = [];
+    let onStatus: (status: RoomSocketStatus) => void = () => {};
+    vi.mocked(openRoomSocket).mockImplementation((_type, _id, opts) => {
+      onStatus = opts.onStatus ?? onStatus;
+      return { send: (data) => sent.push(data as (typeof sent)[number]), close: vi.fn() };
+    });
+    const onTooLarge = vi.fn();
+    const handle = bindCollabDoc(doc, "team_challenge:t:c", { onTooLarge });
+    return { sent, setStatus: (status: RoomSocketStatus) => onStatus(status), onTooLarge, handle };
+  }
+
+  it("sends nothing while the socket is down; the full state on open carries it", () => {
+    const doc = new Y.Doc();
+    const { sent, setStatus, handle } = bind(doc);
+    doc.getText("notes").insert(0, "typed offline");
+    expect(sent).toEqual([]);
+
+    setStatus("open");
+    expect(sent.map((f) => f.type)).toEqual(["note_update"]);
+    const peer = new Y.Doc();
+    Y.applyUpdate(peer, base64ToBytes(sent[0].update!));
+    expect(peer.getText("notes").toString()).toBe("typed offline");
+
+    setStatus("closed");
+    doc.getText("notes").insert(0, "more ");
+    expect(sent).toHaveLength(1);
+    handle.close();
+  });
+
+  it("never sends more than the server accepts, and says when the note is too large", () => {
+    const doc = new Y.Doc();
+    const { sent, setStatus, onTooLarge, handle } = bind(doc);
+    setStatus("open");
+    sent.length = 0;
+
+    const text = doc.getText("notes");
+    text.insert(0, "x".repeat(MAX_SYNC_BYTES + 1));
+    expect(sent).toEqual([]);
+    expect(onTooLarge).toHaveBeenLastCalledWith(true);
+    setStatus("closed");
+    setStatus("open"); // a reconnect doesn't re-send it either
+    expect(sent).toEqual([]);
+
+    text.delete(0, text.length); // back under the cap
+    vi.advanceTimersByTime(2_000); // the debounced persist
+    expect(sent.map((f) => f.type)).toEqual(["note_update", "note_persist"]);
+    expect(onTooLarge).toHaveBeenLastCalledWith(false);
+    handle.close();
+  });
+
+  it("re-syncs a live peer with the whole state once the note fits again", () => {
+    const doc = new Y.Doc();
+    const { sent, setStatus, handle } = bind(doc);
+    setStatus("open");
+    const text = doc.getText("notes");
+    text.insert(0, "base");
+    const peer = new Y.Doc();
+    for (const frame of sent.splice(0)) {
+      if (frame.type === "note_update") Y.applyUpdate(peer, base64ToBytes(frame.update!));
+    }
+    expect(peer.getText("notes").toString()).toBe("base");
+
+    text.insert(4, "x".repeat(MAX_SYNC_BYTES + 1)); // held back
+    text.delete(4, MAX_SYNC_BYTES + 1);
+    text.insert(4, "after"); // built on the held-back insert
+    for (const frame of sent.splice(0)) {
+      if (frame.type === "note_update") Y.applyUpdate(peer, base64ToBytes(frame.update!));
+    }
+    expect(peer.getText("notes").toString()).toBe("baseafter");
+    handle.close();
   });
 });

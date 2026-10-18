@@ -29,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.deps import require_permission
 from db import get_db
-from models.ticket import TicketMessage
+from models.ticket import Ticket, TicketMessage
 from models.ticket_attachment import TicketAttachment
 from utils.uploads import read_upload_capped
 from models.user import User
@@ -170,6 +170,16 @@ async def upload_ticket_attachment(
 
     # The cap is per **ticket**, across every message and author, so it has to
     # be counted over the whole thread rather than the message being added to.
+    # Count-then-insert races, so lock the ticket row first (GHSA-4wrj): two
+    # concurrent uploads to a ticket one short of the cap would otherwise both
+    # pass the count. The lock holds until the commit below, so the second
+    # upload counts the first's row. A no-op on SQLite, which serialises
+    # writers globally — Postgres is where it matters (``lock_subject``).
+    await db.execute(
+        select(Ticket.id)
+        .where(Ticket.competition_id == competition_id, Ticket.id == ticket_id)
+        .with_for_update()
+    )
     existing = (
         await db.scalar(
             select(func.count(TicketAttachment.id)).where(

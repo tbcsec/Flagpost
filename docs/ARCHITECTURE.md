@@ -234,6 +234,17 @@ Design decisions:
   send the auth frame before closing the connection.
 - **Exponential backoff reconnect** (capped, with jitter) so a dropped
   connection doesn't hammer the server on reconnect storms.
+- **Inbound frames are bounded.** uvicorn runs with `--ws-max-size 2097152`
+  (2 MiB; its default is 16 MiB) — on every launch: the image, the compose
+  files, the dev commands, and any command an operator writes themselves (a
+  multi-instance web task starts uvicorn directly, ADR-0031). A room that
+  handles client frames declares the longest it accepts (anything longer is
+  dropped before it's parsed), every frame sent to such a room is charged to a
+  per-user rate limit before it's parsed (`ws_message_rate_limit`, closing the
+  socket `4429` when exceeded), and only a small frame counts as a keepalive
+  ping — all on top of the per-user handshake limit (`ws_handshake_rate_limit`)
+  (GHSA-4wrj). The collab client never sends a frame over the server's cap, and
+  backs off rather than reconnecting at once after a `1009` or `4429` close.
 - **Debounced presence clearing.** When a connection drops, the "who's
   here" list isn't cleared instantly — a short grace period absorbs blips
   from brief reconnects so the UI doesn't flicker.
@@ -298,7 +309,10 @@ already worked out itself.
 > the opener) for a ticket note. The transport is a **dumb relay** with client-side
 > snapshot persistence (**ADR-0014**): the server relays opaque Y.js update
 > frames and stores one full-state blob per doc (`collab_documents`), never
-> decoding the CRDT. Frontend: `<CollabNote>` (TipTap + `@tiptap/extension-collaboration`
+> decoding the CRDT. Relayed and persisted frames are size-capped (1 MiB of
+> state) and per-user rate-limited (§4.1); a client closed for exceeding the
+> rate re-sends its full state on reconnect, so peers converge.
+> Frontend: `<CollabNote>` (TipTap + `@tiptap/extension-collaboration`
 > over a Y.Doc) wired into the challenge dialog (team scratchpad, or the personal
 > one when the competitor has no team) and the ticket thread (staff notes). The
 > soft-lock/"who's here" cue rides the existing
@@ -349,7 +363,9 @@ announcements, plays a sound; everything else is visual-only via the bell.
 This exists independently of the automation engine's `notify` action
 (§5.3): Support Tickets is required-core (§11.3), so competitors and
 judges need a way to notice ticket activity before automations exist, not
-after.
+after. Because a competitor's new ticket — and their reply on an unassigned
+one — notifies the whole staff queue, both are rate-limited per user; staff
+replies notify only the opener and aren't.
 
 Notifications ride the same WebSocket infrastructure as the rest of this
 layer, but over a per-user room (`/ws/user/<user_id>`) rather than the
@@ -1878,8 +1894,11 @@ existing problems; #451) — and **one test-data zip** in the ICPC/Kattis layout
 (`data/sample|secret/NNN.in|.ans`) plus a cached manifest, so it rides backup,
 clone and purge like an attachment (ADR-0042 amendment). Its caps — 10,000
 cases, 16 MB a file, 64 MB a problem — hold when it's written and again when
-it's read, since a restored backup decides the stored bytes. Publishing requires a
-test case; flag submission to it is refused.
+it's read. A zip arriving in a backup is never stored as sent: it must hold
+exactly the members its manifest names, within the upload caps, and is rebuilt
+and re-manifested from what it holds. The competitor's problem page reads only
+the sample cases. Publishing requires a test case; flag submission to it is
+refused.
 
 ### 17.2 Executors and the harness
 

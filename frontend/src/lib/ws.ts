@@ -41,6 +41,12 @@ interface RoomSocketOptions {
 const BASE_DELAY_MS = 1_000;
 const MAX_DELAY_MS = 30_000;
 
+/** Close codes that mean the server refused what this client sent — a frame
+ *  over its size cap (1009) or over its rate limit (4429). Reconnecting straight
+ *  away would only repeat it, so these keep the backoff growing across the
+ *  reconnects they cause instead of resetting it on the next auth_ok. */
+const REFUSAL_CLOSE_CODES = new Set([1009, 4429]);
+
 /** App-level keepalive cadence (ADR-0031). Browsers can't send protocol-level
  *  WS pings, so an idle socket (a quiet scoreboard) has zero traffic and gets
  *  culled by proxy / load-balancer idle timeouts — default 60s on an AWS ALB —
@@ -62,12 +68,18 @@ export function openRoomSocket(
   const url = `${wsBase()}/ws/${roomType}/${roomId}`;
   let ws: WebSocket | null = null;
   let attempt = 0;
+  // Consecutive refusal closes (REFUSAL_CLOSE_CODES): the backoff after one
+  // starts from here, not from the 0 the auth_ok before it reset it to.
+  let refusals = 0;
   let closed = false;
   let authed = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let pingTimer: ReturnType<typeof setInterval> | null = null;
   // Frames requested before auth completes (or during a reconnect) wait here and
   // flush on auth_ok, so a caller never has to track connection state itself.
+  // Ones still queued when a connection drops are discarded with it: they were
+  // meant for that connection, and a room that needs state carried across a
+  // reconnect re-sends it on "open" (the CRDT relay sends its full state).
   const outbox: unknown[] = [];
 
   function flush() {
@@ -126,9 +138,16 @@ export function openRoomSocket(
       onMessage(data);
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event?: { code?: number }) => {
       authed = false;
       stopPing();
+      outbox.length = 0;
+      if (REFUSAL_CLOSE_CODES.has(event?.code ?? 0)) {
+        refusals = Math.min(refusals + 1, 10);
+        attempt = Math.max(attempt, refusals);
+      } else {
+        refusals = 0;
+      }
       onStatus?.("closed");
       if (closed) return;
       timer = setTimeout(() => {

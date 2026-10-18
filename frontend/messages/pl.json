@@ -37,7 +37,8 @@
       "alignHint": "Wyrównanie nie ma zastosowania w listach lub blokach kodu",
       "live": "Żywe",
       "connecting": "Łączenie…",
-      "reconnecting": "Ponowne łączenie…"
+      "reconnecting": "Ponowne łączenie…",
+      "tooLarge": "Za duża, by ją zsynchronizować — skróć tę notatkę"
     },
     "presence": {
       "staffTitle": "{name} (personel)"

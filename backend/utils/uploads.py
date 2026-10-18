@@ -24,8 +24,12 @@ def safe_filename(filename: str | None, *, default: str = "file") -> str:
     (``../``) or a Windows separator into a stored name or an export archive
     entry. Mirrors the attachment routes' ``_safe_name`` — used by the ctfcli
     import, which stores the bundled filename verbatim otherwise (a name like
-    ``..\\..\\evil.bat`` would then ride into the challenge-export zip)."""
-    name = PurePosixPath(filename or default).name or default
+    ``..\\..\\evil.bat`` would then ride into the challenge-export zip). A leaf
+    that is itself ``..`` (``a/..``), or all dots, names a directory, not a
+    file; and zipfile cuts an entry name at a NUL, so neither survives."""
+    name = PurePosixPath(filename or default).name.replace("\x00", "")
+    if not name.strip("."):
+        return default
     return name.replace("\\", "_")
 
 

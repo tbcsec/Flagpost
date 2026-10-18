@@ -17,12 +17,16 @@ from dataclasses import dataclass
 from uuid import uuid4
 
 from storage.base import ObjectStorage
+from utils.untrusted_zip import MAX_MEMBERS, ArchiveRefused, check_member_count, read_bounded
 
 # Per-file and per-problem caps. Generous for contest test data (large
 # performance inputs run to a few MB), bounded so a single problem can't
 # swallow the object store or a backup.
 MAX_FILE_BYTES = 16 * 1024 * 1024
 MAX_TOTAL_BYTES = 64 * 1024 * 1024
+# Two zip entries a case, so the shared entry cap allows this many — the most a
+# problem package can bring in, and so the most the editor accepts too.
+MAX_CASES = MAX_MEMBERS // 2
 
 
 @dataclass
@@ -60,6 +64,8 @@ def ordered(cases: list[Testcase]) -> list[Testcase]:
 
 
 def check_sizes(cases: list[Testcase]) -> None:
+    if len(cases) > MAX_CASES:
+        raise TestdataError(f"A problem can have at most {MAX_CASES:,} test cases.")
     total = 0
     for case in cases:
         for label, blob in (("input", case.input), ("expected output", case.answer)):
@@ -98,10 +104,31 @@ def manifest(cases: list[Testcase]) -> list[dict]:
 
 def load(storage: ObjectStorage, key: str | None, rows: list[dict]) -> list[Testcase]:
     """The problem's test cases, in manifest order. Our own zips only — the
-    names are derived from manifest position, so they line up 1:1."""
+    names are derived from manifest position, so they line up 1:1. Read within
+    the caps all the same (GHSA-wvjv-56qv-9v42): a restored backup decides the
+    stored bytes, and this runs on every judging and problem view."""
     if not key or not rows:
         return []
+    if len(rows) > MAX_CASES:  # a manifest no write path could have made
+        raise TestdataError("The stored test data is malformed.")
     blob = storage.get(key)
+    try:
+        check_member_count(blob, MAX_MEMBERS)
+    except ArchiveRefused as exc:
+        raise TestdataError("The stored test data is malformed.") from exc
+    total = 0
+
+    def read(zf: zipfile.ZipFile, name: str) -> bytes:
+        nonlocal total
+        try:
+            data = read_bounded(zf, name, MAX_FILE_BYTES + 1)
+        except ArchiveRefused as exc:
+            raise TestdataError("The stored test data is malformed.") from exc
+        total += len(data)
+        if len(data) > MAX_FILE_BYTES or total > MAX_TOTAL_BYTES:
+            raise TestdataError("The stored test data is larger than a problem allows.")
+        return data
+
     with zipfile.ZipFile(io.BytesIO(blob)) as zf:
         names = set(zf.namelist())
         stub = [Testcase(id=r["id"], sample=bool(r["sample"]), input=b"", answer=b"") for r in rows]
@@ -113,8 +140,8 @@ def load(storage: ObjectStorage, key: str | None, rows: list[dict]) -> list[Test
                 Testcase(
                     id=case.id,
                     sample=case.sample,
-                    input=zf.read(f"{stem}.in"),
-                    answer=zf.read(f"{stem}.ans"),
+                    input=read(zf, f"{stem}.in"),
+                    answer=read(zf, f"{stem}.ans"),
                 )
             )
     return cases

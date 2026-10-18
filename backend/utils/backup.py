@@ -118,6 +118,7 @@ from utils.theme_tokens import (
     validate_theme_mode,
     validate_theme_tokens,
 )
+from utils.uploads import safe_filename
 
 SCHEMA_VERSION = 1
 
@@ -229,8 +230,9 @@ class Spec:
     # enforce a content invariant (e.g. ``theme_presets``' ``#RRGGBB`` token
     # boundary) must repeat it here — otherwise a hand-crafted backup bypasses the
     # boundary the interactive routes guard (#323 review). It raises
-    # :class:`ImportError_` to reject the whole document with a 400.
-    validate_row: Callable[[dict], None] | None = None
+    # :class:`ImportError_` to reject the whole document with a 400, or returns
+    # ``False`` to drop just this row (counted as skipped).
+    validate_row: Callable[[dict], bool | None] | None = None
     # A global grant this table needs on top of its section's gate, for a table
     # that rides a section whose grant doesn't govern it: ``pages`` travels with
     # site_settings (older files carry it there, so it can't move) but is
@@ -240,8 +242,16 @@ class Spec:
     permission: str | None = None
 
 
+def _stored_name(row: dict, default: str) -> str:
+    """The row's filename as the upload routes store it: a bare leaf, never a
+    path (GHSA-wvjv-56qv-9v42)."""
+    name = row.get("filename")
+    return safe_filename(name if isinstance(name, str) else None, default=default)
+
+
+# The key builders run before validate_row, so they clean the name themselves.
 def _challenge_object_key(row: dict) -> str:
-    return f"{row['competition_id']}/{row['challenge_id']}/{uuid4().hex}_{row.get('filename', 'file')}"
+    return f"{row['competition_id']}/{row['challenge_id']}/{uuid4().hex}_{_stored_name(row, 'file')}"
 
 
 def _judge_object_key(row: dict) -> str:
@@ -251,7 +261,7 @@ def _judge_object_key(row: dict) -> str:
 
 
 def _ticket_object_key(row: dict) -> str:
-    return f"{row['competition_id']}/tickets/{row['ticket_id']}/{uuid4().hex}_{row.get('filename', 'image')}"
+    return f"{row['competition_id']}/tickets/{row['ticket_id']}/{uuid4().hex}_{_stored_name(row, 'image')}"
 
 
 async def _nk_user(db: AsyncSession, row: dict) -> str | None:
@@ -501,6 +511,31 @@ def _validate_judge_problem_row(row: dict) -> None:
             raise ImportError_(f"{where}: malformed test-case entry")
 
 
+def _validate_attachment_row(row: dict) -> bool:
+    """Reduce an imported attachment's ``filename`` to the bare leaf the upload
+    route stores (GHSA-wvjv-56qv-9v42). ``load_row`` does no content validation,
+    so a crafted backup — or one taken before the ctfcli importer cleaned names
+    — would otherwise land a traversal name that the challenge export writes
+    into its zip. Normalised rather than refused, so such a backup still
+    restores. The #323/#324 class.
+
+    The row is kept only if it points at its *own* re-stored object, as
+    ``_validate_judge_problem_row`` requires. With no bytes in the backup it
+    would keep the source install's key — or any key a crafted row names,
+    another competition's object included, which the download route would
+    then serve and a purge delete — so it's dropped."""
+    row["filename"] = _stored_name(row, "file")
+    own = f"{row.get('competition_id')}/{row.get('challenge_id')}/"
+    return str(row.get("object_key") or "").startswith(own)
+
+
+def _validate_ticket_attachment_row(row: dict) -> bool:
+    """The same for a ticket's image (its route's default name is ``image``)."""
+    row["filename"] = _stored_name(row, "image")
+    own = f"{row.get('competition_id')}/tickets/{row.get('ticket_id')}/"
+    return str(row.get("object_key") or "").startswith(own)
+
+
 async def _nk_competition(db: AsyncSession, row: dict) -> str | None:
     return await db.scalar(select(Competition.id).where(Competition.name == row["name"]))
 
@@ -592,7 +627,7 @@ SPECS: tuple[Spec, ...] = (
          remaps=(_COMP, ("challenge_id", "challenge", True)), owned_by_competition=True),
     Spec("attachments", Attachment, "competitions",
          remaps=(_COMP, ("challenge_id", "challenge", True)), owned_by_competition=True,
-         object_key_for=_challenge_object_key),
+         object_key_for=_challenge_object_key, validate_row=_validate_attachment_row),
     Spec("teams", Team, "competitions", id_map="team",
          remaps=(_COMP,), owned_by_competition=True, regenerate=("invite_code",)),
     Spec("team_memberships", TeamMembership, "competitions",
@@ -631,7 +666,8 @@ SPECS: tuple[Spec, ...] = (
          remaps=(_COMP, ("ticket_id", "ticket", True),
                  ("message_id", "ticket_message", True),
                  ("uploader_user_id", "user", True)),
-         owned_by_competition=True, object_key_for=_ticket_object_key),
+         owned_by_competition=True, object_key_for=_ticket_object_key,
+         validate_row=_validate_ticket_attachment_row),
     Spec("hint_reveals", HintReveal, "competitions",
          remaps=(_COMP, ("hint_id", "hint", True), ("challenge_id", "challenge", True),
                  ("user_id", "user", True), ("team_id", "team", False)),
@@ -900,8 +936,9 @@ async def import_data(
 
             # Re-apply any content invariant the CRUD routes guard (load_row does
             # not) before the row lands — see Spec.validate_row (#323 review).
-            if spec.validate_row is not None:
-                spec.validate_row(row)
+            if spec.validate_row is not None and spec.validate_row(row) is False:
+                skipped += 1
+                continue
 
             obj = spec.model(**load_row(spec.model, row))
             if actor_global is not None:

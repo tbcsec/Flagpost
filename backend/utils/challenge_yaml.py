@@ -25,6 +25,7 @@ Field mapping (ctfcli ⇄ Flagpost):
 
 from __future__ import annotations
 
+import asyncio
 import io
 import re
 import zipfile
@@ -42,6 +43,14 @@ from models.hint import Hint
 from storage.base import ObjectStorage
 from utils.flags import hash_static_flag, make_salt
 from utils.richtext import doc_to_text
+from utils.untrusted_zip import (
+    ArchiveRefused,
+    check_member_count,
+    load_yaml,
+    read_bounded,
+    unique_name,
+    yaml_too_large,
+)
 from utils.uploads import safe_filename
 
 
@@ -49,28 +58,81 @@ from utils.uploads import safe_filename
 # zf.read() decompresses a whole member into memory trusting its declared size,
 # so a small DEFLATE bundle (~1000:1) can force a multi-GB allocation and OOM
 # the backend. Read every member through a bounded reader that never pulls more
-# than the cap, and hold the whole import under an aggregate ceiling.
+# than the cap (``utils.untrusted_zip`` — which also refuses bzip2/LZMA members,
+# whose reads aren't bounded), cap the member count, and hold the whole import
+# under an aggregate ceiling.
 _MAX_MANIFEST_BYTES = 1 * 1024 * 1024        # a challenge.yml is tiny
 _MAX_MEMBER_BYTES = 50 * 1024 * 1024         # per bundled file — parity with the upload route's cap
 _MAX_TOTAL_DECOMPRESSED = 512 * 1024 * 1024  # aggregate across the whole import
+_MAX_MEMBERS = 20_000                        # entries in the zip
+_MAX_YAML_NODES = 10_000                     # a challenge.yml once its aliases are expanded
+_MAX_YAML_CHARS = 4 * _MAX_MANIFEST_BYTES     # …and its scalars' length, likewise
 
 
-class _MemberTooLarge(Exception):
+class _Skip(Exception):
+    """A manifest or bundled file the import skips; the message is its error."""
+
+
+class _MemberTooLarge(_Skip):
     """A single zip member exceeded its decompressed cap (skip that member)."""
 
 
-def _read_member(zf: "zipfile.ZipFile", name: str, cap: int) -> bytes:
+class _Budget:
+    """The import's running total of decompressed bytes. Every byte inflated
+    counts — an over-cap read's ``cap + 1`` too, or one oversized member named
+    over and over would inflate far past the ceiling for free."""
+
+    def __init__(self) -> None:
+        self.total = 0
+
+    def spend(self, n: int) -> None:
+        self.total += n
+        if self.total > _MAX_TOTAL_DECOMPRESSED:
+            raise ValueError("Import exceeds the maximum total decompressed size")
+
+
+def _read_member(
+    zf: "zipfile.ZipFile", name: str, cap: int, budget: _Budget | None = None
+) -> bytes:
     """Read a zip member without trusting its header-declared size: read at most
     ``cap + 1`` bytes, so a zip bomb can't force a huge allocation. Raises
-    :class:`_MemberTooLarge` if the member is larger than ``cap``. ``KeyError``
+    :class:`_MemberTooLarge` if the member is larger than ``cap``, and
+    :class:`_Skip` if its compression can't be read boundedly. ``KeyError``
     (member absent) propagates to the caller, as ``zf.read`` did."""
-    with zf.open(name) as handle:
-        blob = handle.read(cap + 1)
+    try:
+        blob = read_bounded(zf, name, cap + 1)
+    except ArchiveRefused as exc:
+        raise _Skip(str(exc)) from exc
+    if budget is not None:
+        budget.spend(len(blob))
     if len(blob) > cap:
         raise _MemberTooLarge(
             f"{name}: exceeds {cap // (1024 * 1024)} MB decompressed"
         )
     return blob
+
+
+def _open_bundle(zip_bytes: bytes) -> "zipfile.ZipFile":
+    check_member_count(zip_bytes, _MAX_MEMBERS)  # before zipfile builds the directory
+    try:
+        return zipfile.ZipFile(io.BytesIO(zip_bytes))
+    except zipfile.BadZipFile as exc:
+        raise ValueError("Not a valid zip file") from exc
+
+
+def _parse_manifest(zf: "zipfile.ZipFile", name: str, budget: _Budget) -> dict:
+    raw = _read_member(zf, name, _MAX_MANIFEST_BYTES, budget)
+    try:
+        spec = load_yaml(raw) or {}
+    except yaml.YAMLError as exc:
+        raise _Skip(f"{name}: {exc}") from exc
+    if not isinstance(spec, dict):
+        raise _Skip(f"{name}: not a YAML mapping")
+    # YAML aliases share nodes, so a few hundred bytes can expand to gigabytes
+    # the moment the importer str()s a value below.
+    if yaml_too_large(spec, _MAX_YAML_NODES, _MAX_YAML_CHARS):
+        raise _Skip(f"{name}: too large once its aliases are expanded")
+    return spec
 
 
 # --- TipTap ⇄ plain text -----------------------------------------------------
@@ -194,17 +256,27 @@ async def export_challenges(
             # Attachment files (bundled under the challenge folder).
             attachments = (
                 await db.scalars(
-                    select(Attachment).where(Attachment.challenge_id == ch.id)
+                    select(Attachment)
+                    .where(
+                        Attachment.competition_id == competition.id,
+                        Attachment.challenge_id == ch.id,
+                    )
+                    .order_by(Attachment.created_at, Attachment.id)
                 )
             ).all()
             files: list[str] = []
+            used = {"challenge.yml"}  # an attachment mustn't shadow the manifest
             for att in attachments:
                 try:
                     blob = storage.get(att.object_key)
                 except Exception:
                     continue  # a missing object shouldn't sink the whole export
-                zf.writestr(f"{slug}/{att.filename}", blob)
-                files.append(att.filename)
+                # A stored name is only as safe as whatever wrote it: a row from
+                # before the importer sanitised names, or one restored from a
+                # crafted backup, can carry a traversal (GHSA-wvjv-56qv-9v42).
+                name = unique_name(safe_filename(att.filename), used)
+                zf.writestr(f"{slug}/{name}", blob)
+                files.append(name)
             if files:
                 data["files"] = files
 
@@ -336,10 +408,9 @@ async def import_challenges(
 ) -> dict:
     """Create challenges from a ctfcli zip. Additive: a challenge whose title
     already exists is skipped. Returns ``{created, skipped, errors}``."""
-    try:
-        zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
-    except zipfile.BadZipFile as exc:
-        raise ValueError("Not a valid zip file") from exc
+    # The zip work runs in a thread, as the problem-package importer's does:
+    # inflating and parsing never stall the event loop.
+    zf = await asyncio.to_thread(_open_bundle, zip_bytes)
 
     existing_titles = {
         t
@@ -368,29 +439,20 @@ async def import_challenges(
     # Running total of decompressed bytes across the whole import (GHSA-wvjv):
     # even with every member individually capped, a bundle of many bomb members
     # could still exhaust memory in aggregate, so the total is bounded too.
-    total_bytes = 0
+    budget = _Budget()
     # Remember prerequisite titles to resolve after all challenges exist.
     pending_prereqs: list[tuple[str, list[str]]] = []  # (challenge_id, titles)
     title_to_id: dict[str, str] = {}
 
-    for name in sorted(zf.namelist()):
+    # A name listed twice in the directory opens the same entry: read it once.
+    for name in sorted(set(zf.namelist())):
         if not name.endswith("challenge.yml"):
             continue
         folder = name.rsplit("/", 1)[0] if "/" in name else ""
         try:
-            raw = _read_member(zf, name, _MAX_MANIFEST_BYTES)
-        except _MemberTooLarge as exc:
+            spec = await asyncio.to_thread(_parse_manifest, zf, name, budget)
+        except _Skip as exc:
             errors.append(str(exc))
-            continue
-        total_bytes += len(raw)
-        if total_bytes > _MAX_TOTAL_DECOMPRESSED:
-            raise ValueError(
-                "Import exceeds the maximum total decompressed size"
-            )
-        try:
-            spec = yaml.safe_load(raw) or {}
-        except yaml.YAMLError as exc:
-            errors.append(f"{name}: {exc}")
             continue
         title = str(spec.get("name") or "").strip()
         if not title:
@@ -480,22 +542,23 @@ async def import_challenges(
                         cost=cost,
                     )
                 )
-        # Attachment files bundled in the zip.
+        # Attachment files bundled in the zip — each named file once.
+        seen_files: set[str] = set()
         for fname in spec.get("files") or []:
             path = f"{folder}/{fname}" if folder else fname
+            if path in seen_files:
+                continue
+            seen_files.add(path)
             try:
-                blob = _read_member(zf, path, _MAX_MEMBER_BYTES)
+                blob = await asyncio.to_thread(
+                    _read_member, zf, path, _MAX_MEMBER_BYTES, budget
+                )
             except KeyError:
                 errors.append(f"{title}: file {fname} not in zip")
                 continue
-            except _MemberTooLarge as exc:
+            except _Skip as exc:
                 errors.append(f"{title}: {exc}")
                 continue
-            total_bytes += len(blob)
-            if total_bytes > _MAX_TOTAL_DECOMPRESSED:
-                raise ValueError(
-                    "Import exceeds the maximum total decompressed size"
-                )
             # Sanitise the bundled filename (GHSA-wvjv): stored verbatim it would
             # ride a traversal name (..\..\evil.bat) into the challenge-export zip.
             safe = safe_filename(fname)

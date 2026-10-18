@@ -857,3 +857,297 @@ async def test_ctfcli_import_sanitises_traversal_attachment_filename(client):
     assert att is not None
     # No path separator survives, so the export can't emit a traversal entry.
     assert "\\" not in att.filename and "/" not in att.filename
+
+
+# --- ctfcli import/export containment, continued (GHSA-wvjv-56qv-9v42) -------
+
+
+def _ctfcli_bundle(entries: list[tuple[str, bytes | str, int]]) -> bytes:
+    """A ctfcli zip from (name, content, compression) entries, in order."""
+    import io
+    import zipfile
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for name, content, compression in entries:
+            zf.writestr(name, content, compress_type=compression)
+    return buf.getvalue()
+
+
+def _ctfcli_manifest(name: str, **extra) -> str:
+    import yaml
+
+    return yaml.safe_dump(
+        {"name": name, "category": "misc", "value": 10, "flags": ["flag{x}"], **extra}
+    )
+
+
+async def _ctfcli_import(client, comp: str, blob: bytes):
+    admin = await admin_token(client)
+    return await client.post(
+        f"/api/competitions/{comp}/challenges/import",
+        files={"file": ("challenges.zip", blob, "application/zip")},
+        headers=_auth(admin),
+    )
+
+
+async def _attachment_names(comp: str) -> list[str]:
+    async with SessionLocal() as session:
+        return list(
+            (
+                await session.scalars(
+                    select(Attachment.filename).where(Attachment.competition_id == comp)
+                )
+            ).all()
+        )
+
+
+@pytest.mark.parametrize("compression", ["bzip2", "lzma"])
+async def test_ctfcli_import_refuses_bzip2_and_lzma_members(client, compression):
+    """A bzip2 or LZMA member inflates whole on the first read, past any cap, so
+    neither a bundled file nor a manifest compressed that way is read at all."""
+    import zipfile
+
+    method = {"bzip2": zipfile.ZIP_BZIP2, "lzma": zipfile.ZIP_LZMA}[compression]
+    deflate = zipfile.ZIP_DEFLATED
+    comp = await _make_competition(client)
+    blob = _ctfcli_bundle([
+        ("a/challenge.yml", _ctfcli_manifest("A", files=["bomb.bin"]), deflate),
+        ("a/bomb.bin", b"\0" * (4 << 20), method),
+        ("b/challenge.yml", _ctfcli_manifest("B"), method),
+    ])
+    assert len(blob) < 8192  # 4 MiB, and then some, in a few KB
+
+    resp = await _ctfcli_import(client, comp, blob)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["created"] == 1  # A, without its file; B's manifest unread
+    assert any("a/bomb.bin" in e and "isn't accepted" in e for e in body["errors"])
+    assert any("b/challenge.yml" in e and "isn't accepted" in e for e in body["errors"])
+    assert await _attachment_names(comp) == []
+
+
+async def test_ctfcli_import_counts_over_cap_reads_toward_the_total(client, monkeypatch):
+    """An over-cap member still inflated cap + 1 bytes to find that out: those
+    count toward the aggregate, or many of them would inflate for free."""
+    import zipfile
+
+    from utils import challenge_yaml
+
+    monkeypatch.setattr(challenge_yaml, "_MAX_MEMBER_BYTES", 1024)
+    monkeypatch.setattr(challenge_yaml, "_MAX_TOTAL_DECOMPRESSED", 8 * 1024)
+    deflate = zipfile.ZIP_DEFLATED
+    entries = []
+    for i in range(10):
+        entries.append((f"c{i}/challenge.yml", _ctfcli_manifest(f"C{i}", files=["big.bin"]), deflate))
+        entries.append((f"c{i}/big.bin", b"\0" * 4096, deflate))
+    comp = await _make_competition(client)
+
+    resp = await _ctfcli_import(client, comp, _ctfcli_bundle(entries))
+    assert resp.status_code == 400, resp.text
+    assert "total decompressed size" in resp.json()["detail"]
+
+
+async def test_ctfcli_import_reads_each_named_file_once(client):
+    import zipfile
+
+    deflate = zipfile.ZIP_DEFLATED
+    comp = await _make_competition(client)
+    blob = _ctfcli_bundle([
+        ("a/challenge.yml", _ctfcli_manifest("A", files=["f.txt"] * 5), deflate),
+        ("a/f.txt", b"hello", deflate),
+    ])
+    resp = await _ctfcli_import(client, comp, blob)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["created"] == 1
+    assert await _attachment_names(comp) == ["f.txt"]
+
+
+async def test_ctfcli_import_caps_the_member_count(client, monkeypatch):
+    import zipfile
+
+    from utils import challenge_yaml
+
+    monkeypatch.setattr(challenge_yaml, "_MAX_MEMBERS", 5)
+    deflate = zipfile.ZIP_DEFLATED
+    comp = await _make_competition(client)
+    blob = _ctfcli_bundle(
+        [("a/challenge.yml", _ctfcli_manifest("A"), deflate)]
+        + [(f"a/f{i}.txt", b"", deflate) for i in range(5)]
+    )
+    resp = await _ctfcli_import(client, comp, blob)
+    assert resp.status_code == 400, resp.text
+    assert "too many files" in resp.json()["detail"]
+    async with SessionLocal() as session:
+        assert await session.scalar(select(Challenge).where(Challenge.competition_id == comp)) is None
+
+
+async def test_ctfcli_import_refuses_a_yaml_alias_bomb(client):
+    """YAML aliases share nodes, so a short manifest can expand enormously the
+    moment the importer str()s a value. Counted before anything expands it."""
+    import zipfile
+
+    tens = lambda ref: "[" + ", ".join([ref] * 10) + "]"  # noqa: E731
+    manifest = "\n".join([
+        "name: Bomb",
+        "category: misc",
+        f"l0: &l0 {tens('x')}",
+        f"l1: &l1 {tens('*l0')}",
+        f"l2: &l2 {tens('*l1')}",
+        f"l3: &l3 {tens('*l2')}",
+        "description: *l3",
+    ])
+    comp = await _make_competition(client)
+    resp = await _ctfcli_import(
+        client, comp, _ctfcli_bundle([("bomb/challenge.yml", manifest, zipfile.ZIP_DEFLATED)])
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["created"] == 0
+    assert any("aliases" in e for e in body["errors"])
+
+
+async def test_ctfcli_export_cleans_stored_attachment_names(client, object_storage):
+    """A stored name is only as safe as whatever wrote it — a row from before
+    the importer cleaned names, or one restored from a backup — so the export
+    makes each entry a unique leaf under its challenge's folder, and never lets
+    one shadow the manifest."""
+    import io
+    import zipfile
+
+    import yaml
+
+    admin = await admin_token(client)
+    comp = await _make_competition(client)
+    chal = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges",
+            json={"title": "Legacy", "points": 10},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    stored = ["..\\..\\evil.bat", "../../etc/passwd", "a/..", "challenge.yml", "notes.txt", "notes.txt"]
+    async with SessionLocal() as session:
+        for i, name in enumerate(stored):
+            key = f"{comp}/{chal}/{i}"
+            object_storage.put(key, f"blob {i}".encode(), "application/octet-stream")
+            session.add(Attachment(competition_id=comp, challenge_id=chal, filename=name,
+                                   object_key=key, content_type="application/octet-stream",
+                                   size_bytes=6))
+        await session.commit()
+
+    resp = await client.get(f"/api/competitions/{comp}/challenges/export", headers=_auth(admin))
+    assert resp.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+        names = zf.namelist()
+        assert len(names) == len(set(names)) == len(stored) + 1
+        for name in names:
+            folder, _, leaf = name.partition("/")
+            assert folder == "legacy" and leaf.strip(".") and "/" not in leaf and "\\" not in leaf
+        manifest = yaml.safe_load(zf.read("legacy/challenge.yml"))
+        assert manifest["name"] == "Legacy"
+        assert sorted(f"legacy/{f}" for f in manifest["files"]) == sorted(
+            n for n in names if n != "legacy/challenge.yml"
+        )
+        assert sorted(zf.read(f"legacy/{f}") for f in manifest["files"]) == sorted(
+            f"blob {i}".encode() for i in range(len(stored))
+        )
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("..\\..\\evil.bat", ".._.._evil.bat"),
+        ("../../etc/passwd", "passwd"),
+        ("a/..", "file"),
+        ("../..", "file"),
+        ("...", "file"),
+        (".", "file"),
+        ("", "file"),
+        (None, "file"),
+        ("x\x00.txt", "x.txt"),
+        (".hidden", ".hidden"),
+        ("report.pdf", "report.pdf"),
+    ],
+)
+def test_safe_filename_leaves_a_file_name_and_nothing_else(raw, expected):
+    from utils.uploads import safe_filename
+
+    assert safe_filename(raw) == expected
+
+
+async def test_ctfcli_import_refuses_one_long_string_aliased_many_times(client):
+    """Few nodes, but str() of the description would be 5 MB of text from a
+    manifest of a few KB — counted by length, not just by node."""
+    import zipfile
+
+    manifest = (
+        "name: Long\ncategory: misc\n"
+        f"pad: &s {'a' * 50_000}\n"
+        "description: [" + ", ".join(["*s"] * 100) + "]\n"
+    )
+    comp = await _make_competition(client)
+    resp = await _ctfcli_import(
+        client, comp, _ctfcli_bundle([("long/challenge.yml", manifest, zipfile.ZIP_DEFLATED)])
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["created"] == 0
+    assert any("aliases" in e for e in body["errors"])
+
+
+async def test_ctfcli_import_reports_yaml_nested_too_deeply(client):
+    import zipfile
+
+    comp = await _make_competition(client)
+    blob = _ctfcli_bundle([("deep/challenge.yml", "[" * 2000 + "]" * 2000, zipfile.ZIP_DEFLATED)])
+    resp = await _ctfcli_import(client, comp, blob)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["created"] == 0
+    assert any("nested too deeply" in e for e in resp.json()["errors"])
+
+
+async def test_ctfcli_export_takes_only_its_own_competitions_attachments(client, object_storage):
+    import io
+    import zipfile
+
+    admin = await admin_token(client)
+    comp = await _make_competition(client)
+    other = await _make_competition(client)
+    chal = (
+        await client.post(
+            f"/api/competitions/{comp}/challenges",
+            json={"title": "Mine", "points": 10},
+            headers=_auth(admin),
+        )
+    ).json()["id"]
+    async with SessionLocal() as session:
+        for owner, name in ((comp, "mine.txt"), (other, "theirs.txt")):
+            key = f"{owner}/{chal}/{name}"
+            object_storage.put(key, b"x", "application/octet-stream")
+            session.add(Attachment(competition_id=owner, challenge_id=chal, filename=name,
+                                   object_key=key, content_type="application/octet-stream",
+                                   size_bytes=1))
+        await session.commit()
+    resp = await client.get(f"/api/competitions/{comp}/challenges/export", headers=_auth(admin))
+    with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+        assert sorted(zf.namelist()) == ["mine/challenge.yml", "mine/mine.txt"]
+
+
+async def test_ctfcli_import_refuses_merge_keys(client):
+    """Merges that name one mapping several times, level upon level, cost
+    exponential time inside the YAML loader — refused before any flattening."""
+    import time
+    import zipfile
+
+    lines = ["name: Merged", "b0: &b0 {" + ", ".join(f"k{i}: v" for i in range(10)) + "}"]
+    lines += [f"b{i}: &b{i} {{<<: [" + ", ".join([f"*b{i - 1}"] * 4) + f"], z{i}: 1}}" for i in range(1, 10)]
+    comp = await _make_competition(client)
+    started = time.perf_counter()
+    resp = await _ctfcli_import(
+        client, comp, _ctfcli_bundle([("m/challenge.yml", "\n".join(lines), zipfile.ZIP_DEFLATED)])
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["created"] == 0
+    assert any("merge keys" in e for e in resp.json()["errors"])
+    assert time.perf_counter() - started < 5

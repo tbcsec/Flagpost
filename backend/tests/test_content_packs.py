@@ -324,3 +324,112 @@ async def test_install_needs_the_target_competition_to_be_visible(client):
 
     visible = await _install(client, token, pack, public)
     assert visible.status_code == 200, visible.text
+
+
+# --- unpacking is bounded (GHSA-wvjv-56qv-9v42) -------------------------------
+
+
+def _theme_pack_with(themes_json: bytes, compression: int = zipfile.ZIP_DEFLATED) -> bytes:
+    manifest = {
+        "manifest_version": 2, "id": "test.theme-pack", "name": "Theme Pack",
+        "version": "1.0.0", "kind": "pack", "pack": {"pack_type": "theme", "target": "site"},
+    }
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("plugin.yaml", yaml.safe_dump(manifest))
+        zf.writestr("payload/themes.json", themes_json, compress_type=compression)
+    return buf.getvalue()
+
+
+async def test_a_bzip2_or_lzma_member_is_refused(client):
+    # Inflated whole on the first read whatever its header says — refused
+    # before it's opened, even when its content is a perfectly good theme.
+    token = await admin_token(client)
+    themes = json.dumps([_theme_preset("squeezed")]).encode()
+    for method in (zipfile.ZIP_BZIP2, zipfile.ZIP_LZMA):
+        resp = await _install(client, token, _theme_pack_with(themes, method))
+        assert resp.status_code == 400, resp.text
+        assert "isn't accepted" in resp.json()["detail"]
+    async with SessionLocal() as s:
+        assert await s.get(ThemePreset, "squeezed") is None
+
+
+async def test_a_member_over_its_cap_is_refused(client):
+    token = await admin_token(client)
+    padded = json.dumps([_theme_preset("padded")]).encode() + b" " * (1024 * 1024)
+    resp = await _install(client, token, _theme_pack_with(padded))
+    assert resp.status_code == 400, resp.text
+    assert "too large" in resp.json()["detail"]
+    async with SessionLocal() as s:
+        assert await s.get(ThemePreset, "padded") is None
+
+
+async def test_the_entry_count_is_capped_before_parsing(client, monkeypatch):
+    from utils import content_packs
+
+    monkeypatch.setattr(content_packs, "MAX_PACK_MEMBERS", 1)
+    token = await admin_token(client)
+    resp = await _install(client, token, _theme_pack([_theme_preset("counted")]))
+    assert resp.status_code == 400, resp.text
+    assert "too many files" in resp.json()["detail"]
+
+
+async def test_a_refused_challenge_bundle_is_a_pack_error(client, monkeypatch):
+    # The ctfcli importer's own whole-bundle refusals surface as a 400, not a 500.
+    from utils import challenge_yaml
+
+    monkeypatch.setattr(challenge_yaml, "_MAX_MEMBERS", 0)
+    token = await admin_token(client)
+    comp_id = await _make_competition(client)
+    pack = _challenge_pack([{"name": "Warmup", "value": 100, "flags": ["flag{a}"]}])
+    resp = await _install(client, token, pack, comp_id)
+    assert resp.status_code == 400, resp.text
+    assert "too many files" in resp.json()["detail"]
+
+
+def _pack_with_manifest_text(plugin_yaml: str) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("plugin.yaml", plugin_yaml)
+        zf.writestr("payload/themes.json", json.dumps([_theme_preset("aliased")]))
+    return buf.getvalue()
+
+
+_THEME_MANIFEST = (
+    "manifest_version: 2\nid: test.theme-pack\nname: Theme Pack\nversion: 1.0.0\n"
+    "kind: pack\npack: {pack_type: theme, target: site}\n"
+)
+
+
+async def test_a_manifest_whose_aliases_nest_is_refused_before_validation(client):
+    # Validation walks every alias as its own value: six levels of nine is half
+    # a million values from a few hundred bytes. Refused before that walk.
+    import time
+
+    levels = ["a0: &a0 [x, x, x, x, x, x, x, x, x]"]
+    levels += [f"a{i}: &a{i} [" + ", ".join([f"*a{i - 1}"] * 9) + "]" for i in range(1, 7)]
+    plugin = _THEME_MANIFEST + "\n".join(levels) + "\ndependencies: *a6\n"
+    token = await admin_token(client)
+    started = time.perf_counter()
+    resp = await _install(client, token, _pack_with_manifest_text(plugin))
+    assert resp.status_code == 400, resp.text
+    assert "aliases" in resp.json()["detail"]
+    assert time.perf_counter() - started < 5
+
+
+async def test_a_manifest_nested_too_deeply_is_a_pack_error(client):
+    token = await admin_token(client)
+    resp = await _install(client, token, _pack_with_manifest_text("[" * 2000 + "]" * 2000))
+    assert resp.status_code == 400, resp.text
+    assert "nested too deeply" in resp.json()["detail"]
+
+
+async def test_a_manifest_with_merge_keys_or_an_unbuildable_value_is_a_pack_error(client):
+    token = await admin_token(client)
+    for extra, phrase in (
+        ("base: &base {x: 1}\nmore: {<<: *base}\n", "merge keys"),
+        ("big: " + "9" * 5000 + "\n", "can't be read"),
+    ):
+        resp = await _install(client, token, _pack_with_manifest_text(_THEME_MANIFEST + extra))
+        assert resp.status_code == 400, resp.text
+        assert phrase in resp.json()["detail"]

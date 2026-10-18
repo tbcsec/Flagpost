@@ -557,3 +557,74 @@ async def test_backup_import_rejects_an_invalid_problem(client, object_storage, 
     async with SessionLocal() as db:
         with pytest.raises(backup.ImportError_):
             await backup.import_data(db, InMemoryStorage(), doc, ["competitions"])
+
+
+# --- reading stored test data (GHSA-wvjv-56qv-9v42) ----------------------------
+
+
+def _stored_testdata(object_storage, inputs: list[bytes], *, method=zipfile.ZIP_DEFLATED,
+                     extra: int = 0) -> tuple[str, list[dict]]:
+    """A test-data zip as a restored backup could plant it: one secret case per
+    input (answer ``1``), the inputs compressed with ``method``, plus ``extra``
+    stray entries."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for i, data in enumerate(inputs, start=1):
+            zf.writestr(f"data/secret/{i:03d}.in", data, compress_type=method)
+            zf.writestr(f"data/secret/{i:03d}.ans", b"1\n")
+        for i in range(extra):
+            zf.writestr(f"stray/{i}", b"")
+    object_storage.put("planted", buf.getvalue(), "application/zip")
+    rows = [{"id": f"c{i}", "sample": False, "input_bytes": 1, "answer_bytes": 2}
+            for i in range(len(inputs))]
+    return "planted", rows
+
+
+def test_stored_test_data_is_read_within_the_caps(object_storage, monkeypatch):
+    """The judge reads a problem's zip on every judging and problem view, and a
+    restored backup decides its bytes — so it's read under the caps it was
+    written under, never trusting the zip's own sizes or compression."""
+    monkeypatch.setattr(td, "MAX_FILE_BYTES", 1024)
+    with pytest.raises(td.TestdataError, match="larger"):  # one file over its cap
+        td.load(object_storage, *_stored_testdata(object_storage, [b"\0" * 4096]))
+    monkeypatch.setattr(td, "MAX_TOTAL_BYTES", 2048)
+    with pytest.raises(td.TestdataError, match="larger"):  # each under, together over
+        td.load(object_storage, *_stored_testdata(object_storage, [b"\0" * 1000] * 3))
+    for method in (zipfile.ZIP_BZIP2, zipfile.ZIP_LZMA):  # would inflate whole
+        with pytest.raises(td.TestdataError, match="malformed"):
+            td.load(object_storage, *_stored_testdata(object_storage, [b"1\n"], method=method))
+    # Within every cap, it reads as ever.
+    [case] = td.load(object_storage, *_stored_testdata(object_storage, [b"\0" * 1000]))
+    assert case.input == b"\0" * 1000 and case.answer == b"1\n"
+
+
+def test_stored_test_data_entry_count_is_capped_before_parsing(object_storage, monkeypatch):
+    monkeypatch.setattr(td, "MAX_MEMBERS", 4)
+    td.load(object_storage, *_stored_testdata(object_storage, [b"1\n"], extra=2))
+    with pytest.raises(td.TestdataError, match="malformed"):
+        td.load(object_storage, *_stored_testdata(object_storage, [b"1\n"], extra=3))
+
+
+def test_the_test_case_count_is_capped_on_read_and_write(object_storage, monkeypatch):
+    # A restored backup's manifest decides how many cases a load looks for: no
+    # more than any write path could have made, checked before storage is read.
+    monkeypatch.setattr(td, "MAX_CASES", 2)
+    key, rows = _stored_testdata(object_storage, [b"1\n"] * 3)
+    object_storage.delete(key)
+    with pytest.raises(td.TestdataError, match="malformed"):
+        td.load(object_storage, key, rows)
+    cases = [td.Testcase(id=str(i), sample=False, input=b"1", answer=b"1") for i in range(3)]
+    with pytest.raises(td.TestdataError, match="at most 2 test cases"):
+        td.check_sizes(cases)
+    td.check_sizes(cases[:2])
+
+
+async def test_the_editor_stops_at_the_test_case_cap(client, monkeypatch):
+    monkeypatch.setattr(td, "MAX_CASES", 1)
+    admin, comp, chal = await _setup(client)
+    await _add(client, admin, comp, chal)
+    resp = await client.post(
+        f"{_base(comp, chal)}/testcases", json={"input": "1", "answer": "1", "sample": False},
+        headers=_auth(admin),
+    )
+    assert resp.status_code == 413 and "at most 1 test cases" in resp.json()["detail"]

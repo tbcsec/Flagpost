@@ -1070,3 +1070,94 @@ async def test_automations_export_needs_automation_view(client):
         headers={"Authorization": f"Bearer {token2}"},
     )
     assert ok.status_code == 200, ok.text
+
+
+async def test_backup_import_cleans_attachment_filenames(client):
+    """GHSA-wvjv-56qv-9v42: load_row does no content validation, so a crafted
+    backup's attachment name would land verbatim — and ride into the object key
+    and the ctfcli export's zip. The import reduces it to the leaf the upload
+    route would have stored."""
+    import copy
+
+    from models.attachment import Attachment
+
+    comp_id, chal_id, _ = await _seed()
+    storage = InMemoryStorage()
+    storage.put("old-key", b"payload", "application/octet-stream")
+    async with SessionLocal() as db:
+        db.add(Attachment(competition_id=comp_id, challenge_id=chal_id, filename="notes.txt",
+                          object_key="old-key", content_type="application/octet-stream",
+                          size_bytes=7))
+        await db.commit()
+    async with SessionLocal() as db:
+        doc = await backup.export_data(db, storage, ["competitions"])
+    [row] = doc["data"]["attachments"]
+    second = copy.deepcopy(row)
+    row["filename"] = "../../../evil.bat"
+    second.update(id="att-2", filename="..\\..\\evil.bat")
+    doc["data"]["attachments"].append(second)
+    async with SessionLocal() as db:
+        await db.delete(await db.get(Competition, comp_id))
+        await db.commit()
+
+    async with SessionLocal() as db:
+        await backup.import_data(db, storage, doc, ["competitions"])
+    async with SessionLocal() as db:
+        comp = await db.scalar(select(Competition).where(Competition.name == "Export Test"))
+        chal = await db.scalar(select(Challenge).where(Challenge.competition_id == comp.id))
+        rows = (await db.scalars(select(Attachment).where(Attachment.competition_id == comp.id))).all()
+    assert sorted(a.filename for a in rows) == [".._.._evil.bat", "evil.bat"]
+    for att in rows:
+        segments = att.object_key.split("/")
+        assert segments[:2] == [comp.id, chal.id] and len(segments) == 3
+        assert segments[2].endswith(f"_{att.filename}")
+        assert storage.get(att.object_key) == b"payload"
+
+
+def test_backup_import_cleans_ticket_attachment_filenames():
+    spec = next(s for s in backup.SPECS if s.table == "ticket_attachments")
+    row = {"competition_id": "c", "ticket_id": "t", "filename": "../../x/evil.png"}
+    row["object_key"] = spec.object_key_for(row)
+    assert spec.validate_row(row) is not False
+    assert row["filename"] == "evil.png"
+    key = row["object_key"]
+    assert key.startswith("c/tickets/t/") and key.count("/") == 3 and key.endswith("_evil.png")
+    # With no bytes to re-store, the row keeps the key it came with — which
+    # can name any object at all, so it's dropped.
+    assert spec.validate_row({**row, "object_key": "other/tickets/t2/x_evil.png"}) is False
+
+
+async def test_backup_import_drops_an_attachment_that_names_someone_elses_object(client):
+    """GHSA-wvjv-56qv-9v42: a row carried without its bytes keeps its object
+    key — a crafted one can name another competition's object, which the
+    download route would serve and a purge delete. Only a row whose bytes were
+    re-stored under its own key is imported."""
+    from models.attachment import Attachment
+
+    comp_id, chal_id, _ = await _seed()
+    storage = InMemoryStorage()
+    storage.put("victim/chal/secret.bin", b"secret", "application/octet-stream")
+    storage.put("old-key", b"payload", "application/octet-stream")
+    async with SessionLocal() as db:
+        db.add(Attachment(competition_id=comp_id, challenge_id=chal_id, filename="notes.txt",
+                          object_key="old-key", content_type="application/octet-stream",
+                          size_bytes=7))
+        await db.commit()
+    async with SessionLocal() as db:
+        doc = await backup.export_data(db, storage, ["competitions"])
+    [row] = doc["data"]["attachments"]
+    doc["data"]["attachments"].append(
+        {**row, "id": "att-2", "filename": "secret.bin", "object_key": "victim/chal/secret.bin",
+         "_object_data": None}
+    )
+    async with SessionLocal() as db:
+        await db.delete(await db.get(Competition, comp_id))
+        await db.commit()
+
+    async with SessionLocal() as db:
+        result = await backup.import_data(db, storage, doc, ["competitions"])
+    assert result["attachments"] == {"created": 1, "skipped": 1}
+    async with SessionLocal() as db:
+        keys = (await db.scalars(select(Attachment.object_key))).all()
+    assert len(keys) == 1 and keys[0] != "victim/chal/secret.bin" and keys[0].endswith("_notes.txt")
+    assert storage.get("victim/chal/secret.bin") == b"secret"

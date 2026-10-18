@@ -302,6 +302,23 @@ def test_a_yaml_alias_bomb_is_refused_before_anything_expands_it():
     assert time.perf_counter() - started < 2
 
 
+def test_one_long_string_aliased_many_times_is_refused():
+    # A handful of nodes, but str(meta["validation"]) would be 5 MB of text.
+    blob = _pkg(yaml_extra=f"pad: &s {'a' * 50_000}\nvalidation: [" + ", ".join(["*s"] * 100) + "]\n")
+    assert "aliases" in _refused(blob)
+
+
+def test_yaml_nested_too_deeply_is_invalid_yaml():
+    files = pf.legacy_files()
+    files["problem.yaml"] = "[" * 2000 + "]" * 2000
+    assert "isn't valid YAML" in _refused(pf.build_package(files, root=pf.SHORTNAME))
+
+
+def test_merge_keys_and_unbuildable_values_are_invalid_yaml():
+    assert "isn't valid YAML" in _refused(_pkg(yaml_extra="base: &base {x: 1}\nmore: {<<: *base}\n"))
+    assert "isn't valid YAML" in _refused(_pkg(yaml_extra="big: " + "9" * 5000 + "\n"))
+
+
 def test_a_hostile_ini_is_linear():
     # A run of blank lines once made the time-limit search quadratic (~3 s
     # here, ~30 min at the 1 MB manifest cap); linear, it's milliseconds.
@@ -514,6 +531,22 @@ def test_refusals(blob, phrase):
 def test_a_zip_bomb_is_contained():
     reason = _refused(pf.zip_bomb())
     assert "larger than" in reason
+
+
+@pytest.mark.parametrize("method", [zipfile.ZIP_BZIP2, zipfile.ZIP_LZMA])
+def test_a_bzip2_or_lzma_member_is_refused_before_it_inflates(method):
+    # zipfile inflates a bzip2/LZMA chunk whole, whatever the read asks for:
+    # here 20 MiB — past the 16 MB test-file cap — from a zip of a few KB.
+    src = zipfile.ZipFile(io.BytesIO(pf.legacy_passfail()))
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
+        for info in src.infolist():
+            if info.filename.endswith("secret/1.in"):
+                zf.writestr(info.filename, b"\0" * (20 << 20), compress_type=method)
+            else:
+                zf.writestr(info, src.read(info))
+    assert len(out.getvalue()) < 64 * 1024
+    assert "isn't accepted" in _refused(out.getvalue())
 
 
 def _damage(blob: bytes, suffix: str, how: str) -> bytes:
@@ -768,7 +801,7 @@ def test_export_numbers_tests_so_name_order_is_judging_order(object_storage):
         name="Many", uuid="u", statement={"type": "doc", "content": []}, time_limit_ms=1000,
         memory_limit_mb=256, output_limit_kb=1024, compare_mode="token", float_tolerance=None,
         case_insensitive=False, allowed_languages=None, testdata_key="k",
-        files=[("a b.txt", "f1"), ("a_b.txt", "f2")],
+        testcases=td.manifest(cases), files=[("a b.txt", "f1"), ("a_b.txt", "f2")],
     )
     object_storage.put("f1", b"one", "text/plain")
     object_storage.put("f2", b"two", "text/plain")
@@ -782,6 +815,34 @@ def test_export_numbers_tests_so_name_order_is_judging_order(object_storage):
         assert len(names) == len(set(names))
     imported = _one(out.getvalue())
     assert [c.input for c in imported.testcases] == [c.input for c in cases]
+
+
+def test_export_names_test_data_by_position_never_by_the_stored_zip(object_storage):
+    # GHSA-wvjv-56qv-9v42: a restored backup decides the stored zip, so its
+    # entry names never reach the export — each is made from its case's place.
+    cases = [
+        td.Testcase(id="a", sample=True, input=b"1\n", answer=b"1\n"),
+        td.Testcase(id="b", sample=False, input=b"2\n", answer=b"2\n"),
+    ]
+    buf = io.BytesIO(td.build_zip(cases))
+    with zipfile.ZipFile(buf, "a") as zf:
+        zf.writestr("data/../../../evil.in", b"x")
+        zf.writestr("data/..\\..\\evil.ans", b"x")
+    object_storage.put("k", buf.getvalue(), "application/zip")
+    problem = pp.ExportProblem(
+        name="P", uuid="u", statement={"type": "doc", "content": []}, time_limit_ms=1000,
+        memory_limit_mb=256, output_limit_kb=1024, compare_mode="token", float_tolerance=None,
+        case_insensitive=False, allowed_languages=None, testdata_key="k",
+        testcases=td.manifest(cases),
+    )
+    out = io.BytesIO()
+    pp.build_export([problem], object_storage, out)
+    with zipfile.ZipFile(io.BytesIO(out.getvalue())) as zf:
+        names = zf.namelist()
+    assert sorted(n for n in names if n.startswith("p/data/") and not n.endswith(".yaml")) == [
+        "p/data/sample/001.ans", "p/data/sample/001.in", "p/data/secret/001.ans", "p/data/secret/001.in",
+    ]
+    assert all(".." not in n.split("/") and "\\" not in n for n in names)
 
 
 async def _setup_second_competition(client, admin) -> str:

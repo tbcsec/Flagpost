@@ -665,6 +665,7 @@ async def _export_problem(
         case_insensitive=bool(problem.case_insensitive),
         allowed_languages=problem.allowed_languages,
         testdata_key=problem.object_key,
+        testcases=problem.testcases or [],
         files=[(a.filename, a.object_key) for a in attachments],
         reference=await _export_reference(db, storage, challenge, problem),
     )

@@ -1845,7 +1845,9 @@ null means the default; output can also be compared **ignoring letter case**
 (ASCII, in any mode — the standard ICPC/Kattis checker's default, off for
 existing problems; #451) — and **one test-data zip** in the ICPC/Kattis layout
 (`data/sample|secret/NNN.in|.ans`) plus a cached manifest, so it rides backup,
-clone and purge like an attachment (ADR-0042 amendment). Publishing requires a
+clone and purge like an attachment (ADR-0042 amendment). Its caps — 10,000
+cases, 16 MB a file, 64 MB a problem — hold when it's written and again when
+it's read, since a restored backup decides the stored bytes. Publishing requires a
 test case; flag submission to it is refused.
 
 ### 17.2 Executors and the harness
@@ -2080,10 +2082,13 @@ confirm the tests and the limit in one click.
 
 Same containment as the challenge importer, and then some, because a package
 from the internet is untrusted input: bounded reads that never trust a declared
-size, an aggregate decompressed ceiling that counts every byte inflated, an
+size and accept stored or deflate members only (CPython inflates a bzip2 or LZMA
+chunk whole, past any read bound), an aggregate decompressed ceiling that counts
+every byte inflated, an
 entry cap counted from the entries' own signatures before `zipfile` builds its
 directory (the end records can lie), a problem-count cap, symlinks followed only inside their own problem, YAML whose aliases
-can't expand past a node budget, and the judge's own test-data caps (16 MB a
+can't expand past a node or character budget (and no merge keys, whose
+flattening is exponential inside the loader), and the judge's own test-data caps (16 MB a
 file, 64 MB a problem — a package over them is refused, not truncated). A
 problem that fails in any unforeseen way is refused alone, not the whole zip.
 Parsing is pure and runs in a thread — but CPython's regex engine holds the GIL,
@@ -2094,7 +2099,9 @@ scanner works against a character budget. The import creates **draft**
 challenges in one transaction with no per-row events (atomic authoring), and
 deletes anything it stored if it fails. Export writes a 2025-09 package per
 problem: `problem.yaml` with the effective limits, a Markdown statement, the
-stored test data (renumbered so name order is judging order), the checker
+stored test data (read through the judge's bounded loader and named from each
+case's position, never the stored zip's own names, so name order is judging
+order), the checker
 settings as `output_validator_args`, attachments, and the kept or newest
 accepted reference solution under `submissions/accepted/`. It streams each
 problem's files from storage into a temporary file, so a contest's test data is

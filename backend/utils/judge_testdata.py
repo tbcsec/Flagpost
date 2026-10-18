@@ -157,6 +157,13 @@ def rebuild(
     what's stored is then a fresh :func:`build_zip` of what was read, with the
     manifest rewritten to match. ``rows`` is the shape-checked manifest.
     Raises :class:`TestdataError`."""
+    if len(rows) > MAX_CASES:
+        raise TestdataError("The test data has more cases than a problem allows.")
+    try:
+        # Counted on the raw bytes before zipfile builds its directory.
+        check_member_count(blob, MAX_MEMBERS)
+    except ArchiveRefused as exc:
+        raise TestdataError(str(exc)) from exc
     stub = [Testcase(id=r["id"], sample=r["sample"], input=b"", answer=b"") for r in rows]
     named = _entry_names(stub)
     expected = sorted(f"{stem}{ext}" for _, stem in named for ext in (".in", ".ans"))

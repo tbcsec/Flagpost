@@ -762,3 +762,14 @@ async def test_the_editor_stops_at_the_test_case_cap(client, monkeypatch):
         headers=_auth(admin),
     )
     assert resp.status_code == 413 and "at most 1 test cases" in resp.json()["detail"]
+
+
+def test_rebuild_counts_entries_before_parsing_the_zip():
+    """A restored archive's entry count is checked on the raw bytes, before
+    zipfile builds a directory for it, and its manifest is held to the case cap."""
+    blob = b"PK\x01\x02" * (td.MAX_MEMBERS + 1)
+    with pytest.raises(td.TestdataError, match="too many files"):
+        td.rebuild(blob, [{"id": "a", "sample": True}])
+    rows = [{"id": f"c{i}", "sample": False} for i in range(td.MAX_CASES + 1)]
+    with pytest.raises(td.TestdataError, match="more cases"):
+        td.rebuild(b"", rows)

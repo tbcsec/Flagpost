@@ -41,6 +41,23 @@ export function useEnabledModules(competitionId: string, enabled = true) {
   });
 }
 
+// A quiet poll, like the Judging entry's: a module switched on site-wide, or
+// a first deployment spec authored, should surface within a minute without a
+// reload.
+const IN_USE_REFRESH_MS = 60_000;
+
+/** Which inert modules are of use here (#511), for the sidebar: hidden until
+ *  known, since "not in use" is the common answer. */
+export function useModulesInUse(competitionId: string, enabled = true) {
+  const isAuthenticated = useAuthStore((s) => s.status === "authenticated");
+  return useQuery({
+    queryKey: ["modules", competitionId, "in-use"],
+    queryFn: () => modulesApi.inUse(competitionId),
+    enabled: isAuthenticated && enabled && Boolean(competitionId),
+    refetchInterval: IN_USE_REFRESH_MS,
+  });
+}
+
 export function useToggleModule(competitionId: string) {
   const qc = useQueryClient();
   return useMutation({

@@ -4,6 +4,7 @@ import {
   isCompetitionScopedPath,
   shouldShowJoinPanel,
   switcherGroups,
+  shouldCheckModulesInUse,
   shouldCheckProgrammingProblems,
   shouldRedirectToLobby,
   visibleCompNav,
@@ -13,9 +14,12 @@ import {
 const NAV = [
   { key: "challenges" },
   { key: "analytics", manage: true, module: "analytics" },
-  { key: "instances", module: "instances", permission: "instance_view" },
-  { key: "judging", module: "judge", permission: "judging_view" },
+  { key: "instances", module: "instances", permission: "instance_view", inUse: "instances" },
+  { key: "aiTranscripts", module: "ai", permission: "ai_view_transcripts", inUse: "ai" },
+  { key: "judging", module: "judge", permission: "judging_view", inUse: "judge" },
 ];
+const ALL_ON = ["judge", "analytics", "instances", "ai"];
+const EVERYTHING = { judge: true, ai: true, instances: true };
 
 const viewer = (grants: string[], over: Partial<NavViewer> = {}): NavViewer => ({
   ready: true,
@@ -25,24 +29,22 @@ const viewer = (grants: string[], over: Partial<NavViewer> = {}): NavViewer => (
   ...over,
 });
 
-const staff = viewer(["judging_view", "instance_view"]);
+const staff = viewer(["judging_view", "instance_view", "ai_view_transcripts"]);
 const competitor = viewer([]);
 const keys = (items: { key: string }[]) => items.map((i) => i.key);
 
 describe("the Judging sidebar entry", () => {
   it("shows for staff once the competition has a programming problem", () => {
-    expect(keys(visibleCompNav(NAV, staff, ["judge", "analytics", "instances"], true))).toContain(
-      "judging",
-    );
+    expect(keys(visibleCompNav(NAV, staff, ALL_ON, EVERYTHING))).toContain("judging");
   });
 
   it("stays hidden with no programming problem, or until that's known", () => {
-    expect(keys(visibleCompNav(NAV, staff, ["judge"], false))).not.toContain("judging");
-    expect(keys(visibleCompNav(NAV, staff, ["judge"], undefined))).not.toContain("judging");
+    expect(keys(visibleCompNav(NAV, staff, ["judge"], { judge: false }))).not.toContain("judging");
+    expect(keys(visibleCompNav(NAV, staff, ["judge"], {}))).not.toContain("judging");
   });
 
   it("is never shown to competitors, nor asked about for them", () => {
-    expect(keys(visibleCompNav(NAV, competitor, ["judge"], true))).not.toContain("judging");
+    expect(keys(visibleCompNav(NAV, competitor, ["judge"], EVERYTHING))).not.toContain("judging");
     expect(shouldCheckProgrammingProblems(competitor, ["judge"])).toBe(false);
   });
 
@@ -55,19 +57,47 @@ describe("the Judging sidebar entry", () => {
   });
 });
 
-describe("the other sidebar rules", () => {
-  it("keeps module entries while modules load, and drops disabled ones", () => {
-    expect(keys(visibleCompNav(NAV, staff, undefined, true))).toEqual([
+describe("the AI transcripts and Instances entries (#511)", () => {
+  it("show only once the module is of use here, and stay hidden until known", () => {
+    expect(keys(visibleCompNav(NAV, staff, ALL_ON, { ai: true, instances: false }))).toEqual([
+      "challenges",
+      "analytics",
+      "aiTranscripts",
+    ]);
+    expect(keys(visibleCompNav(NAV, staff, ALL_ON, { instances: true }))).toEqual([
       "challenges",
       "analytics",
       "instances",
+    ]);
+    expect(keys(visibleCompNav(NAV, staff, ALL_ON, {}))).toEqual(["challenges", "analytics"]);
+  });
+
+  it("are only asked about for someone who could open one, with that module on", () => {
+    expect(shouldCheckModulesInUse(staff, ALL_ON)).toBe(true);
+    expect(shouldCheckModulesInUse(viewer(["instance_view"]), ["ai"])).toBe(false);
+    expect(shouldCheckModulesInUse(viewer(["instance_view"]), ["instances"])).toBe(true);
+    expect(shouldCheckModulesInUse(viewer(["ai_view_transcripts"]), ["ai"])).toBe(true);
+    expect(shouldCheckModulesInUse(competitor, ALL_ON)).toBe(false);
+    expect(shouldCheckModulesInUse(staff, undefined)).toBe(false);
+    expect(shouldCheckModulesInUse({ ...staff, inLobby: true }, ALL_ON)).toBe(false);
+    expect(shouldCheckModulesInUse({ ...staff, ready: false }, ALL_ON)).toBe(false);
+  });
+});
+
+describe("the other sidebar rules", () => {
+  it("keeps module entries while modules load, and drops disabled ones", () => {
+    expect(keys(visibleCompNav(NAV, staff, undefined, EVERYTHING))).toEqual([
+      "challenges",
+      "analytics",
+      "instances",
+      "aiTranscripts",
       "judging",
     ]);
-    expect(keys(visibleCompNav(NAV, staff, ["judge"], true))).toEqual(["challenges", "judging"]);
+    expect(keys(visibleCompNav(NAV, staff, ["judge"], EVERYTHING))).toEqual(["challenges", "judging"]);
   });
 
   it("hides staff entries from competitors", () => {
-    expect(keys(visibleCompNav(NAV, competitor, undefined, undefined))).toEqual(["challenges"]);
+    expect(keys(visibleCompNav(NAV, competitor, undefined, {}))).toEqual(["challenges"]);
   });
 });
 

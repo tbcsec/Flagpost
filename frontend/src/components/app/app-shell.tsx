@@ -13,6 +13,7 @@ import { UpdateNotice } from "@/components/admin/update-notice";
 import { HelpMenu } from "@/components/app/help-menu";
 import {
   isCompetitionScopedPath,
+  shouldCheckModulesInUse,
   shouldCheckProgrammingProblems,
   shouldRedirectToLobby,
   shouldShowJoinPanel,
@@ -33,7 +34,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useCompetitions } from "@/lib/hooks/use-competitions";
 import { severityStyle } from "@/lib/announcement-severity";
 import { useActivityLive } from "@/lib/hooks/use-activity";
-import { useEnabledModules } from "@/lib/hooks/use-modules";
+import { useEnabledModules, useModulesInUse } from "@/lib/hooks/use-modules";
 import { usePageNav } from "@/lib/hooks/use-pages";
 import { useHasProgrammingProblems } from "@/lib/hooks/use-judge";
 import { useAccess } from "@/lib/hooks/use-permissions";
@@ -86,6 +87,7 @@ const COMP_NAV: {
   manage?: boolean;
   module?: string;
   permission?: string;
+  inUse?: string;
 }[] = [
   { href: "/", key: "dashboard", icon: icon("dashboard") },
   { href: "/challenges", key: "challenges", icon: <span className="text-base leading-none">⚑</span> },
@@ -97,14 +99,14 @@ const COMP_NAV: {
   { href: "/automations", key: "automations", icon: icon("automations"), manage: true, module: "automations" },
   // Competitor-assistant transcript review (#98) — its own grant, not the
   // manage bundle, so a transcripts-only reviewer role reaches it.
-  { href: "/ai-transcripts", key: "aiTranscripts", icon: icon("ai"), module: "ai", permission: "ai_view_transcripts" },
+  { href: "/ai-transcripts", key: "aiTranscripts", icon: icon("ai"), module: "ai", inUse: "ai", permission: "ai_view_transcripts" },
   // Running-instance ops (#266) — its own grant (instance_view), shown only when
   // the instances module is enabled for the competition.
-  { href: "/instances", key: "instances", icon: icon("instances"), module: "instances", permission: "instance_view" },
+  { href: "/instances", key: "instances", icon: icon("instances"), module: "instances", inUse: "instances", permission: "instance_view" },
   // The jury console (#450) — its own grant (judging_view), shown only when the
   // code judge module is on for the competition AND it has a programming
   // problem (see `hasProgrammingProblems` below).
-  { href: "/judging", key: "judging", icon: icon("judge"), module: "judge", permission: "judging_view" },
+  { href: "/judging", key: "judging", icon: icon("judge"), module: "judge", inUse: "judge", permission: "judging_view" },
   { href: "/settings", key: "settings", icon: icon("settings"), manage: true },
 ];
 
@@ -223,12 +225,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     activeCompetitionId ?? "",
     shouldCheckProgrammingProblems(access, enabledModules.data),
   );
-  const compNav = visibleCompNav(
-    COMP_NAV,
-    access,
-    enabledModules.data,
-    hasProgrammingProblems.data,
+  // AI transcripts and Instances likewise show only once the module is of
+  // use here (#511).
+  const modulesInUse = useModulesInUse(
+    activeCompetitionId ?? "",
+    shouldCheckModulesInUse(access, enabledModules.data),
   );
+  const compNav = visibleCompNav(COMP_NAV, access, enabledModules.data, {
+    judge: hasProgrammingProblems.data,
+    ...modulesInUse.data,
+  });
   const adminDenied = isAdminSection && access.ready && !access.isAdmin;
 
   // A lobby user (no competition access) has no competition-scoped pages to be

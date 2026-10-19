@@ -876,6 +876,14 @@ export interface ModuleState {
   needs_setup: boolean;
 }
 
+/** Which inert modules are of use in a competition (#511): switched on
+ *  site-wide, or already holding its data. False for a module the viewer
+ *  couldn't open anyway. */
+export interface ModulesInUse {
+  ai: boolean;
+  instances: boolean;
+}
+
 /** A site-level catalog entry for an optional module — the at-creation module
  *  picker's source (#252), available before any competition exists. */
 export interface ModuleCatalogEntry {

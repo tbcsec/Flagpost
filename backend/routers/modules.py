@@ -20,16 +20,26 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth.deps import require_permission
+from auth.deps import require_permission, user_has_permission
 from db import get_db
-from models.ai import AI_SETTINGS_ID, AiSettings
-from models.challenge_instancing import INSTANCE_SETTINGS_ID, InstanceSettings
+from models.ai import AI_SETTINGS_ID, AiConversation, AiSettings
+from models.challenge_instancing import (
+    INSTANCE_SETTINGS_ID,
+    ChallengeDeployment,
+    ChallengeInstance,
+    InstanceSettings,
+)
 from models.competition import Competition
 from models.competition_module import CompetitionModule
 from models.judge import JUDGE_SETTINGS_ID, JudgeSettings
 from models.user import User
 from plugins.loader import all_manifests, loaded_manifest, optional_modules
-from schemas.module import ModuleCatalogEntry, ModuleStateOut, ModuleToggle
+from schemas.module import (
+    ModuleCatalogEntry,
+    ModulesInUseOut,
+    ModuleStateOut,
+    ModuleToggle,
+)
 from utils.event_bus import event_bus
 
 router = APIRouter(
@@ -125,6 +135,40 @@ async def enabled_modules(
     return sorted(
         m.id for m in optional_modules() if overrides.get(m.id, True)
     )
+
+
+@router.get("/in-use", response_model=ModulesInUseOut)
+async def modules_in_use(
+    competition_id: str,
+    current_user: User = Depends(require_permission("challenge_view")),
+    db: AsyncSession = Depends(get_db),
+) -> ModulesInUseOut:
+    """Which inert modules are of any use here (#511): the sidebar shows the
+    AI transcripts and Instances entries only when the module is switched on
+    site-wide, or the competition already holds its data from an earlier
+    configuration — the same rule Judging follows with programming problems.
+    Each answer is computed only for a caller who could open that page, so a
+    plain member learns nothing about site-wide configuration."""
+    await _competition_or_404(db, competition_id)
+    waiting = await _awaiting_site_setup(db)
+
+    async def any_row(model) -> bool:
+        return (
+            await db.scalar(
+                select(model.id).where(model.competition_id == competition_id).limit(1)
+            )
+        ) is not None
+
+    ai = instances = False
+    if await user_has_permission(db, current_user.id, "ai_view_transcripts", competition_id):
+        ai = "ai" not in waiting or await any_row(AiConversation)
+    if await user_has_permission(db, current_user.id, "instance_view", competition_id):
+        instances = (
+            "instances" not in waiting
+            or await any_row(ChallengeDeployment)
+            or await any_row(ChallengeInstance)
+        )
+    return ModulesInUseOut(ai=ai, instances=instances)
 
 
 @router.get("", response_model=list[ModuleStateOut])

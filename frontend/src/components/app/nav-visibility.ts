@@ -9,7 +9,14 @@ export interface NavRule {
   module?: string;
   /** Gated on one specific grant. */
   permission?: string;
+  /** Earns its slot only once the module is of real use here (#511): the key
+   *  into the in-use map — `judge` (a programming problem exists), `ai`,
+   *  `instances` (switched on site-wide, or data already here). */
+  inUse?: string;
 }
+
+/** Whether each in-use key currently applies; undefined until known. */
+export type InUseMap = Partial<Record<string, boolean | undefined>>;
 
 export interface NavViewer {
   ready: boolean;
@@ -32,6 +39,19 @@ export function shouldCheckProgrammingProblems(
   );
 }
 
+/** Whether to ask which inert modules are of use — only for someone who could
+ *  open one of their pages, with that module on here. */
+export function shouldCheckModulesInUse(
+  viewer: NavViewer,
+  enabledModules: string[] | undefined,
+): boolean {
+  if (!viewer.ready || viewer.inLobby || !enabledModules) return false;
+  return (
+    (viewer.has("ai_view_transcripts") && enabledModules.includes("ai")) ||
+    (viewer.has("instance_view") && enabledModules.includes("instances"))
+  );
+}
+
 export function visibleCompNav<T extends NavRule>(
   items: T[],
   viewer: NavViewer,
@@ -39,18 +59,20 @@ export function visibleCompNav<T extends NavRule>(
   // modules are on by default, so hiding-then-showing would flicker more than
   // the rare disabled case.
   enabledModules: string[] | undefined,
-  // Undefined until known (or not asked).
-  hasProgrammingProblems: boolean | undefined,
+  // Per in-use key, undefined until known (or not asked).
+  inUse: InUseMap,
 ): T[] {
   return items.filter((item) => {
     if (item.manage && !viewer.canManageActiveCompetition) return false;
     if (item.permission && !viewer.has(item.permission)) return false;
     if (item.module && enabledModules && !enabledModules.includes(item.module)) return false;
-    // Judging earns its slot only once there's a programming problem — the
-    // module being on isn't enough (it's on by default everywhere). Hidden
-    // until known, the opposite of the module rule: most competitions have
-    // none, so showing then hiding would be the common flicker.
-    if (item.key === "judging" && hasProgrammingProblems !== true) return false;
+    // An inert module's entry earns its slot only once the module is of real
+    // use here — being on isn't enough (every optional module is on by
+    // default). Hidden until known, the opposite of the module rule: "not in
+    // use" is the common answer, so showing then hiding would be the usual
+    // flicker. Judging: a programming problem exists; AI transcripts and
+    // Instances: switched on site-wide, or data already here (#511).
+    if (item.inUse && inUse[item.inUse] !== true) return false;
     return true;
   });
 }

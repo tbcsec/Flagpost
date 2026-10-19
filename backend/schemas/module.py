@@ -34,3 +34,12 @@ class ModuleCatalogEntry(BaseModel):
     name: str
     description: str
     needs_setup: bool = False
+
+
+class ModulesInUseOut(BaseModel):
+    """Which inert modules are of use in a competition (#511): switched on
+    site-wide, or already holding this competition's data. The sidebar shows
+    their entries only then. A module the caller may not view reads false."""
+
+    ai: bool = False
+    instances: bool = False

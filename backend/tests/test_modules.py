@@ -180,3 +180,102 @@ async def test_inert_modules_report_when_they_need_site_setup(client):
     ).json()
     assert toggled["needs_setup"] is True and toggled["enabled"] is False
     assert toggled["description"]
+
+
+async def test_modules_in_use_follows_site_setup_or_existing_data(client):
+    """#511: the sidebar's AI transcripts and Instances entries show only when
+    the module is switched on site-wide, or the competition already has its
+    data. A member without the page's permission learns nothing."""
+    from models.ai import AI_SETTINGS_ID, AiConversation, AiSettings
+    from models.challenge_instancing import ChallengeDeployment
+
+    admin = await admin_token(client)
+    comp = await _competition(client)
+    ada, ada_id = await _register(client, "ada@example.com")
+    await _grant_custom_role(ada_id, comp, "Member", ["challenge_view"])
+    url = f"/api/competitions/{comp}/modules/in-use"
+
+    # Fresh install: nothing configured, no data.
+    assert (await client.get(url, headers=_auth(admin))).json() == {"ai": False, "instances": False}
+    # A plain member holds neither page's permission: always false.
+    assert (await client.get(url, headers=_auth(ada))).json() == {"ai": False, "instances": False}
+
+    # Data from an earlier configuration counts: a deployment spec here.
+    async with SessionLocal() as db:
+        chal = (
+            await client.post(
+                f"/api/competitions/{comp}/challenges",
+                json={"title": "Pwn", "points": 100, "flag": "flag{x}"},
+                headers=_auth(admin),
+            )
+        ).json()["id"]
+        db.add(ChallengeDeployment(competition_id=comp, challenge_id=chal, backend="docker", image_ref="img:1"))
+        await db.commit()
+    assert (await client.get(url, headers=_auth(admin))).json() == {"ai": False, "instances": True}
+
+    # Switching AI on site-wide makes it of use everywhere, with no data yet.
+    async with SessionLocal() as db:
+        db.add(AiSettings(id=AI_SETTINGS_ID, enabled=True, base_url="https://ai.example.com/v1", model="m"))
+        await db.commit()
+    assert (await client.get(url, headers=_auth(admin))).json() == {"ai": True, "instances": True}
+
+    # And a conversation left behind counts once it's switched off again.
+    async with SessionLocal() as db:
+        (await db.get(AiSettings, AI_SETTINGS_ID)).enabled = False
+        db.add(AiConversation(competition_id=comp, user_id=ada_id, assistant_type="competitor"))
+        await db.commit()
+    assert (await client.get(url, headers=_auth(admin))).json()["ai"] is True
+    # Still nothing for the member.
+    assert (await client.get(url, headers=_auth(ada))).json() == {"ai": False, "instances": False}
+
+    # Instancing switched on site-wide makes it of use in a competition with
+    # no instance data of its own.
+    from models.challenge_instancing import INSTANCE_SETTINGS_ID, InstanceSettings
+
+    other = await _competition(client)
+    other_url = f"/api/competitions/{other}/modules/in-use"
+    assert (await client.get(other_url, headers=_auth(admin))).json()["instances"] is False
+    async with SessionLocal() as db:
+        db.add(InstanceSettings(id=INSTANCE_SETTINGS_ID, enabled=True, backend="docker", endpoint_url="http://proxy:2375"))
+        await db.commit()
+    assert (await client.get(other_url, headers=_auth(admin))).json()["instances"] is True
+
+    # A Judge of `comp` alone holds both page permissions there and nothing in
+    # `other`: the answers are scoped to the competition asked about.
+    judge, judge_id = await _register(client, "judge@example.com")
+    judge_role = next(r for r in (await client.get("/api/roles", headers=_auth(admin))).json() if r["name"] == "Judge")
+    assert (
+        await client.post(
+            "/api/roles/assignments",
+            json={"user_id": judge_id, "role_id": judge_role["id"], "competition_id": comp},
+            headers=_auth(admin),
+        )
+    ).status_code == 201
+    assert (await client.get(url, headers=_auth(judge))).json() == {"ai": True, "instances": True}
+    assert (await client.get(other_url, headers=_auth(judge))).status_code == 403
+
+    # One permission answers for one module only.
+    ops, ops_id = await _register(client, "ops@example.com")
+    await _grant_custom_role(ops_id, comp, "Ops", ["challenge_view", "instance_view"])
+    assert (await client.get(url, headers=_auth(ops))).json() == {"ai": False, "instances": True}
+
+    # Instance records left behind count on their own — even destroyed ones —
+    # once the spec that made them is gone (the FK is off under SQLite here;
+    # the row's competition_id is what the read scopes on).
+    from models.challenge_instancing import ChallengeInstance
+
+    leftovers = await _competition(client)
+    async with SessionLocal() as db:
+        (await db.get(InstanceSettings, INSTANCE_SETTINGS_ID)).enabled = False
+        spec = await db.scalar(select(ChallengeDeployment).limit(1))
+        db.add(
+            ChallengeInstance(
+                competition_id=leftovers,
+                challenge_id=spec.challenge_id,
+                deployment_id=spec.id,
+                user_id=ada_id,
+                status="destroyed",
+            )
+        )
+        await db.commit()
+    assert (await client.get(f"/api/competitions/{leftovers}/modules/in-use", headers=_auth(admin))).json()["instances"] is True

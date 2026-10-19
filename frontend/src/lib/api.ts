@@ -113,6 +113,7 @@ import type {
   ReportCatalog,
   ReportCreate,
   ModuleState,
+  ModulesInUse,
   MyTeam,
   Participant,
   ApiToken,
@@ -748,6 +749,9 @@ export const modulesApi = {
   // Member-readable enabled optional-module ids — gates the nav for every viewer.
   enabled: (competitionId: string) =>
     apiFetch<string[]>(`/api/competitions/${competitionId}/modules/enabled`),
+  // Which inert modules are of use here (#511) — gates their sidebar entries.
+  inUse: (competitionId: string) =>
+    apiFetch<ModulesInUse>(`/api/competitions/${competitionId}/modules/in-use`),
   toggle: (competitionId: string, moduleId: string, enabled: boolean) =>
     apiFetch<ModuleState>(`/api/competitions/${competitionId}/modules/${moduleId}`, {
       method: "PUT",

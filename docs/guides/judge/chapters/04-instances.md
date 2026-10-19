@@ -35,7 +35,8 @@ flag and can be published as usual.
 
 ## Running instances
 
-**Instances** in the sidebar lists every live instance in the competition —
+**Instances** appears in the sidebar once instancing is set up site-wide or
+the competition has deployments of its own; it lists every live instance —
 challenge, team or user, status, and when it expires — updating live.
 **Kill** destroys one immediately; the subject can launch again. The
 dashboard's **Instance health** section summarises instances by status with

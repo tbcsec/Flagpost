@@ -44,13 +44,16 @@ export interface Scales {
 
 const MS = (iso: string): number => new Date(iso).getTime();
 
-/** Round a maximum up to a readable axis top (1/2/5 × 10ⁿ), so gridlines land
- *  on round numbers instead of the exact leader's score. */
+/** Round a maximum up to a readable axis top (1/2/2.5/5 × 10ⁿ), so gridlines
+ *  land on round numbers instead of the exact leader's score. The 2.5 step is
+ *  there so a 2,150-point leader gets a 2,500 axis, not 5,000 with the top
+ *  half of the chart empty (#513). */
 export function niceMax(value: number): number {
   if (!Number.isFinite(value) || value <= 0) return 1;
   const magnitude = 10 ** Math.floor(Math.log10(value));
   const normalised = value / magnitude;
-  const step = normalised <= 1 ? 1 : normalised <= 2 ? 2 : normalised <= 5 ? 5 : 10;
+  const step =
+    normalised <= 1 ? 1 : normalised <= 2 ? 2 : normalised <= 2.5 ? 2.5 : normalised <= 5 ? 5 : 10;
   return step * magnitude;
 }
 
@@ -115,8 +118,20 @@ export function seriesPolyline(series: TimelineSeries, scales: Scales): string {
   return coords.join(" ");
 }
 
+/** How many gridlines divide the axis top so they land on round numbers:
+ *  niceMax picks 1/2/2.5/5 × 10ⁿ, and a 2,500 or 5,000 axis divides into five
+ *  (500s, 1,000s) where a 2,000 one divides into four. */
+export function gridDivisions(yMax: number): number {
+  if (!(yMax > 0)) return 4;
+  const normalised = yMax / 10 ** Math.floor(Math.log10(yMax));
+  return normalised === 2 ? 4 : 5;
+}
+
 /** Evenly spaced y-axis gridlines (including 0 and the top). */
-export function yTicks(scales: Scales, count = 4): { value: number; y: number }[] {
+export function yTicks(
+  scales: Scales,
+  count = gridDivisions(scales.yMax),
+): { value: number; y: number }[] {
   return Array.from({ length: count + 1 }, (_, i) => {
     const value = Math.round((scales.yMax / count) * i);
     return { value, y: scales.y(value) };

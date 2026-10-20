@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_BOX,
   buildScales,
+  gridDivisions,
   niceMax,
   seriesColor,
   seriesPolyline,
@@ -28,12 +29,25 @@ describe("niceMax", () => {
     expect(niceMax(140)).toBe(200);
     expect(niceMax(350)).toBe(500);
     expect(niceMax(940)).toBe(1000);
+    expect(niceMax(2150)).toBe(2500);
+    expect(niceMax(2600)).toBe(5000);
   });
 
   it("never returns zero, so the y scale can't divide by it", () => {
     expect(niceMax(0)).toBe(1);
     expect(niceMax(-5)).toBe(1);
     expect(niceMax(Number.NaN)).toBe(1);
+  });
+});
+
+describe("gridDivisions", () => {
+  it("picks a division count whose gridlines are round for the axis top", () => {
+    expect(gridDivisions(2500)).toBe(5);
+    expect(gridDivisions(5000)).toBe(5);
+    expect(gridDivisions(1000)).toBe(5);
+    expect(gridDivisions(2000)).toBe(4);
+    expect(gridDivisions(200)).toBe(4);
+    expect(gridDivisions(0)).toBe(4);
   });
 });
 

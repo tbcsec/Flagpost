@@ -35,7 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from db import ensure_aware_utc, utcnow
-from models.challenge import Challenge
+from models.challenge import Category, Challenge
 from models.competition import Competition
 from models.submission import Submission
 from utils.analytics import _solve_time_reference, subject_count
@@ -84,20 +84,59 @@ async def _visible_challenges(
     """(id, title) for challenges a spectator may know about: published and past
     any scheduled release. Uses *now*, not the freeze cutoff — a scoreboard
     freeze stops the standings moving, it doesn't retract a released challenge."""
+    return [(cid, title) for cid, title, _category in await _visible_rows(db, competition_id)]
+
+
+async def _visible_rows(
+    db: AsyncSession, competition_id: str
+) -> list[tuple[str, str, str | None]]:
+    """(id, title, category name) for the visible challenges — the single
+    definition of "visible" behind ``_visible_challenges`` and the category
+    breakdown, so the two can't disagree about what a spectator may see."""
     now = utcnow()
     rows = (
         await db.execute(
-            select(Challenge.id, Challenge.title, Challenge.release_at).where(
+            select(Challenge.id, Challenge.title, Challenge.release_at, Category.name)
+            .outerjoin(Category, Category.id == Challenge.category_id)
+            .where(
                 Challenge.competition_id == competition_id,
                 Challenge.state == "published",
             )
         )
     ).all()
     return [
-        (cid, title)
-        for cid, title, release_at in rows
+        (cid, title, category)
+        for cid, title, release_at, category in rows
         if release_at is None or ensure_aware_utc(release_at) <= now
     ]
+
+
+def _categories(
+    visible: list[tuple[str, str, str | None]],
+    solves: list[tuple[str, str, Any, int]],
+) -> list[dict[str, Any]]:
+    """The per-category breakdown for the venue stats slide (#513): how many
+    visible challenges each category has, how many of those anyone has solved,
+    and the solve count — from the same freeze-filtered solve set as the stats.
+    Uncategorised challenges report ``name: None`` (the client labels them).
+    Sorted by name so the bars hold still between polls."""
+    by_category: dict[str | None, dict[str, Any]] = {}
+    category_of: dict[str, str | None] = {}
+    for cid, _title, category in visible:
+        category_of[cid] = category
+        row = by_category.setdefault(
+            category, {"name": category, "challenges": 0, "solved": 0, "solves": 0}
+        )
+        row["challenges"] += 1
+    solved_ids: set[str] = set()
+    for cid, _sid, _ts, _value in solves:
+        if cid not in category_of:
+            continue
+        by_category[category_of[cid]]["solves"] += 1
+        if cid not in solved_ids:
+            solved_ids.add(cid)
+            by_category[category_of[cid]]["solved"] += 1
+    return sorted(by_category.values(), key=lambda row: (row["name"] is None, row["name"] or ""))
 
 
 def _highlights(
@@ -177,7 +216,8 @@ async def public_insights(
     as_of = freeze_cutoff(competition)
     board = await compute_scoreboard(db, competition)  # spectator = non-staff
 
-    visible = await _visible_challenges(db, competition.id)
+    visible_rows = await _visible_rows(db, competition.id)
+    visible = [(cid, title) for cid, title, _category in visible_rows]
     titles = dict(visible)
     names = {e["subject_id"]: e["name"] for e in board["entries"]}
     solves = await awarded_solves(db, competition, team_mode, as_of)
@@ -207,6 +247,7 @@ async def public_insights(
         "highlights": _highlights(
             solves, attempts, titles, names, _solve_time_reference(competition)
         ),
+        "categories": _categories(visible_rows, solves),
         "timeline": await build_timeline(
             db,
             competition,

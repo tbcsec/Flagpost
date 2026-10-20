@@ -122,11 +122,23 @@ class PointsTimeline(BaseModel):
     series: list[TimelineSeries] = []
 
 
+class CategoryBreakdown(BaseModel):
+    """One category on the venue stats slide (#513): visible challenges, how many
+    of them anyone has solved, and the solve count — freeze-aware like the
+    rest. ``name`` is null for uncategorised challenges."""
+
+    name: str | None = None
+    challenges: int
+    solved: int
+    solves: int
+
+
 class PublicInsightsOut(BaseModel):
     frozen: bool = False
     frozen_at: datetime | None = None
     stats: InsightStats
     highlights: InsightHighlights
+    categories: list[CategoryBreakdown] = []
     timeline: PointsTimeline
 
 

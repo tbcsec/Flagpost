@@ -1175,6 +1175,9 @@ export interface PublicInsights {
     first_blood_leader: { name: string; count: number } | null;
     fastest_solve: { title: string; name: string; seconds: number } | null;
   };
+  /** Per category (#513): visible challenges, how many anyone solved, and the
+   *  solve count; `name` is null for uncategorised challenges. Freeze-aware. */
+  categories: { name: string | null; challenges: number; solved: number; solves: number }[];
   timeline: {
     start: string | null;
     end: string | null;

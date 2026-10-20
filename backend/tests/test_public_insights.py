@@ -164,6 +164,61 @@ async def test_stats_and_highlights_reflect_play(client):
     assert highlights["fastest_solve"]["seconds"] >= 0
 
 
+async def test_category_breakdown_counts_visible_challenges_and_their_solves(client):
+    """The venue stats slide's category bars (#513): per category, how many
+    visible challenges, how many of them anyone solved, and the solve count."""
+    admin = await admin_token(client)
+    comp = await _public_competition(client)
+
+    async def category(name: str) -> str:
+        resp = await client.post(
+            f"/api/competitions/{comp}/categories", json={"name": name}, headers=_auth(admin)
+        )
+        return resp.json()["id"]
+
+    web, crypto = await category("Web"), await category("Crypto")
+    async def categorised(title: str, flag: str, cat: str | None) -> str:
+        chal = (
+            await client.post(
+                f"/api/competitions/{comp}/challenges",
+                json={"title": title, "points": 100, "flag": flag, "category_id": cat},
+                headers=_auth(admin),
+            )
+        ).json()["id"]
+        await client.post(f"/api/competitions/{comp}/challenges/{chal}/publish", headers=_auth(admin))
+        return chal
+
+    xss = await categorised("XSS", "flag{xss}", web)
+    await categorised("SQLi", "flag{sqli}", web)
+    rsa = await categorised("RSA", "flag{rsa}", crypto)
+    misc = await categorised("Misc", "flag{misc}", None)
+    # A draft in Crypto must not count towards the category's challenges.
+    await client.post(
+        f"/api/competitions/{comp}/challenges",
+        json={"title": "Draft", "points": 100, "flag": "flag{d}", "category_id": crypto},
+        headers=_auth(admin),
+    )
+
+    ada, _ = await _player(client, comp, "ada")
+    bob, _ = await _player(client, comp, "bob")
+    # XSS solved twice (one challenge, two solves); RSA once; Misc once; SQLi never.
+    await _submit(client, comp, xss, ada, "flag{xss}")
+    await _submit(client, comp, xss, bob, "flag{xss}")
+    await _submit(client, comp, rsa, ada, "flag{rsa}")
+    await _submit(client, comp, misc, bob, "flag{misc}")
+    await _submit(client, comp, rsa, bob, "wrong")  # an attempt, not a solve
+
+    body = (await _insights(client, comp)).json()
+    assert body["categories"] == [
+        {"name": "Crypto", "challenges": 1, "solved": 1, "solves": 1},
+        {"name": "Web", "challenges": 2, "solved": 1, "solves": 2},
+        {"name": None, "challenges": 1, "solved": 1, "solves": 1},
+    ]
+
+    # Solves land on the right bar, and the empty competition has no bars.
+    assert (await _insights(client, await _public_competition(client))).json()["categories"] == []
+
+
 async def test_drafts_and_unreleased_challenges_are_not_disclosed(client):
     """A spectator must not learn that an unpublished — or not-yet-released —
     challenge exists."""
@@ -301,6 +356,10 @@ async def test_freeze_hides_later_activity_from_insights(client):
     assert frozen["stats"]["solves"] == 1
     assert frozen["stats"]["unsolved"] == 1
     assert frozen["highlights"]["most_solved"] == {"title": "First", "count": 1}
+    # ...the category bars (#513): both challenges visible, one solved...
+    assert frozen["categories"] == [
+        {"name": None, "challenges": 2, "solved": 1, "solves": 1}
+    ]
     # ...including the timeline, which still agrees with the frozen board.
     board = await _board_points(client, comp)
     series = frozen["timeline"]["series"][0]

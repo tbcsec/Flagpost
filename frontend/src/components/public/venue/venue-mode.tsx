@@ -4,18 +4,21 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Lockup } from "@/components/brand/flagpost-mark";
-import { Highlights, StatTiles } from "@/components/public/insights-cards";
-import { PointsTimeline } from "@/components/public/points-timeline";
+import { useFitCount } from "@/components/public/venue/use-fit";
+import { VenueStats } from "@/components/public/venue/venue-stats";
+import { VenueTimeline } from "@/components/public/venue/venue-timeline";
 import { FirstBloodIcon } from "@/components/ui/first-blood-icon";
 import type { PublicActivity, PublicInsights, PublicScoreboard } from "@/lib/types";
 import { nextIndex, pickNewFirstBloods } from "@/lib/venue";
 import { cn } from "@/lib/utils";
 
 // Venue/projector mode (#77): a full-viewport, unauthenticated big-screen display
-// that auto-rotates the scoreboard, insights and points timeline, with a
-// first-blood takeover splash. Data comes from the same freeze-aware public
-// endpoints the static spectator page uses, so it discloses nothing extra; the
-// splash is driven by the recent-solves feed and stays silent during a freeze.
+// that auto-rotates the scoreboard, the stats slide (live solves + records,
+// #513) and the points timeline (chart + race panel, #513), with a first-blood
+// takeover splash. Data comes from the same freeze-aware public endpoints the
+// static spectator page uses, so it discloses nothing extra; the splash is
+// driven by the recent-solves feed and stays silent during a freeze. Nothing
+// here scrolls: each slide shows what fits and drops the rest (use-fit.ts).
 
 const SPLASH_MS = 5000;
 
@@ -41,25 +44,50 @@ export function VenueMode({
   onExit: () => void;
 }) {
   const t = useTranslations("scoreboard.public.venue");
-  // Build the rotation from whatever data is loaded: the board always, insights
-  // and timeline once their fetch lands (and the timeline only if anyone has
-  // scored, matching the component's own empty guard).
+
+  // Fluid scaling (#214): the board sizes off the CSS `.venue-scale` root
+  // font-size, which grows with the display; --venue-zoom lets an operator nudge
+  // it (the +/- keys). The icon marks and the chart's SVG text take px sizes, so
+  // we read the venue root's computed 1em and size them in lockstep with the
+  // em-based text.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState(1);
+  const [unitPx, setUnitPx] = useState(16);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const measure = () => setUnitPx(parseFloat(getComputedStyle(el).fontSize) || 16);
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [zoom]);
+
+  // Build the rotation from whatever data is loaded: the board always, the
+  // stats and timeline slides once insights land (the timeline only if anyone
+  // has scored — an all-zero chart says nothing).
   const slides: { key: string; node: React.ReactNode }[] = [
     { key: "board", node: <VenueBoard scoreboard={scoreboard} /> },
   ];
   if (insights) {
-    slides.push({ key: "insights", node: <VenueInsights insights={insights} /> });
-    if (insights.timeline.series.length > 0) {
+    slides.push({
+      key: "insights",
+      node: (
+        <VenueSlide title={t("stats")}>
+          <VenueStats
+            insights={insights}
+            scoreboard={scoreboard}
+            activity={activity}
+            unitPx={unitPx}
+          />
+        </VenueSlide>
+      ),
+    });
+    if (insights.timeline.series.some((s) => s.points.some((p) => p.points > 0))) {
       slides.push({
         key: "timeline",
         node: (
           <VenueSlide title={t("pointsOverTime")}>
-            <PointsTimeline
-              series={insights.timeline.series}
-              start={insights.timeline.start}
-              end={insights.timeline.end}
-              frozen={insights.frozen}
-            />
+            <VenueTimeline insights={insights} scoreboard={scoreboard} unitPx={unitPx} />
           </VenueSlide>
         ),
       });
@@ -127,22 +155,6 @@ export function VenueMode({
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     else document.documentElement.requestFullscreen().catch(() => {});
   }, []);
-
-  // Fluid scaling (#214): the board sizes off the CSS `.venue-scale` root
-  // font-size, which grows with the display; --venue-zoom lets an operator nudge
-  // it (the +/- keys). The two icon marks take a px `size`, so we read the venue
-  // root's computed 1em and size them in lockstep with the em-based text.
-  const rootRef = useRef<HTMLDivElement>(null);
-  const [zoom, setZoom] = useState(1);
-  const [unitPx, setUnitPx] = useState(16);
-  useEffect(() => {
-    const el = rootRef.current;
-    if (!el) return;
-    const measure = () => setUnitPx(parseFloat(getComputedStyle(el).fontSize) || 16);
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, [zoom]);
 
   // Keyboard: arrows advance, space pauses, f fullscreen, +/- scale, Esc exits.
   useEffect(() => {
@@ -229,14 +241,17 @@ function VenueSlide({ title, children }: { title: string; children: React.ReactN
       <h2 className="mb-[1em] text-[0.875em] font-semibold uppercase tracking-wide text-muted-foreground">
         {title}
       </h2>
-      <div className="min-h-0 flex-1">{children}</div>
+      <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
     </div>
   );
 }
 
+/** The board fills the screen: as many rows as fit at the current zoom, from
+ *  the top of the standings, and never a scrollbar (#513). */
 function VenueBoard({ scoreboard }: { scoreboard: PublicScoreboard }) {
   const t = useTranslations("scoreboard.public.venue");
-  const top = scoreboard.entries.slice(0, 12);
+  const top = scoreboard.entries;
+  const { containerRef, probeRef, count } = useFitCount(top.length);
   return (
     <VenueSlide title={t("scoreboard")}>
       {top.length === 0 ? (
@@ -244,13 +259,15 @@ function VenueBoard({ scoreboard }: { scoreboard: PublicScoreboard }) {
           {t("emptyBoard")}
         </div>
       ) : (
-        <div className="flex flex-col gap-[0.375em]">
-          {top.map((e) => (
+        <div ref={containerRef} className="flex h-full flex-col gap-[0.375em] overflow-hidden">
+          {top.slice(0, Math.max(1, count)).map((e, i) => (
             <div
               key={e.subject_id}
+              ref={i === 0 ? probeRef : undefined}
               className={cn(
                 "flex items-center gap-[1.25em] rounded-lg px-[1.25em] py-[0.625em]",
                 e.rank === 1 && "bg-primary/10",
+                count === 0 && "invisible",
               )}
             >
               <span
@@ -270,15 +287,6 @@ function VenueBoard({ scoreboard }: { scoreboard: PublicScoreboard }) {
         </div>
       )}
     </VenueSlide>
-  );
-}
-
-function VenueInsights({ insights }: { insights: PublicInsights }) {
-  return (
-    <div className="flex h-full flex-col justify-center gap-[1.5em]">
-      <StatTiles stats={insights.stats} />
-      <Highlights highlights={insights.highlights} variant="row" />
-    </div>
   );
 }
 

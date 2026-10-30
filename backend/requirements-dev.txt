@@ -2,6 +2,6 @@
 -r requirements.txt
 
 pytest>=9.1.1,<10.0
-pytest-asyncio>=1.4.0,<1.5
+pytest-asyncio>=1.4.1,<1.5
 # httpx comes from requirements.txt (runtime: webhook action) — also the tests' ASGI transport
 aiosqlite>=0.22.1,<0.23      # in-memory async DB for tests

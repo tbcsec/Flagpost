@@ -11,7 +11,7 @@ RUN for arch in amd64 arm64; do \
         go build -trimpath -ldflags="-s -w" -o /out/harness-linux-$arch . ; \
     done
 
-FROM python:3.14-slim
+FROM python:3.15-slim
 
 WORKDIR /app
 

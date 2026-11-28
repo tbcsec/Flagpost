@@ -29,7 +29,7 @@
 
 services:
   judge-proxy:
-    image: tecnativa/docker-socket-proxy:0.3.0
+    image: tecnativa/docker-socket-proxy:3.4
     restart: unless-stopped
     environment:
       # --- allowed (the judge executor's whole surface) ---

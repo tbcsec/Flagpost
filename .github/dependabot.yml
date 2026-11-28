@@ -59,3 +59,11 @@ updates:
     directory: /frontend
     schedule:
       interval: weekly
+
+  # The compose files pin third-party images (RustFS, docker-socket-proxy,
+  # caddy-docker-proxy, k3s) that the docker entries above never see, because
+  # those only read Dockerfiles. Without this they sat months behind with CVEs.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly

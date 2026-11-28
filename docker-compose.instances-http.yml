@@ -32,7 +32,7 @@
 
 services:
   caddy-socket-proxy:
-    image: tecnativa/docker-socket-proxy:0.3.0
+    image: tecnativa/docker-socket-proxy:3.4
     restart: unless-stopped
     environment:
       # --- allowed (all the ingress needs: watch + read labels) ---
@@ -58,7 +58,7 @@ services:
     # Deliberately NO `ports:` — never published to a host interface.
 
   caddy-ingress:
-    image: lucaslorentz/caddy-docker-proxy:2.9-alpine
+    image: lucaslorentz/caddy-docker-proxy:2.13.1-alpine
     restart: unless-stopped
     environment:
       # Watch Docker via the read-only proxy, never the raw socket.

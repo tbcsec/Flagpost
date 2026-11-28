@@ -37,9 +37,9 @@ services:
       retries: 5
 
   # S3-compatible object storage. RustFS replaces the retired MinIO (ADR-0041);
-  # pinned tag, mirrored at ghcr.io/rustfs/rustfs:1.0.1.
+  # pinned tag, mirrored at ghcr.io/rustfs/rustfs:1.0.7.
   rustfs:
-    image: rustfs/rustfs:1.0.1
+    image: rustfs/rustfs:1.0.7
     environment:
       # The image already defaults to serving /data on :9000; only the
       # credential pair and the console switches differ from it.

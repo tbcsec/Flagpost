@@ -7,7 +7,7 @@ docker``) and a socket proxy with the production allowlist from
     docker run -d --rm --name judge-proxy -p 127.0.0.1:23750:2375 \\
       -v /var/run/docker.sock:/var/run/docker.sock:ro \\
       -e CONTAINERS=1 -e IMAGES=1 -e POST=1 -e PING=1 -e VERSION=1 \\
-      tecnativa/docker-socket-proxy:0.3.0
+      tecnativa/docker-socket-proxy:3.4
     FLAGPOST_JUDGE_E2E_ENDPOINT=http://127.0.0.1:23750 \\
       .venv/bin/pytest tests/test_judge_executor_e2e.py -v
 
